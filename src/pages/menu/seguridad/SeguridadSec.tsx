@@ -11,7 +11,7 @@ import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import AddUserDialog from "../../../components/dialogs/add/AddUserDialog";
 import { useContext, useEffect, useState } from "react";
 import { getUsuario } from "../../../api/Usuario.api";
-import { UsuarioInterface } from "../../../interfaces/interfaces";
+import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { SesionContext } from "../../../context/SesionProvider";
 
 
@@ -23,8 +23,8 @@ const columns = [
   { field: 'phone', headerName: 'Telefono', width: 150 },
   {
     field: 'birthday', headerName: 'Nacimiento', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.birthday);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleDateString();
 
     }
@@ -33,24 +33,24 @@ const columns = [
   { field: 'user', headerName: 'Usuario', width: 100 },
   {
     field: 'rol', headerName: 'Rol', width: 100,
-    valueGetter: (params) => {
-      return params.row.rol.name;
+    valueGetter: ({ value }: { value: RolInterface }) => {
+      return value.name;
 
     }
   },
 
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
@@ -65,7 +65,7 @@ const SeguridadSec: React.FC<SeguridadSecProps> = ({ setuser }) => {
 
   useEffect(() => {
     recibirDatos()
-  }, [open])
+  }, [])
 
 
   const recibirDatos = async () => {
@@ -112,11 +112,9 @@ const SeguridadSec: React.FC<SeguridadSecProps> = ({ setuser }) => {
               }}
             >
               <DataGrid
-                //className="datagrid-content"
                 rows={list ? list : []}
                 columns={columns}
-                experimentalFeatures={{ lazyLoading: true }}
-                rowsLoadingMode="server"
+
                 hideFooterPagination
                 rowHeight={38}
                 disableRowSelectionOnClick

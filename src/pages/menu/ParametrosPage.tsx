@@ -9,15 +9,7 @@ import PropietarioSec from "./parametros/PropiedadSec";
 import TipoObsSec from "./parametros/TipoObsSec";
 import CiudadSec from "./parametros/CiudadSec";
 
-
-
-
-
-
 const ParametrosPage = () => {
-
-
-
   return (
     <Grid
       container

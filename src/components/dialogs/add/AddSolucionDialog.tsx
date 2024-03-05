@@ -46,7 +46,7 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
     setImage(null)
   };
 
-
+  /* @ts-expect-error No se sabe el tipo de event */
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);

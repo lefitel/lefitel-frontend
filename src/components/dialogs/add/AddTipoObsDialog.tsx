@@ -19,9 +19,7 @@ interface AddTipoObsDialogProps {
     functionApp: () => void;
 }
 
-
 const AddTipoObsDialog: React.FC<AddTipoObsDialogProps> = ({ functionApp }) => {
-
     const [open, setOpen] = React.useState(false);
     const [data, setData] = React.useState<TipoObsInterface>({ id: 0, description: "", name: "" });
     const { enqueueSnackbar } = useSnackbar();

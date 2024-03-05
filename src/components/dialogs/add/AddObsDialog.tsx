@@ -80,7 +80,7 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
                                 disablePortal
                                 options={listTipoData}
                                 getOptionLabel={(option) => option.name}
-                                onChange={(event, newValue) => {
+                                onChange={(_event, newValue) => {
                                     const newData: ObsInterface = { ...data, id_tipoObs: newValue?.id ? newValue?.id : 0 };
                                     setData(newData)
                                 }}

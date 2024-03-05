@@ -7,7 +7,8 @@ export const getEvento = (token: string): Promise<EventoInterface[]> => {
   return axios
     .get(urlApi + urlEvento, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => {
-      const dataList: EventoInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: EventoInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -36,7 +37,8 @@ export const getEvento_poste = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: EventoInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: EventoInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -76,7 +78,7 @@ export const createEvento = (
       return { status: response.status, data: response.data };
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return { status: 400, data: eventoExample };
     });
 };
@@ -109,7 +111,7 @@ export const editEvento = (
       return { status: response.status, data: response.data };
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return { status: 400, data: eventoExample };
     });
 };
@@ -124,7 +126,7 @@ export const deleteEvento = (id: number, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

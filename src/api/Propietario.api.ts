@@ -10,17 +10,16 @@ export const getPropietario = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: PropietarioInterface[] = response.data.map(
-        (item: any) => {
-          // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-          return {
-            id: item.id,
-            name: item.name,
-            createdAt: item.createdAt,
-            updatedAt: item.updatedAt,
-          };
-        }
-      );
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: PropietarioInterface[] = response.data.map((item) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          name: item.name,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
       //console.log(dataList);
       return dataList;
     });
@@ -44,7 +43,7 @@ export const createPropietario = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -62,7 +61,7 @@ export const editPropietario = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -80,7 +79,7 @@ export const deletePropietario = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

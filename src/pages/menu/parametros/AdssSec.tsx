@@ -27,16 +27,16 @@ const columns = [
   { field: 'description', headerName: 'Descripción', width: 150 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
@@ -122,8 +122,6 @@ const AdssSec = () => {
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick

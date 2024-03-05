@@ -13,7 +13,6 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { Add } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddTipoObsDialog from "../../../components/dialogs/add/AddTipoObsDialog";
 import { TipoObsInterface } from "../../../interfaces/interfaces";
@@ -28,16 +27,16 @@ const columns = [
   { field: 'description', headerName: 'Descripción', width: 150 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
@@ -45,7 +44,6 @@ const columns = [
 
 ];
 const TipoObsSec = () => {
-
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [data, setData] = useState<TipoObsInterface>({ id: 1, name: "", description: "" });
@@ -57,26 +55,20 @@ const TipoObsSec = () => {
     recibirDatos()
   }, [open])
 
-
   const recibirDatos = async () => {
     setList(await getTipoObs(sesion.token))
-
-
-
   }
-
 
   const handleClickOpen = (rows: TipoObsInterface) => {
     setData(rows);
-
     setOpen(true);
   };
 
   const handleClose = () => {
     setOpen(false);
   };
-  const handleClickOpenDelete = () => {
 
+  const handleClickOpenDelete = () => {
     setOpenDelete(true);
   };
 
@@ -106,7 +98,6 @@ const TipoObsSec = () => {
             aria-label="outlined primary button group"
           >
             <AddTipoObsDialog functionApp={recibirDatos} />
-
           </ButtonGroup>
         </CardActions>
         <Box
@@ -118,7 +109,6 @@ const TipoObsSec = () => {
               xs: "calc(100vw - 100px )",
               sm: "calc(100vw - 115px )",
               md: "calc(33vw - 61px )",
-
             },
           }}
         >
@@ -126,8 +116,6 @@ const TipoObsSec = () => {
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick
@@ -148,7 +136,6 @@ const TipoObsSec = () => {
           <Grid container width={1} m={0}>
             <Grid item xs={12} md={2}>
               <TextField
-
                 fullWidth disabled
                 style={{
                   padding: 0,
@@ -188,7 +175,6 @@ const TipoObsSec = () => {
                 }}
               />
             </Grid>
-
           </Grid>
         </DialogContent>
         <DialogActions style={{
@@ -199,7 +185,6 @@ const TipoObsSec = () => {
             <Button variant="outlined" onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
-
           </Grid>
           <ButtonGroup>
             <Button onClick={handleClose}>Cancelar</Button>

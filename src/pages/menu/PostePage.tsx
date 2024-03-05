@@ -8,14 +8,13 @@ import {
   Grid,
   LinearProgress,
 } from "@mui/material";
-import { DataGrid, GridToolbar } from "@mui/x-data-grid";
-import { AdssPosteInterface, PosteInterface } from "../../interfaces/interfaces";
+import { DataGrid, GridRowParams, GridToolbar } from "@mui/x-data-grid";
+import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../interfaces/interfaces";
 import { getPoste, searchPoste } from "../../api/Poste.api";
 import AddPosteDialog from "../../components/dialogs/add/AddPosteDialog";
 
 import { posteExample } from "../../data/example";
 import EditPosteDialog from "../../components/dialogs/edits/EditPosteDialog";
-import { getAdssPoste } from "../../api/AdssPoste.api";
 import { SesionContext } from "../../context/SesionProvider";
 
 
@@ -26,31 +25,31 @@ const columns = [
   { field: 'lng', headerName: 'Lng', width: 50 },
   {
     field: 'material', headerName: 'Material', width: 150,
-    valueGetter: (params) => { return params.row.material.name; }
+    valueGetter: ({ value }: { value: MaterialInterface }) => { return value.name; }
   },
   {
     field: 'propietario', headerName: 'Propietario', width: 150,
-    valueGetter: (params) => { return params.row.propietario.name; }
+    valueGetter: ({ value }: { value: PropietarioInterface }) => { return value.name; }
   },
   {
     field: 'ciudadA', headerName: 'Tramo de Inicio', width: 150,
-    valueGetter: (params) => { return params.row.ciudadA.name; }
+    valueGetter: ({ value }: { value: CiudadInterface }) => { return value.name; }
   },
   {
     field: 'ciudadB', headerName: 'Tramo de Fin', width: 150,
-    valueGetter: (params) => { return params.row.ciudadB.name; }
+    valueGetter: ({ value }: { value: CiudadInterface }) => { return value.name; }
   },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
 
     }
@@ -59,7 +58,7 @@ const columns = [
 
 const PostePage = () => {
   const [list, setList] = useState<PosteInterface[]>();
-  const [openDelete, setOpenDelete] = useState(false);
+  //const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<PosteInterface>(posteExample);
   const { sesion } = useContext(SesionContext);
@@ -67,12 +66,13 @@ const PostePage = () => {
 
   useEffect(() => {
     recibirDatos()
-  }, [open])
+  }, [openEdit])
+
   const recibirDatos = async () => {
     setList(await getPoste(sesion.token))
   }
 
-  const posteSelect = async (params) => {
+  const posteSelect = async (params: GridRowParams) => {
     setOpenEdit(true);
     setData(await searchPoste(params.row.id, sesion.token))
   }
@@ -119,8 +119,6 @@ const PostePage = () => {
                 //className="datagrid-content"
                 rows={list ? list : []}
                 columns={columns}
-                experimentalFeatures={{ lazyLoading: true }}
-                rowsLoadingMode="server"
                 hideFooterPagination
                 rowHeight={38}
                 disableRowSelectionOnClick

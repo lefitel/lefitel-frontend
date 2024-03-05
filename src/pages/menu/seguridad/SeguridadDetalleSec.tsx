@@ -12,17 +12,13 @@ import { useContext, useEffect, useState } from "react";
 import CustomTabComponent from "../../../components/CustomTabComponent";
 import {
   ArrowBackIos,
-  QuestionMark,
 } from "@mui/icons-material";
 
-import SimpleDialogComponent from "../../../components/SimpleDialogComp";
-import InfoSeguridadDetalleDialog from "../../../components/dialogs/info/InfoSeguridadDetalleDialog";
 import EditUserDialog from "../../../components/dialogs/edits/EditUserDialog";
 import SeguridadDetalleDataSec from "./detalle/SeguridadDetalleDataSec";
 import SeguridadDetalleBitacraSec from "./detalle/SeguridadDetalleBitacraSec";
-import { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
+import { UsuarioInterface } from "../../../interfaces/interfaces";
 import { searchUsuario } from "../../../api/Usuario.api";
-import { getBitacora } from "../../../api/Bitacora.api";
 import { SesionContext } from "../../../context/SesionProvider";
 
 interface SeguridadDetalleSecProps {
@@ -32,8 +28,8 @@ interface SeguridadDetalleSecProps {
 
 
 const SeguridadDetalleSec: React.FC<SeguridadDetalleSecProps> = ({ userId, setUserId }) => {
-  const [open, setOpen] = useState(false);
-  const [list, setList] = useState<BitacoraInterface[]>();
+  //const [open, setOpen] = useState(false);
+  //const [list, setList] = useState<BitacoraInterface[]>();
 
   const [data, setData] = useState<UsuarioInterface>();
   const { sesion } = useContext(SesionContext);
@@ -41,21 +37,21 @@ const SeguridadDetalleSec: React.FC<SeguridadDetalleSecProps> = ({ userId, setUs
 
   useEffect(() => {
     recibirDatos()
-  }, [open])
+  }, [])
 
 
   const recibirDatos = async () => {
     setData(await searchUsuario(userId, sesion.token))
-    setList(await getBitacora(userId, sesion.token))
+    //setList(await getBitacora(userId, sesion.token))
   }
 
 
 
-  const handleChange = (event, newValue: number) => {
+  const handleChange = (_event: React.SyntheticEvent<Element, Event>, newValue: number) => {
     setValue(newValue);
   };
 
-  function a11yProps(index) {
+  function a11yProps(index: number) {
     return {
       id: `simple-tab-${index}`,
       "aria-controls": `simple-tabpanel-${index}`,
@@ -114,12 +110,7 @@ const SeguridadDetalleSec: React.FC<SeguridadDetalleSecProps> = ({ userId, setUs
                     {data ? <EditUserDialog user={data} functionApp={recibirDatos} /> : null}
 
 
-                    <SimpleDialogComponent
-                      label=""
-                      title="Como funciona esta pantalla?"
-                      icon={<QuestionMark />}
-                      content={<InfoSeguridadDetalleDialog />}
-                    />
+
                   </ButtonGroup>
                 </Grid>
                 <Tabs

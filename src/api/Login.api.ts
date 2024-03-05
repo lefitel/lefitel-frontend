@@ -44,6 +44,7 @@ export const comprobarToken = (
       };
     })
     .catch((e) => {
+      console.log(e);
       return {
         status: 500,
         usuario: null,

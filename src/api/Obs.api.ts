@@ -6,7 +6,8 @@ export const getObs = (token: string): Promise<ObsInterface[]> => {
   return axios
     .get(urlApi + urlObs, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => {
-      const dataList: ObsInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: ObsInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -42,7 +43,7 @@ export const createObs = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -57,7 +58,7 @@ export const editObs = (data: ObsInterface, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -72,7 +73,7 @@ export const deleteObs = (id: number, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

@@ -93,7 +93,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
     setOpenDelete(false);
   };
 
-
+  /* @ts-expect-error No se sabe el tipo de event */
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);

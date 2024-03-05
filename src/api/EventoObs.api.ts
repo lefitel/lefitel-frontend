@@ -11,7 +11,8 @@ export const getEventoObs = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: EventoObsInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: EventoObsInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -59,7 +60,7 @@ export const deleteEventoObs = (id: number, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

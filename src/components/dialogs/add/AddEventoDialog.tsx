@@ -68,7 +68,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
     functionApp();
     setListObsSelected([])
   };
-
+  /* @ts-expect-error No se sabe el tipo de event */
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
@@ -143,7 +143,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
                   options={listPoste}
                   getOptionLabel={(option) => option.name}
 
-                  onChange={(event, newValue) => {
+                  onChange={(_event, newValue) => {
                     const newData: EventoInterface = { ...data, id_poste: newValue?.id ? newValue?.id : 0 };
                     setData(newData)
                   }}

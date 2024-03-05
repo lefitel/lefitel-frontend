@@ -15,10 +15,9 @@ const columns = [
   { field: 'id_usuario', headerName: 'Usuario', width: 100 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
-
     }
   },
 ];
@@ -57,8 +56,6 @@ const SeguridadDetalleBitacoraSec: React.FC<SeguridadDetalleBitacoraSecProps> = 
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick

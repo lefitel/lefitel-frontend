@@ -1,7 +1,5 @@
 import {
-  Button,
   Grid,
-  InputAdornment,
   TextField,
   Typography,
 } from "@mui/material";
@@ -10,13 +8,9 @@ import { useContext, useEffect, useState } from "react";
 import { SesionContext } from "../context/SesionProvider";
 import { useSnackbar } from "notistack";
 import { useNavigate } from "react-router-dom";
-import LoadingComponent from "../components/LoadingComponent";
 import LoadingButton from "@mui/lab/LoadingButton";
 import {
-  AccountCircle,
-  Key,
   KeyboardArrowRight,
-  Person,
 } from "@mui/icons-material";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
@@ -35,9 +29,9 @@ const LoginPage = () => {
   });
 
   const ComprobarToken = async () => {
-    const TokenSesion = JSON.parse(window.localStorage.getItem("token"));
+    const TokenSesion = JSON.parse(window.localStorage.getItem("token") || "").toString();
 
-    if (TokenSesion) {
+    if (TokenSesion != "") {
       console.log("ComprobarToken");
       const responde = await comprobarToken(TokenSesion)
       if (responde.status === 200) {

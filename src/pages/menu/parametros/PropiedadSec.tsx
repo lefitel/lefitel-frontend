@@ -26,55 +26,44 @@ const columns = [
   { field: 'name', headerName: 'Nombre', width: 100 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
-
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
-
     }
   },
-
 ];
 const PropietarioSec = () => {
-
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [data, setData] = useState<PropietarioInterface>({ id: 1, name: "" });
   const [list, setList] = useState<PropietarioInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
   const { sesion } = useContext(SesionContext);
-
   useEffect(() => {
     recibirDatos()
   }, [open])
 
-
   const recibirDatos = async () => {
     setList(await getPropietario(sesion.token))
-
-
-
   }
-
 
   const handleClickOpen = (rows: PropietarioInterface) => {
     setData(rows);
-
     setOpen(true);
   };
 
   const handleClose = () => {
     setOpen(false);
   };
-  const handleClickOpenDelete = () => {
 
+  const handleClickOpenDelete = () => {
     setOpenDelete(true);
   };
 
@@ -104,7 +93,6 @@ const PropietarioSec = () => {
             aria-label="outlined primary button group"
           >
             <AddPropietarioDialog functionApp={recibirDatos} />
-
           </ButtonGroup>
         </CardActions>
         <Box
@@ -123,8 +111,6 @@ const PropietarioSec = () => {
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick
@@ -145,7 +131,6 @@ const PropietarioSec = () => {
           <Grid container width={1} m={0}>
             <Grid item xs={12} md={2}>
               <TextField
-
                 fullWidth disabled
                 style={{
                   padding: 0,
@@ -170,8 +155,6 @@ const PropietarioSec = () => {
                 }}
               />
             </Grid>
-
-
           </Grid>
         </DialogContent>
         <DialogActions style={{
@@ -182,7 +165,6 @@ const PropietarioSec = () => {
             <Button variant="outlined" onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
-
           </Grid>
           <ButtonGroup>
             <Button onClick={handleClose}>Cancelar</Button>

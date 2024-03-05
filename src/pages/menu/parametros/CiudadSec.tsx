@@ -30,15 +30,15 @@ const columns = [
   { field: 'lng', headerName: 'Longitud', width: 150 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
     }
   },
@@ -74,6 +74,7 @@ const CiudadSec = () => {
     setOpenDelete(false);
   };
   function LocationMarker() {
+    // @ts-expect-error No se sabe el tipo de event
     const map = useMapEvent('click', (event) => {
       const newData: CiudadInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
@@ -125,8 +126,6 @@ const CiudadSec = () => {
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick
@@ -173,23 +172,19 @@ const CiudadSec = () => {
               />
             </Grid>
             <Grid item xs={12} md={12}>
-
-              <MapContainer
-                center={[data.lat, data.lng]}
+              {/* @ts-expect-error No se sabe el tipo de event*/}
+              <MapContainer center={[data.lat, data.lng]}
                 zoom={13}
                 style={{ height: "200px" }}
                 scrollWheelZoom={false}
-
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
-
                 <LocationMarker />
                 <Marker position={[data.lat, data.lng]}>
                   <Popup>You are here</Popup>
                 </Marker>
               </MapContainer>
             </Grid>
-
           </Grid>
         </DialogContent>
         <DialogActions style={{

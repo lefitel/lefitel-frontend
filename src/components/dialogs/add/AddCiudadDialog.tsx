@@ -41,6 +41,7 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
     };
 
     function LocationMarker() {
+        /* @ts-expect-error No se sabe el tipo de event */
         const map = useMapEvent('click', (event) => {
             const newData: CiudadInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
             setData(newData)
@@ -79,9 +80,8 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
                             />
                         </Grid>
                         <Grid item xs={12} md={12}>
-
-                            <MapContainer
-                                center={[data.lat, data.lng]}
+                            {/* @ts-expect-error No se sabe el tipo de event */}
+                            <MapContainer center={[data.lat, data.lng]}
                                 zoom={13}
                                 style={{ height: "200px" }}
                                 scrollWheelZoom={false}

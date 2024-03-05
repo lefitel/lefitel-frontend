@@ -1,5 +1,5 @@
 import axios from "axios";
-import { urlSolucion, urlApi, urlPoste, urlEvento } from "./url";
+import { urlSolucion, urlApi, urlEvento } from "./url";
 import { SolucionInterface } from "../interfaces/interfaces";
 import { solucionExample } from "../data/example";
 
@@ -9,7 +9,8 @@ export const getSolucion = (token: string): Promise<SolucionInterface[]> => {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: SolucionInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: SolucionInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -63,7 +64,7 @@ export const createSolucion = (
       return { status: response.status, data: response.data };
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return { status: 400, data: solucionExample };
     });
 };
@@ -96,7 +97,7 @@ export const editSolucion = (
       return { status: response.status, data: response.data };
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return { status: 400, data: solucionExample };
     });
 };
@@ -111,7 +112,7 @@ export const deleteSolucion = (id: number, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

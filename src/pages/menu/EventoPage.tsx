@@ -8,8 +8,8 @@ import {
   Grid,
   LinearProgress,
 } from "@mui/material";
-import { DataGrid, GridToolbar } from "@mui/x-data-grid";
-import { EventoInterface } from "../../interfaces/interfaces";
+import { DataGrid, GridRowParams, GridToolbar } from "@mui/x-data-grid";
+import { EventoInterface, PosteInterface } from "../../interfaces/interfaces";
 import { getEvento, searchEvento } from "../../api/Evento.api";
 import AddEventoDialog from "../../components/dialogs/add/AddEventoDialog";
 
@@ -22,25 +22,21 @@ const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
   {
     field: 'poste', headerName: 'poste', width: 50,
-    valueGetter: (params) => { return params.row.poste.name; }
+    valueGetter: ({ value }: { value: PosteInterface }) => { return value.name; }
   },
-
   { field: 'description', headerName: 'Descripción', width: 100 },
-  {
-    field: 'state', headerName: 'Estado', width: 100, type: 'boolean',
-  },
+  { field: 'state', headerName: 'Estado', width: 100, type: 'boolean', },
   {
     field: 'createdAt', headerName: 'Creación', width: 150, type: 'dateTime',
-
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date;
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150, type: 'dateTime',
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date
     }
   },
@@ -48,7 +44,7 @@ const columns = [
 
 const EventoPage = () => {
   const [list, setList] = useState<EventoInterface[]>();
-  const [openDelete, setOpenDelete] = useState(false);
+  //const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<EventoInterface>(eventoExample);
   const { sesion } = useContext(SesionContext);
@@ -61,7 +57,7 @@ const EventoPage = () => {
     setList(await getEvento(sesion.token))
   }
 
-  const EventoSelect = async (params) => {
+  const EventoSelect = async (params: GridRowParams) => {
     setOpenEdit(true);
     setData(await searchEvento(params.row.id, sesion.token))
   }
@@ -108,8 +104,6 @@ const EventoPage = () => {
                 //className="datagrid-content"
                 rows={list ? list : []}
                 columns={columns}
-                experimentalFeatures={{ lazyLoading: true }}
-                rowsLoadingMode="server"
                 hideFooterPagination
                 rowHeight={38}
                 disableRowSelectionOnClick

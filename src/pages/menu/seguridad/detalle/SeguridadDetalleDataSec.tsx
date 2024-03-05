@@ -41,7 +41,7 @@ const SeguridadDetalleDataSec: React.FC<SeguridadDetalleDataSecProps> = ({ data 
 
 
           <Grid item xs={12} md={6} textAlign={"left"} lineHeight={1}>
-            <Typography variant="h6">Fecha de nacimiento: <b>{data.birthday}</b></Typography>
+            <Typography variant="h6">Fecha de nacimiento: <b>{new Date(data.birthday).toLocaleDateString()}</b></Typography>
           </Grid>
         </Grid>
 

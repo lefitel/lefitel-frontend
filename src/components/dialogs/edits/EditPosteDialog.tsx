@@ -1,4 +1,3 @@
-import { Add, Edit, WhereToVote } from "@mui/icons-material";
 import {
   Autocomplete,
   Button,
@@ -91,7 +90,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
     setOpenDelete(false);
   };
 
-
+  // @ts-expect-error No se sabe el tipo de event
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
@@ -99,8 +98,8 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
   };
 
   function LocationMarker() {
+    // @ts-expect-error No se sabe el tipo de event
     const map = useMapEvent('click', (event) => {
-
       const newData: PosteInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
       map.flyTo(event.latlng, map.getZoom())
@@ -265,7 +264,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
               options={listPropietario}
               getOptionLabel={(option) => option.name}
               value={listPropietario.find(tipoObs => tipoObs.id === data.id_propietario) || null}
-              onChange={(event, newValue) => {
+              onChange={(_event, newValue) => {
                 const newData: PosteInterface = { ...data, id_propietario: newValue?.id ? newValue?.id : 0 };
                 setData(newData)
               }}
@@ -285,7 +284,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
               options={listMaterial}
               getOptionLabel={(option) => option.name}
               value={listMaterial.find(tipoObs => tipoObs.id === data.id_material) || null}
-              onChange={(event, newValue) => {
+              onChange={(_event, newValue) => {
                 const newData: PosteInterface = { ...data, id_material: newValue?.id ? newValue?.id : 0 };
                 setData(newData)
               }}
@@ -318,7 +317,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
                   options={listCiudad}
                   getOptionLabel={(option) => option.name}
                   value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadA) || null}
-                  onChange={(event, newValue) => {
+                  onChange={(_event, newValue) => {
                     const newData: PosteInterface = { ...data, id_ciudadA: newValue?.id ? newValue?.id : 0 };
                     setData(newData)
                   }}
@@ -338,7 +337,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
                   options={listCiudad}
                   getOptionLabel={(option) => option.name}
                   value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadB) || null}
-                  onChange={(event, newValue) => {
+                  onChange={(_event, newValue) => {
                     const newData: PosteInterface = { ...data, id_ciudadB: newValue?.id ? newValue?.id : 0 };
                     setData(newData)
                   }}
@@ -409,8 +408,8 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
               </Grid>
             </Grid>
             <Grid item xs={12}>
-              <MapContainer
-                center={[data.lat, data.lng]}
+              {/* @ts-expect-error No se sabe el tipo de event */}
+              <MapContainer center={[data.lat, data.lng]}
                 zoom={13}
                 style={{ height: "240px" }}
                 scrollWheelZoom={false}

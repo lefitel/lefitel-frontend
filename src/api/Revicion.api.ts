@@ -12,7 +12,8 @@ export const getRevicion = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: RevicionInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: RevicionInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,

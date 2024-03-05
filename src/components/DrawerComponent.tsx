@@ -24,7 +24,6 @@ import {
   WifiTetheringError,
   CellTower,
   CellWifiTwoTone,
-  SettingsAccessibility,
 } from "@mui/icons-material";
 import ParametrosPage from "../pages/menu/ParametrosPage";
 import { useContext, useEffect, useState } from "react";
@@ -49,11 +48,11 @@ import { usuarioExample } from '../data/example';
 
 interface MenuInterface {
   text: string;
-  icon: Element;
-  route: Element;
+  icon: JSX.Element;
+  route: JSX.Element;
 }
 
-const MenuListUser1 = [
+const MenuListUser1: MenuInterface[] = [
   {
     text: "Inicio",
     icon: <Dashboard />,
@@ -215,7 +214,7 @@ const DrawerComponent = () => {
   const [openMenu, setOpenMenu] = useState(false);
   const [page, setPage] = useState(MenuListUser3[0]);
   const [openDialog, setOpenDialog] = useState(false);
-  const [menuList, setMenuList] = useState([]);
+  const [menuList, setMenuList] = useState<MenuInterface[]>(MenuListUser3);
 
   useEffect(() => {
     if (sesion.usuario.id_rol === 1) setMenuList(MenuListUser1)

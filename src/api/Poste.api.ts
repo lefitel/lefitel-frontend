@@ -7,7 +7,8 @@ export const getPoste = (token: string): Promise<PosteInterface[]> => {
   return axios
     .get(urlApi + urlPoste, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => {
-      const dataList: PosteInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: PosteInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,

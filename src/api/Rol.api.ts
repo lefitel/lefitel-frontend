@@ -6,7 +6,8 @@ export const getRol = (token: string): Promise<RolInterface[]> => {
   return axios
     .get(urlApi + urlRol, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => {
-      const dataList: RolInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: RolInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,

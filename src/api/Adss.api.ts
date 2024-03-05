@@ -6,7 +6,8 @@ export const getAdss = (token: string): Promise<AdssInterface[]> => {
   return axios
     .get(urlApi + urlAdss, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => {
-      const dataList: AdssInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: AdssInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
@@ -19,7 +20,7 @@ export const getAdss = (token: string): Promise<AdssInterface[]> => {
       return dataList;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return [];
     });
 };
@@ -43,7 +44,7 @@ export const createAdss = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -61,7 +62,7 @@ export const editAdss = (
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };
@@ -76,7 +77,7 @@ export const deleteAdss = (id: number, token: string): Promise<number> => {
       return response.status;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return 400;
     });
 };

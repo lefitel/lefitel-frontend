@@ -1,6 +1,5 @@
-import { Add, WhereToVote } from "@mui/icons-material";
+import { Add } from "@mui/icons-material";
 import {
-  Box,
   Button,
   Card,
   CardActions,
@@ -9,18 +8,12 @@ import {
   Typography,
 } from "@mui/material";
 import { LineChart } from "@mui/x-charts/LineChart";
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import {
-  columnsData,
-  markersData,
   pData,
-  rowsData,
   timeData,
   uData,
 } from "../../data/example";
-import { DataGrid } from "@mui/x-data-grid";
-import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-import { getAdss } from "../../api/Adss.api";
 
 const InicioPage = () => {
   useEffect(() => {
@@ -131,23 +124,7 @@ const InicioPage = () => {
             >
               Detalle
             </Typography>
-            <Box sx={{ width: 1 }}>
-              <DataGrid
-                rowHeight={34}
-                rows={rowsData}
-                columns={columnsData}
-                initialState={{
-                  pagination: {
-                    paginationModel: {
-                      pageSize: 7,
-                    },
-                  },
-                }}
-                pageSizeOptions={[7]}
-                checkboxSelection
-                disableRowSelectionOnClick
-              />
-            </Box>
+
           </CardContent>
         </Card>
       </Grid>

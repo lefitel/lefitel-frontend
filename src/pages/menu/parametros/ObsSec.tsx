@@ -31,28 +31,26 @@ const columns = [
   { field: 'id_tipoObs', headerName: 'Tpo de observación', width: 150 },
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.createdAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
-
     }
   },
   {
     field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: (params) => {
-      const date = new Date(params.row.updatedAt);
+    valueGetter: ({ value }: { value: string }) => {
+      const date = new Date(value);
       return date.toLocaleString();
-
     }
   },
-
 ];
+
 const ObsSec = () => {
 
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [listTipoObs, setListTipoObs] = useState<TipoObsInterface[]>([]);
-  const [tipoObs, setTipoObs] = useState<TipoObsInterface>();
+  //const [tipoObs, setTipoObs] = useState<TipoObsInterface>();
 
   const [data, setData] = useState<ObsInterface>(obsExample);
   const [list, setList] = useState<ObsInterface[]>();
@@ -61,7 +59,7 @@ const ObsSec = () => {
 
   useEffect(() => {
     recibirDatos()
-  }, [open])
+  }, [open, openDelete])
 
   const recibirDatosTipoObs = async () => {
     setListTipoObs(await getTipoObs(sesion.token))
@@ -134,8 +132,6 @@ const ObsSec = () => {
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
-            experimentalFeatures={{ lazyLoading: true }}
-            rowsLoadingMode="server"
             hideFooterPagination
             rowHeight={38}
             disableRowSelectionOnClick
@@ -192,18 +188,14 @@ const ObsSec = () => {
                   );
                 }}
                 disablePortal
-
                 options={listTipoObs}
                 getOptionLabel={(option) => option.name}
                 value={listTipoObs.find(tipoObs => tipoObs.id === data.id_tipoObs) || null}
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                   const newData: ObsInterface = { ...data, id_tipoObs: newValue?.id || 0 };
                   setData(newData)
                 }}
                 renderInput={(params) => <TextField {...params} label="Tipo de Observación" />}
-
-
-
               />
             </Grid>
             <Grid item xs={12} md={12}>

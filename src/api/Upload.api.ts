@@ -1,5 +1,5 @@
 import axios from "axios";
-import { url, urlApi, urlUpload } from "./url";
+import { urlApi, urlUpload } from "./url";
 
 export const uploadImage = (data: File, token: string): Promise<string> => {
   const formData = new FormData();
@@ -13,7 +13,7 @@ export const uploadImage = (data: File, token: string): Promise<string> => {
       return response.data.path;
     })
     .catch((e) => {
-      //console.log(JSON.stringify(e.response.data.message));
+      console.log(JSON.stringify(e.response.data.message));
       return "400";
     });
 };

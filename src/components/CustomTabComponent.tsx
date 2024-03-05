@@ -1,6 +1,8 @@
 import { Box, Typography } from "@mui/material";
 import PropTypes from "prop-types";
 
+
+// @ts-expect-error No se sabe el tipo de props
 const CustomTabComponent = (props) => {
   const { children, value, index, ...other } = props;
 

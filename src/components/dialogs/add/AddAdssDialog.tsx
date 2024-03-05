@@ -19,10 +19,7 @@ interface AddAdssDialogProps {
     functionApp: () => void;
 }
 
-
-
 const AddAdssDialog: React.FC<AddAdssDialogProps> = ({ functionApp }) => {
-
     const [open, setOpen] = React.useState(false);
     const [data, setData] = React.useState<AdssInterface>({ description: "", name: "" });
     const { enqueueSnackbar } = useSnackbar();

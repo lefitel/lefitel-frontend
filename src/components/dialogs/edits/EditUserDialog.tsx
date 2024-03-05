@@ -48,7 +48,7 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
     functionApp();
   };
 
-
+  // @ts-expect-error No se sabe el tipo de event
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
@@ -176,7 +176,7 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
                     getOptionLabel={(option) => option.name}
                     value={listTipoData.find(tipoObs => tipoObs.id === data.id_rol) || null}
 
-                    onChange={(event, newValue) => {
+                    onChange={(_event, newValue) => {
                       const newData: UsuarioInterface = { ...data, id_rol: newValue?.id ? newValue?.id : 0 };
                       setData(newData)
                     }}

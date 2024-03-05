@@ -18,7 +18,7 @@ import {
 } from "@mui/material";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
 import React, { useContext, useState } from "react";
-import { latExample, lngExample, posteExample } from "../../../data/example";
+import { posteExample } from "../../../data/example";
 import { DatePicker } from "@mui/x-date-pickers";
 import { AdssInterface, CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
@@ -68,13 +68,14 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
     setListAdssSelected([])
 
   };
-
+  /* @ts-expect-error No se sabe el tipo de event */
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
     }
   };
   function LocationMarker() {
+    /* @ts-expect-error No se sabe el tipo de event */
     const map = useMapEvent('click', (event) => {
       const newData: PosteInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
@@ -144,7 +145,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                 options={listPropietario}
                 getOptionLabel={(option) => option.name}
 
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                   const newData: PosteInterface = { ...data, id_propietario: newValue?.id ? newValue?.id : 0 };
                   setData(newData)
                 }}
@@ -165,7 +166,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                 options={listMaterial}
                 getOptionLabel={(option) => option.name}
 
-                onChange={(event, newValue) => {
+                onChange={(_event, newValue) => {
                   const newData: PosteInterface = { ...data, id_material: newValue?.id ? newValue?.id : 0 };
                   setData(newData)
                 }}
@@ -199,7 +200,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                     options={listCiudad}
                     getOptionLabel={(option) => option.name}
 
-                    onChange={(event, newValue) => {
+                    onChange={(_event, newValue) => {
                       const newData: PosteInterface = { ...data, id_ciudadA: newValue?.id ? newValue?.id : 0 };
                       setData(newData)
                     }}
@@ -220,7 +221,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                     options={listCiudad}
                     getOptionLabel={(option) => option.name}
 
-                    onChange={(event, newValue) => {
+                    onChange={(_event, newValue) => {
                       const newData: PosteInterface = { ...data, id_ciudadB: newValue?.id ? newValue?.id : 0 };
                       setData(newData)
                     }}
@@ -289,8 +290,8 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
 
               </Grid>
               <Grid item xs={12}>
-                <MapContainer
-                  center={[data.lat, data.lng]}
+                {/* @ts-expect-error No se sabe el tipo de event */}
+                <MapContainer center={[data.lat, data.lng]}
                   zoom={13}
                   style={{ height: "240px" }}
                   scrollWheelZoom={false}

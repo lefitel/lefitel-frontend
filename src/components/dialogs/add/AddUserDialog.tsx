@@ -17,7 +17,7 @@ import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { useSnackbar } from "notistack";
 import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { getRol } from "../../../api/Rol.api";
-import { createUsuario, searchUsuario, searchUsuario_user } from "../../../api/Usuario.api";
+import { createUsuario, searchUsuario_user } from "../../../api/Usuario.api";
 import { uploadImage } from "../../../api/Upload.api";
 import dayjs from "dayjs";
 import { usuarioExample } from "../../../data/example";
@@ -53,7 +53,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
     setImage(null)
   };
 
-
+  {/* @ts-expect-error No se sabe el tipo de event */ }
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
@@ -200,7 +200,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
                     options={listTipoData}
                     getOptionLabel={(option) => option.name}
 
-                    onChange={(event, newValue) => {
+                    onChange={(_event, newValue) => {
                       const newData: UsuarioInterface = { ...data, id_rol: newValue?.id ? newValue?.id : 0 };
                       setData(newData)
                     }}

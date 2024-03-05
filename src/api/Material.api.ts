@@ -8,7 +8,8 @@ export const getMaterial = (token: string): Promise<MaterialInterface[]> => {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      const dataList: MaterialInterface[] = response.data.map((item: any) => {
+      /* @ts-expect-error No se sabe el tipo de event */
+      const dataList: MaterialInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
         return {
           id: item.id,
