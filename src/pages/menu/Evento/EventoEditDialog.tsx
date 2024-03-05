@@ -56,6 +56,7 @@ const PosteDetalleEventoSec: React.FC<PosteDetalleEventoSecProps> = ({ posteId }
   const [image, setImage] = useState<File | null>();
   const [data, setData] = React.useState<EventoInterface>(eventoExample);
   const [dataRevicion, setDataRevicion] = React.useState<RevicionInterface[]>([]);
+
   const [listObs, setListObs] = React.useState<ObsInterface[]>([]);
   const [listTipoObs, setListTipoObs] = React.useState<TipoObsInterface[]>([]);
   const [listObsSelected, setListObsSelected] = React.useState<number[]>([]);
@@ -238,6 +239,7 @@ const PosteDetalleEventoSec: React.FC<PosteDetalleEventoSecProps> = ({ posteId }
                                         checked={listObsSelected?.some(objeto => objeto === obs.id)}
 
                                         onChange={(event) => {
+                                          console.log()
                                           if (event.target.checked) {
                                             setListObsSelected(prevLista => [...prevLista, tipoObs.id ? tipoObs.id : 0])
                                           }

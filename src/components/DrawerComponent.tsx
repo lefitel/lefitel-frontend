@@ -23,9 +23,11 @@ import {
   Dashboard,
   WifiTetheringError,
   CellTower,
+  CellWifiTwoTone,
+  SettingsAccessibility,
 } from "@mui/icons-material";
 import ParametrosPage from "../pages/menu/ParametrosPage";
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import PostePage from "../pages/menu/PostePage";
 import ReportePage from "../pages/menu/ReportePage";
 import AjustePage from "../pages/menu/AjustePage";
@@ -41,8 +43,17 @@ import {
   Grid,
 } from "@mui/material";
 import InicioPage from "../pages/menu/InicioPage";
+import EventoPage from '../pages/menu/EventoPage';
+import { usuarioExample } from '../data/example';
 
-const MenuListGeneral = [
+
+interface MenuInterface {
+  text: string;
+  icon: Element;
+  route: Element;
+}
+
+const MenuListUser1 = [
   {
     text: "Inicio",
     icon: <Dashboard />,
@@ -52,6 +63,11 @@ const MenuListGeneral = [
     text: "Postes",
     icon: <CellTower />,
     route: <PostePage />,
+  },
+  {
+    text: "Eventos",
+    icon: <CellWifiTwoTone />,
+    route: <EventoPage />,
   },
   {
     text: "Parametros",
@@ -64,19 +80,64 @@ const MenuListGeneral = [
     route: <ReportePage />,
   },
   {
-    text: "Ajustes",
+    text: "Seguridad",
     icon: <AdminPanelSettings />,
     route: <SeguridadPage />,
   },
-];
-
-const MenuListProfile = [
   {
-    text: "Perfil",
+    text: "Ajustes",
     icon: <Settings />,
     route: <AjustePage />,
-  },
+  }
 ];
+
+
+const MenuListUser2 = [
+  {
+    text: "Inicio",
+    icon: <Dashboard />,
+    route: <InicioPage />,
+  },
+  {
+    text: "Postes",
+    icon: <CellTower />,
+    route: <PostePage />,
+  },
+  {
+    text: "Eventos",
+    icon: <CellWifiTwoTone />,
+    route: <EventoPage />,
+  },
+  {
+    text: "Reportes",
+    icon: <BarChart />,
+    route: <ReportePage />,
+  },
+  {
+    text: "Ajustes",
+    icon: <Settings />,
+    route: <AjustePage />,
+  }
+];
+
+const MenuListUser3 = [
+  {
+    text: "Inicio",
+    icon: <Dashboard />,
+    route: <InicioPage />,
+  },
+  {
+    text: "Reportes",
+    icon: <BarChart />,
+    route: <ReportePage />,
+  },
+  {
+    text: "Ajustes",
+    icon: <Settings />,
+    route: <AjustePage />,
+  }
+];
+
 
 const drawerWidth = 240;
 
@@ -148,12 +209,22 @@ const Drawer = styled(MuiDrawer, { shouldForwardProp: (prop) => prop !== 'open' 
 );
 
 const DrawerComponent = () => {
-  const { setSesion } = useContext(SesionContext);
+  const { setSesion, sesion } = useContext(SesionContext);
 
   const theme = useTheme();
   const [openMenu, setOpenMenu] = useState(false);
-  const [page, setPage] = useState(MenuListGeneral[0]);
+  const [page, setPage] = useState(MenuListUser3[0]);
   const [openDialog, setOpenDialog] = useState(false);
+  const [menuList, setMenuList] = useState([]);
+
+  useEffect(() => {
+    if (sesion.usuario.id_rol === 1) setMenuList(MenuListUser1)
+    if (sesion.usuario.id_rol === 2) setMenuList(MenuListUser2)
+
+    if (sesion.usuario.id_rol === 3) setMenuList(MenuListUser3)
+    console.log(sesion)
+  }, [])
+
 
   const handleClickOpen = () => {
     setOpenDialog(true);
@@ -171,7 +242,7 @@ const DrawerComponent = () => {
   };
   const cerrarSesion = () => {
     window.localStorage.removeItem("token");
-    setSesion();
+    setSesion({ token: "", usuario: usuarioExample });
   };
 
   return (
@@ -195,14 +266,7 @@ const DrawerComponent = () => {
             {page.text}
           </Typography>
           <Box sx={{ flexGrow: 1 }} />
-          <IconButton
-            title={"Ajustes"}
-            color="inherit"
-            onClick={() => setPage(MenuListProfile[0])}
-          >
-            {" "}
-            <Settings />{" "}
-          </IconButton>
+
           <IconButton
             title={"Cerrar Sesión"}
             onClick={handleClickOpen}
@@ -225,8 +289,12 @@ const DrawerComponent = () => {
         </DrawerHeader>
         <Divider />
         <List>
-          {MenuListGeneral.map((item) => (
-            <ListItem key={item.text} disablePadding sx={{ display: "block" }}>
+          {menuList.map((item) => {
+
+
+
+
+            return <ListItem key={item.text} disablePadding sx={{ display: "block" }}>
               <ListItemButton
                 sx={{
                   minHeight: 48,
@@ -250,7 +318,7 @@ const DrawerComponent = () => {
                 />
               </ListItemButton>
             </ListItem>
-          ))}
+          })}
         </List>
         <Divider />
       </Drawer>

@@ -18,10 +18,13 @@ import {
   KeyboardArrowRight,
   Person,
 } from "@mui/icons-material";
+import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
+import { usuarioExample } from "../data/example";
+import { comprobarToken, loginUsuario } from "../api/Login.api";
 
 const LoginPage = () => {
   const { setSesion } = useContext(SesionContext);
-  const [login, setLogin] = useState({ user: "", password: "" });
+  const [login, setLogin] = useState<UsuarioInterface>(usuarioExample);
   const [loading, setLoading] = useState(false);
 
   const { enqueueSnackbar } = useSnackbar();
@@ -31,36 +34,44 @@ const LoginPage = () => {
     ComprobarToken();
   });
 
-  const ComprobarToken = () => {
+  const ComprobarToken = async () => {
     const TokenSesion = JSON.parse(window.localStorage.getItem("token"));
 
     if (TokenSesion) {
-      //console.log("ComprobarToken");
+      console.log("ComprobarToken");
+      const responde = await comprobarToken(TokenSesion)
+      if (responde.status === 200) {
+        setSesion({ token: TokenSesion, usuario: responde.usuario as UsuarioInterface });
+        navigater("/home", { replace: true });
+      }
 
-      setSesion(TokenSesion);
-      navigater("/home", { replace: true });
     }
   };
-  const ValidarDatos = () => {
-    if (login.user === "" || login.password === "") {
+
+  const ValidarDatos = async () => {
+
+    if (login.user === "" || login.pass === "") {
       return enqueueSnackbar("Rellena todos los espacios", {
         variant: "warning",
       });
     } else {
       setLoading(true);
+      const responde = await loginUsuario(login);
+      if (responde.status != 500) {
+        window.localStorage.setItem("token", JSON.stringify(responde.usuario?.token));
+        setSesion(responde.usuario as SesionInterface);
+        navigater("/home", { replace: true });
 
-      setTimeout(() => {
-        if (login.user === "a" && login.password === "a") {
-          window.localStorage.setItem("token", JSON.stringify(login.user));
-          setSesion(login.user);
-          navigater("/home", { replace: true });
-        } else {
-          enqueueSnackbar("Usuario o contraseña incorrectos", {
-            variant: "error",
-          });
-        }
+        enqueueSnackbar("Bienvenido", {
+          variant: "success",
+        });
+      } else {
+        enqueueSnackbar(responde.message, {
+          variant: "error",
+        });
         setLoading(false);
-      }, 3000);
+      }
+
     }
   };
   return (
@@ -97,7 +108,7 @@ const LoginPage = () => {
             //helperText="Incorrect entry."
             inputProps={{ style: { textAlign: "center" } }}
             type="password"
-            onChange={(e) => setLogin({ ...login, password: e.target.value })}
+            onChange={(e) => setLogin({ ...login, pass: e.target.value })}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
                 ValidarDatos();

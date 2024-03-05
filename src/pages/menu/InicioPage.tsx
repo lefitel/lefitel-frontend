@@ -24,7 +24,7 @@ import { getAdss } from "../../api/Adss.api";
 
 const InicioPage = () => {
   useEffect(() => {
-    getAdss();
+    //getAdss();
   }, []);
 
   return (

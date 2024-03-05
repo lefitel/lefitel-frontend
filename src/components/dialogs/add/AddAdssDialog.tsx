@@ -8,11 +8,12 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React from "react";
+import React, { useContext } from "react";
 import { Add } from "@mui/icons-material";
 import { AdssInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
 import { createAdss } from "../../../api/Adss.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddAdssDialogProps {
     functionApp: () => void;
@@ -25,6 +26,7 @@ const AddAdssDialog: React.FC<AddAdssDialogProps> = ({ functionApp }) => {
     const [open, setOpen] = React.useState(false);
     const [data, setData] = React.useState<AdssInterface>({ description: "", name: "" });
     const { enqueueSnackbar } = useSnackbar();
+    const { sesion } = useContext(SesionContext);
 
     const handleClickOpen = () => {
         setOpen(true);
@@ -85,7 +87,7 @@ const AddAdssDialog: React.FC<AddAdssDialogProps> = ({ functionApp }) => {
                         <Button onClick={handleClose}>Cancelar</Button>
                         <Button onClick={async () => {
                             if (data.name != '' && data.description != '') {
-                                const reponse = await createAdss(data);
+                                const reponse = await createAdss(data, sesion.token);
 
                                 if (Number(reponse) === 200) {
                                     enqueueSnackbar("Introducido con exito", {

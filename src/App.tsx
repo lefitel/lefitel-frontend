@@ -53,7 +53,7 @@ const lightTheme = createTheme(
 const PrivateRoutes = () => {
   const { sesion } = useContext(SesionContext);
 
-  return sesion ? <Outlet /> : <Navigate to="/login" />;
+  return sesion.token != "" ? <Outlet /> : <Navigate to="/login" />;
 };
 
 const App = () => {

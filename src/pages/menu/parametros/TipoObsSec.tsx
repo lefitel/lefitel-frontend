@@ -17,9 +17,10 @@ import { Add } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddTipoObsDialog from "../../../components/dialogs/add/AddTipoObsDialog";
 import { TipoObsInterface } from "../../../interfaces/interfaces";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useSnackbar } from "notistack";
 import { deleteTipoObs, editTipoObs, getTipoObs } from "../../../api/TipoObs.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -50,6 +51,7 @@ const TipoObsSec = () => {
   const [data, setData] = useState<TipoObsInterface>({ id: 1, name: "", description: "" });
   const [list, setList] = useState<TipoObsInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
+  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
@@ -57,7 +59,7 @@ const TipoObsSec = () => {
 
 
   const recibirDatos = async () => {
-    setList(await getTipoObs())
+    setList(await getTipoObs(sesion.token))
 
 
 
@@ -203,7 +205,7 @@ const TipoObsSec = () => {
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
               if (data.name != '' && data.description != '') {
-                const reponse = await editTipoObs(data);
+                const reponse = await editTipoObs(data, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",
@@ -238,7 +240,7 @@ const TipoObsSec = () => {
         <DialogActions>
           <Button onClick={handleCloseDelete}>Cancelar</Button>
           <Button onClick={async () => {
-            const reponse = await deleteTipoObs(data.id);
+            const reponse = await deleteTipoObs(data.id as number, sesion.token);
             if (Number(reponse) === 200) {
               enqueueSnackbar("Eliminado con exito", {
                 variant: "success",

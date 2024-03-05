@@ -8,11 +8,12 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React from "react";
+import React, { useContext } from "react";
 import { Add } from "@mui/icons-material";
 import { PropietarioInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
 import { createPropietario } from "../../../api/Propietario.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddPropietarioDialogProps {
     functionApp: () => void;
@@ -24,6 +25,7 @@ const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp
     const [open, setOpen] = React.useState(false);
     const [data, setData] = React.useState<PropietarioInterface>({ id: 0, name: "" });
     const { enqueueSnackbar } = useSnackbar();
+    const { sesion } = useContext(SesionContext);
 
     const handleClickOpen = () => {
         setOpen(true);
@@ -70,7 +72,7 @@ const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp
                         <Button onClick={handleClose}>Cancelar</Button>
                         <Button onClick={async () => {
                             if (data.name != '') {
-                                const reponse = await createPropietario(data);
+                                const reponse = await createPropietario(data, sesion.token);
 
                                 if (Number(reponse) === 200) {
                                     enqueueSnackbar("Introducido con exito", {

@@ -3,26 +3,34 @@ import { urlBitacora, urlApi } from "./url";
 import { BitacoraInterface } from "../interfaces/interfaces";
 
 export const getBitacora = (
-  id_usuario: number
+  id_usuario: number,
+  token: string
 ): Promise<BitacoraInterface[]> => {
-  return axios.get(urlApi + urlBitacora + id_usuario).then((response) => {
-    const dataList: BitacoraInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        id_usuario: item.id_usuario,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+  return axios
+    .get(urlApi + urlBitacora + id_usuario, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      const dataList: BitacoraInterface[] = response.data.map((item: any) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          id_usuario: item.id_usuario,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+      //console.log(dataList);
+      return dataList;
     });
-    //console.log(dataList);
-    return dataList;
-  });
 };
 
-export const createBitacora = (data: BitacoraInterface): Promise<number> => {
+export const createBitacora = (
+  data: BitacoraInterface,
+  token: string
+): Promise<number> => {
   //type BitacoraWithoutId = Omit<BitacoraInterface, "id">;
   const newData: BitacoraInterface = {
     name: data.name,
@@ -31,7 +39,9 @@ export const createBitacora = (data: BitacoraInterface): Promise<number> => {
   };
 
   return axios
-    .post(urlApi + urlBitacora, newData)
+    .post(urlApi + urlBitacora, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;

@@ -1,8 +1,6 @@
-import { Add, Edit, WhereToVote } from "@mui/icons-material";
 import {
   Autocomplete,
   Button,
-  ButtonGroup,
   Checkbox,
   Dialog,
   DialogActions,
@@ -14,36 +12,42 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import React, { useEffect, useState } from "react";
+import CustomTabComponent from "../../components/CustomTabComponent";
+import {
+  ArrowBackIos,
+  QuestionMark,
+} from "@mui/icons-material";
+
+import AddEventoDialog from "../../components/dialogs/add/AddEventoDialog";
+import EditPosteDialog from "../../components/dialogs/edits/EditPosteDialog";
+import PosteDetalleEventoSec from "./detalle/PosteDetalleEventoSec";
+import PosteDetalleDataSec from "./detalle/PosteDetalleDataSec";
+import SimpleDialogComponent from "../../components/SimpleDialogComp";
+import InfoPosteDetalleDialog from "../../components/dialogs/info/InfoPosteDetalleDialog";
+import { AdssInterface, AdssPosteInterface, CiudadInterface, EventoInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../interfaces/interfaces";
+import { editPoste, searchPoste } from "../../api/Poste.api";
+import { getAdss } from "../../api/Adss.api";
+import { createAdssPoste, deleteAdssPoste, getAdssPoste } from "../../api/AdssPoste.api";
+import { latExample, lngExample } from "../../data/example";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
-import React, { useContext, useEffect, useState } from "react";
+import { useSnackbar } from "notistack";
 import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { DatePicker } from "@mui/x-date-pickers";
-import { useSnackbar } from "notistack";
-import { AdssInterface, AdssPosteInterface, CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../../interfaces/interfaces";
-import { getAdss } from "../../../api/Adss.api";
-import { getCiudad } from "../../../api/Ciudad.api";
-import { getMaterial } from "../../../api/Material.api";
-import { getPropietario } from "../../../api/Propietario.api";
-import { url } from "../../../api/url";
 import dayjs from "dayjs";
-import { createAdssPoste, deleteAdssPoste, getAdssPoste } from "../../../api/AdssPoste.api";
-import { uploadImage } from "../../../api/Upload.api";
-import { deletePoste, editPoste } from "../../../api/Poste.api";
-import { posteExample } from "../../../data/example";
-import { getEvento_poste } from "../../../api/Evento.api";
-import { SesionContext } from "../../../context/SesionProvider";
+import { uploadImage } from "../../api/Upload.api";
+import { url } from "../../api/url";
+import { getCiudad } from "../../api/Ciudad.api";
+import { getMaterial } from "../../api/Material.api";
+import { getPropietario } from "../../api/Propietario.api";
 
-
-interface EditPosteDialogProps {
+interface PosteDetalleSecProps {
   poste: PosteInterface;
-  setPoste: (poste: PosteInterface) => void;
-
   functionApp: () => void;
-  setOpen: (open: boolean) => void;
-  open: boolean;
 }
-const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, functionApp, setOpen, open }) => {
-  const [data, setData] = React.useState(poste);
+const PosteDetalleSec: React.FC<PosteDetalleSecProps> = ({ poste, functionApp }) => {
+  const [open, setOpen] = React.useState(false);
+  const [data, setData] = React.useState({ ...poste });
   const [image, setImage] = useState<File | null>();
 
   const { enqueueSnackbar } = useSnackbar();
@@ -54,43 +58,33 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
   const [listCiudad, setListCiudad] = React.useState<CiudadInterface[]>([]);
   const [listMaterial, setListMaterial] = React.useState<MaterialInterface[]>([]);
   const [listPropietario, setListPropietario] = React.useState<PropietarioInterface[]>([]);
-  const [openDelete, setOpenDelete] = useState(false);
-  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
   }, [open])
 
-  const recibirDatos = async () => {
 
-    const adssposteTemp = await getAdssPoste(data.id as number, sesion.token)
+
+  const recibirDatos = async () => {
+    const adssposteTemp = await getAdssPoste(data.id ? data.id : 0)
     await setListAdssPoste(adssposteTemp)
-    const ids = await adssposteTemp.map(objeto => objeto.id) ? adssposteTemp.map(objeto => objeto.id_adss) : [];
+    const ids = await adssposteTemp.map(objeto => objeto.id) ? listAdssPoste.map(objeto => objeto.id_adss) : [];
 
     setListAdssSelected(ids as [])
-    setListAdss(await getAdss(sesion.token))
-    setListCiudad(await getCiudad(sesion.token))
-    setListMaterial(await getMaterial(sesion.token))
-    setListPropietario(await getPropietario(sesion.token))
+    setListAdss(await getAdss())
+    setListCiudad(await getCiudad())
+    setListMaterial(await getMaterial())
+    setListPropietario(await getPropietario())
   }
-
+  const handleClickOpen = () => {
+    setOpen(true);
+  };
 
   const handleClose = () => {
     setOpen(false);
-    setPoste(posteExample)
     functionApp();
     setListAdssSelected([]);
-    //setListAdssPoste([]);
   };
-  const handleClickOpenDelete = () => {
-
-    setOpenDelete(true);
-  };
-
-  const handleCloseDelete = () => {
-    setOpenDelete(false);
-  };
-
 
   const onImageChange = (event) => {
     if (event.target.files && event.target.files[0]) {
@@ -100,99 +94,15 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
 
   function LocationMarker() {
     const map = useMapEvent('click', (event) => {
-
       const newData: PosteInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
       map.flyTo(event.latlng, map.getZoom())
-
     })
 
 
     return null
   }
 
-  const handleEdit = async () => {
-    if (data.name != '' && data.id_ciudadA != 0 && data.id_ciudadB != 0 && data.id_material != 0 && data.id_propietario != 0 && listAdssSelected.length > 0) {
-      if (data.id_ciudadA != data.id_ciudadB) {
-        let newData: PosteInterface = { ...data }
-        if (image) {
-          const reponseUpload = await uploadImage(image, sesion.token);
-          if (reponseUpload != "500") {
-            newData = { ...newData, image: reponseUpload };
-          }
-          else {
-            enqueueSnackbar("No se pudo Ingresar la imagen", {
-              variant: "error",
-            });
-          }
-        }
-        const reponse = await editPoste(newData, sesion.token);
-        if (Number(reponse.status) === 200) {
-          try {
-            const diferenciasAñadir = listAdssSelected.filter(numero => listAdssPoste.every(objeto => objeto.id_adss !== numero));
-            const diferenciasEliminar = listAdssPoste.filter(objeto => listAdssSelected.every(numero => objeto.id_adss !== numero))
-              .map(objeto => objeto.id);
-            diferenciasAñadir.map(async (adss: number) => {
-              await createAdssPoste({ id_adss: adss, id_poste: reponse.data.id as number }, sesion.token);
-            })
-            diferenciasEliminar.map(async (adss) => {
-              await deleteAdssPoste(adss as number, sesion.token);
-            }
-            )
-            enqueueSnackbar("Ingresado con exito", {
-              variant: "success",
-            })
-            handleClose()
-          } catch (e) {
-            enqueueSnackbar("Error al ingresar los Adss", {
-              variant: "error",
-            })
-          }
-        }
-        else {
-          enqueueSnackbar("No se pudo Ingresar", {
-            variant: "error",
-          });
-        }
-      } else {
-        enqueueSnackbar("Las ciudades son iguales", {
-          variant: "warning",
-        });
-      }
-    }
-    else {
-      enqueueSnackbar("Rellena todos los espacios", {
-        variant: "warning",
-      });
-    }
-  }
-
-  const handleDelete = async () => {
-    const listEvento = await getEvento_poste(data?.id as number, sesion.token);
-    if (listEvento.length < 1) {
-      listAdssPoste.map((adssPoste) => {
-        deleteAdssPoste(adssPoste?.id as number, sesion.token);
-      })
-      const reponse = await deletePoste(data?.id as number, sesion.token);
-      if (Number(reponse) === 200) {
-        enqueueSnackbar("Eliminado con exito", {
-          variant: "success",
-        });
-        handleCloseDelete()
-        handleClose()
-      }
-      else {
-        enqueueSnackbar("No se pudo Eliminar", {
-          variant: "error",
-        });
-      }
-    }
-    else {
-      enqueueSnackbar("No se pudo Eliminar porque tiene eventos asociados", {
-        variant: "error",
-      });
-    }
-  }
 
   return (
     <Dialog
@@ -471,41 +381,94 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
           </Grid>
         </Grid>
       </DialogContent>
-      <DialogActions style={{
-        display: "flex",
-        justifyContent: "space-between"
-      }}>
-        <Grid>
-          <Button variant="outlined" onClick={handleClickOpenDelete}>
-            {"Eliminar"}
-          </Button>
+      <DialogActions>
+        <Button onClick={handleClose}>Cancelar</Button>
+        <Button onClick={async () => {
+          //console.log(data)
 
-        </Grid>
-        <ButtonGroup>
-          <Button onClick={handleClose}>Cancelar</Button>
-          <Button onClick={handleEdit}>Editar</Button>
-        </ButtonGroup>
+          if (data.name != '' && data.id_ciudadA != 0 && data.id_ciudadB != 0 && data.id_material != 0 && data.id_propietario != 0 && listAdssSelected.length > 0) {
 
+
+            if (data.id_ciudadA != data.id_ciudadB) {
+              let newData: PosteInterface = { ...data }
+
+              if (image) {
+                const reponseUpload = await uploadImage(image);
+                if (reponseUpload != "500") {
+                  newData = { ...newData, image: reponseUpload };
+                }
+                else {
+                  enqueueSnackbar("No se pudo Ingresar la imagen", {
+                    variant: "error",
+                  });
+                }
+              }
+              const reponse = await editPoste(newData);
+
+
+              if (Number(reponse.status) === 200) {
+                try {
+
+                  const diferenciasAñadir = listAdssSelected.filter(numero => listAdssPoste.every(objeto => objeto.id_adss !== numero));
+                  const diferenciasEliminar = listAdssPoste.filter(objeto => listAdssSelected.every(numero => objeto.id_adss !== numero))
+                    .map(objeto => objeto.id);
+
+                  //console.log("------------------------------------------------")
+                  //console.log(diferenciasAñadir)
+                  //console.log(diferenciasEliminar)
+
+                  //console.log("------------------------------------------------")
+
+                  diferenciasAñadir.map(async (adss) => {
+
+                    await createAdssPoste({ id_adss: adss, id_poste: reponse.data.id ? reponse.data.id : 0 });
+                  })
+                  diferenciasEliminar.map(async (adss) => {
+                    await deleteAdssPoste(adss ? adss : 0);
+
+
+                  }
+
+                  )
+                  enqueueSnackbar("Ingresado con exito", {
+                    variant: "success",
+                  })
+                  handleClose()
+                } catch (e) {
+                  enqueueSnackbar("Error al ingresar los Adss", {
+                    variant: "error",
+                  })
+                }
+
+
+
+              }
+              else {
+                enqueueSnackbar("No se pudo Ingresar", {
+                  variant: "error",
+                });
+              }
+
+            } else {
+              enqueueSnackbar("Las ciudades son iguales", {
+                variant: "warning",
+              });
+            }
+
+
+          }
+          else {
+            enqueueSnackbar("Rellena todos los espacios", {
+              variant: "warning",
+            });
+          }
+
+
+
+
+        }}>Editar</Button>
       </DialogActions>
-      <Dialog
-        open={openDelete}
-        onClose={handleCloseDelete}
-      >
-        <DialogTitle>{"Eliminar Poste"}</DialogTitle>
-        <DialogContent>
-          <Grid container width={1} m={0}>
-            Seguro que quiere eliminar este Poste?
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-
-          <Button onClick={handleCloseDelete}>Cancelar</Button>
-          <Button onClick={handleDelete}>Eliminar</Button>
-        </DialogActions>
-      </Dialog>
     </Dialog>
-
   );
 };
-
-export default EditPosteDialog;
+export default PosteDetalleSec;

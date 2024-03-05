@@ -2,38 +2,67 @@ import axios from "axios";
 import { urlUsuario, urlApi } from "./url";
 import { UsuarioInterface } from "../interfaces/interfaces";
 
-export const getUsuario = (): Promise<UsuarioInterface[]> => {
-  return axios.get(urlApi + urlUsuario).then((response) => {
-    const dataList: UsuarioInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        name: item.name,
-        lastname: item.lastname,
-        image: item.image,
-        phone: item.phone,
-        birthday: item.birthday,
-        user: item.user,
-        pass: item.pass,
-        id_rol: item.id_rol,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+export const getUsuario = (token: string): Promise<UsuarioInterface[]> => {
+  return axios
+    .get(urlApi + urlUsuario, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => {
+      const dataList: UsuarioInterface[] = response.data.map((item: any) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          name: item.name,
+          lastname: item.lastname,
+          image: item.image,
+          phone: item.phone,
+          birthday: item.birthday,
+          user: item.user,
+          pass: item.pass,
+          id_rol: item.id_rol,
+          rol: item.rol,
+
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+      //console.log(dataList);
+      return dataList;
     });
-    //console.log(dataList);
-    return dataList;
-  });
 };
 
-export const searchUsuario = (dataId: number): Promise<UsuarioInterface> => {
-  return axios.get(urlApi + urlUsuario + dataId).then((response) => {
-    const data: UsuarioInterface = response.data;
-    //console.log(data);
-    return data;
-  });
+export const searchUsuario = (
+  dataId: number,
+  token: string
+): Promise<UsuarioInterface> => {
+  return axios
+    .get(urlApi + urlUsuario + dataId, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      const data: UsuarioInterface = response.data;
+      //console.log(data);
+      return data;
+    });
 };
 
-export const createUsuario = (data: UsuarioInterface): Promise<number> => {
+export const searchUsuario_user = (
+  user: string,
+  token: string
+): Promise<UsuarioInterface> => {
+  return axios
+    .get(urlApi + urlUsuario + "user/" + user, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      const data: UsuarioInterface = response.data;
+      //console.log(data);
+      return data;
+    });
+};
+
+export const createUsuario = (
+  data: UsuarioInterface,
+  token: string
+): Promise<number> => {
   type UsuarioWithoutId = Omit<UsuarioInterface, "id">;
   const newData: UsuarioWithoutId = {
     name: data.name,
@@ -47,7 +76,9 @@ export const createUsuario = (data: UsuarioInterface): Promise<number> => {
   };
 
   return axios
-    .post(urlApi + urlUsuario, newData)
+    .post(urlApi + urlUsuario, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -58,9 +89,14 @@ export const createUsuario = (data: UsuarioInterface): Promise<number> => {
     });
 };
 
-export const editUsuario = (data: UsuarioInterface): Promise<number> => {
+export const editUsuario = (
+  data: UsuarioInterface,
+  token: string
+): Promise<number> => {
   return axios
-    .put(urlApi + urlUsuario + data.id, data)
+    .put(urlApi + urlUsuario + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -71,9 +107,11 @@ export const editUsuario = (data: UsuarioInterface): Promise<number> => {
     });
 };
 
-export const deleteUsuario = (id: number): Promise<number> => {
+export const deleteUsuario = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlUsuario + id)
+    .delete(urlApi + urlUsuario + id, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;

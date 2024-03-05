@@ -1,7 +1,10 @@
 import {
   EventoInterface,
+  ObsInterface,
   PosteInterface,
   RevicionInterface,
+  SolucionInterface,
+  UsuarioInterface,
 } from "../interfaces/interfaces";
 
 export const columnsData = [
@@ -69,6 +72,30 @@ export const eventoExample: EventoInterface = {
 
   state: false,
   id_poste: 0,
+};
+
+export const usuarioExample: UsuarioInterface = {
+  name: "",
+  lastname: "",
+  birthday: new Date(),
+  image: "",
+  phone: "",
+  user: "",
+  pass: "",
+  id_rol: 0,
+};
+
+export const solucionExample: SolucionInterface = {
+  description: "",
+  image: "",
+  date: new Date(),
+  id_evento: 0,
+};
+
+export const obsExample: ObsInterface = {
+  name: "",
+  description: "",
+  id_tipoObs: 0,
 };
 
 export const revicionExample: RevicionInterface = {

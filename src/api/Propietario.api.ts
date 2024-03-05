@@ -2,24 +2,33 @@ import axios from "axios";
 import { urlPropietario, urlApi } from "./url";
 import { PropietarioInterface } from "../interfaces/interfaces";
 
-export const getPropietario = (): Promise<PropietarioInterface[]> => {
-  return axios.get(urlApi + urlPropietario).then((response) => {
-    const dataList: PropietarioInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        name: item.name,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+export const getPropietario = (
+  token: string
+): Promise<PropietarioInterface[]> => {
+  return axios
+    .get(urlApi + urlPropietario, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      const dataList: PropietarioInterface[] = response.data.map(
+        (item: any) => {
+          // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+          return {
+            id: item.id,
+            name: item.name,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          };
+        }
+      );
+      //console.log(dataList);
+      return dataList;
     });
-    //console.log(dataList);
-    return dataList;
-  });
 };
 
 export const createPropietario = (
-  data: PropietarioInterface
+  data: PropietarioInterface,
+  token: string
 ): Promise<number> => {
   type PropietarioWithoutId = Omit<PropietarioInterface, "id">;
   const newData: PropietarioWithoutId = {
@@ -27,7 +36,9 @@ export const createPropietario = (
   };
 
   return axios
-    .post(urlApi + urlPropietario, newData)
+    .post(urlApi + urlPropietario, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -39,10 +50,13 @@ export const createPropietario = (
 };
 
 export const editPropietario = (
-  data: PropietarioInterface
+  data: PropietarioInterface,
+  token: string
 ): Promise<number> => {
   return axios
-    .put(urlApi + urlPropietario + data.id, data)
+    .put(urlApi + urlPropietario + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -53,9 +67,14 @@ export const editPropietario = (
     });
 };
 
-export const deletePropietario = (id: number): Promise<number> => {
+export const deletePropietario = (
+  id: number,
+  token: string
+): Promise<number> => {
   return axios
-    .delete(urlApi + urlPropietario + id)
+    .delete(urlApi + urlPropietario + id, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;

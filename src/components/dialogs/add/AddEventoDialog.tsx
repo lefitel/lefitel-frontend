@@ -3,6 +3,7 @@ import {
   Accordion,
   AccordionDetails,
   AccordionSummary,
+  Autocomplete,
   Button,
   ButtonGroup,
   Checkbox,
@@ -17,7 +18,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { DatePicker } from "@mui/x-date-pickers";
 import { EventoInterface, ObsInterface, PosteInterface, RevicionInterface, TipoObsInterface } from "../../../interfaces/interfaces";
@@ -30,14 +31,15 @@ import { uploadImage } from "../../../api/Upload.api";
 import { createEvento } from "../../../api/Evento.api";
 import { createEventoObs } from "../../../api/EventoObs.api";
 import { createRevicion } from "../../../api/Revicion.api";
+import { getPoste } from "../../../api/Poste.api";
+import { SesionContext } from "../../../context/SesionProvider";
 interface AddEventoDialogProps {
-  poste: PosteInterface;
   functionApp: () => void;
 }
-const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp }) => {
+const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
   const [open, setOpen] = React.useState(false);
   const [image, setImage] = useState<File | null>();
-  const [data, setData] = React.useState<EventoInterface>({ ...eventoExample, id_poste: poste.id ? poste.id : 0 });
+  const [data, setData] = React.useState<EventoInterface>({ ...eventoExample });
   const [dataRevicion, setDataRevicion] = React.useState<RevicionInterface>(revicionExample);
   const [listObsSelected, setListObsSelected] = React.useState<number[]>([]);
 
@@ -46,27 +48,25 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp })
   const [listObs, setListObs] = React.useState<ObsInterface[]>([]);
   const [listTipoObs, setListTipoObs] = React.useState<TipoObsInterface[]>([]);
 
-
+  const [listPoste, setListPoste] = React.useState<PosteInterface[]>([]);
+  const { sesion } = useContext(SesionContext);
 
   const recibirDatos = async () => {
-    //.log(data)
-    setListObs(await getObs())
-    setListTipoObs(await getTipoObs())
+    setListPoste(await getPoste(sesion.token))
+    setListObs(await getObs(sesion.token))
+    setListTipoObs(await getTipoObs(sesion.token))
   }
   const handleClickOpen = () => {
     recibirDatos()
-
     setOpen(true);
   };
 
   const handleClose = () => {
-    setData({ ...eventoExample, id_poste: poste.id ? poste.id : 0 })
-
+    setData({ ...eventoExample })
     setOpen(false);
     setImage(null);
     functionApp();
     setListObsSelected([])
-
   };
 
   const onImageChange = (event) => {
@@ -74,6 +74,48 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp })
       setImage(event.target.files[0]);
     }
   };
+
+  const handleGuardar = async () => {
+    if (image && data.description != '' && data.id_poste != 0 && listObsSelected.length > 0) {
+      const reponseUpload = await uploadImage(image, sesion.token);
+      if (reponseUpload != "500") {
+        const newData: EventoInterface = { ...data, image: reponseUpload };
+        const reponse = await createEvento(newData, sesion.token);
+        if (Number(reponse.status) === 200) {
+          try {
+            const newDataRevicion: RevicionInterface = { ...dataRevicion, id_evento: reponse.data.id ? reponse.data.id : 0 };
+            await createRevicion(newDataRevicion, sesion.token);
+            listObsSelected.map(async (obs: number) => {
+              await createEventoObs({ id_obs: obs, id_evento: reponse.data.id ? reponse.data.id : 0 }, sesion.token);
+            })
+            enqueueSnackbar("Ingresado con exito", {
+              variant: "success",
+            })
+            handleClose()
+          } catch (e) {
+            enqueueSnackbar("Error al ingresar las observaciones", {
+              variant: "error",
+            })
+          }
+        }
+        else {
+          enqueueSnackbar("No se pudo Ingresar", {
+            variant: "error",
+          });
+        }
+      } else {
+        enqueueSnackbar("No se pudo Ingresar la imagen", {
+          variant: "error",
+        });
+      }
+    }
+    else {
+      enqueueSnackbar("Rellena todos los espacios", {
+        variant: "warning",
+      });
+    }
+  }
+
   return (
     <React.Fragment>
       <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
@@ -89,16 +131,26 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp })
           <DialogContentText>
             <Grid container width={1} m={0}>
               <Grid item xs={12} md={4}>
-                <TextField
-                  disabled
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
+                <Autocomplete
+                  renderOption={(props, option) => {
+                    return (
+                      <li {...props} key={option.id}>
+                        {option.name}
+                      </li>
+                    );
                   }}
-                  type="number"
-                  label="Numero de poste"
-                  value={poste.name}
+                  disablePortal
+                  options={listPoste}
+                  getOptionLabel={(option) => option.name}
+
+                  onChange={(event, newValue) => {
+                    const newData: EventoInterface = { ...data, id_poste: newValue?.id ? newValue?.id : 0 };
+                    setData(newData)
+                  }}
+                  renderInput={(params) => <TextField {...params} label="Numero de poste" />}
+
+
+
                 />
               </Grid>
 
@@ -173,7 +225,6 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp })
                                           }
                                           else {
                                             const nuevaLista = listObsSelected.filter(item => item !== obs.id);
-                                            console.log(nuevaLista)
                                             setListObsSelected(nuevaLista);
                                           }
                                         }}
@@ -287,55 +338,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ poste, functionApp })
         <DialogActions>
           <ButtonGroup>
             <Button onClick={handleClose}>Cancelar</Button>
-            <Button onClick={async () => {
-              console.log(poste)
-              if (image && data.description != '' && data.id_poste != 0 && listObsSelected.length > 0) {
-                const reponseUpload = await uploadImage(image);
-                if (reponseUpload != "500") {
-                  const newData: EventoInterface = { ...data, image: reponseUpload };
-                  const reponse = await createEvento(newData);
-
-                  if (Number(reponse.status) === 200) {
-                    try {
-                      const newDataRevicion: RevicionInterface = { ...dataRevicion, id_evento: reponse.data.id ? reponse.data.id : 0 };
-                      await createRevicion(newDataRevicion);
-                      listObsSelected.map(async (obs) => {
-                        await createEventoObs({ id_obs: obs, id_evento: reponse.data.id ? reponse.data.id : 0 });
-                      })
-                      enqueueSnackbar("Ingresado con exito", {
-                        variant: "success",
-                      })
-                      handleClose()
-                    } catch (e) {
-                      enqueueSnackbar("Error al ingresar las observaciones", {
-                        variant: "error",
-                      })
-                    }
-
-
-
-                  }
-                  else {
-                    enqueueSnackbar("No se pudo Ingresar", {
-                      variant: "error",
-                    });
-                  }
-                } else {
-                  enqueueSnackbar("No se pudo Ingresar la imagen", {
-                    variant: "error",
-                  });
-                }
-
-
-
-              }
-              else {
-
-                enqueueSnackbar("Rellena todos los espacios", {
-                  variant: "warning",
-                });
-              }
-            }}>Guardar</Button>
+            <Button onClick={handleGuardar}>Guardar</Button>
           </ButtonGroup>
         </DialogActions>
       </Dialog>

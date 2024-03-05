@@ -8,14 +8,14 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { Add } from "@mui/icons-material";
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
 import { createCiudad } from "../../../api/Ciudad.api";
-import { MapContainer, Marker, Popup, TileLayer, useMapEvent, useMapEvents } from "react-leaflet";
+import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
 import { latExample, lngExample } from "../../../data/example";
-import { customIcon } from "../../../assets/PinMap";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddCiudadDialogProps {
     functionApp: () => void;
@@ -25,9 +25,10 @@ interface AddCiudadDialogProps {
 
 const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
 
-    const [open, setOpen] = React.useState(false);
-    const [data, setData] = React.useState<CiudadInterface>({ id: 0, name: "", lat: latExample, lng: lngExample });
+    const [open, setOpen] = useState(false);
+    const [data, setData] = useState<CiudadInterface>({ id: 0, name: "", lat: latExample, lng: lngExample });
     const { enqueueSnackbar } = useSnackbar();
+    const { sesion } = useContext(SesionContext);
 
     const handleClickOpen = () => {
         setOpen(true);
@@ -40,15 +41,10 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
     };
 
     function LocationMarker() {
-        const [position, setPosition] = useState([latExample, lngExample])
         const map = useMapEvent('click', (event) => {
             const newData: CiudadInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
             setData(newData)
-            setPosition(event.latlng)
-            //console.log(position);
-
             map.flyTo(event.latlng, map.getZoom())
-
         })
 
 
@@ -106,7 +102,7 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
                         <Button onClick={handleClose}>Cancelar</Button>
                         <Button onClick={async () => {
                             if (data.name != '' && data.lat != 0 && data.lng != 0) {
-                                const reponse = await createCiudad(data);
+                                const reponse = await createCiudad(data, sesion.token);
 
                                 if (Number(reponse) === 200) {
                                     enqueueSnackbar("Introducido con exito", {

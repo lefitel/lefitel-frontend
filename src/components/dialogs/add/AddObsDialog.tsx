@@ -9,37 +9,34 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React from "react";
+import React, { useContext } from "react";
 import { Add } from "@mui/icons-material";
 import { ObsInterface, TipoObsInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
 import { createObs } from "../../../api/Obs.api";
 import { getTipoObs } from "../../../api/TipoObs.api";
+import { obsExample } from "../../../data/example";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddObsDialogProps {
     functionApp: () => void;
 }
 
-
 const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
-
     const [open, setOpen] = React.useState(false);
     const [listTipoData, setListTipoData] = React.useState<TipoObsInterface[]>([]);
-
-    const [data, setData] = React.useState<ObsInterface>({ id: 0, description: "", name: "", id_tipoObs: 0 });
+    const [data, setData] = React.useState<ObsInterface>(obsExample);
     const { enqueueSnackbar } = useSnackbar();
-
+    const { sesion } = useContext(SesionContext);
     const recibirDatos = async () => {
-        setListTipoData(await getTipoObs())
+        setListTipoData(await getTipoObs(sesion.token))
     }
-
     const handleClickOpen = () => {
         recibirDatos()
         setOpen(true);
     };
-
     const handleClose = () => {
-        setData({ id: 0, description: "", name: "", id_tipoObs: 0 })
+        setData(obsExample)
         setOpen(false);
         functionApp()
     };
@@ -72,21 +69,22 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
                             />
                         </Grid>
                         <Grid item xs={12} md={8}>
-
                             <Autocomplete
+                                renderOption={(props, option) => {
+                                    return (
+                                        <li {...props} key={option.id}>
+                                            {option.name}
+                                        </li>
+                                    );
+                                }}
                                 disablePortal
-
                                 options={listTipoData}
                                 getOptionLabel={(option) => option.name}
-
                                 onChange={(event, newValue) => {
                                     const newData: ObsInterface = { ...data, id_tipoObs: newValue?.id ? newValue?.id : 0 };
                                     setData(newData)
                                 }}
                                 renderInput={(params) => <TextField {...params} label="Tipo de Observación" />}
-
-
-
                             />
                         </Grid>
                         <Grid item xs={12} md={12}>
@@ -111,7 +109,7 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
                         <Button onClick={handleClose}>Cancelar</Button>
                         <Button onClick={async () => {
                             if (data.name != '' && data.description != '' && data.id_tipoObs != 0) {
-                                const reponse = await createObs(data);
+                                const reponse = await createObs(data, sesion.token);
 
                                 if (Number(reponse) === 200) {
                                     enqueueSnackbar("Ingresado con exito", {

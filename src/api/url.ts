@@ -1,5 +1,8 @@
-export const url = `http://192.168.0.14:3000/`;
-export const urlApi = `http://192.168.0.14:3000/api/`;
+export const urld = `http://192.168.0.10:3000/`;
+export const urlApid = `http://192.168.0.10:3000/api/`;
+
+export const url = `https://backend-lefitel.fly.dev/`;
+export const urlApi = `https://backend-lefitel.fly.dev/api/`;
 
 export const urlAdss = "adss/";
 export const urlAdssPoste = "adssposte/";
@@ -17,3 +20,4 @@ export const urlUpload = "upload/";
 export const urlBitacora = "bitacora/";
 export const urlEvento = "evento/";
 export const urlRevicion = "revicion/";
+export const urlSolucion = "solucion/";

@@ -1,3 +1,7 @@
+export interface SesionInterface {
+  usuario: UsuarioInterface;
+  token: string;
+}
 export interface AdssInterface {
   id?: number | null;
   name: string;
@@ -56,6 +60,7 @@ export interface ObsInterface {
   name: string;
   description: string;
   id_tipoObs: number;
+  tipoObs?: TipoObsInterface | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -86,6 +91,13 @@ export interface PosteInterface {
   id_propietario: number;
   id_ciudadA: number;
   id_ciudadB: number;
+
+  adss?: AdssInterface | null;
+  material?: MaterialInterface | null;
+  propietario?: PropietarioInterface | null;
+  ciudadA?: CiudadInterface | null;
+  ciudadB?: CiudadInterface | null;
+
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -96,6 +108,9 @@ export interface EventoInterface {
   image: string;
   state: boolean;
   id_poste: number;
+
+  poste?: PosteInterface | null;
+
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -119,6 +134,22 @@ export interface UsuarioInterface {
   user: string;
   pass: string;
   id_rol: number;
+
+  rol?: RolInterface | null;
+
+  createdAt?: Date | null;
+  updatedAt?: Date | null;
+}
+
+export interface SolucionInterface {
+  id?: number | null;
+  description: string;
+  image: string;
+  date: Date;
+  id_evento: number;
+
+  evento?: RolInterface | null;
+
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }

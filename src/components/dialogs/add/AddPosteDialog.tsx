@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { latExample, lngExample, posteExample } from "../../../data/example";
 import { DatePicker } from "@mui/x-date-pickers";
 import { AdssInterface, CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../../interfaces/interfaces";
@@ -30,6 +30,7 @@ import { uploadImage } from "../../../api/Upload.api";
 import { createPoste } from "../../../api/Poste.api";
 import dayjs from "dayjs";
 import { createAdssPoste } from "../../../api/AdssPoste.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddPosteDialogProps {
   functionApp: () => void;
@@ -46,12 +47,13 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
   const [listCiudad, setListCiudad] = React.useState<CiudadInterface[]>([]);
   const [listMaterial, setListMaterial] = React.useState<MaterialInterface[]>([]);
   const [listPropietario, setListPropietario] = React.useState<PropietarioInterface[]>([]);
+  const { sesion } = useContext(SesionContext);
 
   const recibirDatos = async () => {
-    setListAdss(await getAdss())
-    setListCiudad(await getCiudad())
-    setListMaterial(await getMaterial())
-    setListPropietario(await getPropietario())
+    setListAdss(await getAdss(sesion.token))
+    setListCiudad(await getCiudad(sesion.token))
+    setListMaterial(await getMaterial(sesion.token))
+    setListPropietario(await getPropietario(sesion.token))
   }
   const handleClickOpen = () => {
     recibirDatos()
@@ -73,12 +75,9 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
     }
   };
   function LocationMarker() {
-    const [position, setPosition] = useState([latExample, lngExample])
     const map = useMapEvent('click', (event) => {
       const newData: PosteInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
-      setPosition(event.latlng)
-      //console.log(position);
 
       map.flyTo(event.latlng, map.getZoom())
 
@@ -133,6 +132,13 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
 
             <Grid item xs={12} md={6}>
               <Autocomplete
+                renderOption={(props, option) => {
+                  return (
+                    <li {...props} key={option.id}>
+                      {option.name}
+                    </li>
+                  );
+                }}
                 disablePortal
 
                 options={listPropietario}
@@ -147,6 +153,13 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
             </Grid>
             <Grid item xs={12} md={6}>
               <Autocomplete
+                renderOption={(props, option) => {
+                  return (
+                    <li {...props} key={option.id}>
+                      {option.name}
+                    </li>
+                  );
+                }}
                 disablePortal
 
                 options={listMaterial}
@@ -174,6 +187,13 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
               <Grid container p={0} m={0}>
                 <Grid item xs={6}>
                   <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
                     disablePortal
 
                     options={listCiudad}
@@ -188,6 +208,13 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                 </Grid>
                 <Grid item xs={6}>
                   <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
                     disablePortal
 
                     options={listCiudad}
@@ -333,16 +360,16 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
               //console.log(data)
               if (image && data.name != '' && data.id_ciudadA != 0 && data.id_ciudadB != 0 && data.id_material != 0 && data.id_propietario != 0 && listAdssSelected.length > 0) {
                 if (data.id_ciudadA != data.id_ciudadB) {
-                  const reponseUpload = await uploadImage(image);
+                  const reponseUpload = await uploadImage(image, sesion.token);
                   if (reponseUpload != "500") {
                     const newData: PosteInterface = { ...data, image: reponseUpload };
-                    const reponse = await createPoste(newData);
+                    const reponse = await createPoste(newData, sesion.token);
 
                     if (Number(reponse.status) === 200) {
                       try {
-                        listAdssSelected.map(async (adss) => {
+                        listAdssSelected.map(async (adss: number) => {
 
-                          await createAdssPoste({ id_adss: adss, id_poste: reponse.data.id ? reponse.data.id : 0 });
+                          await createAdssPoste({ id_adss: adss, id_poste: reponse.data.id as number }, sesion.token);
                         })
                         enqueueSnackbar("Ingresado con exito", {
                           variant: "success",

@@ -9,20 +9,15 @@ import {
 } from "@mui/material";
 import { CellTower } from "@mui/icons-material";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-import { customIcon } from "../../../../assets/PinMap";
-import { latExample, lngExample } from "../../../../data/example";
-import { AdssInterface, AdssPosteInterface, PosteInterface } from "../../../../interfaces/interfaces";
 import { useEffect, useState } from "react";
-import { url } from "../../../../api/url";
-import { getAdss } from "../../../../api/Adss.api";
+import { AdssPosteInterface, PosteInterface } from "../../../interfaces/interfaces";
 
 interface PosteDetalleDataSecProps {
-  data: PosteInterface;
   listAdssPoste: AdssPosteInterface[] | undefined;
 
 }
 
-const PosteDetalleDataSec: React.FC<PosteDetalleDataSecProps> = ({ data, listAdssPoste }) => {
+const PosteDetalleDataSec: React.FC<PosteDetalleDataSecProps> = ({listAdssPoste }) => {
   const [listAdss, setListAdss] = useState<AdssInterface[]>();
 
   useEffect(() => {
@@ -152,6 +147,7 @@ const PosteDetalleDataSec: React.FC<PosteDetalleDataSecProps> = ({ data, listAds
           />
         </Grid>
       </Grid>
+      
     </Card>
   );
 };

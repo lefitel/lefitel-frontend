@@ -4,9 +4,10 @@ import {
   CardContent,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { BitacoraInterface } from "../../../../interfaces/interfaces";
 import { getBitacora } from "../../../../api/Bitacora.api";
+import { SesionContext } from "../../../../context/SesionProvider";
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
   { field: 'name', headerName: 'Nombre', width: 100 },
@@ -27,13 +28,14 @@ interface SeguridadDetalleBitacoraSecProps {
 }
 const SeguridadDetalleBitacoraSec: React.FC<SeguridadDetalleBitacoraSecProps> = ({ userId }) => {
   const [list, setList] = useState<BitacoraInterface[]>();
+  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
   }, [])
 
   const recibirDatos = async () => {
-    setList(await getBitacora(userId))
+    setList(await getBitacora(userId, sesion.token))
   }
 
   return (

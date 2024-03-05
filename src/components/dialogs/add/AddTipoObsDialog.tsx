@@ -8,11 +8,12 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React from "react";
+import React, { useContext } from "react";
 import { Add } from "@mui/icons-material";
 import { TipoObsInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
 import { createTipoObs } from "../../../api/TipoObs.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddTipoObsDialogProps {
     functionApp: () => void;
@@ -24,6 +25,7 @@ const AddTipoObsDialog: React.FC<AddTipoObsDialogProps> = ({ functionApp }) => {
     const [open, setOpen] = React.useState(false);
     const [data, setData] = React.useState<TipoObsInterface>({ id: 0, description: "", name: "" });
     const { enqueueSnackbar } = useSnackbar();
+    const { sesion } = useContext(SesionContext);
 
     const handleClickOpen = () => {
         setOpen(true);
@@ -84,7 +86,7 @@ const AddTipoObsDialog: React.FC<AddTipoObsDialogProps> = ({ functionApp }) => {
                         <Button onClick={handleClose}>Cancelar</Button>
                         <Button onClick={async () => {
                             if (data.name != '' && data.description != '') {
-                                const reponse = await createTipoObs(data);
+                                const reponse = await createTipoObs(data, sesion.token);
 
                                 if (Number(reponse) === 200) {
                                     enqueueSnackbar("Introducido con exito", {

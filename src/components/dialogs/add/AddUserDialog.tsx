@@ -1,4 +1,4 @@
-import { Add, ArrowDropDown } from "@mui/icons-material";
+import { Add } from "@mui/icons-material";
 import {
   Autocomplete,
   Button,
@@ -12,15 +12,16 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { useSnackbar } from "notistack";
 import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { getRol } from "../../../api/Rol.api";
-import { createUsuario } from "../../../api/Usuario.api";
+import { createUsuario, searchUsuario, searchUsuario_user } from "../../../api/Usuario.api";
 import { uploadImage } from "../../../api/Upload.api";
 import dayjs from "dayjs";
+import { usuarioExample } from "../../../data/example";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface AddUserDialogProps {
   functionApp: () => void;
@@ -29,17 +30,16 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
   const [open, setOpen] = React.useState(false);
   const [passConfirm, setPassConfirm] = React.useState("");
 
-  const [data, setData] = React.useState<UsuarioInterface>(
-    { name: "", lastname: "", user: "", pass: "", phone: "", image: "", birthday: new Date(), id_rol: 0 }
-  );
+  const [data, setData] = React.useState<UsuarioInterface>(usuarioExample);
   const { enqueueSnackbar } = useSnackbar();
   const [listTipoData, setListTipoData] = React.useState<RolInterface[]>([]);
   const [image, setImage] = useState<File | null>();
+  const { sesion } = useContext(SesionContext);
 
 
 
   const recibirDatos = async () => {
-    setListTipoData(await getRol())
+    setListTipoData(await getRol(sesion.token))
   }
   const handleClickOpen = () => {
     recibirDatos()
@@ -47,7 +47,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
   };
 
   const handleClose = () => {
-    setData({ name: "", lastname: "", user: "", pass: "", phone: "", image: "", birthday: new Date(), id_rol: 0 })
+    setData(usuarioExample)
     setOpen(false);
     functionApp()
     setImage(null)
@@ -188,6 +188,13 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
                 </Grid>
                 <Grid item xs={12}>
                   <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
                     disablePortal
 
                     options={listTipoData}
@@ -262,27 +269,37 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
               //console.log(data)
               if (image && data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && passConfirm != '' && data.user != '' && data.id_rol != 0) {
                 if (data.pass === passConfirm) {
-                  const reponseUpload = await uploadImage(image);
-                  if (reponseUpload != "500") {
-                    const newData: UsuarioInterface = { ...data, image: reponseUpload };
-                    const reponse = await createUsuario(newData);
 
-                    if (Number(reponse) === 200) {
-                      enqueueSnackbar("Ingresado con exito", {
-                        variant: "success",
-                      });
-                      handleClose()
-                    }
-                    else {
-                      enqueueSnackbar("No se pudo Ingresar", {
+                  const userExist = await searchUsuario_user(data.user, sesion.token);
+                  if (!userExist) {
+                    const reponseUpload = await uploadImage(image, sesion.token);
+                    if (reponseUpload != "500") {
+                      const newData: UsuarioInterface = { ...data, image: reponseUpload };
+                      const reponse = await createUsuario(newData, sesion.token);
+
+                      if (Number(reponse) === 200) {
+                        enqueueSnackbar("Ingresado con exito", {
+                          variant: "success",
+                        });
+                        handleClose()
+                      }
+                      else {
+                        enqueueSnackbar("No se pudo Ingresar", {
+                          variant: "error",
+                        });
+                      }
+                    } else {
+                      enqueueSnackbar("No se pudo Ingresar la imagen", {
                         variant: "error",
                       });
                     }
-                  } else {
-                    enqueueSnackbar("No se pudo Ingresar la imagen", {
-                      variant: "error",
+                  }
+                  else {
+                    enqueueSnackbar("Este usuario ya existe", {
+                      variant: "warning",
                     });
                   }
+
                 } else {
                   enqueueSnackbar("Las contraseñas no son iguales", {
                     variant: "warning",

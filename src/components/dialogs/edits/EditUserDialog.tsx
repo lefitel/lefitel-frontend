@@ -11,7 +11,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useContext, useState } from "react";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { getRol } from "../../../api/Rol.api";
@@ -20,6 +20,7 @@ import { url } from "../../../api/url";
 import { uploadImage } from "../../../api/Upload.api";
 import { editUsuario } from "../../../api/Usuario.api";
 import { enqueueSnackbar } from "notistack";
+import { SesionContext } from "../../../context/SesionProvider";
 interface EditUserDialogProps {
   user: UsuarioInterface;
   functionApp: () => void;
@@ -31,10 +32,11 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
   const [data, setData] = React.useState({ ...user });
   const [listTipoData, setListTipoData] = React.useState<RolInterface[]>([]);
   const [image, setImage] = useState<File | null>();
+  const { sesion } = useContext(SesionContext);
 
   const recibirDatos = async () => {
     //console.log(data)
-    setListTipoData(await getRol())
+    setListTipoData(await getRol(sesion.token))
   }
   const handleClickOpen = () => {
     recibirDatos()
@@ -162,8 +164,14 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
                 <Grid item xs={12}>
 
                   <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
                     disablePortal
-
                     options={listTipoData}
                     getOptionLabel={(option) => option.name}
                     value={listTipoData.find(tipoObs => tipoObs.id === data.id_rol) || null}
@@ -236,7 +244,7 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
             if (data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && data.user != '' && data.id_rol != 0) {
               let newData: UsuarioInterface = { ...data }
               if (image) {
-                const reponseUpload = await uploadImage(image);
+                const reponseUpload = await uploadImage(image, sesion.token);
                 if (reponseUpload != "500") {
                   newData = { ...newData, image: reponseUpload };
                 }
@@ -247,7 +255,7 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, functionApp }) =>
                 }
               }
 
-              const reponse = await editUsuario(newData);
+              const reponse = await editUsuario(newData, sesion.token);
 
               if (Number(reponse) === 200) {
                 enqueueSnackbar("Ingresado con exito", {

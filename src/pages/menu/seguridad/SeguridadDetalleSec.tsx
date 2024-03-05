@@ -8,7 +8,7 @@ import {
   Tab,
   Tabs,
 } from "@mui/material";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import CustomTabComponent from "../../../components/CustomTabComponent";
 import {
   ArrowBackIos,
@@ -16,13 +16,14 @@ import {
 } from "@mui/icons-material";
 
 import SimpleDialogComponent from "../../../components/SimpleDialogComp";
-import InfoSeguridadDetalleDialog from "../../../components/dialogs/InfoSeguridadDetalleDialog";
+import InfoSeguridadDetalleDialog from "../../../components/dialogs/info/InfoSeguridadDetalleDialog";
 import EditUserDialog from "../../../components/dialogs/edits/EditUserDialog";
 import SeguridadDetalleDataSec from "./detalle/SeguridadDetalleDataSec";
 import SeguridadDetalleBitacraSec from "./detalle/SeguridadDetalleBitacraSec";
 import { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { searchUsuario } from "../../../api/Usuario.api";
 import { getBitacora } from "../../../api/Bitacora.api";
+import { SesionContext } from "../../../context/SesionProvider";
 
 interface SeguridadDetalleSecProps {
   userId: number;
@@ -35,6 +36,8 @@ const SeguridadDetalleSec: React.FC<SeguridadDetalleSecProps> = ({ userId, setUs
   const [list, setList] = useState<BitacoraInterface[]>();
 
   const [data, setData] = useState<UsuarioInterface>();
+  const { sesion } = useContext(SesionContext);
+  const [value, setValue] = useState(0);
 
   useEffect(() => {
     recibirDatos()
@@ -42,14 +45,13 @@ const SeguridadDetalleSec: React.FC<SeguridadDetalleSecProps> = ({ userId, setUs
 
 
   const recibirDatos = async () => {
-    setData(await searchUsuario(userId))
-    setList(await getBitacora(userId))
+    setData(await searchUsuario(userId, sesion.token))
+    setList(await getBitacora(userId, sesion.token))
   }
 
 
-  const [value, setValue] = useState(0);
 
-  const handleChange = (event, newValue) => {
+  const handleChange = (event, newValue: number) => {
     setValue(newValue);
   };
 

@@ -2,25 +2,30 @@ import axios from "axios";
 import { urlObs, urlApi } from "./url";
 import { ObsInterface } from "../interfaces/interfaces";
 
-export const getObs = (): Promise<ObsInterface[]> => {
-  return axios.get(urlApi + urlObs).then((response) => {
-    const dataList: ObsInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        id_tipoObs: item.id_tipoObs,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+export const getObs = (token: string): Promise<ObsInterface[]> => {
+  return axios
+    .get(urlApi + urlObs, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => {
+      const dataList: ObsInterface[] = response.data.map((item: any) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          id_tipoObs: item.id_tipoObs,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+      //console.log(dataList);
+      return dataList;
     });
-    //console.log(dataList);
-    return dataList;
-  });
 };
 
-export const createObs = (data: ObsInterface): Promise<number> => {
+export const createObs = (
+  data: ObsInterface,
+  token: string
+): Promise<number> => {
   type ObsWithoutId = Omit<ObsInterface, "id">;
   const newData: ObsWithoutId = {
     name: data.name,
@@ -29,7 +34,9 @@ export const createObs = (data: ObsInterface): Promise<number> => {
   };
 
   return axios
-    .post(urlApi + urlObs, newData)
+    .post(urlApi + urlObs, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -40,9 +47,11 @@ export const createObs = (data: ObsInterface): Promise<number> => {
     });
 };
 
-export const editObs = (data: ObsInterface): Promise<number> => {
+export const editObs = (data: ObsInterface, token: string): Promise<number> => {
   return axios
-    .put(urlApi + urlObs + data.id, data)
+    .put(urlApi + urlObs + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -53,9 +62,11 @@ export const editObs = (data: ObsInterface): Promise<number> => {
     });
 };
 
-export const deleteObs = (id: number): Promise<number> => {
+export const deleteObs = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlObs + id)
+    .delete(urlApi + urlObs + id, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;

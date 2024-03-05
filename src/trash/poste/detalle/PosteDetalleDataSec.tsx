@@ -9,12 +9,12 @@ import {
 } from "@mui/material";
 import { CellTower } from "@mui/icons-material";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
-import { customIcon } from "../../../../assets/PinMap";
-import { latExample, lngExample } from "../../../../data/example";
-import { AdssInterface, AdssPosteInterface, PosteInterface } from "../../../../interfaces/interfaces";
+import { customIcon } from "../../../assets/PinMap";
+import { latExample, lngExample } from "../../../data/example";
+import { AdssInterface, AdssPosteInterface, PosteInterface } from "../../../interfaces/interfaces";
 import { useEffect, useState } from "react";
-import { url } from "../../../../api/url";
-import { getAdss } from "../../../../api/Adss.api";
+import { url } from "../../../api/url";
+import { getAdss } from "../../../api/Adss.api";
 
 interface PosteDetalleDataSecProps {
   data: PosteInterface;

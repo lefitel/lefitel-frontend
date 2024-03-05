@@ -17,10 +17,12 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import AddObsDialog from "../../../components/dialogs/add/AddObsDialog";
 import { ObsInterface, TipoObsInterface } from "../../../interfaces/interfaces";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { useSnackbar } from "notistack";
 import { deleteObs, editObs, getObs } from "../../../api/Obs.api";
 import { getTipoObs } from "../../../api/TipoObs.api";
+import { SesionContext } from "../../../context/SesionProvider";
+import { obsExample } from "../../../data/example";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -52,20 +54,21 @@ const ObsSec = () => {
   const [listTipoObs, setListTipoObs] = useState<TipoObsInterface[]>([]);
   const [tipoObs, setTipoObs] = useState<TipoObsInterface>();
 
-  const [data, setData] = useState<ObsInterface>({ id: 1, name: "", description: "", id_tipoObs: 0 });
+  const [data, setData] = useState<ObsInterface>(obsExample);
   const [list, setList] = useState<ObsInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
+  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
   }, [open])
 
   const recibirDatosTipoObs = async () => {
-    setListTipoObs(await getTipoObs())
+    setListTipoObs(await getTipoObs(sesion.token))
   }
 
   const recibirDatos = async () => {
-    setList(await getObs())
+    setList(await getObs(sesion.token))
 
 
 
@@ -181,6 +184,13 @@ const ObsSec = () => {
             <Grid item xs={12} md={7}>
 
               <Autocomplete
+                renderOption={(props, option) => {
+                  return (
+                    <li {...props} key={option.id}>
+                      {option.name}
+                    </li>
+                  );
+                }}
                 disablePortal
 
                 options={listTipoObs}
@@ -228,7 +238,7 @@ const ObsSec = () => {
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
               if (data.name != '' && data.description != '') {
-                const reponse = await editObs(data);
+                const reponse = await editObs(data, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",
@@ -263,7 +273,7 @@ const ObsSec = () => {
         <DialogActions>
           <Button onClick={handleCloseDelete}>Cancelar</Button>
           <Button onClick={async () => {
-            const reponse = await deleteObs(data.id);
+            const reponse = await deleteObs(data.id as number, sesion.token);
             if (Number(reponse) === 200) {
               enqueueSnackbar("Eliminado con exito", {
                 variant: "success",

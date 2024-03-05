@@ -25,17 +25,17 @@ import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import React, { useEffect, useState } from "react";
 import PropTypes from "prop-types";
 import { ArrowDropDown, Close } from "@mui/icons-material";
-import EditEventoDialog from "../../../../components/dialogs/edits/EditEventoDialog";
-import { EventoInterface, EventoObsInterface, ObsInterface, RevicionInterface, TipoObsInterface } from "../../../../interfaces/interfaces";
-import { getEvento } from "../../../../api/Evento.api";
+import EditEventoDialog from "../../../components/dialogs/edits/EditEventoDialog";
+import { EventoInterface, EventoObsInterface, ObsInterface, RevicionInterface, TipoObsInterface } from "../../../interfaces/interfaces";
+import { getEvento } from "../../../api/Evento.api";
 import { DatePicker } from "@mui/x-date-pickers";
-import { url } from "../../../../api/url";
-import { eventoExample, revicionExample } from "../../../../data/example";
-import { getRevicion } from "../../../../api/Revicion.api";
+import { url } from "../../../api/url";
+import { eventoExample, revicionExample } from "../../../data/example";
+import { getRevicion } from "../../../api/Revicion.api";
 import dayjs from "dayjs";
-import { getObs } from "../../../../api/Obs.api";
-import { getTipoObs } from "../../../../api/TipoObs.api";
-import { getEventoObs } from "../../../../api/EventoObs.api";
+import { getObs } from "../../../api/Obs.api";
+import { getTipoObs } from "../../../api/TipoObs.api";
+import { getEventoObs } from "../../../api/EventoObs.api";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -84,7 +84,6 @@ const PosteDetalleEventoSec: React.FC<PosteDetalleEventoSecProps> = ({ posteId }
     setListEventoObs(eventoObsTemp)
 
     const ids = await eventoObsTemp.map(objeto => objeto.id) ? listEventoObs.map(objeto => objeto.id_obs) : [];
-    console.log(eventoObsTemp)
     setListObsSelected(ids)
 
 

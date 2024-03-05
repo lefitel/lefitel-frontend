@@ -16,11 +16,12 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import AddCiudadDialog from "../../../components/dialogs/add/AddCiudadDialog";
 import { CiudadInterface } from "../../../interfaces/interfaces";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { deleteCiudad, editCiudad, getCiudad } from "../../../api/Ciudad.api";
 import { useSnackbar } from "notistack";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
 import { latExample, lngExample } from "../../../data/example";
+import { SesionContext } from "../../../context/SesionProvider";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -32,7 +33,6 @@ const columns = [
     valueGetter: (params) => {
       const date = new Date(params.row.createdAt);
       return date.toLocaleString();
-
     }
   },
   {
@@ -40,28 +40,22 @@ const columns = [
     valueGetter: (params) => {
       const date = new Date(params.row.updatedAt);
       return date.toLocaleString();
-
     }
   },
-
 ];
 const CiudadSec = () => {
-
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
-
   const [data, setData] = useState<CiudadInterface>({ id: 1, name: "", lat: latExample, lng: lngExample });
   const [list, setList] = useState<CiudadInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
-
+  const { sesion } = useContext(SesionContext);
   useEffect(() => {
     recibirDatos()
   }, [open])
 
-
   const recibirDatos = async () => {
-    setList(await getCiudad())
-
+    setList(await getCiudad(sesion.token))
   }
 
   const handleClickOpen = (rows: CiudadInterface) => {
@@ -80,13 +74,9 @@ const CiudadSec = () => {
     setOpenDelete(false);
   };
   function LocationMarker() {
-    const [position, setPosition] = useState([latExample, lngExample])
     const map = useMapEvent('click', (event) => {
       const newData: CiudadInterface = { ...data, lat: event.latlng.lat, lng: event.latlng.lng };
       setData(newData)
-      setPosition(event.latlng)
-      //console.log(position);
-
       map.flyTo(event.latlng, map.getZoom())
 
     })
@@ -215,8 +205,8 @@ const CiudadSec = () => {
           <ButtonGroup>
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
-              if (data.name != '' && data.description != '') {
-                const reponse = await editCiudad(data);
+              if (data.name != '') {
+                const reponse = await editCiudad(data, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",
@@ -251,7 +241,7 @@ const CiudadSec = () => {
         <DialogActions>
           <Button onClick={handleCloseDelete}>Cancelar</Button>
           <Button onClick={async () => {
-            const reponse = await deleteCiudad(data.id);
+            const reponse = await deleteCiudad(data.id as number, sesion.token);
             if (Number(reponse) === 200) {
               enqueueSnackbar("Eliminado con exito", {
                 variant: "success",

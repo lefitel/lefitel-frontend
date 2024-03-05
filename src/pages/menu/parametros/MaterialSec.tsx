@@ -17,9 +17,10 @@ import { Add } from "@mui/icons-material";
 import { DataGrid } from "@mui/x-data-grid";
 import AddMaterialDialog from "../../../components/dialogs/add/AddMaterialDialog";
 import { MaterialInterface } from "../../../interfaces/interfaces";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { deleteMaterial, editMaterial, getMaterial } from "../../../api/Material.api";
 import { useSnackbar } from "notistack";
+import { SesionContext } from "../../../context/SesionProvider";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -51,6 +52,7 @@ const MaterialSec = () => {
   const [data, setData] = useState<MaterialInterface>({ id: 1, name: "", description: "" });
   const [list, setList] = useState<MaterialInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
+  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
@@ -58,7 +60,7 @@ const MaterialSec = () => {
 
 
   const recibirDatos = async () => {
-    setList(await getMaterial())
+    setList(await getMaterial(sesion.token))
 
   }
 
@@ -198,7 +200,7 @@ const MaterialSec = () => {
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
               if (data.name != '' && data.description != '') {
-                const reponse = await editMaterial(data);
+                const reponse = await editMaterial(data, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",
@@ -233,7 +235,7 @@ const MaterialSec = () => {
         <DialogActions>
           <Button onClick={handleCloseDelete}>Cancelar</Button>
           <Button onClick={async () => {
-            const reponse = await deleteMaterial(data.id);
+            const reponse = await deleteMaterial(data.id as number, sesion.token);
             if (Number(reponse) === 200) {
               enqueueSnackbar("Eliminado con exito", {
                 variant: "success",

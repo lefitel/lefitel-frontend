@@ -9,9 +9,10 @@ import {
 } from "@mui/material";
 import { DataGrid, GridToolbar } from "@mui/x-data-grid";
 import AddUserDialog from "../../../components/dialogs/add/AddUserDialog";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { getUsuario } from "../../../api/Usuario.api";
 import { UsuarioInterface } from "../../../interfaces/interfaces";
+import { SesionContext } from "../../../context/SesionProvider";
 
 
 
@@ -30,7 +31,13 @@ const columns = [
   },
 
   { field: 'user', headerName: 'Usuario', width: 100 },
-  { field: 'id_rol', headerName: 'Rol', width: 100 },
+  {
+    field: 'rol', headerName: 'Rol', width: 100,
+    valueGetter: (params) => {
+      return params.row.rol.name;
+
+    }
+  },
 
   {
     field: 'createdAt', headerName: 'Creación', width: 150,
@@ -54,6 +61,7 @@ interface SeguridadSecProps {
 }
 const SeguridadSec: React.FC<SeguridadSecProps> = ({ setuser }) => {
   const [list, setList] = useState<UsuarioInterface[]>();
+  const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
     recibirDatos()
@@ -61,7 +69,7 @@ const SeguridadSec: React.FC<SeguridadSecProps> = ({ setuser }) => {
 
 
   const recibirDatos = async () => {
-    setList(await getUsuario())
+    setList(await getUsuario(sesion.token))
 
   }
 

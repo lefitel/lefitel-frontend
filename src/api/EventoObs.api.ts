@@ -3,24 +3,32 @@ import { urlEventoObs, urlApi } from "./url";
 import { EventoObsInterface } from "../interfaces/interfaces";
 
 export const getEventoObs = (
-  id_evento: number
+  id_evento: number,
+  token: string
 ): Promise<EventoObsInterface[]> => {
-  return axios.get(urlApi + urlEventoObs + id_evento).then((response) => {
-    const dataList: EventoObsInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        id_evento: item.id_evento,
-        id_obs: item.id_obs,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+  return axios
+    .get(urlApi + urlEventoObs + id_evento, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      const dataList: EventoObsInterface[] = response.data.map((item: any) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          id_evento: item.id_evento,
+          id_obs: item.id_obs,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+      return dataList;
     });
-    return dataList;
-  });
 };
 
-export const createEventoObs = (data: EventoObsInterface): Promise<number> => {
+export const createEventoObs = (
+  data: EventoObsInterface,
+  token: string
+): Promise<number> => {
   //type EventoObsWithoutId = Omit<EventoObsInterface, "id">;
   const newData: EventoObsInterface = {
     id_evento: data.id_evento,
@@ -28,7 +36,9 @@ export const createEventoObs = (data: EventoObsInterface): Promise<number> => {
   };
 
   return axios
-    .post(urlApi + urlEventoObs, newData)
+    .post(urlApi + urlEventoObs, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       console.log(response);
       return response.status;
@@ -39,9 +49,11 @@ export const createEventoObs = (data: EventoObsInterface): Promise<number> => {
     });
 };
 
-export const deleteEventoObs = (id: number): Promise<number> => {
+export const deleteEventoObs = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlEventoObs + id)
+    .delete(urlApi + urlEventoObs + id, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;

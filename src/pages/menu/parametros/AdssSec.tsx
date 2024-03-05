@@ -16,9 +16,10 @@ import {
 import { DataGrid } from "@mui/x-data-grid";
 import AddAdssDialog from "../../../components/dialogs/add/AddAdssDialog";
 import { AdssInterface } from "../../../interfaces/interfaces";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { deleteAdss, editAdss, getAdss } from "../../../api/Adss.api";
 import { useSnackbar } from "notistack";
+import { SesionContext } from "../../../context/SesionProvider";
 
 const columns = [
   { field: 'id', headerName: 'Id', width: 15 },
@@ -50,13 +51,16 @@ const AdssSec = () => {
   const [list, setList] = useState<AdssInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
 
+  const { sesion } = useContext(SesionContext);
+
+
   useEffect(() => {
     recibirDatos()
   }, [open])
 
 
   const recibirDatos = async () => {
-    setList(await getAdss())
+    setList(await getAdss(sesion.token))
   }
 
 
@@ -197,7 +201,7 @@ const AdssSec = () => {
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
               if (data.name != '' && data.description != '') {
-                const reponse = await editAdss(data);
+                const reponse = await editAdss(data, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",
@@ -232,7 +236,7 @@ const AdssSec = () => {
         <DialogActions>
           <Button onClick={handleCloseDelete}>Cancelar</Button>
           <Button onClick={async () => {
-            const reponse = await deleteAdss(data.id);
+            const reponse = await deleteAdss(data.id as number, sesion.token);
             if (Number(reponse) === 200) {
               enqueueSnackbar("Eliminado con exito", {
                 variant: "success",

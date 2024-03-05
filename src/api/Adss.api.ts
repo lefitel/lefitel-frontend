@@ -2,24 +2,32 @@ import axios from "axios";
 import { urlAdss, urlApi } from "./url";
 import { AdssInterface } from "../interfaces/interfaces";
 
-export const getAdss = (): Promise<AdssInterface[]> => {
-  return axios.get(urlApi + urlAdss).then((response) => {
-    const dataList: AdssInterface[] = response.data.map((item: any) => {
-      // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-      return {
-        id: item.id,
-        name: item.name,
-        description: item.description,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      };
+export const getAdss = (token: string): Promise<AdssInterface[]> => {
+  return axios
+    .get(urlApi + urlAdss, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => {
+      const dataList: AdssInterface[] = response.data.map((item: any) => {
+        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
+        return {
+          id: item.id,
+          name: item.name,
+          description: item.description,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        };
+      });
+      return dataList;
+    })
+    .catch((e) => {
+      //console.log(JSON.stringify(e.response.data.message));
+      return [];
     });
-    //console.log(dataList);
-    return dataList;
-  });
 };
 
-export const createAdss = (data: AdssInterface): Promise<number> => {
+export const createAdss = (
+  data: AdssInterface,
+  token: string
+): Promise<number> => {
   //type AdssWithoutId = Omit<AdssInterface, "id">;
   const newData: AdssInterface = {
     name: data.name,
@@ -27,7 +35,9 @@ export const createAdss = (data: AdssInterface): Promise<number> => {
   };
 
   return axios
-    .post(urlApi + urlAdss, newData)
+    .post(urlApi + urlAdss, newData, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -38,9 +48,14 @@ export const createAdss = (data: AdssInterface): Promise<number> => {
     });
 };
 
-export const editAdss = (data: AdssInterface): Promise<number> => {
+export const editAdss = (
+  data: AdssInterface,
+  token: string
+): Promise<number> => {
   return axios
-    .put(urlApi + urlAdss + data.id, data)
+    .put(urlApi + urlAdss + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
@@ -51,9 +66,11 @@ export const editAdss = (data: AdssInterface): Promise<number> => {
     });
 };
 
-export const deleteAdss = (id: number): Promise<number> => {
+export const deleteAdss = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlAdss + id)
+    .delete(urlApi + urlAdss + id, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       //console.log(response);
       return response.status;
