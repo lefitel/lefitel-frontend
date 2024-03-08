@@ -26,20 +26,26 @@ const LoginPage = () => {
   const navigater = useNavigate();
   useEffect(() => {
     ComprobarToken();
-  });
+  }, []);
+
+
+
 
   const ComprobarToken = async () => {
-    const TokenSesion = JSON.parse(window.localStorage.getItem("token") || "").toString();
-
-    if (TokenSesion != "") {
-      console.log("ComprobarToken");
-      const responde = await comprobarToken(TokenSesion)
-      if (responde.status === 200) {
-        setSesion({ token: TokenSesion, usuario: responde.usuario as UsuarioInterface });
-        navigater("/home", { replace: true });
+    try {
+      const TokenSesion = JSON.parse(window.localStorage.getItem("token") || "").toString();
+      if (TokenSesion != "") {
+        console.log("ComprobarToken");
+        const responde = await comprobarToken(TokenSesion)
+        if (responde.status === 200) {
+          setSesion({ token: TokenSesion, usuario: responde.usuario as UsuarioInterface });
+          navigater("/home", { replace: true });
+        }
       }
-
+    } catch (e) {
+      console.log();
     }
+
   };
 
   const ValidarDatos = async () => {

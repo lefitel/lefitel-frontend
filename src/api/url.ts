@@ -1,8 +1,8 @@
-export const urld = `http://192.168.0.10:3000/`;
-export const urlApid = `http://192.168.0.10:3000/api/`;
+export const url = `http://192.168.0.10:3000/`;
+export const urlApi = `http://192.168.0.10:3000/api/`;
 
-export const url = `https://backend-lefitel.fly.dev/`;
-export const urlApi = `https://backend-lefitel.fly.dev/api/`;
+export const urld = `https://backend-lefitel.fly.dev/`;
+export const urlApid = `https://backend-lefitel.fly.dev/api/`;
 
 export const urlAdss = "adss/";
 export const urlAdssPoste = "adssposte/";
