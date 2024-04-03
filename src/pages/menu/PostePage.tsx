@@ -5,10 +5,8 @@ import {
   Card,
   CardActions,
   CardContent,
-  Grid,
-  LinearProgress,
+  Grid
 } from "@mui/material";
-import { DataGrid, GridRowParams, GridToolbar } from "@mui/x-data-grid";
 import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../interfaces/interfaces";
 import { getPoste, searchPoste } from "../../api/Poste.api";
 import AddPosteDialog from "../../components/dialogs/add/AddPosteDialog";
@@ -16,48 +14,66 @@ import AddPosteDialog from "../../components/dialogs/add/AddPosteDialog";
 import { posteExample } from "../../data/example";
 import EditPosteDialog from "../../components/dialogs/edits/EditPosteDialog";
 import { SesionContext } from "../../context/SesionProvider";
+import { DataGridPremium, GridColDef, GridRowParams, GridToolbar } from "@mui/x-data-grid-premium";
 
 
-const columns = [
-  { field: 'id', headerName: 'Id', width: 15 },
-  { field: 'name', headerName: 'Número', width: 100 },
-  { field: 'lat', headerName: 'Lat', width: 50 },
-  { field: 'lng', headerName: 'Lng', width: 50 },
+const columns: GridColDef[] = [
+  { field: 'id', headerName: 'Id' },
+  { field: 'name', headerName: 'Número' },
+  { field: 'lat', headerName: 'Lat' },
+  { field: 'lng', headerName: 'Lng' },
   {
-    field: 'material', headerName: 'Material', width: 150,
-    valueGetter: ({ value }: { value: MaterialInterface }) => { return value.name; }
+    field: 'material', headerName: 'Material',
+    //type: 'singleSelect', valueOptions: ['full time', 'part time', 'intern'],
+    valueGetter: (value: MaterialInterface) => { return value.name }
   },
   {
-    field: 'propietario', headerName: 'Propietario', width: 150,
-    valueGetter: ({ value }: { value: PropietarioInterface }) => { return value.name; }
+    field: 'propietario', headerName: 'Propietario',
+    valueGetter: (value: PropietarioInterface) => { return value.name }
   },
   {
-    field: 'ciudadA', headerName: 'Tramo de Inicio', width: 150,
-    valueGetter: ({ value }: { value: CiudadInterface }) => { return value.name; }
+    field: 'ciudadA', headerName: 'Tramo de Inicio',
+    valueGetter: (value: CiudadInterface) => { return value.name }
   },
   {
-    field: 'ciudadB', headerName: 'Tramo de Fin', width: 150,
-    valueGetter: ({ value }: { value: CiudadInterface }) => { return value.name; }
+    field: 'ciudadB', headerName: 'Tramo de Fin',
+    valueGetter: (value: CiudadInterface) => { return value.name }
   },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
+      return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
-
+      return date;
     }
   },
 ];
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 const PostePage = () => {
-  const [list, setList] = useState<PosteInterface[]>();
+  const [list, setList] = useState<PosteInterface[]>([]);
   //const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<PosteInterface>(posteExample);
@@ -66,6 +82,7 @@ const PostePage = () => {
 
   useEffect(() => {
     recibirDatos()
+    console.log(list)
   }, [openEdit])
 
   const recibirDatos = async () => {
@@ -83,25 +100,17 @@ const PostePage = () => {
       sx={{
         height: { xs: "auto", md: "calc(100vh - 64px)" },
         alignItems: "stretch",
-        margin: 0,
       }}
     >
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
-        <Card sx={{ flex: 1 }} variant="outlined" style={{}}>
+        <Card sx={{ flex: 1 }} >
+          <CardActions >
+            <ButtonGroup >
+              <AddPosteDialog functionApp={recibirDatos} />
+            </ButtonGroup>
+          </CardActions>
           <CardContent style={{}}>
-            <CardActions
-              style={{
-                paddingInline: 0,
-              }}
-            >
-              <ButtonGroup
-                size="small"
-                variant="outlined"
-                aria-label="outlined primary button group"
-              >
-                <AddPosteDialog functionApp={recibirDatos} />
-              </ButtonGroup>
-            </CardActions>
+
             <Box
               sx={{
                 height: {
@@ -109,13 +118,13 @@ const PostePage = () => {
                   md: "calc(100vh - 200px)",
                 },
                 width: {
-                  xs: "calc(100vw - 100px)",
+                  xs: "calc(100vw - 110px)",
                   sm: "calc(100vw - 115px)",
                   md: "calc(100vw - 115px)",
                 },
               }}
             >
-              <DataGrid
+              <DataGridPremium
                 //className="datagrid-content"
                 rows={list ? list : []}
                 columns={columns}
@@ -124,7 +133,7 @@ const PostePage = () => {
                 disableRowSelectionOnClick
                 slots={{
                   toolbar: GridToolbar,
-                  loadingOverlay: LinearProgress,
+
                 }}
                 slotProps={{ toolbar: { showQuickFilter: true } }}
                 onRowClick={posteSelect}

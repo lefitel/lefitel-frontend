@@ -37,7 +37,7 @@ const AddTipoObsDialog: React.FC<AddTipoObsDialogProps> = ({ functionApp }) => {
 
     return (
         <React.Fragment>
-            <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+            <Button startIcon={<Add />} onClick={handleClickOpen}>
                 {"Nuevo Tipo de Obs."}
             </Button>
             <Dialog

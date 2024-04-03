@@ -15,6 +15,8 @@ export const getEvento = (token: string): Promise<EventoInterface[]> => {
           description: item.description,
           image: item.image,
           state: item.state,
+          date: item.date,
+
           id_poste: item.id_poste,
 
           poste: item.poste,
@@ -45,6 +47,8 @@ export const getEvento_poste = (
           description: item.description,
           image: item.image,
           state: item.state,
+          date: item.date,
+
           id_poste: item.id_poste,
 
           createdAt: item.createdAt,
@@ -64,6 +68,7 @@ export const createEvento = (
   const newData: EventoWithoutId = {
     description: data.description,
     image: data.image,
+    date: data.date,
     state: data.state,
     id_poste: data.id_poste,
   };

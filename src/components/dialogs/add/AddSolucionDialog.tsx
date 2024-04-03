@@ -13,7 +13,6 @@ import {
 import React, { useContext, useState } from "react";
 import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
 import { DatePicker } from "@mui/x-date-pickers";
-import { Add } from "@mui/icons-material";
 import { EventoInterface, SolucionInterface } from "../../../interfaces/interfaces";
 import { solucionExample } from "../../../data/example";
 import dayjs from "dayjs";
@@ -26,9 +25,10 @@ import { SesionContext } from "../../../context/SesionProvider";
 interface AddSolucionDialogProps {
   evento: EventoInterface;
   functionApp: () => void;
+  handleCloseDialog: () => void;
 }
 
-const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, evento }) => {
+const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, evento, handleCloseDialog }) => {
   const [open, setOpen] = React.useState(false);
   const [data, setData] = React.useState<SolucionInterface>({ ...solucionExample, id_evento: evento?.id as number });
   const [image, setImage] = useState<File | null>();
@@ -41,6 +41,7 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
 
   const handleClose = () => {
     functionApp()
+    handleCloseDialog()
     setOpen(false);
     setData({ ...solucionExample, id_evento: evento?.id as number })
     setImage(null)
@@ -89,7 +90,7 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
   }
   return (
     <React.Fragment>
-      <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+      <Button onClick={handleClickOpen}>
         {"Solucionar"}
       </Button>
       <Dialog
@@ -168,17 +169,15 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
               md={6}
               paddingBlock={1}
             >
-              <Grid display={"flex"} justifyContent={"space-between"}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Imagen:
-                </Typography>
-                <Input fullWidth onChange={onImageChange} type={"file"} />
-              </Grid>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
 
               {image ? <img
                 width={"100%"}

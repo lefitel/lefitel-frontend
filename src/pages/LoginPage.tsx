@@ -118,8 +118,8 @@ const LoginPage = () => {
         </Grid>
         <Grid container>
           <LoadingButton
-            fullWidth
             variant="contained"
+            fullWidth
             onClick={ValidarDatos}
             loading={loading}
             loadingPosition="end"

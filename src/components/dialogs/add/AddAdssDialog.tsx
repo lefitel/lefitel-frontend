@@ -37,7 +37,7 @@ const AddAdssDialog: React.FC<AddAdssDialogProps> = ({ functionApp }) => {
 
     return (
         <React.Fragment>
-            <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+            <Button startIcon={<Add />} onClick={handleClickOpen}>
                 {"Nuevo Adss"}
             </Button>
             <Dialog

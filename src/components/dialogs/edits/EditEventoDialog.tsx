@@ -10,6 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControlLabel,
   Grid,
   Input,
@@ -18,7 +19,7 @@ import {
 } from "@mui/material";
 import React, { useContext, useEffect, useState } from "react";
 import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
-import { DatePicker } from "@mui/x-date-pickers";
+import { DateTimePicker } from "@mui/x-date-pickers";
 import { useSnackbar } from "notistack";
 import { EventoInterface, RevicionInterface, TipoObsInterface, ObsInterface, EventoObsInterface, SolucionInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
@@ -107,7 +108,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
       if (image) {
         const reponseUpload = await uploadImage(image, sesion.token);
         if (reponseUpload != "500") {
-          newData = { ...newData, image: reponseUpload };
+          newData = { ...newData, image: reponseUpload, date: listDataRevicion[0].date };
         }
         else {
           enqueueSnackbar("No se pudo Ingresar la imagen", {
@@ -164,7 +165,8 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   const handleDelete = async () => {
     const solucionEvento = await getSolucion_evento(data?.id as number, sesion.token);
-    if (solucionEvento) {
+    console.log(solucionEvento)
+    if (!solucionEvento) {
       listEventoObs.map((eventoObs) => {
         deleteEventoObs(eventoObs?.id as number, sesion.token);
       })
@@ -183,7 +185,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
       }
     }
     else {
-      enqueueSnackbar("No se pudo Eliminar porque tiene eventos asociados", {
+      enqueueSnackbar("No se pudo Eliminar porque tiene muchos registros asociados asociados", {
         variant: "error",
       });
     }
@@ -243,16 +245,13 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
           </Grid>
           <Grid
             item
-            sx={{
-              height: "100%",
-            }}
+            sx={{ p: 0 }}
             xs={12}
             md={6}
-            paddingBlock={1}
-            paddingInline={0}
+
           >
-            <Grid container m={0} p={0}>
-              <Grid item xs={12} paddingInline={0} paddingBlock={1}>
+            <Grid container sx={{ p: 0 }}>
+              <Grid item xs={12} sx={{ p: 0 }}>
                 <Typography
                   display={"flex"}
                   color="text.secondary"
@@ -263,14 +262,11 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                   Observaciones:
                 </Typography>
               </Grid>
-
-
-
               {
                 listTipoObs.map((tipoObs, i) =>
                 (
                   <Grid key={i} item xs={12}>
-                    <Accordion sx={{ width: 1 }} variant="outlined">
+                    <Accordion sx={{ width: 1 }} >
                       <AccordionSummary expandIcon={<ArrowDropDown />}>
                         <Typography>{tipoObs.name}</Typography>
                       </AccordionSummary>
@@ -327,24 +323,18 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
           </Grid>
           <Grid
             item
-            sx={{
-              height: "100%",
-            }}
             xs={12}
             md={6}
-            paddingBlock={1}
           >
-            <Grid display={"flex"} justifyContent={"space-between"}>
-              <Typography
-                display={"flex"}
-                color="text.secondary"
-                paddingInline={1}
-                textAlign={"left"}
-              >
-                Imagen:
-              </Typography>
-              <Input fullWidth onChange={onImageChange} type={"file"} />
-            </Grid>
+            <Typography
+              display={"flex"}
+              color="text.secondary"
+              paddingInline={1}
+              textAlign={"left"}
+            >
+              Imagen:
+            </Typography>
+            <Input fullWidth onChange={onImageChange} type={"file"} />
 
             {image ? <img
               width={"100%"}
@@ -370,10 +360,25 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
               />
             }
           </Grid>
+          <Grid container sx={{ p: 0 }} >
+            <Grid item xs={12}>
+              <Divider />
+            </Grid>
+          </Grid>
+          <Grid item xs={12} sx={{ p: 0 }}>
+            <Typography
+              display={"flex"}
+              color="text.secondary"
+              paddingInline={1}
+              textAlign={"left"}
+            >
+              Reviciones:
+            </Typography>
+          </Grid>
           {listDataRevicion.map((revicion, i) => {
             return <Grid sx={{ p: 0, m: 0 }} key={i} container>< Grid item xs={12} md={6}>
               <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                <DatePicker
+                <DateTimePicker
                   sx={{ width: 1 }}
                   label="Fecha de revición"
                   format="DD-MM-YYYY"
@@ -409,58 +414,70 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
               </Grid></Grid>
           })
           }
+          <Grid container sx={{ padding: 0 }} >
+            <Grid item xs={12}>
+              <Divider />
+            </Grid>
+          </Grid>
+
 
           {
-            solucion ? <> <Grid
-              item
-              sx={{
-                height: "100%",
-              }}
-              xs={12}
-              md={6}
-              paddingBlock={1}
-              paddingInline={0}
-            >
-              <Grid item xs={12}>
-                <TextField
-                  disabled
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  type="number"
-                  label="Numero de evento"
-                  value={solucion.id}
-                />
-              </Grid>
+            solucion ? <>
 
               <Grid item xs={12}>
-                <TextField
-                  disabled
-                  fullWidth
-                  multiline
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Descripción"
-                  value={solucion.description}
-                />
+                Solución:
               </Grid>
-              <Grid item xs={12}>
-                <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                  <DatePicker
+              <Grid
+                item
+                sx={{
+                  height: "100%",
+                }}
+                xs={12}
+                md={6}
+                paddingBlock={1}
+                paddingInline={0}
+              >
+
+                <Grid item xs={12}>
+                  <TextField
                     disabled
-                    sx={{ width: 1 }}
-
-                    label="Fecha de solucion"
-                    format="DD-MM-YYYY"
-                    defaultValue={dayjs(solucion.date)}
+                    fullWidth
+                    style={{
+                      padding: 0,
+                      margin: 0,
+                    }}
+                    type="number"
+                    label="Numero de evento"
+                    value={solucion.id}
                   />
-                </DemoContainer>
+                </Grid>
+
+                <Grid item xs={12}>
+                  <TextField
+                    disabled
+                    fullWidth
+                    multiline
+                    style={{
+                      padding: 0,
+                      margin: 0,
+                    }}
+                    label="Descripción"
+                    value={solucion.description}
+                  />
+                </Grid>
+                <Grid item xs={12}>
+                  <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
+                    <DateTimePicker
+                      disabled
+                      sx={{ width: 1 }}
+
+                      label="Fecha de solucion"
+                      format="DD-MM-YYYY"
+                      defaultValue={dayjs(solucion.date)}
+                    />
+                  </DemoContainer>
+                </Grid>
               </Grid>
-            </Grid>
 
               <Grid
                 item
@@ -502,13 +519,13 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
         justifyContent: "space-between"
       }}>
         <Grid>
-          <Button variant="outlined" onClick={handleClickOpenDelete}>
+          <Button onClick={handleClickOpenDelete}>
             {"Eliminar"}
           </Button>
         </Grid>
         <ButtonGroup>
           <Button onClick={handleClose}>Cancelar</Button>
-          {solucion ? null : <><AddSolucionDialog functionApp={recibirDatos} evento={data} />
+          {solucion ? null : <><AddSolucionDialog functionApp={recibirDatos} evento={data} handleCloseDialog={handleClose} />
             <Button onClick={() => {
               setListDataRevicion([...listDataRevicion, { ...revicionExample, id_evento: data?.id as number }])
             }}>Añadir revición</Button></>

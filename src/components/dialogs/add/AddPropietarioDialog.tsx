@@ -39,7 +39,7 @@ const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp
 
     return (
         <React.Fragment>
-            <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+            <Button startIcon={<Add />} onClick={handleClickOpen}>
                 {"Nuevo Propietario"}
             </Button>
             <Dialog

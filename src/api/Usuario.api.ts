@@ -108,6 +108,42 @@ export const editUsuario = (
     });
 };
 
+export const editUserName = (
+  data: UsuarioInterface,
+  token: string
+): Promise<number> => {
+  return axios
+    .put(urlApi + urlUsuario + "username/" + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      //console.log(response);
+      return response.status;
+    })
+    .catch((e) => {
+      console.log(JSON.stringify(e.response.data.message));
+      return 400;
+    });
+};
+
+export const editUserPass = (
+  data: UsuarioInterface,
+  token: string
+): Promise<number> => {
+  return axios
+    .put(urlApi + urlUsuario + "userpass/" + data.id, data, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((response) => {
+      //console.log(response);
+      return response.status;
+    })
+    .catch((e) => {
+      console.log(JSON.stringify(e.response.data.message));
+      return 400;
+    });
+};
+
 export const deleteUsuario = (id: number, token: string): Promise<number> => {
   return axios
     .delete(urlApi + urlUsuario + id, {

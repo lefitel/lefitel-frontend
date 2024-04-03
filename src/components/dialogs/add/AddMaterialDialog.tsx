@@ -40,7 +40,7 @@ const AddMaterialDialog: React.FC<AddMaterialDialogProps> = ({ functionApp }) =>
 
     return (
         <React.Fragment>
-            <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+            <Button startIcon={<Add />} onClick={handleClickOpen}>
                 {"Nuevo Material"}
             </Button>
             <Dialog

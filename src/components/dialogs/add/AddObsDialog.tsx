@@ -43,7 +43,7 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
 
     return (
         <React.Fragment>
-            <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+            <Button startIcon={<Add />} onClick={handleClickOpen}>
                 {"Nueva Observación"}
             </Button>
             <Dialog

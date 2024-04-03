@@ -6,25 +6,54 @@ import { useContext } from "react";
 import { CssBaseline, createTheme } from "@mui/material";
 import { ThemeProvider } from "@emotion/react";
 
-import { esES as dataGridEs } from "@mui/x-data-grid";
+import { esES as dataGridEs } from "@mui/x-data-grid-premium/locales";
 import { esES as coreEs } from "@mui/material/locale";
 import { esES as dateEs } from "@mui/x-date-pickers/locales";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import { LicenseInfo } from '@mui/x-data-grid-premium';
 
+LicenseInfo.setLicenseKey(
+  'e0d9bb8070ce0054c9d9ecb6e82cb58fTz0wLEU9MzI0NzIxNDQwMDAwMDAsUz1wcmVtaXVtLExNPXBlcnBldHVhbCxLVj0y',
+);
 const lightTheme = createTheme(
   {
     palette: {
       mode: "light",
       primary: { main: "#596BAB" },
     },
+
     components: {
+
+
+      MuiButtonGroup: {
+        defaultProps: {
+          variant: "contained",
+          size: "small"
+        },
+      },
+      MuiGrid: {
+        defaultProps: {
+          padding: "4px",
+        }
+        , styleOverrides: {
+          container: {
+            justifyContent: "center",
+          }
+        }
+      },
+
       MuiButton: {
+        defaultProps: {
+          variant: "contained",
+          size: "small"
+        },
         styleOverrides: {
           root: {
             textTransform: "capitalize",
+            margin: 0
           },
         },
       },
@@ -40,9 +69,32 @@ const lightTheme = createTheme(
       },
       MuiCard: {
         defaultProps: {
-          variant: "outlined",
+          variant: "elevation",
+        },
+        styleOverrides: {
+          root: {
+            padding: "8px"
+          }
         },
       },
+      MuiCardContent: {
+
+        styleOverrides: {
+          root: {
+            padding: "4px"
+          }
+        },
+
+      },
+      MuiCardActions: {
+        styleOverrides: {
+          root: {
+            padding: "4px",
+
+          }
+        },
+      },
+
     },
   },
   dataGridEs,

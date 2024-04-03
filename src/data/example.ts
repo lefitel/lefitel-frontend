@@ -1,4 +1,5 @@
 import {
+  CiudadInterface,
   EventoInterface,
   ObsInterface,
   PosteInterface,
@@ -25,9 +26,15 @@ export const posteExample: PosteInterface = {
 export const eventoExample: EventoInterface = {
   description: "",
   image: "",
-
+  date: new Date(),
   state: false,
   id_poste: 0,
+};
+export const ciudadExample: CiudadInterface = {
+  name: "",
+  image: "",
+  lat: lngExample,
+  lng: lngExample,
 };
 
 export const usuarioExample: UsuarioInterface = {

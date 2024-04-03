@@ -13,35 +13,34 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
 import AddAdssDialog from "../../../components/dialogs/add/AddAdssDialog";
 import { AdssInterface } from "../../../interfaces/interfaces";
 import { useContext, useEffect, useState } from "react";
 import { deleteAdss, editAdss, getAdss } from "../../../api/Adss.api";
 import { useSnackbar } from "notistack";
 import { SesionContext } from "../../../context/SesionProvider";
+import { DataGridPremium, GridColDef } from "@mui/x-data-grid-premium";
 
-const columns = [
-  { field: 'id', headerName: 'Id', width: 15 },
-  { field: 'name', headerName: 'Nombre', width: 100 },
-  { field: 'description', headerName: 'Descripción', width: 150 },
+const columns: GridColDef[] = [
+  { field: 'id', headerName: 'Id' },
+  { field: 'name', headerName: 'Nombre' },
+  { field: 'description', headerName: 'Descripción' },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
-
+      return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
-
+      return date;
     }
   },
 ];
+
 const AdssSec = () => {
 
   const [open, setOpen] = useState(false);
@@ -83,42 +82,38 @@ const AdssSec = () => {
 
   return (
     <Card sx={{ flex: 1 }}>
-      <CardContent>
-        <CardActions
-          style={{
-            paddingInline: 0,
-            justifyContent: "space-between",
-          }}
+      <CardActions
+        style={{
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography
+          sx={{ fontSize: 16 }}
+          fontWeight="bold"
+          color="text.secondary"
         >
-          <Typography
-            sx={{ fontSize: 16 }}
-            fontWeight="bold"
-            color="text.secondary"
-          >
-            Adss
-          </Typography>
-          <ButtonGroup
-            size="small"
-            variant="outlined"
-            aria-label="outlined primary button group"
-          >
-            <AddAdssDialog functionApp={recibirDatos} />
+          Adss
+        </Typography>
+        <ButtonGroup >
+          <AddAdssDialog functionApp={recibirDatos} />
 
-          </ButtonGroup>
-        </CardActions>
+        </ButtonGroup>
+      </CardActions>
+      <CardContent>
+
         <Box
           sx={{
             height: {
               xs: "250px",
             },
             width: {
-              xs: "calc(100vw - 100px )",
+              xs: "calc(100vw - 110px )",
               sm: "calc(100vw - 115px )",
               md: "calc(66vw - 80px )",
             },
           }}
         >
-          <DataGrid
+          <DataGridPremium
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
@@ -190,7 +185,7 @@ const AdssSec = () => {
           justifyContent: "space-between"
         }}>
           <Grid>
-            <Button variant="outlined" onClick={handleClickOpenDelete}>
+            <Button onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
 

@@ -6,9 +6,7 @@ import {
   CardActions,
   CardContent,
   Grid,
-  LinearProgress,
 } from "@mui/material";
-import { DataGrid, GridRowParams, GridToolbar } from "@mui/x-data-grid";
 import { EventoInterface, PosteInterface } from "../../interfaces/interfaces";
 import { getEvento, searchEvento } from "../../api/Evento.api";
 import AddEventoDialog from "../../components/dialogs/add/AddEventoDialog";
@@ -16,26 +14,27 @@ import AddEventoDialog from "../../components/dialogs/add/AddEventoDialog";
 import { eventoExample } from "../../data/example";
 import EditEventoDialog from "../../components/dialogs/edits/EditEventoDialog";
 import { SesionContext } from "../../context/SesionProvider";
+import { DataGridPremium, GridColDef, GridRowParams, GridToolbar } from "@mui/x-data-grid-premium";
 
 
-const columns = [
+const columns: GridColDef[] = [
   { field: 'id', headerName: 'Id', width: 15 },
   {
     field: 'poste', headerName: 'poste', width: 50,
-    valueGetter: ({ value }: { value: PosteInterface }) => { return value.name; }
+    valueGetter: (value: PosteInterface) => { return value.name; }
   },
   { field: 'description', headerName: 'Descripción', width: 100 },
   { field: 'state', headerName: 'Estado', width: 100, type: 'boolean', },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150, type: 'dateTime',
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
       return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150, type: 'dateTime',
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
       return date
     }
@@ -68,25 +67,17 @@ const EventoPage = () => {
       sx={{
         height: { xs: "auto", md: "calc(100vh - 64px)" },
         alignItems: "stretch",
-        margin: 0,
       }}
     >
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
-        <Card sx={{ flex: 1 }} variant="outlined" style={{}}>
+        <Card sx={{ flex: 1 }} style={{}}>
+          <CardActions >
+            <ButtonGroup >
+              <AddEventoDialog functionApp={recibirDatos} />
+            </ButtonGroup>
+          </CardActions>
           <CardContent style={{}}>
-            <CardActions
-              style={{
-                paddingInline: 0,
-              }}
-            >
-              <ButtonGroup
-                size="small"
-                variant="outlined"
-                aria-label="outlined primary button group"
-              >
-                <AddEventoDialog functionApp={recibirDatos} />
-              </ButtonGroup>
-            </CardActions>
+
             <Box
               sx={{
                 height: {
@@ -94,13 +85,13 @@ const EventoPage = () => {
                   md: "calc(100vh - 200px)",
                 },
                 width: {
-                  xs: "calc(100vw - 100px)",
+                  xs: "calc(100vw - 110px)",
                   sm: "calc(100vw - 115px)",
                   md: "calc(100vw - 115px)",
                 },
               }}
             >
-              <DataGrid
+              <DataGridPremium
                 //className="datagrid-content"
                 rows={list ? list : []}
                 columns={columns}
@@ -109,7 +100,6 @@ const EventoPage = () => {
                 disableRowSelectionOnClick
                 slots={{
                   toolbar: GridToolbar,
-                  loadingOverlay: LinearProgress,
                 }}
                 slotProps={{ toolbar: { showQuickFilter: true } }}
                 onRowClick={EventoSelect}

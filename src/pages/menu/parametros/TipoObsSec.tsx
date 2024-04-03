@@ -13,35 +13,32 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
 import AddTipoObsDialog from "../../../components/dialogs/add/AddTipoObsDialog";
 import { TipoObsInterface } from "../../../interfaces/interfaces";
 import { useContext, useEffect, useState } from "react";
 import { useSnackbar } from "notistack";
 import { deleteTipoObs, editTipoObs, getTipoObs } from "../../../api/TipoObs.api";
 import { SesionContext } from "../../../context/SesionProvider";
+import { DataGridPremium, GridColDef } from "@mui/x-data-grid-premium";
 
-const columns = [
-  { field: 'id', headerName: 'Id', width: 15 },
-  { field: 'name', headerName: 'Nombre', width: 100 },
-  { field: 'description', headerName: 'Descripción', width: 150 },
+const columns: GridColDef[] = [
+  { field: 'id', headerName: 'Id' },
+  { field: 'name', headerName: 'Nombre' },
+  { field: 'description', headerName: 'Descripción' },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
-
+      return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
-
+      return date;
     }
-  },
-
+  }
 ];
 const TipoObsSec = () => {
   const [open, setOpen] = useState(false);
@@ -78,41 +75,38 @@ const TipoObsSec = () => {
 
   return (
     <Card sx={{ flex: 1 }}>
-      <CardContent>
-        <CardActions
-          style={{
-            paddingInline: 0,
-            justifyContent: "space-between",
-          }}
+      <CardActions
+        style={{
+          paddingInline: 0,
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography
+          sx={{ fontSize: 16 }}
+          fontWeight="bold"
+          color="text.secondary"
         >
-          <Typography
-            sx={{ fontSize: 16 }}
-            fontWeight="bold"
-            color="text.secondary"
-          >
-            Tipo de Observación
-          </Typography>
-          <ButtonGroup
-            size="small"
-            variant="outlined"
-            aria-label="outlined primary button group"
-          >
-            <AddTipoObsDialog functionApp={recibirDatos} />
-          </ButtonGroup>
-        </CardActions>
+          Tipo de Observación
+        </Typography>
+        <ButtonGroup >
+          <AddTipoObsDialog functionApp={recibirDatos} />
+        </ButtonGroup>
+      </CardActions>
+      <CardContent>
+
         <Box
           sx={{
             height: {
               xs: "250px",
             },
             width: {
-              xs: "calc(100vw - 100px )",
+              xs: "calc(100vw - 110px )",
               sm: "calc(100vw - 115px )",
               md: "calc(33vw - 61px )",
             },
           }}
         >
-          <DataGrid
+          <DataGridPremium
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
@@ -182,7 +176,7 @@ const TipoObsSec = () => {
           justifyContent: "space-between"
         }}>
           <Grid>
-            <Button variant="outlined" onClick={handleClickOpenDelete}>
+            <Button onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
           </Grid>

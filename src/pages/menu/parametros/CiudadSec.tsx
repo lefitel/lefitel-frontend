@@ -10,45 +10,55 @@ import {
   DialogContent,
   DialogTitle,
   Grid,
+  Input,
   TextField,
   Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
 import AddCiudadDialog from "../../../components/dialogs/add/AddCiudadDialog";
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { useContext, useEffect, useState } from "react";
 import { deleteCiudad, editCiudad, getCiudad } from "../../../api/Ciudad.api";
 import { useSnackbar } from "notistack";
 import { MapContainer, Marker, Popup, TileLayer, useMapEvent } from "react-leaflet";
-import { latExample, lngExample } from "../../../data/example";
+import { ciudadExample } from "../../../data/example";
 import { SesionContext } from "../../../context/SesionProvider";
+import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { url } from "../../../api/url";
+import { uploadImage } from "../../../api/Upload.api";
 
-const columns = [
-  { field: 'id', headerName: 'Id', width: 15 },
-  { field: 'name', headerName: 'Nombre', width: 150 },
-  { field: 'lat', headerName: 'Latitud', width: 150 },
-  { field: 'lng', headerName: 'Longitud', width: 150 },
+const columns: GridColDef[] = [
+  { field: 'id', headerName: 'Id' },
+  { field: 'name', headerName: 'Nombre' },
+  { field: 'lat', headerName: 'Latitud' },
+  { field: 'lng', headerName: 'Longitud' },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'image', headerName: 'Foto',
+    renderCell: (params) => (<img src={`${url}${params.row.image}`} style={{ height: 100 }} />),
+    valueGetter(_params, row) { return `${url}${row.image}` },
+  },
+  {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
+      return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
+      return date;
     }
-  },
+  }
 ];
 const CiudadSec = () => {
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
-  const [data, setData] = useState<CiudadInterface>({ id: 1, name: "", lat: latExample, lng: lngExample });
+  const [data, setData] = useState<CiudadInterface>(ciudadExample);
   const [list, setList] = useState<CiudadInterface[]>();
   const { enqueueSnackbar } = useSnackbar();
+  const [image, setImage] = useState<File | null>();
+
   const { sesion } = useContext(SesionContext);
   useEffect(() => {
     recibirDatos()
@@ -65,6 +75,7 @@ const CiudadSec = () => {
 
   const handleClose = () => {
     setOpen(false);
+    setImage(null);
   };
   const handleClickOpenDelete = () => {
     setOpenDelete(true);
@@ -73,6 +84,14 @@ const CiudadSec = () => {
   const handleCloseDelete = () => {
     setOpenDelete(false);
   };
+
+  /* @ts-expect-error No se sabe el tipo de event */
+  const onImageChange = (event) => {
+    if (event.target.files && event.target.files[0]) {
+      setImage(event.target.files[0]);
+    }
+  };
+
   function LocationMarker() {
     // @ts-expect-error No se sabe el tipo de event
     const map = useMapEvent('click', (event) => {
@@ -87,36 +106,32 @@ const CiudadSec = () => {
   }
   return (
     <Card sx={{ flex: 1 }}>
-      <CardContent>
-        <CardActions
-          style={{
-            paddingInline: 0,
-            justifyContent: "space-between",
-          }}
+      <CardActions
+        style={{
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography
+          sx={{ fontSize: 16 }}
+          fontWeight="bold"
+          color="text.secondary"
         >
-          <Typography
-            sx={{ fontSize: 16 }}
-            fontWeight="bold"
-            color="text.secondary"
-          >
-            Ciudad
-          </Typography>
-          <ButtonGroup
-            size="small"
-            variant="outlined"
-            aria-label="outlined primary button group"
-          >
-            <AddCiudadDialog functionApp={recibirDatos} />
+          Ciudad
+        </Typography>
+        <ButtonGroup >
+          <AddCiudadDialog functionApp={recibirDatos} />
 
-          </ButtonGroup>
-        </CardActions>
+        </ButtonGroup>
+      </CardActions>
+      <CardContent>
+
         <Box
           sx={{
             height: {
               xs: "250px",
             },
             width: {
-              xs: "calc(100vw - 100px )",
+              xs: "calc(100vw - 110px )",
               sm: "calc(100vw - 115px )",
               md: "calc(66vw - 80px )",
             },
@@ -143,7 +158,7 @@ const CiudadSec = () => {
       >
         <DialogTitle>{"Editar Ciudad"}</DialogTitle>
         <DialogContent>
-          <Grid container width={1} m={0}>
+          <Grid container width={1}>
             <Grid item xs={12} md={3}>
               <TextField
                 fullWidth
@@ -171,19 +186,106 @@ const CiudadSec = () => {
                 }}
               />
             </Grid>
-            <Grid item xs={12} md={12}>
-              {/* @ts-expect-error No se sabe el tipo de event*/}
-              <MapContainer center={[data.lat, data.lng]}
-                zoom={13}
-                style={{ height: "200px" }}
-                scrollWheelZoom={false}
+            <Grid item xs={12} md={6} sx={{ p: 0 }}>
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={12} sx={{ p: 0 }}>
+                  <Typography
+                    display={"flex"}
+                    color="text.secondary"
+                    textAlign={"left"}
+                    paddingInline={1}
+                  >
+                    Ubicación:
+                  </Typography>
+                </Grid>
+                <Grid container sx={{ p: 0 }}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Latitud"
+                      value={data.lat}
+                      onChange={(event) => {
+                        const newData: CiudadInterface = { ...data, lat: Number.parseInt(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Longitud"
+                      value={data.lng}
+                      onChange={(event) => {
+                        const newData: CiudadInterface = { ...data, lng: Number.parseInt(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+              <Grid>
+                {/* @ts-expect-error No se sabe el tipo de event*/}
+                <MapContainer center={[data.lat, data.lng]}
+                  zoom={13}
+                  style={{ height: "200px" }}
+                  scrollWheelZoom={false}
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
+                  <LocationMarker />
+                  <Marker position={[data.lat, data.lng]}>
+                    <Popup>You are here</Popup>
+                  </Marker>
+                </MapContainer>
+              </Grid>
+
+
+
+            </Grid>
+            <Grid
+              item
+              sx={{ p: 0 }}
+              xs={12}
+              md={6}
+            >
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
               >
-                <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
-                <LocationMarker />
-                <Marker position={[data.lat, data.lng]}>
-                  <Popup>You are here</Popup>
-                </Marker>
-              </MapContainer>
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
+
+              {image ? <img
+                width={"100%"}
+                style={{
+                  aspectRatio: "1/1",
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+                src={URL.createObjectURL(image)}
+                alt={"imagen"}
+                loading="lazy"
+              /> :
+                <img
+                  width={"100%"}
+                  style={{
+                    aspectRatio: "1/1",
+                    objectFit: "cover",
+                    borderRadius: 4,
+                  }}
+                  src={`${url}${data.image}`}
+                  alt={"imagen"}
+                  loading="lazy"
+                />
+              }
             </Grid>
           </Grid>
         </DialogContent>
@@ -192,7 +294,7 @@ const CiudadSec = () => {
           justifyContent: "space-between"
         }}>
           <Grid>
-            <Button variant="outlined" onClick={handleClickOpenDelete}>
+            <Button onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
 
@@ -201,7 +303,21 @@ const CiudadSec = () => {
             <Button onClick={handleClose}>Cancelar</Button>
             <Button onClick={async () => {
               if (data.name != '') {
-                const reponse = await editCiudad(data, sesion.token);
+
+                let newData: CiudadInterface = { ...data }
+                if (image) {
+                  const reponseUpload = await uploadImage(image, sesion.token);
+                  if (reponseUpload != "500") {
+                    newData = { ...newData, image: reponseUpload };
+                  }
+                  else {
+                    enqueueSnackbar("No se pudo Ingresar la imagen", {
+                      variant: "error",
+                    });
+                  }
+                }
+
+                const reponse = await editCiudad(newData, sesion.token);
                 if (Number(reponse) === 200) {
                   enqueueSnackbar("Editado con exito", {
                     variant: "success",

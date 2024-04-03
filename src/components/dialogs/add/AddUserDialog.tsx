@@ -61,7 +61,7 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
   };
   return (
     <React.Fragment>
-      <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+      <Button startIcon={<Add />} onClick={handleClickOpen}>
         {"Nuevo Usuario"}
       </Button>
       <Dialog
@@ -222,17 +222,15 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
               md={6}
               paddingBlock={1}
             >
-              <Grid display={"flex"} justifyContent={"space-between"}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Imagen:
-                </Typography>
-                <Input fullWidth onChange={onImageChange} type={"file"} />
-              </Grid>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
 
               {image ? <img
                 width={"100%"}

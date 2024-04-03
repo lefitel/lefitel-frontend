@@ -89,7 +89,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
   }
   return (
     <React.Fragment>
-      <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+      <Button startIcon={<Add />} onClick={handleClickOpen}>
         {"Nuevo Poste"}
       </Button>
       <Dialog
@@ -174,19 +174,18 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
               />
             </Grid>
 
-            <Grid item xs={12} paddingInline={0} paddingBlock={1}>
+            <Grid item xs={12} sx={{ p: 0 }}>
               <Typography
                 display={"flex"}
                 color="text.secondary"
-                textAlign={"left"}
                 paddingInline={1}
-                pt={1}
+                textAlign={"left"}
               >
                 Tramo:
               </Typography>
 
-              <Grid container p={0} m={0}>
-                <Grid item xs={6}>
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={6} p={0}>
                   <Autocomplete
                     renderOption={(props, option) => {
                       return (
@@ -230,7 +229,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                 </Grid>
               </Grid>
             </Grid>
-            <Grid item xs={12} paddingInline={0} paddingBlock={1}>
+            <Grid item xs={12} sx={{ p: 0 }}>
               <Typography
                 display={"flex"}
                 color="text.secondary"
@@ -241,9 +240,9 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                 Adss-Ferreteria de sujeción:
               </Typography>
 
-              <Grid justifyContent={"left"} container m={0} p={0}>
+              <Grid justifyContent={"left"} container sx={{ p: 0 }}>
                 {listAdss.map((adds, i) => (
-                  <Grid key={i} item xs={6} p={0}>
+                  <Grid key={i} item xs={6} sx={{ p: 0 }}>
                     <FormControlLabel
                       control={<Checkbox
                         onChange={(event) => {
@@ -268,15 +267,11 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
             </Grid>
             <Grid
               item
-              sx={{
-                height: "100%",
-              }}
               xs={12}
               md={6}
-              paddingBlock={1}
-              paddingInline={0}
+              sx={{ p: 0 }}
             >
-              <Grid container m={0} p={0}>
+              <Grid container m={0} sx={{ p: 0 }}>
                 <Grid item xs={12}>
                   <Typography
                     display={"flex"}
@@ -287,9 +282,37 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                     Ubicación:
                   </Typography>
                 </Grid>
+                <Grid container sx={{ p: 0 }}>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Latitud"
+                      value={data.lat}
+                      onChange={(event) => {
+                        const newData: PosteInterface = { ...data, lat: Number.parseInt(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={6} >
+                    <TextField
+                      fullWidth
+                      type="number"
+                      label="Longitud"
+                      value={data.lng}
+
+                      onChange={(event) => {
+                        const newData: PosteInterface = { ...data, lng: Number.parseInt(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                </Grid>
 
               </Grid>
-              <Grid item xs={12}>
+              <Grid item xs={12} >
+
                 {/* @ts-expect-error No se sabe el tipo de event */}
                 <MapContainer center={[data.lat, data.lng]}
                   zoom={13}
@@ -310,24 +333,18 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
 
             <Grid
               item
-              sx={{
-                height: "100%",
-              }}
               xs={12}
               md={6}
-              paddingBlock={1}
             >
-              <Grid display={"flex"} justifyContent={"space-between"}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Imagen:
-                </Typography>
-                <Input fullWidth onChange={onImageChange} type={"file"} />
-              </Grid>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
 
               {image ? <img
                 width={"100%"}

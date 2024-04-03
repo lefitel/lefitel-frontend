@@ -13,31 +13,31 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
 import AddPropietarioDialog from "../../../components/dialogs/add/AddPropietarioDialog";
 import { PropietarioInterface } from "../../../interfaces/interfaces";
 import { useContext, useEffect, useState } from "react";
 import { useSnackbar } from "notistack";
 import { deletePropietario, editPropietario, getPropietario } from "../../../api/Propietario.api";
 import { SesionContext } from "../../../context/SesionProvider";
+import { DataGridPremium, GridColDef } from "@mui/x-data-grid-premium";
 
-const columns = [
-  { field: 'id', headerName: 'Id', width: 15 },
-  { field: 'name', headerName: 'Nombre', width: 100 },
+const columns: GridColDef[] = [
+  { field: 'id', headerName: 'Id' },
+  { field: 'name', headerName: 'Nombre' },
   {
-    field: 'createdAt', headerName: 'Creación', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
+      return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', width: 150,
-    valueGetter: ({ value }: { value: string }) => {
+    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    valueGetter: (value) => {
       const date = new Date(value);
-      return date.toLocaleString();
+      return date;
     }
-  },
+  }
 ];
 const PropietarioSec = () => {
   const [open, setOpen] = useState(false);
@@ -73,41 +73,37 @@ const PropietarioSec = () => {
 
   return (
     <Card sx={{ flex: 1 }}>
-      <CardContent>
-        <CardActions
-          style={{
-            paddingInline: 0,
-            justifyContent: "space-between",
-          }}
+      <CardActions
+        style={{
+          justifyContent: "space-between",
+        }}
+      >
+        <Typography
+          sx={{ fontSize: 16 }}
+          fontWeight="bold"
+          color="text.secondary"
         >
-          <Typography
-            sx={{ fontSize: 16 }}
-            fontWeight="bold"
-            color="text.secondary"
-          >
-            Propietario
-          </Typography>
-          <ButtonGroup
-            size="small"
-            variant="outlined"
-            aria-label="outlined primary button group"
-          >
-            <AddPropietarioDialog functionApp={recibirDatos} />
-          </ButtonGroup>
-        </CardActions>
+          Propietario
+        </Typography>
+        <ButtonGroup >
+          <AddPropietarioDialog functionApp={recibirDatos} />
+        </ButtonGroup>
+      </CardActions>
+      <CardContent>
+
         <Box
           sx={{
             height: {
               xs: "250px",
             },
             width: {
-              xs: "calc(100vw - 100px )",
+              xs: "calc(100vw - 110px )",
               sm: "calc(100vw - 115px )",
               md: "calc(33vw - 61px )",
             },
           }}
         >
-          <DataGrid
+          <DataGridPremium
             //className="datagrid-content"
             rows={list ? list : []}
             columns={columns}
@@ -162,7 +158,7 @@ const PropietarioSec = () => {
           justifyContent: "space-between"
         }}>
           <Grid>
-            <Button variant="outlined" onClick={handleClickOpenDelete}>
+            <Button onClick={handleClickOpenDelete}>
               {"Elimnar"}
             </Button>
           </Grid>

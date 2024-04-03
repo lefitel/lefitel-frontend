@@ -9,7 +9,7 @@ export const uploadImage = (data: File, token: string): Promise<string> => {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      //.log(response.data.path);
+      console.log(response.data);
       return response.data.path;
     })
     .catch((e) => {

@@ -22,13 +22,13 @@ main{
 }
 
 body::-webkit-scrollbar{
-  width: 5px;
+  width: 0px;
   background: var( --color-back);
   height: 0px;
 }
 body::-webkit-scrollbar-thumb{
   background: var( --color-primary);
-  border-radius: 5px;
+  border-radius: 0px;
   
 }
 .leaflet-container{
@@ -36,17 +36,16 @@ body::-webkit-scrollbar-thumb{
   height: 500px;
   max-height: 100vh;
 }
+/*
 .MuiGrid-container{
   align-items: center;
   justify-content: center;
   margin: 4px;
 
-}
+}*/
 
 
-.MuiGrid-root{
-  padding: 4px;
-}
+
 .login-page{
   display: flex;
   align-items: center;
@@ -60,6 +59,7 @@ body::-webkit-scrollbar-thumb{
 .saturate{
   filter: grayscale(1) opacity(0.7);
 }
+/*
 .MuiGrid-root::-webkit-scrollbar {
   width: 0;
 }
@@ -73,15 +73,16 @@ body::-webkit-scrollbar-thumb{
 
   border-radius: 0px;
   
-}
+}*/
 
 
 @media screen and (max-width: 599px) {
   .datagrid-content{
-    width: calc(100vw - 120px);
+    /*width: calc(100vw - 120px);*/
     padding: 0;
     margin: 0;
   }
+  /*
   .MuiGrid-container{
     margin: 2px;
   
@@ -89,13 +90,13 @@ body::-webkit-scrollbar-thumb{
   
   .MuiGrid-root{
     padding: 2px;
-  }
+  }*/
 }
 @media screen and (min-width: 600px) and (max-width: 1239px) {
   .datagrid-content{
-    width: calc(100vw - 140px);
+   /* width: calc(100vw - 140px);
     padding: 0;
-    margin: 0;
+    margin: 0;*/
   }
 }
 @media screen and (min-width: 1240px) {

@@ -12,6 +12,7 @@ export const getCiudad = (token: string): Promise<CiudadInterface[]> => {
         return {
           id: item.id,
           name: item.name,
+          image: item.image,
           lat: item.lat,
           lng: item.lng,
           createdAt: item.createdAt,
@@ -30,6 +31,7 @@ export const createCiudad = (
   type CiudadWithoutId = Omit<CiudadInterface, "id">;
   const newData: CiudadWithoutId = {
     name: data.name,
+    image: data.image,
     lat: data.lat,
     lng: data.lng,
   };

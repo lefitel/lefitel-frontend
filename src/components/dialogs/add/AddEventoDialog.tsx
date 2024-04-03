@@ -20,7 +20,7 @@ import {
 } from "@mui/material";
 import React, { useContext, useState } from "react";
 import { DemoContainer } from "@mui/x-date-pickers/internals/demo";
-import { DatePicker } from "@mui/x-date-pickers";
+import { DateTimePicker } from "@mui/x-date-pickers";
 import { EventoInterface, ObsInterface, PosteInterface, RevicionInterface, TipoObsInterface } from "../../../interfaces/interfaces";
 import { eventoExample, revicionExample } from "../../../data/example";
 import { getObs } from "../../../api/Obs.api";
@@ -79,7 +79,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
     if (image && data.description != '' && data.id_poste != 0 && listObsSelected.length > 0) {
       const reponseUpload = await uploadImage(image, sesion.token);
       if (reponseUpload != "500") {
-        const newData: EventoInterface = { ...data, image: reponseUpload };
+        const newData: EventoInterface = { ...data, image: reponseUpload, date: dataRevicion.date };
         const reponse = await createEvento(newData, sesion.token);
         if (Number(reponse.status) === 200) {
           try {
@@ -118,7 +118,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
 
   return (
     <React.Fragment>
-      <Button startIcon={<Add />} variant="outlined" onClick={handleClickOpen}>
+      <Button startIcon={<Add />} onClick={handleClickOpen}>
         {"Nuevo Evento"}
       </Button>
       <Dialog
@@ -172,34 +172,26 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
 
               <Grid
                 item
-                sx={{
-                  height: "100%",
-                }}
                 xs={12}
                 md={6}
-                paddingBlock={1}
-                paddingInline={0}
               >
-                <Grid container m={0} p={0}>
-                  <Grid item xs={12} paddingInline={0} paddingBlock={1}>
-                    <Typography
-                      display={"flex"}
-                      color="text.secondary"
-                      textAlign={"left"}
-                      paddingInline={1}
-                      pb={0}
-                    >
-                      Observaciones:
-                    </Typography>
-                  </Grid>
+                <Grid container sx={{ p: 0, justifyContent: "left" }} >
+                  <Typography
+                    display={"flex"}
+                    color="text.secondary"
+                    textAlign={"left"}
+                    paddingInline={1}
+                  >
+                    Observaciones:
+                  </Typography>
 
 
 
                   {
                     listTipoObs.map((tipoObs, i) =>
                     (
-                      <Grid key={i} item xs={12}>
-                        <Accordion sx={{ width: 1 }} variant="outlined">
+                      <Grid key={i} item xs={12} sx={{ p: 0 }}>
+                        <Accordion sx={{ width: 1 }} >
                           <AccordionSummary expandIcon={<ArrowDropDown />}>
                             <Typography>{tipoObs.name}</Typography>
                           </AccordionSummary>
@@ -257,24 +249,18 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
 
               <Grid
                 item
-                sx={{
-                  height: "100%",
-                }}
                 xs={12}
                 md={6}
-                paddingBlock={1}
               >
-                <Grid display={"flex"} justifyContent={"space-between"}>
-                  <Typography
-                    display={"flex"}
-                    color="text.secondary"
-                    paddingInline={1}
-                    textAlign={"left"}
-                  >
-                    Imagen:
-                  </Typography>
-                  <Input fullWidth onChange={onImageChange} type={"file"} />
-                </Grid>
+                <Typography
+                  display={"flex"}
+                  color="text.secondary"
+                  paddingInline={1}
+                  textAlign={"left"}
+                >
+                  Imagen:
+                </Typography>
+                <Input fullWidth onChange={onImageChange} type={"file"} />
 
                 {image ? <img
                   width={"100%"}
@@ -301,7 +287,7 @@ const AddEventoDialog: React.FC<AddEventoDialogProps> = ({ functionApp }) => {
               </Grid>
               <Grid item xs={12} md={6}>
                 <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                  <DatePicker
+                  <DateTimePicker
                     sx={{ width: 1 }}
 
                     label="Fecha de revición"

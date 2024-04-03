@@ -2,6 +2,12 @@ export interface SesionInterface {
   usuario: UsuarioInterface;
   token: string;
 }
+export interface ReporteInterface {
+  TramoInicial: number | null;
+  TramoFinal: number | null;
+  fechaInicial?: Date | null;
+  fechaFinal?: Date | null;
+}
 export interface AdssInterface {
   id?: number | null;
   name: string;
@@ -50,6 +56,7 @@ export interface MaterialInterface {
 export interface CiudadInterface {
   id?: number | null;
   name: string;
+  image: string;
   lat: number;
   lng: number;
   createdAt?: Date | null;
@@ -97,6 +104,7 @@ export interface PosteInterface {
   propietario?: PropietarioInterface | null;
   ciudadA?: CiudadInterface | null;
   ciudadB?: CiudadInterface | null;
+  adsspostes?: AdssPosteInterface | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -107,9 +115,13 @@ export interface EventoInterface {
   description: string;
   image: string;
   state: boolean;
+  date: Date;
   id_poste: number;
 
   poste?: PosteInterface | null;
+  solucions?: SolucionInterface[] | null;
+  revicions?: RevicionInterface[] | null;
+  eventoObs?: EventoObsInterface[] | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;

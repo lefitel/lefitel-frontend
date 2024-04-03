@@ -21,9 +21,9 @@ import {
   Settings,
   ExitToAppRounded,
   Dashboard,
-  WifiTetheringError,
   CellTower,
-  CellWifiTwoTone,
+  PermDataSetting,
+  PortableWifiOff,
 } from "@mui/icons-material";
 import ParametrosPage from "../pages/menu/ParametrosPage";
 import { useContext, useEffect, useState } from "react";
@@ -46,11 +46,14 @@ import EventoPage from '../pages/menu/EventoPage';
 import { usuarioExample } from '../data/example';
 
 
+
+
 interface MenuInterface {
   text: string;
   icon: JSX.Element;
   route: JSX.Element;
 }
+
 
 const MenuListUser1: MenuInterface[] = [
   {
@@ -65,12 +68,12 @@ const MenuListUser1: MenuInterface[] = [
   },
   {
     text: "Eventos",
-    icon: <CellWifiTwoTone />,
+    icon: <PortableWifiOff />,
     route: <EventoPage />,
   },
   {
     text: "Parametros",
-    icon: <WifiTetheringError />,
+    icon: <PermDataSetting />,
     route: <ParametrosPage />,
   },
   {
@@ -104,7 +107,7 @@ const MenuListUser2 = [
   },
   {
     text: "Eventos",
-    icon: <CellWifiTwoTone />,
+    icon: <PortableWifiOff />,
     route: <EventoPage />,
   },
   {
@@ -247,7 +250,7 @@ const DrawerComponent = () => {
   return (
     <Box className="box-main" sx={{ display: "flex", minHeight: "100vh" }}>
       <CssBaseline />
-      <AppBar variant="outlined" elevation={0} position="fixed" open={openMenu}>
+      <AppBar position="fixed" open={openMenu}>
         <Toolbar>
           <IconButton
             color="inherit"
@@ -287,12 +290,10 @@ const DrawerComponent = () => {
           </IconButton>
         </DrawerHeader>
         <Divider />
+
+
         <List>
           {menuList.map((item) => {
-
-
-
-
             return <ListItem key={item.text} disablePadding sx={{ display: "block" }}>
               <ListItemButton
                 sx={{
@@ -342,7 +343,7 @@ const DrawerComponent = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleClose}>No</Button>
-          <Button variant="contained" onClick={cerrarSesion}>
+          <Button onClick={cerrarSesion}>
             Si
           </Button>
         </DialogActions>
