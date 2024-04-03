@@ -52,7 +52,6 @@ const SeguridadPage = () => {
 
   useEffect(() => {
     recibirDatos()
-    console.log(list)
   }, [openEdit])
 
   const recibirDatos = async () => {

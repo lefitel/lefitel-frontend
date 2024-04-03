@@ -11,7 +11,7 @@ export const getReporteGeneral = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      console.log(response.data);
+      //console.log(response.data);
       /* @ts-expect-error No se sabe el tipo de event */
       const dataList: EventoInterface[] = response.data.map((item) => {
         // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
@@ -70,7 +70,7 @@ export const getReporteTramo = (
         };
       });
 
-      console.log(dataList);
+      // console.log(dataList);
       return dataList;
     });
 };

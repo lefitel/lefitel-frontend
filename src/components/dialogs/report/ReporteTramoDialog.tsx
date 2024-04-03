@@ -155,7 +155,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
             groupId: 'Observaciones',
             children: nuevaColumnGroupingTemp,
         })
-        console.log(nuevaColumn)
         setColumnsGrouping(nuevaColumnGrouping)
         setColumns(nuevaColumn)
 

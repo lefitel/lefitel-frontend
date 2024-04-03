@@ -82,7 +82,6 @@ const PostePage = () => {
 
   useEffect(() => {
     recibirDatos()
-    console.log(list)
   }, [openEdit])
 
   const recibirDatos = async () => {

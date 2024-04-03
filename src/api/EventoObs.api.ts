@@ -41,7 +41,7 @@ export const createEventoObs = (
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
-      console.log(response);
+      //console.log(response);
       return response.status;
     })
     .catch((e) => {

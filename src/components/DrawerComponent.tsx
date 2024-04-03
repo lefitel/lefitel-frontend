@@ -224,7 +224,7 @@ const DrawerComponent = () => {
     if (sesion.usuario.id_rol === 2) setMenuList(MenuListUser2)
 
     if (sesion.usuario.id_rol === 3) setMenuList(MenuListUser3)
-    console.log(sesion)
+    //console.log(sesion)
   }, [])
 
 

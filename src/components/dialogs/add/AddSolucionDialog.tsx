@@ -54,7 +54,7 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
     }
   };
   const handleGuardar = async () => {
-    console.log(data)
+    //console.log(data)
     if (image && data.description != '' && data.id_evento != 0) {
       const reponseUpload = await uploadImage(image, sesion.token);
       if (reponseUpload != "500") {

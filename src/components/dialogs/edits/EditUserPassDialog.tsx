@@ -94,7 +94,7 @@ const EditUserPassDialog = () => {
                     <Button onClick={handleClose}>Cancelar</Button>
                     <Button onClick={async () => {
 
-                        console.log({ ...sesion.usuario, pass: data.pass })
+                        //console.log({ ...sesion.usuario, pass: data.pass })
 
                         const responde = await loginUsuario({ ...sesion.usuario, pass: data.pass });
 

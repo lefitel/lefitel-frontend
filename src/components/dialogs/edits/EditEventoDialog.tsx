@@ -165,7 +165,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   const handleDelete = async () => {
     const solucionEvento = await getSolucion_evento(data?.id as number, sesion.token);
-    console.log(solucionEvento)
+    //console.log(solucionEvento)
     if (!solucionEvento) {
       listEventoObs.map((eventoObs) => {
         deleteEventoObs(eventoObs?.id as number, sesion.token);

@@ -35,7 +35,7 @@ const LoginPage = () => {
     try {
       const TokenSesion = JSON.parse(window.localStorage.getItem("token") || "").toString();
       if (TokenSesion != "") {
-        console.log("ComprobarToken");
+        // console.log("ComprobarToken");
         const responde = await comprobarToken(TokenSesion)
         if (responde.status === 200) {
           setSesion({ token: TokenSesion, usuario: responde.usuario as UsuarioInterface });
