@@ -1,8 +1,8 @@
 export const url4 = `http://192.168.0.10:3000/`;
 export const urlApi4 = `http://192.168.0.10:3000/api/`;
 
-export const url = `https://backend-lefitel.onrender.com/`;
-export const urlApi = `https://backend-lefitel.onrender.com/api/`;
+export const url = `https://lefitel-backend.onrender.com/`;
+export const urlApi = `https://lefitel-backend.onrender.com/api/`;
 
 export const urlAdss = "adss/";
 export const urlAdssPoste = "adssposte/";
