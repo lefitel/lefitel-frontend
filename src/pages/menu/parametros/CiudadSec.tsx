@@ -210,7 +210,7 @@ const CiudadSec = () => {
                       label="Latitud"
                       value={data.lat}
                       onChange={(event) => {
-                        const newData: CiudadInterface = { ...data, lat: Number.parseInt(event.target.value) };
+                        const newData: CiudadInterface = { ...data, lat: parseFloat(event.target.value) };
                         setData(newData)
                       }}
                     />
@@ -222,7 +222,7 @@ const CiudadSec = () => {
                       label="Longitud"
                       value={data.lng}
                       onChange={(event) => {
-                        const newData: CiudadInterface = { ...data, lng: Number.parseInt(event.target.value) };
+                        const newData: CiudadInterface = { ...data, lng: parseFloat(event.target.value) };
                         setData(newData)
                       }}
                     />

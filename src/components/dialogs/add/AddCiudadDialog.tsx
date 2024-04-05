@@ -109,11 +109,12 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
                                                 padding: 0,
                                                 margin: 0,
                                             }}
-                                            type="number"
                                             label="Latitud"
+                                            type="number"
+
                                             value={data.lat}
                                             onChange={(event) => {
-                                                const newData: CiudadInterface = { ...data, lat: Number.parseInt(event.target.value) };
+                                                const newData: CiudadInterface = { ...data, lat: parseFloat(event.target.value) };
                                                 setData(newData)
                                             }}
                                         />
@@ -130,7 +131,7 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
                                             value={data.lng}
 
                                             onChange={(event) => {
-                                                const newData: CiudadInterface = { ...data, lng: Number.parseInt(event.target.value) };
+                                                const newData: CiudadInterface = { ...data, lng: parseFloat(event.target.value) };
                                                 setData(newData)
                                             }}
                                         />

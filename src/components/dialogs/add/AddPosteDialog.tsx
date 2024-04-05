@@ -107,7 +107,6 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                   padding: 0,
                   margin: 0,
                 }}
-                type="number"
                 label="Numero de poste"
                 onChange={(event) => {
                   const newData: PosteInterface = { ...data, name: event.target.value };
@@ -290,7 +289,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                       label="Latitud"
                       value={data.lat}
                       onChange={(event) => {
-                        const newData: PosteInterface = { ...data, lat: Number.parseInt(event.target.value) };
+                        const newData: PosteInterface = { ...data, lat: parseFloat(event.target.value) };
                         setData(newData)
                       }}
                     />
@@ -303,7 +302,7 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
                       value={data.lng}
 
                       onChange={(event) => {
-                        const newData: PosteInterface = { ...data, lng: Number.parseInt(event.target.value) };
+                        const newData: PosteInterface = { ...data, lng: parseFloat(event.target.value) };
                         setData(newData)
                       }}
                     />
