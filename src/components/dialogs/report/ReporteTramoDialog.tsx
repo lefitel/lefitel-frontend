@@ -356,7 +356,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
         });
 
 
-        worksheet.addRow(['Lefitel']);
+        //worksheet.addRow(['Lefitel']);
     };
 
     const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte por tramo " + new Date().toLocaleDateString() };

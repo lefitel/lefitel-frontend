@@ -280,7 +280,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
 
 
-        worksheet.addRow(['Lefitel']);
+        //worksheet.addRow(['Lefitel']);
     };
 
     const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte general del " + new Date().toLocaleDateString() };
