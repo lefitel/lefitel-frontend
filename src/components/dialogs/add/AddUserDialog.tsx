@@ -134,22 +134,14 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
 
             <Grid
               item
-              sx={{
-                height: "100%",
-              }}
+              sx={{ p: 0 }}
               xs={12}
               md={6}
-              paddingBlock={1}
-              paddingInline={0}
             >
-              <Grid container m={0} p={0}>
+              <Grid container sx={{ p: 0 }}>
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    style={{
-                      padding: 0,
-                      margin: 0,
-                    }}
                     label="Usuario"
                     onChange={(event) => {
                       const newData: UsuarioInterface = { ...data, user: event.target.value };
@@ -161,10 +153,6 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
                   <TextField
                     fullWidth
                     type="password"
-                    style={{
-                      padding: 0,
-                      margin: 0,
-                    }}
                     label="Contraseña"
                     onChange={(event) => {
                       const newData: UsuarioInterface = { ...data, pass: event.target.value };
@@ -176,10 +164,6 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
                   <TextField
                     fullWidth
                     type="password"
-                    style={{
-                      padding: 0,
-                      margin: 0,
-                    }}
                     label="Confirmar Contraseña"
                     onChange={(event) => {
                       setPassConfirm(event.target.value)

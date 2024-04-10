@@ -1,6 +1,7 @@
 import {
   Autocomplete,
   Button,
+  ButtonGroup,
   Dialog,
   DialogActions,
   DialogContent,
@@ -17,7 +18,7 @@ import { getRol } from "../../../api/Rol.api";
 import dayjs from "dayjs";
 import { url } from "../../../api/url";
 import { uploadImage } from "../../../api/Upload.api";
-import { editUsuario } from "../../../api/Usuario.api";
+import { deleteUsuario, editUsuario } from "../../../api/Usuario.api";
 import { enqueueSnackbar } from "notistack";
 import { SesionContext } from "../../../context/SesionProvider";
 import { usuarioExample } from "../../../data/example";
@@ -35,6 +36,7 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, setUser, function
   const [listTipoData, setListTipoData] = React.useState<RolInterface[]>([]);
   const [image, setImage] = useState<File | null>();
   const { sesion } = useContext(SesionContext);
+  const [openDelete, setOpenDelete] = useState(false);
 
 
   useEffect(() => {
@@ -51,6 +53,32 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, setUser, function
     setUser(usuarioExample)
     functionApp();
   };
+
+  const handleClickOpenDelete = () => {
+    setOpenDelete(true);
+  };
+
+  const handleCloseDelete = () => {
+    setOpenDelete(false);
+  };
+
+  const handleDelete = async () => {
+
+    const reponse = await deleteUsuario(data?.id as number, sesion.token);
+    if (Number(reponse) === 200) {
+      enqueueSnackbar("Eliminado con exito", {
+        variant: "success",
+      });
+      handleCloseDelete()
+      handleClose()
+    }
+    else {
+      enqueueSnackbar("No se pudo Eliminar", {
+        variant: "error",
+      });
+    }
+  }
+
 
   // @ts-expect-error No se sabe el tipo de event
   const onImageChange = (event) => {
@@ -226,46 +254,76 @@ const EditUserDialog: React.FC<EditUserDialogProps> = ({ user, setUser, function
           </Grid>
         </Grid>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={handleClose}>Cancelar</Button>
-        <Button onClick={async () => {
-          //console.log(data)
+      <DialogActions
+        style={{
+          display: "flex",
+          justifyContent: "space-between"
+        }}
+      >
+        <Grid>
+          <Button onClick={handleClickOpenDelete}>
+            {"Eliminar"}
+          </Button>
+        </Grid>
+        <ButtonGroup>
+          <Button onClick={handleClose}>Cancelar</Button>
+          <Button onClick={async () => {
+            //console.log(data)
 
-          if (data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && data.user != '' && data.id_rol != 0) {
-            let newData: UsuarioInterface = { ...data }
-            if (image) {
-              const reponseUpload = await uploadImage(image, sesion.token);
-              if (reponseUpload != "500") {
-                newData = { ...newData, image: reponseUpload };
+            if (data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && data.user != '' && data.id_rol != 0) {
+              let newData: UsuarioInterface = { ...data }
+              if (image) {
+                const reponseUpload = await uploadImage(image, sesion.token);
+                if (reponseUpload != "500") {
+                  newData = { ...newData, image: reponseUpload };
+                }
+                else {
+                  enqueueSnackbar("No se pudo Editado la imagen", {
+                    variant: "error",
+                  });
+                }
+              }
+
+              const reponse = await editUsuario(newData, sesion.token);
+
+              if (Number(reponse) === 200) {
+                enqueueSnackbar("Editado con exito", {
+                  variant: "success",
+                });
+                handleClose()
               }
               else {
-                enqueueSnackbar("No se pudo Editado la imagen", {
+                enqueueSnackbar("No se pudo Editado", {
                   variant: "error",
                 });
               }
-            }
-
-            const reponse = await editUsuario(newData, sesion.token);
-
-            if (Number(reponse) === 200) {
-              enqueueSnackbar("Editado con exito", {
-                variant: "success",
-              });
-              handleClose()
-            }
-            else {
-              enqueueSnackbar("No se pudo Editado", {
-                variant: "error",
+            } else {
+              enqueueSnackbar("Rellena todos los espacios", {
+                variant: "warning",
               });
             }
-          } else {
-            enqueueSnackbar("Rellena todos los espacios", {
-              variant: "warning",
-            });
-          }
-        }}>Guardar</Button>
+          }}>Guardar</Button>
+        </ButtonGroup>
+
       </DialogActions>
+      <Dialog
+        open={openDelete}
+        onClose={handleCloseDelete}
+      >
+        <DialogTitle>{"Eliminar Usuario"}</DialogTitle>
+        <DialogContent>
+          <Grid container width={1} m={0}>
+            Seguro que quiere eliminar este Usuario?
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+
+          <Button onClick={handleCloseDelete}>Cancelar</Button>
+          <Button onClick={handleDelete}>Eliminar</Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
+
   );
 };
 
