@@ -180,7 +180,7 @@ const InicioPage = () => {
                 listEventos?.map((item, i) => {
                   if (!item.state) {
                     return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                      <Popup>You are here</Popup>
+                      <Popup>Poste #{item.poste?.id}</Popup>
                     </Marker>
                   }
                   else { return }
@@ -221,7 +221,7 @@ const InicioPage = () => {
                 listPostes?.map((item, i) => {
 
                   return <Marker key={i} position={[item?.lat, item?.lng]}>
-                    <Popup>You are here</Popup>
+                    <Popup>Poste #{item.id}</Popup>
                   </Marker>
                 }
                 )

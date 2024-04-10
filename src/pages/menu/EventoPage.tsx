@@ -18,13 +18,13 @@ import { DataGridPremium, GridColDef, GridRowParams, GridToolbar } from "@mui/x-
 
 
 const columns: GridColDef[] = [
-  { field: 'id', headerName: 'Id', width: 15 },
+  { field: 'id', headerName: 'Id' },
   {
-    field: 'poste', headerName: 'poste', width: 50,
+    field: 'poste', headerName: 'poste',
     valueGetter: (value: PosteInterface) => { return value.name; }
   },
-  { field: 'description', headerName: 'Descripción', width: 100 },
-  { field: 'state', headerName: 'Estado', width: 100, type: 'boolean', },
+  { field: 'description', headerName: 'Descripción' },
+  { field: 'state', headerName: 'Estado', type: 'boolean', },
   {
     field: 'createdAt', headerName: 'Creación', type: 'dateTime',
     valueGetter: (value) => {
