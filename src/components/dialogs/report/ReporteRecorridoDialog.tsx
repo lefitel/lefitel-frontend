@@ -8,6 +8,7 @@ import { url } from '../../../api/url';
 import { useSnackbar } from 'notistack';
 import { DataGridPremium, GridCloseIcon, GridColDef, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
 import { getCiudad } from '../../../api/Ciudad.api';
+import axios from 'axios';
 
 
 const columns: GridColDef[] = [
@@ -103,7 +104,7 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
         worksheet.addRow([]);
     };
-    const exceljsPostProcess = ({ worksheet }: GridExceljsProcessInput) => {
+    const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
         worksheet.addRow({});
         worksheet.name = 'Reporte';
 
@@ -119,7 +120,18 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
         for (let i = 5; i <= lastRow; i++) {
             const fila = worksheet.getRow(i);
-            fila.height = 15;
+            fila.height = 50;
+            const celda = worksheet.getCell(`E${i}`)
+            if (celda.value != "" && celda.value != undefined) {
+                const imageBuffer = await axios.get(celda.value.toString(), { responseType: 'arraybuffer' });
+                const imageId = workbook.addImage({
+                    buffer: imageBuffer.data,
+                    extension: 'jpeg',
+                });
+                celda.value = ""
+                worksheet.addImage(imageId, `E${i}:E${i}`);
+
+            }
         }
 
         worksheet.mergeCells(1, 1, 1, 5);
@@ -142,13 +154,6 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
             bold: true,
             size: 20,
         };
-        ['A1', 'A2', 'A3'].map(key => {
-            worksheet.getCell(key).alignment = {
-                vertical: 'middle',
-                horizontal: 'center',
-                wrapText: true,
-            };
-        });
 
 
 
@@ -160,7 +165,11 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
             lastRow = Math.max(lastRow, rowNumber);
             row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
                 lastCol = Math.max(lastCol, colNumber);
-
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: 'center',
+                    wrapText: true,
+                };
                 cell.border = {
                     top: { style: 'thin' },
                     left: { style: 'thin' },

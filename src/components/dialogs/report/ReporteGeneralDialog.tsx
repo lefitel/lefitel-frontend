@@ -7,6 +7,7 @@ import { getReporteGeneral } from '../../../api/reporte.api';
 import { url } from '../../../api/url';
 import { useSnackbar } from 'notistack';
 import { DataGridPremium, GridCloseIcon, GridColDef, GridColumnGroupingModel, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
+import axios from 'axios';
 
 
 const columns: GridColDef[] = [
@@ -14,7 +15,7 @@ const columns: GridColDef[] = [
     {
         field: 'poste', headerName: 'Nmr',
         valueGetter(_params, row) {
-            return row.name
+            return row.poste.name
         },
     },
     {
@@ -174,7 +175,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
         worksheet.addRow([]);
     };
-    const exceljsPostProcess = ({ worksheet }: GridExceljsProcessInput) => {
+    const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
         worksheet.addRow({});
         worksheet.name = 'Reporte';
 
@@ -189,8 +190,22 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
         for (let i = 6; i <= lastRow; i++) {
             const fila = worksheet.getRow(i);
-            fila.height = 15;
+            fila.height = 50;
+            const celda = worksheet.getCell(`I${i}`)
+            if (celda.value != "" && celda.value != undefined) {
+                const imageBuffer = await axios.get(celda.value.toString(), { responseType: 'arraybuffer' });
+                const imageId = workbook.addImage({
+                    buffer: imageBuffer.data,
+                    extension: 'jpeg',
+                });
+                celda.value = ""
+                worksheet.addImage(imageId, `I${i}:I${i}`);
+
+            }
+
+
         }
+
 
         worksheet.mergeCells(1, 1, 1, 12);
         worksheet.mergeCells(2, 1, 2, 12);
@@ -212,13 +227,6 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             bold: true,
             size: 20,
         };
-        ['A1', 'A2', 'A3'].map(key => {
-            worksheet.getCell(key).alignment = {
-                vertical: 'middle',
-                horizontal: 'center',
-                wrapText: true,
-            };
-        });
 
 
 
@@ -230,7 +238,11 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             lastRow = Math.max(lastRow, rowNumber);
             row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
                 lastCol = Math.max(lastCol, colNumber);
-
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: 'center',
+                    wrapText: true,
+                };
                 cell.border = {
                     top: { style: 'thin' },
                     left: { style: 'thin' },

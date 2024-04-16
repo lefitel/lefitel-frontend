@@ -8,6 +8,7 @@ import { Box, ButtonGroup, Card, CardActions, CardContent, Grid } from "@mui/mat
 import AddUserDialog from "../../components/dialogs/add/AddUserDialog";
 import { usuarioExample } from "../../data/example";
 import EditUserDialog from "../../components/dialogs/edits/EditUserDialog";
+import axios from "axios";
 
 const columns: GridColDef[] = [
   { field: 'id', headerName: 'Id' },
@@ -74,7 +75,7 @@ const SeguridadPage = () => {
 
     worksheet.addRow([]);
   };
-  const exceljsPostProcess = ({ worksheet }: GridExceljsProcessInput) => {
+  const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
     worksheet.addRow({});
     worksheet.name = 'Reporte';
 
@@ -98,6 +99,12 @@ const SeguridadPage = () => {
 
     worksheet.getCell('A1').value = 'USUARIOS';
     worksheet.getCell('A2').value = 'Lefitel';
+
+
+
+
+
+
 
     ['A2', 'A3'].map(key => {
       worksheet.getCell(key).font = {

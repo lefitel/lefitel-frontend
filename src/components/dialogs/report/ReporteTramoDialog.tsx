@@ -274,13 +274,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
             bold: true,
             size: 20,
         };
-        ['A1', 'A2', 'A3', 'A4', 'F2', 'F3', 'F4'].map(key => {
-            worksheet.getCell(key).alignment = {
-                vertical: 'middle',
-                horizontal: 'center',
-                wrapText: true,
-            };
-        });
 
         worksheet.getRow(6).eachCell(function (cell) {
             if (cell.value != "Latitud" && cell.value != "Longitud") {
@@ -296,7 +289,11 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
             lastRow = Math.max(lastRow, rowNumber);
             row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
                 lastCol = Math.max(lastCol, colNumber);
-
+                cell.alignment = {
+                    vertical: 'middle',
+                    horizontal: 'center',
+                    wrapText: true,
+                };
                 cell.border = {
                     top: { style: 'thin' },
                     left: { style: 'thin' },
