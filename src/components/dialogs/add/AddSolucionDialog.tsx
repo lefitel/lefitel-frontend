@@ -1,6 +1,8 @@
 import {
+  Box,
   Button,
   ButtonGroup,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -29,8 +31,10 @@ interface AddSolucionDialogProps {
 }
 
 const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, evento, handleCloseDialog }) => {
-  const [open, setOpen] = React.useState(false);
-  const [data, setData] = React.useState<SolucionInterface>({ ...solucionExample, id_evento: evento?.id as number });
+  const [open, setOpen] = useState(false);
+  const [cargando, setCargando] = useState(false);
+
+  const [data, setData] = useState<SolucionInterface>({ ...solucionExample, id_evento: evento?.id as number });
   const [image, setImage] = useState<File | null>();
   const { enqueueSnackbar } = useSnackbar();
   const { sesion } = useContext(SesionContext);
@@ -54,7 +58,7 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
     }
   };
   const handleGuardar = async () => {
-    //console.log(data)
+    setCargando(true)
     if (image && data.description != '' && data.id_evento != 0) {
       const reponseUpload = await uploadImage(image, sesion.token);
       if (reponseUpload != "500") {
@@ -67,22 +71,26 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
           await editEvento({ ...evento, state: true }, sesion.token);
 
           handleClose()
-          enqueueSnackbar("Ingresado con exito", {
+          await setCargando(false)
+          await enqueueSnackbar("Ingresado con exito", {
             variant: "success",
           })
         }
         else {
+          setCargando(false)
           enqueueSnackbar("No se pudo Ingresar", {
             variant: "error",
           });
         }
       } else {
+        setCargando(false)
         enqueueSnackbar("No se pudo Ingresar la imagen", {
           variant: "error",
         });
       }
     }
     else {
+      setCargando(false)
       enqueueSnackbar("Rellena todos los espacios", {
         variant: "warning",
       });
@@ -211,6 +219,11 @@ const AddSolucionDialog: React.FC<AddSolucionDialogProps> = ({ functionApp, even
           </ButtonGroup>
         </DialogActions>
       </Dialog>
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
     </React.Fragment>
   );
 };

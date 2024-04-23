@@ -5,6 +5,7 @@ import {
   Card,
   CardActions,
   CardContent,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -40,6 +41,8 @@ const columns: GridColDef[] = [
   }
 ];
 const PropietarioSec = () => {
+  const [cargando, setCargando] = useState(false);
+
   const [open, setOpen] = useState(false);
   const [openDelete, setOpenDelete] = useState(false);
   const [data, setData] = useState<PropietarioInterface>({ id: 1, name: "" });
@@ -70,7 +73,49 @@ const PropietarioSec = () => {
   const handleCloseDelete = () => {
     setOpenDelete(false);
   };
-
+  const handleEdit = async () => {
+    setCargando(true)
+    if (data.name != '') {
+      const reponse = await editPropietario(data, sesion.token);
+      if (Number(reponse) === 200) {
+        setCargando(false)
+        enqueueSnackbar("Editado con exito", {
+          variant: "success",
+        });
+        handleClose()
+      }
+      else {
+        setCargando(false)
+        enqueueSnackbar("No se pudo editar los datos", {
+          variant: "error",
+        });
+      }
+    }
+    else {
+      setCargando(false)
+      enqueueSnackbar("Rellena todos los espacios", {
+        variant: "warning",
+      });
+    }
+  }
+  const handleDelete = async () => {
+    setCargando(true)
+    const reponse = await deletePropietario(data.id as number, sesion.token);
+    if (Number(reponse) === 200) {
+      setCargando(false)
+      enqueueSnackbar("Eliminado con exito", {
+        variant: "success",
+      });
+      handleCloseDelete()
+      handleClose()
+    }
+    else {
+      setCargando(false)
+      enqueueSnackbar("No se pudo Eliminar", {
+        variant: "error",
+      });
+    }
+  }
   return (
     <Card sx={{ flex: 1 }}>
       <CardActions
@@ -85,9 +130,13 @@ const PropietarioSec = () => {
         >
           Propietario
         </Typography>
-        <ButtonGroup >
-          <AddPropietarioDialog functionApp={recibirDatos} />
-        </ButtonGroup>
+
+        {sesion.usuario.id_rol === 1 ? <>
+          <ButtonGroup >
+            <AddPropietarioDialog functionApp={recibirDatos} />
+          </ButtonGroup>
+        </> : null}
+
       </CardActions>
       <CardContent>
 
@@ -117,106 +166,81 @@ const PropietarioSec = () => {
           />
         </Box>
       </CardContent>
-      <Dialog
-        fullWidth
-        open={open}
-        onClose={handleClose}
-      >
-        <DialogTitle>{"Editar Propietario"}</DialogTitle>
-        <DialogContent>
-          <Grid container width={1} m={0}>
-            <Grid item xs={12} md={2}>
-              <TextField
-                fullWidth disabled
-                style={{
-                  padding: 0,
-                  margin: 0,
-                }}
-                label="Id"
-                value={data.id}
-              />
+      {sesion.usuario.id_rol === 1 ? <>
+
+        <Dialog
+          fullWidth
+          open={open}
+          onClose={handleClose}
+        >
+          <DialogTitle>{"Editar Propietario"}</DialogTitle>
+          <DialogContent>
+            <Grid container width={1} m={0}>
+              <Grid item xs={12} md={2}>
+                <TextField
+                  fullWidth disabled
+                  style={{
+                    padding: 0,
+                    margin: 0,
+                  }}
+                  label="Id"
+                  value={data.id}
+                />
+              </Grid>
+              <Grid item xs={12} md={10}>
+                <TextField
+                  fullWidth
+                  style={{
+                    padding: 0,
+                    margin: 0,
+                  }}
+                  label="Nombre"
+                  value={data.name}
+                  onChange={(event) => {
+                    const newData: PropietarioInterface = { ...data, name: event.target.value };
+                    setData(newData)
+                  }}
+                />
+              </Grid>
             </Grid>
-            <Grid item xs={12} md={10}>
-              <TextField
-                fullWidth
-                style={{
-                  padding: 0,
-                  margin: 0,
-                }}
-                label="Nombre"
-                value={data.name}
-                onChange={(event) => {
-                  const newData: PropietarioInterface = { ...data, name: event.target.value };
-                  setData(newData)
-                }}
-              />
+          </DialogContent>
+          <DialogActions style={{
+            display: "flex",
+            justifyContent: "space-between"
+          }}>
+            <Grid>
+              <Button onClick={handleClickOpenDelete}>
+                {"Eliminar"}
+              </Button>
             </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions style={{
-          display: "flex",
-          justifyContent: "space-between"
-        }}>
-          <Grid>
-            <Button onClick={handleClickOpenDelete}>
-              {"Elimnar"}
-            </Button>
-          </Grid>
-          <ButtonGroup>
-            <Button onClick={handleClose}>Cancelar</Button>
-            <Button onClick={async () => {
-              if (data.name != '') {
-                const reponse = await editPropietario(data, sesion.token);
-                if (Number(reponse) === 200) {
-                  enqueueSnackbar("Editado con exito", {
-                    variant: "success",
-                  });
-                  handleClose()
-                }
-                else {
-                  enqueueSnackbar("No se pudo editar los datos", {
-                    variant: "error",
-                  });
-                }
-              }
-              else {
-                enqueueSnackbar("Rellena todos los espacios", {
-                  variant: "warning",
-                });
-              }
-            }}>Guardar</Button>
-          </ButtonGroup>
-        </DialogActions>
-      </Dialog>
-      <Dialog
-        open={openDelete}
-        onClose={handleCloseDelete}
-      >
-        <DialogTitle>{"Eliminar Propietario"}</DialogTitle>
-        <DialogContent>
-          <Grid container width={1} m={0}>
-            Seguro que quiere eliminar este Propietario?
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDelete}>Cancelar</Button>
-          <Button onClick={async () => {
-            const reponse = await deletePropietario(data.id as number, sesion.token);
-            if (Number(reponse) === 200) {
-              enqueueSnackbar("Eliminado con exito", {
-                variant: "success",
-              });
-              handleCloseDelete()
-              handleClose()
-            }
-            else {
-              enqueueSnackbar("No se pudo Eliminar", {
-                variant: "error",
-              });
-            }
-          }}>Eliminar</Button>
-        </DialogActions>
-      </Dialog>
+            <ButtonGroup>
+              <Button onClick={handleClose}>Cancelar</Button>
+              <Button onClick={handleEdit}>Guardar</Button>
+            </ButtonGroup>
+          </DialogActions>
+        </Dialog>
+        <Dialog
+          open={openDelete}
+          onClose={handleCloseDelete}
+        >
+          <DialogTitle>{"Eliminar Propietario"}</DialogTitle>
+          <DialogContent>
+            <Grid container width={1} m={0}>
+              Seguro que quiere eliminar este Propietario?
+            </Grid>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseDelete}>Cancelar</Button>
+            <Button onClick={handleDelete}>Eliminar</Button>
+          </DialogActions>
+        </Dialog>
+      </> : null}
+
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
     </Card>
   );
 };

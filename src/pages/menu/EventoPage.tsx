@@ -7,7 +7,7 @@ import {
   CardContent,
   Grid,
 } from "@mui/material";
-import { EventoInterface, PosteInterface } from "../../interfaces/interfaces";
+import { EventoInterface, PosteInterface, UsuarioInterface } from "../../interfaces/interfaces";
 import { getEvento, searchEvento } from "../../api/Evento.api";
 import AddEventoDialog from "../../components/dialogs/add/AddEventoDialog";
 
@@ -24,7 +24,22 @@ const columns: GridColDef[] = [
     valueGetter: (value: PosteInterface) => { return value.name; }
   },
   { field: 'description', headerName: 'Descripción' },
+  {
+    field: 'tramo', headerName: 'Tramo',
+    valueGetter(_params, row) { return `${row.poste.ciudadA.name} - ${row.poste.ciudadB.name} ` },
+  },
   { field: 'state', headerName: 'Estado', type: 'boolean', },
+  {
+    field: 'usuario', headerName: 'Usuario',
+    valueGetter: (value: UsuarioInterface) => { return value ? value.name : ""; }
+  },
+  /*{
+      field: 'reviciones', headerName: 'Ultima Revición',
+      valueGetter(_params, row) {
+        //console.log(row); 
+        return `${row.revicions.pop()}`
+      },
+    },*/
   {
     field: 'createdAt', headerName: 'Creación', type: 'dateTime',
     valueGetter: (value) => {
@@ -160,9 +175,11 @@ const EventoPage = () => {
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
         <Card sx={{ flex: 1 }} style={{}}>
           <CardActions >
-            <ButtonGroup >
-              <AddEventoDialog functionApp={recibirDatos} />
-            </ButtonGroup>
+            {sesion.usuario.id_rol != 3 ? <>
+              <ButtonGroup >
+                <AddEventoDialog functionApp={recibirDatos} />
+              </ButtonGroup>
+            </> : null}
           </CardActions>
           <CardContent style={{}}>
 

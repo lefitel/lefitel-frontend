@@ -7,7 +7,7 @@ import {
   CardContent,
   Grid
 } from "@mui/material";
-import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface } from "../../interfaces/interfaces";
+import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface, UsuarioInterface } from "../../interfaces/interfaces";
 import { getPoste, searchPoste } from "../../api/Poste.api";
 import AddPosteDialog from "../../components/dialogs/add/AddPosteDialog";
 
@@ -40,6 +40,10 @@ const columns: GridColDef[] = [
     valueGetter: (value: CiudadInterface) => { return value.name }
   },
   {
+    field: 'usuario', headerName: 'Usuario',
+    valueGetter: (value: UsuarioInterface) => { return value ? value.name : ""; }
+  },
+  {
     field: 'createdAt', headerName: 'Creación', type: 'dateTime',
     valueGetter: (value) => {
       const date = new Date(value);
@@ -54,20 +58,6 @@ const columns: GridColDef[] = [
     }
   },
 ];
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -189,9 +179,11 @@ const PostePage = () => {
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
         <Card sx={{ flex: 1 }} >
           <CardActions >
-            <ButtonGroup >
-              <AddPosteDialog functionApp={recibirDatos} />
-            </ButtonGroup>
+            {sesion.usuario.id_rol != 3 ? <>
+              <ButtonGroup >
+                <AddPosteDialog functionApp={recibirDatos} />
+              </ButtonGroup>
+            </> : null}
           </CardActions>
           <CardContent style={{}}>
 

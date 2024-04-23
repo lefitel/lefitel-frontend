@@ -111,6 +111,11 @@ const MenuListUser2 = [
     route: <EventoPage />,
   },
   {
+    text: "Parametros",
+    icon: <PermDataSetting />,
+    route: <ParametrosPage />,
+  },
+  {
     text: "Reportes",
     icon: <BarChart />,
     route: <ReportePage />,
@@ -127,6 +132,16 @@ const MenuListUser3 = [
     text: "Inicio",
     icon: <Dashboard />,
     route: <InicioPage />,
+  },
+  {
+    text: "Postes",
+    icon: <CellTower />,
+    route: <PostePage />,
+  },
+  {
+    text: "Eventos",
+    icon: <PortableWifiOff />,
+    route: <EventoPage />,
   },
   {
     text: "Reportes",

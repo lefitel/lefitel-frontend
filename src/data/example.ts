@@ -1,10 +1,13 @@
 import {
   CiudadInterface,
   EventoInterface,
+  MaterialInterface,
   ObsInterface,
   PosteInterface,
+  PropietarioInterface,
   RevicionInterface,
   SolucionInterface,
+  TipoObsInterface,
   UsuarioInterface,
 } from "../interfaces/interfaces";
 
@@ -21,6 +24,20 @@ export const posteExample: PosteInterface = {
   id_ciudadB: 0,
   id_material: 0,
   id_propietario: 0,
+  id_usuario: 0,
+};
+
+export const propietarioExample: PropietarioInterface = {
+  name: "",
+};
+
+export const tipoObsExample: TipoObsInterface = {
+  name: "",
+  description: "",
+};
+export const MaterialExample: MaterialInterface = {
+  name: "",
+  description: "",
 };
 
 export const eventoExample: EventoInterface = {
@@ -29,6 +46,7 @@ export const eventoExample: EventoInterface = {
   date: new Date(),
   state: false,
   id_poste: 0,
+  id_usuario: 0,
 };
 export const ciudadExample: CiudadInterface = {
   name: "",

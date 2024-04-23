@@ -1,6 +1,8 @@
 import {
+    Box,
     Button,
     ButtonGroup,
+    CircularProgress,
     Dialog,
     DialogActions,
     DialogContent,
@@ -29,6 +31,8 @@ interface AddCiudadDialogProps {
 const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
 
     const [open, setOpen] = useState(false);
+    const [cargando, setCargando] = useState(false);
+
     const [data, setData] = useState<CiudadInterface>(ciudadExample);
     const { enqueueSnackbar } = useSnackbar();
     const { sesion } = useContext(SesionContext);
@@ -60,6 +64,45 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
 
 
         return null
+    }
+
+    const handleGuardar = async () => {
+        setCargando(true)
+
+        if (image && data.name != '' && data.lat != 0 && data.lng != 0) {
+
+            const reponseUpload = await uploadImage(image, sesion.token);
+
+            if (reponseUpload != "500") {
+
+                const newData: CiudadInterface = { ...data, image: reponseUpload };
+
+                const reponse = await createCiudad(newData, sesion.token);
+
+                if (Number(reponse) === 200) {
+                    setCargando(false)
+
+                    enqueueSnackbar("Introducido con exito", {
+                        variant: "success",
+                    });
+                    handleClose()
+                }
+                else {
+                    setCargando(false)
+
+                    enqueueSnackbar("No se pudo introducir los datos", {
+                        variant: "error",
+                    });
+                }
+            }
+
+
+        }
+        else {
+            enqueueSnackbar("Rellena todos los espacios", {
+                variant: "warning",
+            });
+        }
     }
 
     return (
@@ -203,42 +246,16 @@ const AddCiudadDialog: React.FC<AddCiudadDialogProps> = ({ functionApp }) => {
                 <DialogActions>
                     <ButtonGroup>
                         <Button onClick={handleClose}>Cancelar</Button>
-                        <Button onClick={async () => {
-                            if (image && data.name != '' && data.lat != 0 && data.lng != 0) {
-
-                                const reponseUpload = await uploadImage(image, sesion.token);
-
-                                if (reponseUpload != "500") {
-
-                                    const newData: CiudadInterface = { ...data, image: reponseUpload };
-
-                                    const reponse = await createCiudad(newData, sesion.token);
-
-                                    if (Number(reponse) === 200) {
-                                        enqueueSnackbar("Introducido con exito", {
-                                            variant: "success",
-                                        });
-                                        handleClose()
-                                    }
-                                    else {
-                                        enqueueSnackbar("No se pudo introducir los datos", {
-                                            variant: "error",
-                                        });
-                                    }
-                                }
-
-
-                            }
-                            else {
-                                enqueueSnackbar("Rellena todos los espacios", {
-                                    variant: "warning",
-                                });
-                            }
-                        }}>Guardar</Button>
+                        <Button onClick={handleGuardar}>Guardar</Button>
                     </ButtonGroup>
 
                 </DialogActions>
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     );
 

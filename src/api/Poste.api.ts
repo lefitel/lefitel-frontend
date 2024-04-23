@@ -30,7 +30,7 @@ export const getPoste = (token: string): Promise<PosteInterface[]> => {
           updatedAt: item.updatedAt,
         };
       });
-      //console.log(dataList);
+      console.log(dataList);
       return dataList;
     });
 };

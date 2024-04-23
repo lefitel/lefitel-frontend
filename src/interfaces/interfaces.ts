@@ -98,6 +98,7 @@ export interface PosteInterface {
   id_propietario: number;
   id_ciudadA: number;
   id_ciudadB: number;
+  id_usuario: number;
 
   adss?: AdssInterface | null;
   material?: MaterialInterface | null;
@@ -105,6 +106,7 @@ export interface PosteInterface {
   ciudadA?: CiudadInterface | null;
   ciudadB?: CiudadInterface | null;
   adsspostes?: AdssPosteInterface | null;
+  usuario?: UsuarioInterface | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -117,11 +119,13 @@ export interface EventoInterface {
   state: boolean;
   date: Date;
   id_poste: number;
+  id_usuario: number;
 
   poste?: PosteInterface | null;
   solucions?: SolucionInterface[] | null;
   revicions?: RevicionInterface[] | null;
   eventoObs?: EventoObsInterface[] | null;
+  usuario?: UsuarioInterface | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;

@@ -1,7 +1,9 @@
 import {
     Autocomplete,
+    Box,
     Button,
     ButtonGroup,
+    CircularProgress,
     Dialog,
     DialogActions,
     DialogContent,
@@ -9,7 +11,7 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { Add } from "@mui/icons-material";
 import { ObsInterface, TipoObsInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
@@ -23,13 +25,17 @@ interface AddObsDialogProps {
 }
 
 const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
-    const [open, setOpen] = React.useState(false);
-    const [listTipoData, setListTipoData] = React.useState<TipoObsInterface[]>([]);
-    const [data, setData] = React.useState<ObsInterface>(obsExample);
+    const [open, setOpen] = useState(false);
+    const [cargando, setCargando] = useState(false);
+
+    const [listTipoData, setListTipoData] = useState<TipoObsInterface[]>([]);
+    const [data, setData] = useState<ObsInterface>(obsExample);
     const { enqueueSnackbar } = useSnackbar();
     const { sesion } = useContext(SesionContext);
     const recibirDatos = async () => {
+        setCargando(true)
         setListTipoData(await getTipoObs(sesion.token))
+        await setCargando(false)
     }
     const handleClickOpen = () => {
         recibirDatos()
@@ -40,6 +46,33 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
         setOpen(false);
         functionApp()
     };
+
+    const handleGuardar = async () => {
+        setCargando(true)
+        if (data.name != '' && data.description != '' && data.id_tipoObs != 0) {
+            const reponse = await createObs(data, sesion.token);
+
+            if (Number(reponse) === 200) {
+                setCargando(false)
+                enqueueSnackbar("Ingresado con exito", {
+                    variant: "success",
+                });
+                handleClose()
+            }
+            else {
+                setCargando(false)
+                enqueueSnackbar("No se pudo Ingresar", {
+                    variant: "error",
+                });
+            }
+        }
+        else {
+            setCargando(false)
+            enqueueSnackbar("Rellena todos los espacios", {
+                variant: "warning",
+            });
+        }
+    }
 
     return (
         <React.Fragment>
@@ -107,32 +140,16 @@ const AddObsDialog: React.FC<AddObsDialogProps> = ({ functionApp }) => {
                 <DialogActions>
                     <ButtonGroup>
                         <Button onClick={handleClose}>Cancelar</Button>
-                        <Button onClick={async () => {
-                            if (data.name != '' && data.description != '' && data.id_tipoObs != 0) {
-                                const reponse = await createObs(data, sesion.token);
-
-                                if (Number(reponse) === 200) {
-                                    enqueueSnackbar("Ingresado con exito", {
-                                        variant: "success",
-                                    });
-                                    handleClose()
-                                }
-                                else {
-                                    enqueueSnackbar("No se pudo Ingresar", {
-                                        variant: "error",
-                                    });
-                                }
-                            }
-                            else {
-                                enqueueSnackbar("Rellena todos los espacios", {
-                                    variant: "warning",
-                                });
-                            }
-                        }}>Guardar</Button>
+                        <Button onClick={handleGuardar}>Guardar</Button>
                     </ButtonGroup>
 
                 </DialogActions>
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     );
 

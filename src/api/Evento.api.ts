@@ -5,7 +5,9 @@ import { eventoExample } from "../data/example";
 
 export const getEvento = (token: string): Promise<EventoInterface[]> => {
   return axios
-    .get(urlApi + urlEvento, { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlEvento, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
     .then((response) => {
       /* @ts-expect-error No se sabe el tipo de event */
       const dataList: EventoInterface[] = response.data.map((item) => {
@@ -18,8 +20,11 @@ export const getEvento = (token: string): Promise<EventoInterface[]> => {
           date: item.date,
 
           id_poste: item.id_poste,
+          id_usuario: item.id_usuario,
 
           poste: item.poste,
+          revicions: item.revicions,
+          usuario: item.usuario,
 
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
@@ -71,6 +76,7 @@ export const createEvento = (
     date: data.date,
     state: data.state,
     id_poste: data.id_poste,
+    id_usuario: data.id_usuario,
   };
 
   return axios

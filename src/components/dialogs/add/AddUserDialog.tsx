@@ -1,8 +1,10 @@
 import { Add } from "@mui/icons-material";
 import {
   Autocomplete,
+  Box,
   Button,
   ButtonGroup,
+  CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
@@ -27,19 +29,23 @@ interface AddUserDialogProps {
   functionApp: () => void;
 }
 const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
-  const [open, setOpen] = React.useState(false);
-  const [passConfirm, setPassConfirm] = React.useState("");
+  const [open, setOpen] = useState(false);
+  const [cargando, setCargando] = useState(false);
 
-  const [data, setData] = React.useState<UsuarioInterface>(usuarioExample);
+  const [passConfirm, setPassConfirm] = useState("");
+
+  const [data, setData] = useState<UsuarioInterface>(usuarioExample);
   const { enqueueSnackbar } = useSnackbar();
-  const [listTipoData, setListTipoData] = React.useState<RolInterface[]>([]);
+  const [listTipoData, setListTipoData] = useState<RolInterface[]>([]);
   const [image, setImage] = useState<File | null>();
   const { sesion } = useContext(SesionContext);
 
 
 
   const recibirDatos = async () => {
+    setCargando(true)
     setListTipoData(await getRol(sesion.token))
+    await setCargando(false)
   }
   const handleClickOpen = () => {
     recibirDatos()
@@ -59,6 +65,64 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
       setImage(event.target.files[0]);
     }
   };
+
+  const handleGuardar = async () => {
+    setCargando(true)
+    if (image && data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && passConfirm != '' && data.user != '' && data.id_rol != 0) {
+      if (data.pass === passConfirm) {
+
+        const userExist = await searchUsuario_user(data.user, sesion.token);
+        if (!userExist) {
+          const reponseUpload = await uploadImage(image, sesion.token);
+          if (reponseUpload != "500") {
+            const newData: UsuarioInterface = { ...data, image: reponseUpload };
+            const reponse = await createUsuario(newData, sesion.token);
+
+            if (Number(reponse) === 200) {
+              setCargando(false)
+              enqueueSnackbar("Ingresado con exito", {
+                variant: "success",
+              });
+              handleClose()
+            }
+            else {
+              setCargando(false)
+              enqueueSnackbar("No se pudo Ingresar", {
+                variant: "error",
+              });
+            }
+          } else {
+            setCargando(false)
+            enqueueSnackbar("No se pudo Ingresar la imagen", {
+              variant: "error",
+            });
+          }
+        }
+        else {
+          setCargando(false)
+          enqueueSnackbar("Este usuario ya existe", {
+            variant: "warning",
+          });
+        }
+
+      } else {
+        setCargando(false)
+        enqueueSnackbar("Las contraseñas no son iguales", {
+          variant: "warning",
+        });
+      }
+
+
+    }
+    else {
+      setCargando(false)
+      enqueueSnackbar("Rellena todos los espacios", {
+        variant: "warning",
+      });
+    }
+
+  }
+
   return (
     <React.Fragment>
       <Button startIcon={<Add />} onClick={handleClickOpen}>
@@ -245,60 +309,15 @@ const AddUserDialog: React.FC<AddUserDialogProps> = ({ functionApp }) => {
         <DialogActions>
           <ButtonGroup>
             <Button onClick={handleClose}>Cancelar</Button>
-            <Button onClick={async () => {
-
-
-              //console.log(data)
-              if (image && data.name != '' && data.lastname != '' && data.phone != '' && data.pass != '' && passConfirm != '' && data.user != '' && data.id_rol != 0) {
-                if (data.pass === passConfirm) {
-
-                  const userExist = await searchUsuario_user(data.user, sesion.token);
-                  if (!userExist) {
-                    const reponseUpload = await uploadImage(image, sesion.token);
-                    if (reponseUpload != "500") {
-                      const newData: UsuarioInterface = { ...data, image: reponseUpload };
-                      const reponse = await createUsuario(newData, sesion.token);
-
-                      if (Number(reponse) === 200) {
-                        enqueueSnackbar("Ingresado con exito", {
-                          variant: "success",
-                        });
-                        handleClose()
-                      }
-                      else {
-                        enqueueSnackbar("No se pudo Ingresar", {
-                          variant: "error",
-                        });
-                      }
-                    } else {
-                      enqueueSnackbar("No se pudo Ingresar la imagen", {
-                        variant: "error",
-                      });
-                    }
-                  }
-                  else {
-                    enqueueSnackbar("Este usuario ya existe", {
-                      variant: "warning",
-                    });
-                  }
-
-                } else {
-                  enqueueSnackbar("Las contraseñas no son iguales", {
-                    variant: "warning",
-                  });
-                }
-
-
-              }
-              else {
-                enqueueSnackbar("Rellena todos los espacios", {
-                  variant: "warning",
-                });
-              }
-            }}>Guardar</Button>
+            <Button onClick={handleGuardar}>Guardar</Button>
           </ButtonGroup>
         </DialogActions>
       </Dialog>
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
     </React.Fragment>
   );
 };

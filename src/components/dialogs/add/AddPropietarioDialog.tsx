@@ -1,6 +1,8 @@
 import {
+    Box,
     Button,
     ButtonGroup,
+    CircularProgress,
     Dialog,
     DialogActions,
     DialogContent,
@@ -8,7 +10,7 @@ import {
     Grid,
     TextField,
 } from "@mui/material";
-import React, { useContext } from "react";
+import React, { useContext, useState } from "react";
 import { Add } from "@mui/icons-material";
 import { PropietarioInterface } from "../../../interfaces/interfaces";
 import { useSnackbar } from "notistack";
@@ -21,9 +23,10 @@ interface AddPropietarioDialogProps {
 
 
 const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp }) => {
+    const [cargando, setCargando] = useState(false);
 
-    const [open, setOpen] = React.useState(false);
-    const [data, setData] = React.useState<PropietarioInterface>({ id: 0, name: "" });
+    const [open, setOpen] = useState(false);
+    const [data, setData] = useState<PropietarioInterface>({ id: 0, name: "" });
     const { enqueueSnackbar } = useSnackbar();
     const { sesion } = useContext(SesionContext);
 
@@ -36,6 +39,33 @@ const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp
         setOpen(false);
         functionApp()
     };
+
+    const handleGuardar = async () => {
+        setCargando(true)
+        if (data.name != '') {
+            const reponse = await createPropietario(data, sesion.token);
+
+            if (Number(reponse) === 200) {
+                setCargando(false)
+                enqueueSnackbar("Introducido con exito", {
+                    variant: "success",
+                });
+                handleClose()
+            }
+            else {
+                setCargando(false)
+                enqueueSnackbar("No se pudo introducir los datos", {
+                    variant: "error",
+                });
+            }
+        }
+        else {
+            setCargando(false)
+            enqueueSnackbar("Rellena todos los espacios", {
+                variant: "warning",
+            });
+        }
+    }
 
     return (
         <React.Fragment>
@@ -70,32 +100,16 @@ const AddPropietarioDialog: React.FC<AddPropietarioDialogProps> = ({ functionApp
                 <DialogActions>
                     <ButtonGroup>
                         <Button onClick={handleClose}>Cancelar</Button>
-                        <Button onClick={async () => {
-                            if (data.name != '') {
-                                const reponse = await createPropietario(data, sesion.token);
-
-                                if (Number(reponse) === 200) {
-                                    enqueueSnackbar("Introducido con exito", {
-                                        variant: "success",
-                                    });
-                                    handleClose()
-                                }
-                                else {
-                                    enqueueSnackbar("No se pudo introducir los datos", {
-                                        variant: "error",
-                                    });
-                                }
-                            }
-                            else {
-                                enqueueSnackbar("Rellena todos los espacios", {
-                                    variant: "warning",
-                                });
-                            }
-                        }}>Guardar</Button>
+                        <Button onClick={handleGuardar}>Guardar</Button>
                     </ButtonGroup>
 
                 </DialogActions>
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     );
 
