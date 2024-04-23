@@ -207,7 +207,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   return (
     <>
-      {sesion.usuario.id_rol === 1 ? <>
+      {sesion.usuario.id_rol != 3 ? <>
         <Dialog
           fullWidth
           open={open}
@@ -550,24 +550,26 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
             </ButtonGroup>
 
           </DialogActions>
-          <Dialog
-            open={openDelete}
-            onClose={handleCloseDelete}
+          {sesion.usuario.id_rol === 1 ? <>
+            <Dialog
+              open={openDelete}
+              onClose={handleCloseDelete}
 
-          >
-            <DialogTitle>{"Eliminar Evento"}</DialogTitle>
-            <DialogContent>
-              <Grid container width={1} m={0}>
-                Seguro que quiere eliminar este Evento?
-              </Grid>
-            </DialogContent>
-            <DialogActions>
+            >
+              <DialogTitle>{"Eliminar Evento"}</DialogTitle>
+              <DialogContent>
+                <Grid container width={1} m={0}>
+                  Seguro que quiere eliminar este Evento?
+                </Grid>
+              </DialogContent>
+              <DialogActions>
 
-              <Button onClick={handleCloseDelete}>Cancelar</Button>
-              <Button onClick={handleDelete}>Eliminar</Button>
-            </DialogActions>
+                <Button onClick={handleCloseDelete}>Cancelar</Button>
+                <Button onClick={handleDelete}>Eliminar</Button>
+              </DialogActions>
 
-          </Dialog>
+            </Dialog>
+          </> : null}
 
         </Dialog>
         {cargando && (

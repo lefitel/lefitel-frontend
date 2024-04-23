@@ -74,6 +74,9 @@ body::-webkit-scrollbar-thumb{
   border-radius: 0px;
   
 }*/
+.custom-row-class{
+  background-color: black;
+}
 
 
 @media screen and (max-width: 599px) {

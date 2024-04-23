@@ -210,7 +210,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
 
   return (
     <>
-      {sesion.usuario.id_rol === 1 ? <>
+      {sesion.usuario.id_rol != 3 ? <>
         <Dialog
           fullWidth
           open={open}
@@ -534,23 +534,25 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
             </ButtonGroup>
 
           </DialogActions>
-          <Dialog
-            open={openDelete}
-            onClose={handleCloseDelete}
-          >
-            <DialogTitle>{"Eliminar Poste"}</DialogTitle>
-            <DialogContent>
-              <Grid container width={1} m={0}>
-                Seguro que quiere eliminar este Poste?
-              </Grid>
-            </DialogContent>
-            <DialogActions>
+          {sesion.usuario.id_rol === 1 ? <>
 
-              <Button onClick={handleCloseDelete}>Cancelar</Button>
-              <Button onClick={handleDelete}>Eliminar</Button>
-            </DialogActions>
-          </Dialog>
+            <Dialog
+              open={openDelete}
+              onClose={handleCloseDelete}
+            >
+              <DialogTitle>{"Eliminar Poste"}</DialogTitle>
+              <DialogContent>
+                <Grid container width={1} m={0}>
+                  Seguro que quiere eliminar este Poste?
+                </Grid>
+              </DialogContent>
+              <DialogActions>
 
+                <Button onClick={handleCloseDelete}>Cancelar</Button>
+                <Button onClick={handleDelete}>Eliminar</Button>
+              </DialogActions>
+            </Dialog>
+          </> : null}
         </Dialog>
         {cargando && (
           <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", textAlign: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >

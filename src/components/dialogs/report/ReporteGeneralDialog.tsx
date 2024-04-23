@@ -9,6 +9,13 @@ import { useSnackbar } from 'notistack';
 import { DataGridPremium, GridCloseIcon, GridColDef, GridColumnGroupingModel, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
 import axios from 'axios';
 
+/*
+const StyledDataGrid = styled(DataGridPremium)(({ theme }) => ({
+    '& .super-app-theme--Open': {
+      backgroundColor: lighten(theme.palette.info.main, 0.7),
+    
+    },
+  }));*/
 
 const columns: GridColDef[] = [
 
@@ -156,7 +163,6 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
     const handleClose = () => {
         setOpen(false);
     };
-
 
 
 
@@ -346,7 +352,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                         hideFooter
                         columnGroupingModel={columnGroupingModel}
                         slotProps={{ toolbar: { excelOptions } }}
-
+                    //getRowClassName={(params) => 'custom-row-class'}
                     />
                 </DialogContent>
             </Dialog>
