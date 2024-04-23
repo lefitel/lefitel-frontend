@@ -60,6 +60,7 @@ export const getReporteTramo = (
           date: item.date,
 
           id_poste: item.id_poste,
+          id_usuario: item.id_usuario,
           solucions: item.solucions,
           revicions: item.revicions,
           eventoObs: item.eventoObs,
