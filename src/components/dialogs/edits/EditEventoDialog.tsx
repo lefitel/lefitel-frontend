@@ -95,7 +95,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
     setListObsSelected([]);
   };
   const handleClickOpenDelete = () => {
-    setCargando(true)
+    setOpenDelete(true)
   };
 
   const handleCloseDelete = () => {
