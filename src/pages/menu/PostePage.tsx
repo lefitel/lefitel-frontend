@@ -5,6 +5,7 @@ import {
   Card,
   CardActions,
   CardContent,
+  CircularProgress,
   Grid
 } from "@mui/material";
 import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface, UsuarioInterface } from "../../interfaces/interfaces";
@@ -41,7 +42,9 @@ const columns: GridColDef[] = [
   },
   {
     field: 'usuario', headerName: 'Usuario',
-    valueGetter: (value: UsuarioInterface) => { return value ? value.name : ""; }
+    valueGetter: (value: UsuarioInterface) => {
+      return value ? value.name : "";
+    }
   },
   {
     field: 'createdAt', headerName: 'Creación', type: 'dateTime',
@@ -63,12 +66,11 @@ const columns: GridColDef[] = [
 
 
 const PostePage = () => {
-  const [list, setList] = useState<PosteInterface[]>([]);
+  const [list, setList] = useState<PosteInterface[]>();
   //const [openDelete, setOpenDelete] = useState(false);
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<PosteInterface>(posteExample);
   const { sesion } = useContext(SesionContext);
-
 
   useEffect(() => {
     recibirDatos()
@@ -81,13 +83,9 @@ const PostePage = () => {
   const posteSelect = async (params: GridRowParams) => {
     setOpenEdit(true);
     setData(await searchPoste(params.row.id, sesion.token))
+    //setData(params.row)
+
   }
-
-
-
-
-
-
 
   const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
     workbook.creator = 'Lefitel';
@@ -178,46 +176,49 @@ const PostePage = () => {
     >
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
         <Card sx={{ flex: 1 }} >
-          <CardActions >
-            {sesion.usuario.id_rol != 3 ? <>
-              <ButtonGroup >
-                <AddPosteDialog functionApp={recibirDatos} />
-              </ButtonGroup>
-            </> : null}
-          </CardActions>
-          <CardContent style={{}}>
+          {list ? <>
+            <CardActions >
+              {sesion.usuario.id_rol != 3 ? <>
+                <ButtonGroup >
+                  <AddPosteDialog functionApp={recibirDatos} />
+                </ButtonGroup>
+              </> : null}
+            </CardActions>
+            <CardContent style={{}}>
 
-            <Box
-              sx={{
-                height: {
-                  xs: "calc(100vh - 105px)",
-                  md: "calc(100vh - 200px)",
-                },
-                width: {
-                  xs: "calc(100vw - 110px)",
-                  sm: "calc(100vw - 115px)",
-                  md: "calc(100vw - 115px)",
-                },
-              }}
-            >
-              <DataGridPremium
-                //className="datagrid-content"
-                rows={list ? list : []}
-                columns={columns}
-                hideFooterPagination
-                rowHeight={38}
-                disableRowSelectionOnClick
-                slots={{
-                  toolbar: GridToolbar,
-
+              <Box
+                sx={{
+                  height: {
+                    xs: "calc(100vh - 105px)",
+                    md: "calc(100vh - 200px)",
+                  },
+                  width: {
+                    xs: "calc(100vw - 110px)",
+                    sm: "calc(100vw - 115px)",
+                    md: "calc(100vw - 115px)",
+                  },
                 }}
-                onRowClick={posteSelect}
-                hideFooter
-                slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
+              >
+                <DataGridPremium
+                  //className="datagrid-content"
+                  rows={list}
+                  columns={columns}
+                  hideFooterPagination
+                  rowHeight={38}
+                  disableRowSelectionOnClick
+                  slots={{
+                    toolbar: GridToolbar,
 
-              />
-            </Box>
-          </CardContent>
+                  }}
+                  onRowClick={posteSelect}
+                  hideFooter
+                  slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
+
+                />
+              </Box>
+            </CardContent>
+          </> : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+
         </Card>
       </Grid>
       {data.id != null ? <EditPosteDialog functionApp={recibirDatos} poste={data} setPoste={setData} open={openEdit} setOpen={setOpenEdit} /> : null}

@@ -254,7 +254,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
         worksheet.mergeCells(3, 6, 3, lastCol);
         worksheet.mergeCells(4, 1, 4, lastCol);
 
-        worksheet.getCell('A1').value = 'PLANILLA DE EVENTOS';
+        worksheet.getCell('A1').value = 'PLANILLA DE EVENTOS NACIONAL';
         worksheet.getCell('A2').value = 'Tramo: ';
 
         worksheet.getCell('A3').value = 'Fecha: ';
@@ -275,25 +275,33 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
             size: 20,
         };
 
-        worksheet.getRow(6).eachCell(function (cell) {
-            if (cell.value != "Latitud" && cell.value != "Longitud") {
-                cell.alignment = { textRotation: 90 };
-            }
-        });
 
         worksheet.columns.forEach((column) => {
-            column.width = 5 // Ajusta el ancho mínimo de la columna
+            column.width = 3 // Ajusta el ancho mínimo de la columna
         });
 
-        worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-            lastRow = Math.max(lastRow, rowNumber);
-            row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
-                lastCol = Math.max(lastCol, colNumber);
-                cell.alignment = {
-                    vertical: 'middle',
-                    horizontal: 'center',
-                    wrapText: true,
-                };
+        worksheet.getRow(6).height = 150;
+
+        for (let row = 5; row <= lastRow; row++) {
+            for (let col = 1; col <= lastCol; col++) {
+                const cell = worksheet.getCell(row, col);
+
+                if (row === 6 && cell.value != "Latitud" && cell.value != "Longitud") {
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true,
+                        textRotation: 90
+
+                    };
+                } else {
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true,
+
+                    };
+                }
                 cell.border = {
                     top: { style: 'thin' },
                     left: { style: 'thin' },
@@ -301,7 +309,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                     right: { style: 'thin' }
                 };
                 if (cell.value === "Latitud" || cell.value === "Longitud") {
-                    worksheet.getColumn(colNumber).width = 10;
+                    worksheet.getColumn(col).width = 15;
                 }
 
 
@@ -342,8 +350,10 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 if (cell.value === true) {
                     cell.value = "1";
                 }
-            });
-        });
+            }
+        }
+
+
 
         worksheet.getRow(5).eachCell(function (cell) {
             cell.font = { bold: true, size: 13, };

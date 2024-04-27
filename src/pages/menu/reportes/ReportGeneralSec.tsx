@@ -2,7 +2,7 @@ import { ButtonGroup, Card, CardActions, CardContent, Grid, Typography } from '@
 import React from 'react'
 import { DatePicker } from '@mui/x-date-pickers'
 import { ReporteInterface } from '../../../interfaces/interfaces'
-import dayjs from 'dayjs'
+import { Dayjs } from 'dayjs'
 import ReporteGeneralDialog from '../../../components/dialogs/report/ReporteGeneralDialog'
 
 const ReportGeneralSec = () => {
@@ -35,10 +35,10 @@ const ReportGeneralSec = () => {
                             sx={{ width: 1 }}
                             label="Fecha de inicio"
                             format="DD-MM-YYYY"
-                            defaultValue={dayjs(new Date())}
-                            onChange={(date) => {
+                            onChange={(date: Dayjs | null) => {
                                 if (date) {
-                                    const newData: ReporteInterface = { ...filtro, fechaInicial: date.toDate() };
+                                    const fechaActualizada = new Date(date.toDate().setHours(0, 0, 0, 0));
+                                    const newData: ReporteInterface = { ...filtro, fechaInicial: fechaActualizada };
                                     setFiltro(newData)
                                 }
                             }}
@@ -49,11 +49,12 @@ const ReportGeneralSec = () => {
                             sx={{ width: 1 }}
                             label="Fecha de fin"
                             format="DD-MM-YYYY"
-                            defaultValue={dayjs(new Date())}
-                            onChange={(date) => {
+                            onChange={(date: Dayjs | null) => {
                                 if (date) {
-                                    const newData: ReporteInterface = { ...filtro, fechaFinal: date.toDate() };
+                                    const fechaActualizada = new Date(date.toDate().setHours(23, 59, 59, 0));
+                                    const newData: ReporteInterface = { ...filtro, fechaFinal: fechaActualizada };
                                     setFiltro(newData)
+                                    console.log(newData)
                                 }
                             }}
                         />

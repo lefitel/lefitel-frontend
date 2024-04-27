@@ -167,54 +167,58 @@ const CiudadSec = () => {
   }
   return (
     <Card sx={{ flex: 1 }}>
-      <CardActions
-        style={{
-          justifyContent: "space-between",
-        }}
-      >
-        <Typography
-          sx={{ fontSize: 16 }}
-          fontWeight="bold"
-          color="text.secondary"
-        >
-          Ciudad
-        </Typography>
+      {list ? <>
 
-        {sesion.usuario.id_rol === 1 ? <>
-          <ButtonGroup >
-            <AddCiudadDialog functionApp={recibirDatos} />
-          </ButtonGroup>
-        </> : null}
-
-      </CardActions>
-      <CardContent>
-
-        <Box
-          sx={{
-            height: {
-              xs: "250px",
-            },
-            width: {
-              xs: "calc(100vw - 110px )",
-              sm: "calc(100vw - 115px )",
-              md: "calc(66vw - 80px )",
-            },
+        <CardActions
+          style={{
+            justifyContent: "space-between",
           }}
         >
-          <DataGrid
-            //className="datagrid-content"
-            rows={list ? list : []}
-            columns={columns}
-            hideFooterPagination
-            rowHeight={38}
-            disableRowSelectionOnClick
-            onRowClick={(params) => {
-              handleClickOpen(params.row);
+          <Typography
+            sx={{ fontSize: 16 }}
+            fontWeight="bold"
+            color="text.secondary"
+          >
+            Ciudad
+          </Typography>
+
+          {sesion.usuario.id_rol === 1 ? <>
+            <ButtonGroup >
+              <AddCiudadDialog functionApp={recibirDatos} />
+            </ButtonGroup>
+          </> : null}
+
+        </CardActions>
+        <CardContent>
+
+          <Box
+            sx={{
+              height: {
+                xs: "250px",
+              },
+              width: {
+                xs: "calc(100vw - 110px )",
+                sm: "calc(100vw - 115px )",
+                md: "calc(66vw - 80px )",
+              },
             }}
-            hideFooter
-          />
-        </Box>
-      </CardContent>
+          >
+            <DataGrid
+              //className="datagrid-content"
+              rows={list ? list : []}
+              columns={columns}
+              hideFooterPagination
+              rowHeight={38}
+              disableRowSelectionOnClick
+              onRowClick={(params) => {
+                handleClickOpen(params.row);
+              }}
+              hideFooter
+            />
+          </Box>
+        </CardContent>
+      </> : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+
       {sesion.usuario.id_rol === 1 ? <>
 
         <Dialog

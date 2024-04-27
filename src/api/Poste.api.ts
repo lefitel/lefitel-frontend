@@ -21,16 +21,19 @@ export const getPoste = (token: string): Promise<PosteInterface[]> => {
           id_propietario: item.id_propietario,
           id_ciudadA: item.id_ciudadA,
           id_ciudadB: item.id_ciudadB,
+
           adss: item.adss,
           material: item.material,
           propietario: item.propietario,
           ciudadA: item.ciudadA,
           ciudadB: item.ciudadB,
+          usuario: item.usuario,
+
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
         };
       });
-      console.log(dataList);
+      //console.log(dataList[0]);
       return dataList;
     });
 };

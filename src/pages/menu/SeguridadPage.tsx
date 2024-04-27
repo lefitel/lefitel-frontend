@@ -4,7 +4,7 @@ import { DataGridPremium, GridColDef, GridExceljsProcessInput, GridRowParams, Gr
 import { RolInterface, UsuarioInterface } from "../../interfaces/interfaces";
 import { SesionContext } from "../../context/SesionProvider";
 import { getUsuario, searchUsuario } from "../../api/Usuario.api";
-import { Box, ButtonGroup, Card, CardActions, CardContent, Grid } from "@mui/material";
+import { Box, ButtonGroup, Card, CardActions, CardContent, CircularProgress, Grid } from "@mui/material";
 import AddUserDialog from "../../components/dialogs/add/AddUserDialog";
 import { usuarioExample } from "../../data/example";
 import EditUserDialog from "../../components/dialogs/edits/EditUserDialog";
@@ -163,42 +163,46 @@ const SeguridadPage = () => {
     >
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
         <Card sx={{ flex: 1 }} style={{}}>
-          <CardActions >
-            <ButtonGroup >
-              <AddUserDialog functionApp={recibirDatos} />
-            </ButtonGroup>
-          </CardActions>
-          <CardContent style={{}}>
-            <Box
-              sx={{
-                height: {
-                  xs: "calc(100vh - 105px)",
-                  md: "calc(100vh - 200px)",
-                },
-                width: {
-                  xs: "calc(100vw - 100px)",
-                  sm: "calc(100vw - 115px)",
-                  md: "calc(100vw - 115px)",
-                },
-              }}
-            >
-              <DataGridPremium
-                rows={list ? list : []}
-                columns={columns}
-                hideFooterPagination
-                rowHeight={38}
-                disableRowSelectionOnClick
-                slots={{
-                  toolbar: GridToolbar,
-                  //loadingOverlay: LinearProgress,
-                }}
-                onRowClick={userSelect}
-                hideFooter
-                slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
+          {list ? <>
 
-              />
-            </Box>
-          </CardContent>
+            <CardActions >
+              <ButtonGroup >
+                <AddUserDialog functionApp={recibirDatos} />
+              </ButtonGroup>
+            </CardActions>
+            <CardContent style={{}}>
+              <Box
+                sx={{
+                  height: {
+                    xs: "calc(100vh - 105px)",
+                    md: "calc(100vh - 200px)",
+                  },
+                  width: {
+                    xs: "calc(100vw - 100px)",
+                    sm: "calc(100vw - 115px)",
+                    md: "calc(100vw - 115px)",
+                  },
+                }}
+              >
+                <DataGridPremium
+                  rows={list ? list : []}
+                  columns={columns}
+                  hideFooterPagination
+                  rowHeight={38}
+                  disableRowSelectionOnClick
+                  slots={{
+                    toolbar: GridToolbar,
+                    //loadingOverlay: LinearProgress,
+                  }}
+                  onRowClick={userSelect}
+                  hideFooter
+                  slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
+
+                />
+              </Box>
+            </CardContent>
+          </> : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+
         </Card>
       </Grid>
       {data.id != null ? <EditUserDialog functionApp={recibirDatos} user={data} setUser={setData} open={openEdit} setOpen={setOpenEdit} /> : null}

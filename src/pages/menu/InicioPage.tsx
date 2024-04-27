@@ -2,6 +2,7 @@ import {
   Card,
   CardActions,
   CardContent,
+  CircularProgress,
   Grid,
   Typography,
 } from "@mui/material";
@@ -67,6 +68,7 @@ const InicioPage = () => {
 
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={4}>
         <Card style={{ display: "flex", flexDirection: "column" }} >
+
           <CardActions >
             <Typography
               sx={{ fontSize: 16 }}
@@ -84,17 +86,22 @@ const InicioPage = () => {
                 color="text.secondary"
                 component="div"
               >
-                {postesTotal}
+                {listPostes ?
+                  postesTotal
+                  : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+
               </Typography>
               <Typography sx={{ mb: 1.5 }} color="text.secondary">
                 Postes
               </Typography>
             </Grid>
           </CardContent>
+
         </Card>
       </Grid>
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={4}>
         <Card style={{ display: "flex", flexDirection: "column" }} >
+
           <CardActions >
             <Typography
               sx={{ fontSize: 16 }}
@@ -112,17 +119,21 @@ const InicioPage = () => {
                 color="text.secondary"
                 component="div"
               >
-                {eventosTotal}
+                {listEventos ?
+                  eventosTotal
+                  : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
               </Typography>
               <Typography sx={{ mb: 1.5 }} color="text.secondary">
                 Eventos
               </Typography>
             </Grid>
           </CardContent>
+
         </Card>
       </Grid>
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={4}>
         <Card style={{ display: "flex", flexDirection: "column" }} >
+
           <CardActions >
             <Typography
               sx={{ fontSize: 16 }}
@@ -140,13 +151,18 @@ const InicioPage = () => {
                 color="text.secondary"
                 component="div"
               >
-                {eventosSolucionadosTotal}
+                {listEventos ?
+                  eventosSolucionadosTotal
+                  : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+
               </Typography>
+
               <Typography sx={{ mb: 1.5 }} color="text.secondary">
                 Eventos
               </Typography>
             </Grid>
           </CardContent>
+
         </Card>
       </Grid>
 

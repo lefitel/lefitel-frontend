@@ -1,5 +1,5 @@
 import { DocumentScanner } from '@mui/icons-material'
-import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography, lighten, styled } from '@mui/material'
 import React, { useContext, useState } from 'react'
 import { EventoInterface, ReporteInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
@@ -9,13 +9,16 @@ import { useSnackbar } from 'notistack';
 import { DataGridPremium, GridCloseIcon, GridColDef, GridColumnGroupingModel, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
 import axios from 'axios';
 
-/*
+
 const StyledDataGrid = styled(DataGridPremium)(({ theme }) => ({
-    '& .super-app-theme--Open': {
-      backgroundColor: lighten(theme.palette.info.main, 0.7),
-    
+    '& .custom-row-class': {
+        backgroundColor: lighten(theme.palette.info.dark, 0.4),
+        '&:hover': {
+            backgroundColor: lighten(theme.palette.info.dark, 0.5),
+        },
+
     },
-  }));*/
+}));
 
 const columns: GridColDef[] = [
 
@@ -166,19 +169,11 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
 
 
-
-
-
-
-
-
     const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
         workbook.creator = 'Lefitel';
         workbook.created = new Date();
         worksheet.properties.defaultRowHeight = 30;
-        worksheet.getCell("A2").value = ""
-
-
+        worksheet.getCell("A1").value = ""
         worksheet.addRow([]);
     };
     const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
@@ -194,20 +189,39 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             });
         });
 
-        for (let i = 6; i <= lastRow; i++) {
-            const fila = worksheet.getRow(i);
-            fila.height = 50;
-            const celda = worksheet.getCell(`I${i}`)
-            if (celda.value != "" && celda.value != undefined) {
-                const imageBuffer = await axios.get(celda.value.toString(), { responseType: 'arraybuffer' });
-                const imageId = workbook.addImage({
-                    buffer: imageBuffer.data,
-                    extension: 'jpeg',
-                });
-                celda.value = ""
-                worksheet.addImage(imageId, `I${i}:I${i}`);
+        const imageBufferTigo = await axios.get("/public/tigo.png", { responseType: 'arraybuffer' });
+        const imageIdTigo = workbook.addImage({
+            buffer: imageBufferTigo.data,
+            extension: 'png',
+        });
+        worksheet.addImage(imageIdTigo, `L1:L2`);
 
-            }
+        const imageBufferLefitel = await axios.get("/public/logo.png", { responseType: 'arraybuffer' });
+        const imageIdLefitel = workbook.addImage({
+            buffer: imageBufferLefitel.data,
+            extension: 'png',
+        });
+        worksheet.addImage(imageIdLefitel, `A1:A2`);
+
+
+
+        for (let i = 5; i <= lastRow; i++) {
+            const fila = worksheet.getRow(i);
+            fila.height = 75;
+            const celda = worksheet.getCell(`I${i}`)
+
+            try {
+                if (celda.value != "" && celda.value != undefined) {
+                    const imageBuffer = await axios.get(celda.value.toString(), { responseType: 'arraybuffer' });
+                    const imageId = workbook.addImage({
+                        buffer: imageBuffer.data,
+                        extension: 'jpeg',
+                    });
+                    celda.value = ""
+
+                    worksheet.addImage(imageId, `I${i}:I${i}`);
+                }
+            } catch (e) { console.log(e); }
 
 
         }
@@ -215,50 +229,61 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
         worksheet.mergeCells(1, 1, 1, 12);
         worksheet.mergeCells(2, 1, 2, 12);
-        worksheet.mergeCells(3, 1, 3, 12);
 
-        worksheet.getCell('A1').value = 'REPORTE GENERAL';
-        worksheet.getCell('A3').value = 'Lefitel';
+        worksheet.getCell('A1').value = 'RESUMEN DE REPORTES LEFITEL S.R.L.';
         worksheet.getCell('A2').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
-
-        ['A2', 'A3'].map(key => {
-            worksheet.getCell(key).font = {
-                bold: true,
-                size: 15,
-            };
-        });
-
 
         worksheet.getCell('A1').font = {
             bold: true,
-            size: 20,
+            size: 36,
+        };
+        worksheet.getCell('A2').font = {
+            bold: true,
+            size: 18,
+        }
+        worksheet.getCell('A1').alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            wrapText: true,
+        };
+
+        worksheet.getCell('A2').alignment = {
+            vertical: 'middle',
+            horizontal: 'center',
+            wrapText: true,
         };
 
 
+        for (let row = 3; row <= lastRow; row++) {
+            for (let col = 1; col <= lastCol; col++) {
+                const cell = worksheet.getCell(row, col);
+                // Aplica un estilo de fondo de color a cada celda
+                if ((col === 2 || col === 3) && row > 4) {
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true,
+                        textRotation: 90
 
+                    };
+                } else {
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true,
 
-
-
-
-        worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-            lastRow = Math.max(lastRow, rowNumber);
-            row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
-                lastCol = Math.max(lastCol, colNumber);
-                cell.alignment = {
-                    vertical: 'middle',
-                    horizontal: 'center',
-                    wrapText: true,
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-                if (cell.value === "Latitud" || cell.value === "Longitud") {
-                    worksheet.getColumn(colNumber).width = 10;
+                    };
                 }
 
+                cell.border = {
+                    top: { style: 'medium' },
+                    left: { style: 'medium' },
+                    bottom: { style: 'medium' },
+                    right: { style: 'medium' }
+                };
+                if (cell.value === "Latitud" || cell.value === "Longitud") {
+                    worksheet.getColumn(col).width = 10;
+                }
 
                 switch (cell.value) {
                     case 'Poste':
@@ -286,28 +311,25 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                 if (cell.value === true) {
                     cell.value = "1";
                 }
-            });
-        });
+            }
+        }
 
+        worksheet.getRow(3).eachCell(function (cell) {
+            cell.font = { bold: true, size: 15, };
+        });
         worksheet.getRow(4).eachCell(function (cell) {
-            cell.font = { bold: true, size: 13, };
+            cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+            cell.fill = {
+                type: 'pattern',
+                pattern: 'solid',
+                fgColor: { argb: 'FF001F5D' }
+            }
         });
-        worksheet.getRow(5).eachCell(function (cell) {
-            cell.font = { bold: true };
-        });
-
-
 
         //worksheet.addRow(['Lefitel']);
     };
 
     const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte general del " + new Date().toLocaleDateString() };
-
-
-
-
-
-
 
 
 
@@ -341,7 +363,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                 <DialogContent>
 
 
-                    <DataGridPremium
+                    <StyledDataGrid
                         //className="datagrid-content"
                         rows={list ? list : []}
                         columns={columns}
@@ -352,7 +374,12 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                         hideFooter
                         columnGroupingModel={columnGroupingModel}
                         slotProps={{ toolbar: { excelOptions } }}
-                    //getRowClassName={(params) => 'custom-row-class'}
+                        getRowClassName={(params) => {
+                            if (params.row.state) {
+                                return 'custom-row-class'; // Clase CSS para el color deseado
+                            }
+                            return '';
+                        }}
                     />
                 </DialogContent>
             </Dialog>

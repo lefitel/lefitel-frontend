@@ -72,6 +72,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   const recibirDatos = async () => {
     setCargando(true)
+    console.log(data)
 
     const eventoObsTemp = await getEventoObs(data.id as number, sesion.token)
     await setListEventoObs(eventoObsTemp)
@@ -239,7 +240,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                     margin: 0,
                   }}
                   label="Numero de poste"
-                  value={data.id_poste}
+                  value={data.poste?.name}
                   disabled
                 />
               </Grid>

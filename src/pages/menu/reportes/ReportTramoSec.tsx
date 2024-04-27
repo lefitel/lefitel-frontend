@@ -1,7 +1,7 @@
 import { Autocomplete, ButtonGroup, Card, CardActions, CardContent, Grid, TextField, Typography } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers'
 import { CiudadInterface, ReporteInterface } from '../../../interfaces/interfaces'
-import dayjs from 'dayjs'
+import { Dayjs } from 'dayjs'
 import { useContext, useEffect, useState } from 'react'
 import { getCiudad } from '../../../api/Ciudad.api'
 import { SesionContext } from '../../../context/SesionProvider'
@@ -50,12 +50,12 @@ const ReportTramoSec = () => {
                             sx={{ width: 1 }}
                             label="Fecha de inicio"
                             format="DD-MM-YYYY"
-                            defaultValue={dayjs(new Date)}
-                            onChange={(date) => {
+                            onChange={(date: Dayjs | null) => {
                                 if (date) {
-                                    const newData: ReporteInterface = { ...filtro, fechaInicial: date.toDate() };
+                                    const fechaActualizada = new Date(date.toDate().setHours(0, 0, 0, 0));
+                                    const newData: ReporteInterface = { ...filtro, fechaInicial: fechaActualizada };
                                     setFiltro(newData)
-                                    //console.log(newData)
+                                    console.log(newData)
                                 }
                             }}
                         />
@@ -65,12 +65,12 @@ const ReportTramoSec = () => {
                             sx={{ width: 1 }}
                             label="Fecha de fin"
                             format="DD-MM-YYYY"
-                            defaultValue={dayjs(new Date)}
-                            onChange={(date) => {
+                            onChange={(date: Dayjs | null) => {
                                 if (date) {
-                                    const newData: ReporteInterface = { ...filtro, fechaInicial: date.toDate() };
+                                    const fechaActualizada = new Date(date.toDate().setHours(23, 59, 59, 0));
+                                    const newData: ReporteInterface = { ...filtro, fechaFinal: fechaActualizada };
                                     setFiltro(newData)
-                                    //console.log(newData)
+                                    console.log(newData)
                                 }
                             }} />
                     </Grid>
