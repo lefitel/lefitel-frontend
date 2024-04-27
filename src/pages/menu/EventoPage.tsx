@@ -37,7 +37,11 @@ const columns: GridColDef[] = [
   {
     field: 'reviciones', headerName: 'Reviciones', type: 'dateTime',
     valueGetter(_params, row) {
-      const date = new Date(row.revicions[row.revicions.length - 1].date);
+      let date
+      try { date = new Date(row.revicions[row.revicions.length - 1].date); }
+      catch {
+        date = null;
+      }
       return date;
     },
   },
