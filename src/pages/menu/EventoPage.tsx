@@ -34,12 +34,13 @@ const columns: GridColDef[] = [
     field: 'usuario', headerName: 'Usuario',
     valueGetter: (value: UsuarioInterface) => { return value ? value.name : ""; }
   },
-  /*{
-    field: 'reviciones', headerName: 'Reviciones',
+  {
+    field: 'reviciones', headerName: 'Reviciones', type: 'dateTime',
     valueGetter(_params, row) {
-      return `${row.revicions.pop()}`
+      const date = new Date(row.revicions.pop().date);
+      return date;
     },
-  },*/
+  },
   {
     field: 'revicions', headerName: 'Reviciones',
     valueGetter: (value: RevicionInterface[]) => { return value.length }
