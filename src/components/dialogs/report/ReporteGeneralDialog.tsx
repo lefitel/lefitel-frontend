@@ -1,5 +1,5 @@
 import { DocumentScanner } from '@mui/icons-material'
-import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography, lighten, styled } from '@mui/material'
+import { AppBar, Box, Button, CircularProgress, Dialog, DialogContent, IconButton, Toolbar, Typography, lighten, styled } from '@mui/material'
 import React, { useContext, useState } from 'react'
 import { EventoInterface, ReporteInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
@@ -64,14 +64,14 @@ const columns: GridColDef[] = [
         valueGetter(_params, row) { return `${row.poste.ciudadA.name} - ${row.poste.ciudadB.name}` },
     },
     {
-        field: 'fecha', headerName: 'Fecha y Hora', type: 'date',
+        field: 'fecha', headerName: 'Fecha', type: 'date',
         valueGetter(_params, row) {
             const date = new Date(row.date);
             return date;
         }
     },
     {
-        field: 'hora', headerName: 'Fecha y Hora',
+        field: 'hora', headerName: 'Hora',
         valueGetter(_params, row) {
             const date = new Date(row.date);
             return date.toTimeString();
@@ -142,7 +142,9 @@ const columnGroupingModel: GridColumnGroupingModel = [
             { field: 'image' },
             { field: 'description' },
             { field: 'revicions' },
-            { field: 'date' },
+            { field: 'fecha' },
+            { field: 'hora' },
+
         ],
     },
     {
@@ -168,8 +170,10 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
     const { sesion } = useContext(SesionContext);
     const { enqueueSnackbar } = useSnackbar();
+    const [cargando, setCargando] = useState(false);
 
     const handleClickOpen = async () => {
+        setCargando(true)
         const Temp = await getReporteGeneral(filtro, sesion.token)
         if (Temp.length > 0) {
             setList(Temp),
@@ -179,6 +183,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                 variant: "warning",
             });
         }
+        await setCargando(false)
     };
 
     const handleClose = () => {
@@ -188,6 +193,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
 
     const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
+        setCargando(true)
         workbook.creator = 'Lefitel';
         workbook.created = new Date();
         worksheet.properties.defaultRowHeight = 30;
@@ -345,6 +351,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
         });
 
         //worksheet.addRow(['Lefitel']);
+        setCargando(false)
     };
 
     const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte general del " + new Date().toLocaleDateString() };
@@ -407,6 +414,11 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                     />
                 </DialogContent>
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     )
 }

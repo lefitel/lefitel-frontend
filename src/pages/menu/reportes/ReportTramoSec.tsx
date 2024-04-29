@@ -75,6 +75,7 @@ const ReportTramoSec = () => {
 
                 </Grid>
             </CardContent>
+
         </Card>
     )
 }

@@ -1,5 +1,5 @@
 import { DocumentScanner } from '@mui/icons-material'
-import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, Button, CircularProgress, Dialog, DialogContent, IconButton, Toolbar, Typography } from '@mui/material'
 import React, { useContext, useEffect, useState } from 'react'
 import { AdssInterface, AdssPosteInterface, EventoInterface, EventoObsInterface, MaterialInterface, ObsInterface, PropietarioInterface, ReporteInterface, TipoObsInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
@@ -28,6 +28,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
     const { sesion } = useContext(SesionContext);
     const { enqueueSnackbar } = useSnackbar();
+    const [cargando, setCargando] = useState(false);
 
     const [listAdss, setListAdss] = React.useState<AdssInterface[]>([]);
     //const [listCiudad, setListCiudad] = React.useState<CiudadInterface[]>([]);
@@ -171,7 +172,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
 
     const handleClickOpen = async () => {
-
+        setCargando(true)
         console.log(filtro)
         const Temp = await getReporteTramo(filtro, sesion.token)
         if (Temp.length > 0) {
@@ -182,6 +183,8 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 variant: "warning",
             });
         }
+        await setCargando(false)
+
     };
 
     const handleClose = () => {
@@ -189,7 +192,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
     };
 
     const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
-        // Set document meta data
+        setCargando(true)
         workbook.creator = 'Lefitel';
         workbook.created = new Date();
         // Customize default excel properties
@@ -219,6 +222,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
     };
 
     const exceljsPostProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
+        console.log("Cargando")
         // add a text after the data
         worksheet.addRow({}); // Add empty row
         worksheet.name = 'Reporte General';
@@ -388,32 +392,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
             cell.font = { bold: true };
         });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        ///////////////////////Dsatos
 
         datos.map((hojita) => {
 
@@ -621,7 +600,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
 
 
-        //worksheet.addRow(['Lefitel']);
+        setCargando(false)
     };
 
     const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte por tramo " + new Date().toLocaleDateString() };
@@ -677,7 +656,13 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                         slotProps={{ toolbar: { excelOptions } }}
                     />
                 </DialogContent>
+
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     )
 }
