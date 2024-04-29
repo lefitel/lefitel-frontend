@@ -10,11 +10,32 @@ import { DataGridPremium, GridCloseIcon, GridColDef, GridColumnGroupingModel, Gr
 import axios from 'axios';
 
 
-const StyledDataGrid = styled(DataGridPremium)(({ theme }) => ({
-    '& .custom-row-class': {
-        backgroundColor: lighten(theme.palette.info.dark, 0.4),
+const StyledDataGrid = styled(DataGridPremium)(() => ({
+    '& .custom-row-5': {
+        backgroundColor: lighten("#DD0031", 0.4),
         '&:hover': {
-            backgroundColor: lighten(theme.palette.info.dark, 0.5),
+            backgroundColor: lighten("#DD0031", 0.5),
+        },
+
+    },
+    '& .custom-row-2': {
+        backgroundColor: lighten("#FF5500", 0.4),
+        '&:hover': {
+            backgroundColor: lighten("#FF5500", 0.5),
+        },
+
+    },
+    '& .custom-row-1': {
+        backgroundColor: lighten("#F6BF12", 0.4),
+        '&:hover': {
+            backgroundColor: lighten("#F6BF12", 0.5),
+        },
+
+    },
+    '& .custom-row-0': {
+        backgroundColor: lighten("#249243", 0.4),
+        '&:hover': {
+            backgroundColor: lighten("#249243", 0.5),
         },
 
     },
@@ -43,16 +64,17 @@ const columns: GridColDef[] = [
         valueGetter(_params, row) { return `${row.poste.ciudadA.name} - ${row.poste.ciudadB.name}` },
     },
     {
-        field: 'id', headerName: 'Id',
-        valueGetter(params) {
-            return params
-        },
+        field: 'fecha', headerName: 'Fecha y Hora', type: 'date',
+        valueGetter(_params, row) {
+            const date = new Date(row.date);
+            return date;
+        }
     },
     {
-        field: 'date', headerName: 'Fecha y Hora', type: 'dateTime',
-        valueGetter: (value) => {
-            const date = new Date(value);
-            return date;
+        field: 'hora', headerName: 'Fecha y Hora',
+        valueGetter(_params, row) {
+            const date = new Date(row.date);
+            return date.toTimeString();
         }
     },
     { field: 'description', headerName: 'Descripción' },
@@ -137,7 +159,6 @@ const columnGroupingModel: GridColumnGroupingModel = [
 
 interface ReporteGeneralDialogProps {
     filtro: ReporteInterface;
-
 }
 
 const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) => {
@@ -147,9 +168,6 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
     const { sesion } = useContext(SesionContext);
     const { enqueueSnackbar } = useSnackbar();
-
-
-
 
     const handleClickOpen = async () => {
         const Temp = await getReporteGeneral(filtro, sesion.token)
@@ -375,10 +393,16 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                         columnGroupingModel={columnGroupingModel}
                         slotProps={{ toolbar: { excelOptions } }}
                         getRowClassName={(params) => {
-                            if (params.row.state) {
-                                return 'custom-row-class'; // Clase CSS para el color deseado
+                            if (params.row.revicions.length >= 5) {
+                                return 'custom-row-5'; // Clase CSS para el color deseado
                             }
-                            return '';
+                            else if (params.row.revicions.length >= 2) {
+                                return 'custom-row-2'; // Clase CSS para el color deseado
+                            }
+                            else if (params.row.solucions.length > 0) {
+                                return 'custom-row-0'; // Clase CSS para el color deseado
+                            }
+                            return 'custom-row-1';
                         }}
                     />
                 </DialogContent>

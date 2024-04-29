@@ -173,19 +173,13 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
     const handleClickOpen = async () => {
 
-        if (filtro.TramoInicial && filtro.TramoFinal && filtro.TramoInicial != filtro.TramoFinal) {
-            const Temp = await getReporteTramo(filtro, sesion.token)
-            if (Temp.length > 0) {
-                setList(Temp),
-                    setOpen(true);
-            } else {
-                enqueueSnackbar("No hay datos", {
-                    variant: "warning",
-                });
-            }
-        }
-        else {
-            enqueueSnackbar("Selecciona ciudades diferentes", {
+        console.log(filtro)
+        const Temp = await getReporteTramo(filtro, sesion.token)
+        if (Temp.length > 0) {
+            setList(Temp)
+            setOpen(true)
+        } else {
+            enqueueSnackbar("No hay datos", {
                 variant: "warning",
             });
         }
@@ -194,7 +188,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
     const handleClose = () => {
         setOpen(false);
     };
-
 
     const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
         // Set document meta data
@@ -225,13 +218,14 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 };*/
         worksheet.addRow([]);
     };
-    const exceljsPostProcess = ({ worksheet }: GridExceljsProcessInput) => {
+
+    const exceljsPostProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
         // add a text after the data
         worksheet.addRow({}); // Add empty row
-        worksheet.name = 'Reporte';
+        worksheet.name = 'Reporte General';
 
 
-
+        //Gneral
         let lastRow = 0;
         let lastCol = 0;
         worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
@@ -240,6 +234,183 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 lastCol = Math.max(lastCol, colNumber);
             });
         });
+
+
+        const map = new Map(); // Usamos un mapa para almacenar los arrays por pares únicos
+        list.forEach(obj => {
+            const clave = `${obj.poste?.ciudadA?.id}-${obj.poste?.ciudadB?.id}`; // Creamos una clave única para el par de datos
+            if (!map.has(clave)) {
+                map.set(clave, []); // Creamos un nuevo array si es la primera vez que encontramos este par
+            }
+            map.get(clave).push(obj); // Agregamos el objeto al array correspondiente
+        });
+        const datos: EventoInterface[][] = Array.from(map.values());
+
+
+        datos.map((hojita) => {
+
+            const worksheetTemp = workbook.addWorksheet(`${hojita[0].poste?.ciudadA?.name}-${hojita[0].poste?.ciudadB?.name}`);
+
+
+
+            for (let row = 5; row <= 6; row++) {
+                for (let col = 1; col <= lastCol; col++) {
+                    const cell1 = worksheet.getCell(row, col);
+                    const cell2 = worksheetTemp.getCell(row, col);
+                    cell2.value = cell1.value;
+                }
+            }
+
+            let datosTemp = [[5, 1]]
+            for (let col = 1; col <= lastCol; col++) {
+                const cell1 = worksheetTemp.getCell(5, col);
+                const cell2 = worksheetTemp.getCell(5, col + 1);
+                if (cell2.value === cell1.value) {
+                    datosTemp.push([5, col + 1])
+                }
+                else {
+                    worksheetTemp.mergeCells(
+                        datosTemp[0][0], datosTemp[0][1],
+                        datosTemp[datosTemp.length - 1][0], datosTemp[datosTemp.length - 1][1],)
+                    datosTemp = [[5, col + 1]]
+                }
+            }
+
+
+
+
+            let lastRowTemp = 0;
+            let lastColTemp = 0;
+            worksheetTemp.eachRow({ includeEmpty: true }, function (row, rowNumber) {
+                lastRowTemp = Math.max(lastRowTemp, rowNumber);
+                row.eachCell({ includeEmpty: true }, function (_cell, colNumber) {
+                    lastColTemp = Math.max(lastColTemp, colNumber);
+                });
+            });
+
+            for (let i = 7; i <= lastRow; i++) {
+                const fila = worksheetTemp.getRow(i);
+                fila.height = 15;
+            }
+
+            /*
+                        worksheetTemp.mergeCells(1, 1, 1, lastCol);
+                        worksheetTemp.mergeCells(2, 1, 2, 5);
+                        worksheetTemp.mergeCells(2, 6, 2, lastCol);
+                        worksheetTemp.mergeCells(3, 1, 3, 5);
+                        worksheetTemp.mergeCells(3, 6, 3, lastCol);
+                        worksheetTemp.mergeCells(4, 1, 4, lastCol);
+            */
+            worksheetTemp.getCell('A1').value = 'PLANILLA DE EVENTOS NACIONAL';
+            worksheetTemp.getCell('A2').value = 'Tramo: ';
+
+            worksheetTemp.getCell('A3').value = 'Fecha: ';
+            worksheetTemp.getCell('A4').value = 'Lefitel';
+            worksheetTemp.getCell('F3').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
+            worksheetTemp.getCell('F2').value = listCiudad?.find(objeto => objeto.id === filtro.TramoInicial)?.name + " - " + listCiudad?.find(objeto => objeto.id === filtro.TramoFinal)?.name;
+
+            ['A2', 'A3', 'A4', 'F2', 'F3', 'F4'].map(key => {
+                worksheetTemp.getCell(key).font = {
+                    bold: true,
+                    size: 15,
+                };
+            });
+
+
+            worksheetTemp.getCell('A1').font = {
+                bold: true,
+                size: 20,
+            };
+
+
+            worksheetTemp.columns.forEach((column) => {
+                column.width = 3 // Ajusta el ancho mínimo de la columna
+            });
+
+            worksheetTemp.getRow(6).height = 150;
+
+            for (let row = 5; row <= lastRow; row++) {
+                for (let col = 1; col <= lastCol; col++) {
+                    const cell = worksheetTemp.getCell(row, col);
+
+                    if (row === 6 && cell.value != "Latitud" && cell.value != "Longitud") {
+                        cell.alignment = {
+                            vertical: 'middle',
+                            horizontal: 'center',
+                            wrapText: true,
+                            textRotation: 90
+
+                        };
+                    } else {
+                        cell.alignment = {
+                            vertical: 'middle',
+                            horizontal: 'center',
+                            wrapText: true,
+
+                        };
+                    }
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' }
+                    };
+                    if (cell.value === "Latitud" || cell.value === "Longitud") {
+                        worksheetTemp.getColumn(col).width = 15;
+                    }
+
+
+                    switch (cell.value) {
+                        case 'Material':
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FFE06666' } // Rojo
+                            };
+                            break;
+                        case 'Propietario':
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF6FA8DC' } // Rojo
+                            }; break;
+                        case 'Adss':
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FFe2ac3f' } // Rojo
+                            }; break;
+                        case 'Coordenadas':
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FFf8ebbe' } // Rojo
+                            }; break;
+                        case 'Observaciones':
+                            cell.fill = {
+                                type: 'pattern',
+                                pattern: 'solid',
+                                fgColor: { argb: 'FF7ba58d' } // Rojo
+                            }; break;
+                        default:
+                    }
+                    if (cell.value === true) {
+                        cell.value = "1";
+                    }
+                }
+            }
+
+
+
+            worksheetTemp.getRow(5).eachCell(function (cell) {
+                cell.font = { bold: true, size: 13, };
+            });
+            worksheetTemp.getRow(6).eachCell(function (cell) {
+                cell.font = { bold: true };
+            });
+        })
+
+
 
         for (let i = 7; i <= lastRow; i++) {
             const fila = worksheet.getRow(i);

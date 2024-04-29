@@ -30,8 +30,6 @@ export const getEvento = (token: string): Promise<EventoInterface[]> => {
           updatedAt: item.updatedAt,
         };
       });
-      console.log(dataList[0]);
-      console.log(response.data[0]);
 
       return dataList;
     });

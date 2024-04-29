@@ -210,323 +210,325 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
 
   return (
     <>
-      {sesion.usuario.id_rol != 3 ? <>
-        <Dialog
-          fullWidth
-          open={open}
-          onClose={handleClose}
-        >
-          <DialogTitle>{"Edita los datos del poste"}</DialogTitle>
-          <DialogContent>
-            <Grid container width={1} m={0}>
-              <Grid item xs={12} md={2}>
-                <TextField
-                  disabled
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  type="number"
-                  label="Id"
-                  value={data.id}
-
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
-
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Numero de poste"
-                  value={data.name}
-                  onChange={(event) => {
-                    const newData: PosteInterface = { ...data, name: event.target.value };
-                    setData(newData)
-                  }}
-
-                />
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                  <DatePicker
-                    sx={{ width: 1 }}
-                    label="Fecha"
-                    format="DD-MM-YYYY"
-                    defaultValue={dayjs(data.date)}
-                    onChange={(date) => {
-                      if (date) {
-                        const newData: PosteInterface = { ...data, date: date.toDate() };
-                        setData(newData)
-                      }
-                    }}
-                  />
-                </DemoContainer>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <Autocomplete
-                  renderOption={(props, option) => {
-                    return (
-                      <li {...props} key={option.id}>
-                        {option.name}
-                      </li>
-                    );
-                  }}
-                  disablePortal
-                  options={listPropietario}
-                  getOptionLabel={(option) => option.name}
-                  value={listPropietario.find(tipoObs => tipoObs.id === data.id_propietario) || null}
-                  onChange={(_event, newValue) => {
-                    const newData: PosteInterface = { ...data, id_propietario: newValue?.id ? newValue?.id : 0 };
-                    setData(newData)
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Propietario" />}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Autocomplete
-                  renderOption={(props, option) => {
-                    return (
-                      <li {...props} key={option.id}>
-                        {option.name}
-                      </li>
-                    );
-                  }}
-                  disablePortal
-                  options={listMaterial}
-                  getOptionLabel={(option) => option.name}
-                  value={listMaterial.find(tipoObs => tipoObs.id === data.id_material) || null}
-                  onChange={(_event, newValue) => {
-                    const newData: PosteInterface = { ...data, id_material: newValue?.id ? newValue?.id : 0 };
-                    setData(newData)
-                  }}
-                  renderInput={(params) => <TextField {...params} label="Material" />}
-                />
-              </Grid>
-
-              <Grid item xs={12} paddingInline={0} paddingBlock={1} sx={{ p: 0 }}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  textAlign={"left"}
-                  paddingInline={1}
-                  pt={1}
-                >
-                  Tramo:
-                </Typography>
-
-                <Grid container sx={{ p: 0 }}>
-                  <Grid item xs={6}>
-                    <Autocomplete
-                      renderOption={(props, option) => {
-                        return (
-                          <li {...props} key={option.id}>
-                            {option.name}
-                          </li>
-                        );
-                      }}
-                      disablePortal
-                      options={listCiudad}
-                      getOptionLabel={(option) => option.name}
-                      value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadA) || null}
-                      onChange={(_event, newValue) => {
-                        const newData: PosteInterface = { ...data, id_ciudadA: newValue?.id ? newValue?.id : 0 };
-                        setData(newData)
-                      }}
-                      renderInput={(params) => <TextField {...params} label="Inicio" />}
-                    />
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Autocomplete
-                      renderOption={(props, option) => {
-                        return (
-                          <li {...props} key={option.id}>
-                            {option.name}
-                          </li>
-                        );
-                      }}
-                      disablePortal
-                      options={listCiudad}
-                      getOptionLabel={(option) => option.name}
-                      value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadB) || null}
-                      onChange={(_event, newValue) => {
-                        const newData: PosteInterface = { ...data, id_ciudadB: newValue?.id ? newValue?.id : 0 };
-                        setData(newData)
-                      }}
-                      renderInput={(params) => <TextField {...params} label="Inicio" />}
-                    />
-                  </Grid>
-                </Grid>
-              </Grid>
-              <Grid item xs={12} sx={{ p: 0 }}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  textAlign={"left"}
-                  paddingInline={1}
-                  pb={0}
-                >
-                  Ferreteria de sujeción:
-                </Typography>
-
-                <Grid container justifyContent={"left"} sx={{ p: 0 }}>
-                  {listAdss.map((adss, i) => {
-
-                    return <Grid key={i} item xs={6} sx={{ p: 0 }}>
-                      <FormControlLabel
-                        control={<Checkbox
-                          checked={listAdssSelected?.some(objeto => objeto === adss.id)}
-                          onChange={(event) => {
-                            if (event.target.checked) {
-                              setListAdssSelected(prevLista => [...prevLista, adss.id ? adss.id : 0])
-                            }
-                            else {
-                              const nuevaLista = listAdssSelected.filter(item => item !== adss.id);
-                              //console.log(nuevaLista)
-                              setListAdssSelected(nuevaLista);
-                            }
-                          }}
-                        />}
-                        sx={{
-                          margin: 0,
-                        }}
-                        label={adss.name}
-                      />
-                    </Grid>
-                  }
-                  )}
-                </Grid>
-              </Grid>
-              <Grid
-                item
-                sx={{ p: 0 }}
-                xs={12}
-                md={6}
-                paddingBlock={1}
-                paddingInline={0}
-              >
-                <Grid container sx={{ p: 0 }}>
-                  <Grid item xs={12} sx={{ p: 0 }}>
-                    <Typography
-                      display={"flex"}
-                      color="text.secondary"
-                      textAlign={"left"}
-                      paddingInline={1}
-                    >
-                      Ubicación:
-                    </Typography>
-                  </Grid>
-                  <Grid container sx={{ p: 0 }}>
-                    <Grid item xs={6} >
-                      <TextField
-                        fullWidth
-                        style={{
-                          padding: 0,
-                          margin: 0,
-                        }}
-                        type="number"
-                        label="Latitud"
-                        value={data.lat}
-                        onChange={(event) => {
-                          const newData: PosteInterface = { ...data, lat: parseFloat(event.target.value) };
-                          setData(newData)
-                        }}
-                      />
-                    </Grid>
-                    <Grid item xs={6}>
-                      <TextField
-                        fullWidth
-                        style={{
-                          padding: 0,
-                          margin: 0,
-                        }}
-                        type="number"
-                        label="Longitud"
-                        value={data.lng}
-
-                        onChange={(event) => {
-                          const newData: PosteInterface = { ...data, lng: parseFloat(event.target.value) };
-                          setData(newData)
-                        }}
-                      />
-                    </Grid>
-                  </Grid>
-                </Grid>
-                <Grid item xs={12}>
-                  {/* @ts-expect-error No se sabe el tipo de event */}
-                  <MapContainer center={[data.lat, data.lng]}
-                    zoom={13}
-                    style={{ height: "240px" }}
-                    scrollWheelZoom={false}
-                  >
-                    <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
-                    <LocationMarker />
-                    <Marker position={[data.lat, data.lng]}>
-                      <Popup>You are here</Popup>
-                    </Marker>
-                  </MapContainer>
-                </Grid>
-              </Grid>
-
-              <Grid
-                item
-                sx={{
-                  height: "100%",
+      <Dialog
+        fullWidth
+        open={open}
+        onClose={handleClose}
+      >
+        <DialogTitle>{"Edita los datos del poste"}</DialogTitle>
+        <DialogContent>
+          <Grid container width={1} m={0}>
+            <Grid item xs={12} md={2}>
+              <TextField
+                disabled
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
                 }}
-                xs={12}
-                md={6}
-                paddingBlock={1}
-              >
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Imagen:
-                </Typography>
-                <Input fullWidth onChange={onImageChange} type={"file"} />
+                type="number"
+                label="Id"
+                value={data.id}
 
-                {image ? <img
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
+
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                label="Numero de poste"
+                value={data.name}
+                onChange={(event) => {
+                  const newData: PosteInterface = { ...data, name: event.target.value };
+                  setData(newData)
+                }}
+
+              />
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
+                <DatePicker
+                  sx={{ width: 1 }}
+                  label="Fecha"
+                  format="DD-MM-YYYY"
+                  defaultValue={dayjs(data.date)}
+                  onChange={(date) => {
+                    if (date) {
+                      const newData: PosteInterface = { ...data, date: date.toDate() };
+                      setData(newData)
+                    }
+                  }}
+                />
+              </DemoContainer>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Autocomplete
+                renderOption={(props, option) => {
+                  return (
+                    <li {...props} key={option.id}>
+                      {option.name}
+                    </li>
+                  );
+                }}
+                disablePortal
+                options={listPropietario}
+                getOptionLabel={(option) => option.name}
+                value={listPropietario.find(tipoObs => tipoObs.id === data.id_propietario) || null}
+                onChange={(_event, newValue) => {
+                  const newData: PosteInterface = { ...data, id_propietario: newValue?.id ? newValue?.id : 0 };
+                  setData(newData)
+                }}
+                renderInput={(params) => <TextField {...params} label="Propietario" />}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <Autocomplete
+                renderOption={(props, option) => {
+                  return (
+                    <li {...props} key={option.id}>
+                      {option.name}
+                    </li>
+                  );
+                }}
+                disablePortal
+                options={listMaterial}
+                getOptionLabel={(option) => option.name}
+                value={listMaterial.find(tipoObs => tipoObs.id === data.id_material) || null}
+                onChange={(_event, newValue) => {
+                  const newData: PosteInterface = { ...data, id_material: newValue?.id ? newValue?.id : 0 };
+                  setData(newData)
+                }}
+                renderInput={(params) => <TextField {...params} label="Material" />}
+              />
+            </Grid>
+
+            <Grid item xs={12} paddingInline={0} paddingBlock={1} sx={{ p: 0 }}>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                textAlign={"left"}
+                paddingInline={1}
+                pt={1}
+              >
+                Tramo:
+              </Typography>
+
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={6}>
+                  <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
+                    disablePortal
+                    options={listCiudad}
+                    getOptionLabel={(option) => option.name}
+                    value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadA) || null}
+                    onChange={(_event, newValue) => {
+                      const newData: PosteInterface = { ...data, id_ciudadA: newValue?.id ? newValue?.id : 0 };
+                      setData(newData)
+                    }}
+                    renderInput={(params) => <TextField {...params} label="Inicio" />}
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <Autocomplete
+                    renderOption={(props, option) => {
+                      return (
+                        <li {...props} key={option.id}>
+                          {option.name}
+                        </li>
+                      );
+                    }}
+                    disablePortal
+                    options={listCiudad}
+                    getOptionLabel={(option) => option.name}
+                    value={listCiudad.find(tipoObs => tipoObs.id === data.id_ciudadB) || null}
+                    onChange={(_event, newValue) => {
+                      const newData: PosteInterface = { ...data, id_ciudadB: newValue?.id ? newValue?.id : 0 };
+                      setData(newData)
+                    }}
+                    renderInput={(params) => <TextField {...params} label="Inicio" />}
+                  />
+                </Grid>
+              </Grid>
+            </Grid>
+            <Grid item xs={12} sx={{ p: 0 }}>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                textAlign={"left"}
+                paddingInline={1}
+                pb={0}
+              >
+                Ferreteria de sujeción:
+              </Typography>
+
+              <Grid container justifyContent={"left"} sx={{ p: 0 }}>
+                {listAdss.map((adss, i) => {
+
+                  return <Grid key={i} item xs={6} sx={{ p: 0 }}>
+                    <FormControlLabel
+                      control={<Checkbox
+                        checked={listAdssSelected?.some(objeto => objeto === adss.id)}
+                        onChange={(event) => {
+                          if (event.target.checked) {
+                            setListAdssSelected(prevLista => [...prevLista, adss.id ? adss.id : 0])
+                          }
+                          else {
+                            const nuevaLista = listAdssSelected.filter(item => item !== adss.id);
+                            //console.log(nuevaLista)
+                            setListAdssSelected(nuevaLista);
+                          }
+                        }}
+                      />}
+                      sx={{
+                        margin: 0,
+                      }}
+                      label={adss.name}
+                    />
+                  </Grid>
+                }
+                )}
+              </Grid>
+            </Grid>
+            <Grid
+              item
+              sx={{ p: 0 }}
+              xs={12}
+              md={6}
+              paddingBlock={1}
+              paddingInline={0}
+            >
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={12} sx={{ p: 0 }}>
+                  <Typography
+                    display={"flex"}
+                    color="text.secondary"
+                    textAlign={"left"}
+                    paddingInline={1}
+                  >
+                    Ubicación:
+                  </Typography>
+                </Grid>
+                <Grid container sx={{ p: 0 }}>
+                  <Grid item xs={6} >
+                    <TextField
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Latitud"
+                      value={data.lat}
+                      onChange={(event) => {
+                        const newData: PosteInterface = { ...data, lat: parseFloat(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Longitud"
+                      value={data.lng}
+
+                      onChange={(event) => {
+                        const newData: PosteInterface = { ...data, lng: parseFloat(event.target.value) };
+                        setData(newData)
+                      }}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+              <Grid item xs={12}>
+                {/* @ts-expect-error No se sabe el tipo de event */}
+                <MapContainer center={[data.lat, data.lng]}
+                  zoom={13}
+                  style={{ height: "240px" }}
+                  scrollWheelZoom={false}
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
+                  <LocationMarker />
+                  <Marker position={[data.lat, data.lng]}>
+                    <Popup>You are here</Popup>
+                  </Marker>
+                </MapContainer>
+              </Grid>
+            </Grid>
+
+            <Grid
+              item
+              sx={{
+                height: "100%",
+              }}
+              xs={12}
+              md={6}
+              paddingBlock={1}
+            >
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
+
+              {image ? <img
+                width={"100%"}
+                style={{
+                  aspectRatio: "1/1",
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+                src={URL.createObjectURL(image)}
+                alt={"imagen"}
+                loading="lazy"
+              /> :
+                <img
                   width={"100%"}
                   style={{
                     aspectRatio: "1/1",
                     objectFit: "cover",
                     borderRadius: 4,
                   }}
-                  src={URL.createObjectURL(image)}
+                  src={`${url}${data.image}`}
                   alt={"imagen"}
                   loading="lazy"
-                /> :
-                  <img
-                    width={"100%"}
-                    style={{
-                      aspectRatio: "1/1",
-                      objectFit: "cover",
-                      borderRadius: 4,
-                    }}
-                    src={`${url}${data.image}`}
-                    alt={"imagen"}
-                    loading="lazy"
-                  />
-                }
-              </Grid>
+                />
+              }
             </Grid>
-          </DialogContent>
+          </Grid>
+        </DialogContent>
+        {sesion.usuario.id_rol != 3 ?
+
           <DialogActions style={{
             display: "flex",
             justifyContent: "space-between"
           }}>
             <Grid>
-              <Button onClick={handleClickOpenDelete}>
-                {"Eliminar"}
-              </Button>
-
+              {sesion.usuario.id_rol === 1 ? <>
+                <Button onClick={handleClickOpenDelete}>
+                  {"Eliminar"}
+                </Button>
+              </> : null}
             </Grid>
             <ButtonGroup>
               <Button onClick={handleClose}>Cancelar</Button>
@@ -534,32 +536,33 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
             </ButtonGroup>
 
           </DialogActions>
-          {sesion.usuario.id_rol === 1 ? <>
+          : null}
 
-            <Dialog
-              open={openDelete}
-              onClose={handleCloseDelete}
-            >
-              <DialogTitle>{"Eliminar Poste"}</DialogTitle>
-              <DialogContent>
-                <Grid container width={1} m={0}>
-                  Seguro que quiere eliminar este Poste?
-                </Grid>
-              </DialogContent>
-              <DialogActions>
+        {sesion.usuario.id_rol === 1 ? <>
 
-                <Button onClick={handleCloseDelete}>Cancelar</Button>
-                <Button onClick={handleDelete}>Eliminar</Button>
-              </DialogActions>
-            </Dialog>
-          </> : null}
-        </Dialog>
-        {cargando && (
-          <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", textAlign: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
-            <CircularProgress sx={{ color: "white" }} />
-          </Box>
-        )}
-      </> : null}
+          <Dialog
+            open={openDelete}
+            onClose={handleCloseDelete}
+          >
+            <DialogTitle>{"Eliminar Poste"}</DialogTitle>
+            <DialogContent>
+              <Grid container width={1} m={0}>
+                Seguro que quiere eliminar este Poste?
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+
+              <Button onClick={handleCloseDelete}>Cancelar</Button>
+              <Button onClick={handleDelete}>Eliminar</Button>
+            </DialogActions>
+          </Dialog>
+        </> : null}
+      </Dialog>
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", textAlign: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
     </>
 
   );

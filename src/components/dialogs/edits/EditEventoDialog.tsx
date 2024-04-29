@@ -208,162 +208,313 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   return (
     <>
-      {sesion.usuario.id_rol != 3 ? <>
-        <Dialog
-          fullWidth
-          open={open}
-          onClose={handleClose}
-        >
-          <DialogTitle>{"Edita los datos del Evento"}</DialogTitle>
-          <DialogContent>
-            <Grid container width={1} m={0}>
-              <Grid item xs={12} md={2}>
-                <TextField
-                  disabled
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  type="number"
-                  label="Id"
-                  value={data.id}
 
-                />
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <TextField
+      <Dialog
+        fullWidth
+        open={open}
+        onClose={handleClose}
+      >
+        <DialogTitle>{"Edita los datos del Evento"}</DialogTitle>
+        <DialogContent>
+          <Grid container width={1} m={0}>
+            <Grid item xs={12} md={2}>
+              <TextField
+                disabled
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                type="number"
+                label="Id"
+                value={data.id}
 
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Numero de poste"
-                  value={data.poste?.name}
-                  disabled
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <TextField
-                  fullWidth
-                  multiline
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Descripción"
-                  value={data.description}
-                  onChange={(event) => {
-                    const newData: EventoInterface = { ...data, description: event.target.value };
-                    setData(newData)
-                  }}
-                />
-              </Grid>
-              <Grid
-                item
-                sx={{ p: 0 }}
-                xs={12}
-                md={6}
+              />
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <TextField
 
-              >
-                <Grid container sx={{ p: 0 }}>
-                  <Grid item xs={12} sx={{ p: 0 }}>
-                    <Typography
-                      display={"flex"}
-                      color="text.secondary"
-                      textAlign={"left"}
-                      paddingInline={1}
-                      pb={0}
-                    >
-                      Observaciones:
-                    </Typography>
-                  </Grid>
-                  {
-                    listTipoObs.map((tipoObs, i) =>
-                    (
-                      <Grid key={i} item xs={12}>
-                        <Accordion sx={{ width: 1 }} >
-                          <AccordionSummary expandIcon={<ArrowDropDown />}>
-                            <Typography>{tipoObs.name}</Typography>
-                          </AccordionSummary>
-                          <AccordionDetails
-                            sx={{
-                              display: "flex",
-                              flexDirection: "column",
-                              textAlign: "left",
-                              padding: "4px",
-                              margin: "0px",
-                            }}
-                          >
-                            {listObs.map(
-                              (obs, i) => {
-                                if (obs.id_tipoObs === tipoObs.id) {
-                                  return <Grid key={i} item xs={6} p={0}>
-                                    <FormControlLabel
-                                      control={<Checkbox
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                label="Numero de poste"
+                value={data.poste?.name}
+                disabled
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                multiline
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                label="Descripción"
+                value={data.description}
+                onChange={(event) => {
+                  const newData: EventoInterface = { ...data, description: event.target.value };
+                  setData(newData)
+                }}
+              />
+            </Grid>
+            <Grid
+              item
+              sx={{ p: 0 }}
+              xs={12}
+              md={6}
 
-                                        checked={listObsSelected?.some(objeto => objeto === obs.id)}
-
-                                        onChange={(event) => {
-
-                                          if (event.target.checked) {
-                                            setListObsSelected(prevLista => [...prevLista, obs.id ? obs.id : 0])
-                                          }
-                                          else {
-                                            const nuevaLista = listObsSelected.filter(item => item !== obs.id);
-                                            setListObsSelected(nuevaLista);
-                                          }
-                                        }}
-                                      />}
-                                      sx={{
-                                        margin: 0,
-                                      }}
-                                      label={obs.name}
-
-                                    />
-                                  </Grid>
-                                }
-                                else {
-                                  return null
-                                }
-                              }
-
-
-                            )}
-
-                          </AccordionDetails>
-                        </Accordion></Grid>)
-                    )
-                  }
+            >
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={12} sx={{ p: 0 }}>
+                  <Typography
+                    display={"flex"}
+                    color="text.secondary"
+                    textAlign={"left"}
+                    paddingInline={1}
+                    pb={0}
+                  >
+                    Observaciones:
+                  </Typography>
                 </Grid>
-              </Grid>
-              <Grid
-                item
-                xs={12}
-                md={6}
-              >
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Imagen:
-                </Typography>
-                <Input fullWidth onChange={onImageChange} type={"file"} />
+                {
+                  listTipoObs.map((tipoObs, i) =>
+                  (
+                    <Grid key={i} item xs={12}>
+                      <Accordion sx={{ width: 1 }} >
+                        <AccordionSummary expandIcon={<ArrowDropDown />}>
+                          <Typography>{tipoObs.name}</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails
+                          sx={{
+                            display: "flex",
+                            flexDirection: "column",
+                            textAlign: "left",
+                            padding: "4px",
+                            margin: "0px",
+                          }}
+                        >
+                          {listObs.map(
+                            (obs, i) => {
+                              if (obs.id_tipoObs === tipoObs.id) {
+                                return <Grid key={i} item xs={6} p={0}>
+                                  <FormControlLabel
+                                    control={<Checkbox
 
-                {image ? <img
+                                      checked={listObsSelected?.some(objeto => objeto === obs.id)}
+
+                                      onChange={(event) => {
+
+                                        if (event.target.checked) {
+                                          setListObsSelected(prevLista => [...prevLista, obs.id ? obs.id : 0])
+                                        }
+                                        else {
+                                          const nuevaLista = listObsSelected.filter(item => item !== obs.id);
+                                          setListObsSelected(nuevaLista);
+                                        }
+                                      }}
+                                    />}
+                                    sx={{
+                                      margin: 0,
+                                    }}
+                                    label={obs.name}
+
+                                  />
+                                </Grid>
+                              }
+                              else {
+                                return null
+                              }
+                            }
+
+
+                          )}
+
+                        </AccordionDetails>
+                      </Accordion></Grid>)
+                  )
+                }
+              </Grid>
+            </Grid>
+            <Grid
+              item
+              xs={12}
+              md={6}
+            >
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Imagen:
+              </Typography>
+              <Input fullWidth onChange={onImageChange} type={"file"} />
+
+              {image ? <img
+                width={"100%"}
+                style={{
+                  aspectRatio: "1/1",
+                  objectFit: "cover",
+                  borderRadius: 4,
+                }}
+                src={URL.createObjectURL(image)}
+                alt={"imagen"}
+                loading="lazy"
+              /> :
+                <img
                   width={"100%"}
                   style={{
                     aspectRatio: "1/1",
                     objectFit: "cover",
                     borderRadius: 4,
                   }}
-                  src={URL.createObjectURL(image)}
+                  src={`${url}${data.image}`}
                   alt={"imagen"}
                   loading="lazy"
-                /> :
+                />
+              }
+            </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+            <Grid item xs={12} sx={{ p: 0 }}>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                paddingInline={1}
+                textAlign={"left"}
+              >
+                Reviciones:
+              </Typography>
+            </Grid>
+            {listDataRevicion.map((revicion, i) => {
+              return <Grid sx={{ p: 0, m: 0 }} key={i} container>< Grid item xs={12} md={6}>
+                <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
+                  <DateTimePicker
+                    sx={{ width: 1 }}
+                    label="Fecha de revición"
+                    format="DD-MM-YYYY"
+                    defaultValue={dayjs(revicion.date)}
+                    onChange={(date) => {
+                      if (date) {
+                        const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
+                          item.id === revicion.id ? { ...item, date: date.toDate() } : item
+                        );
+                        setListDataRevicion(listaActualizada);
+                      }
+                    }}
+                  />
+                </DemoContainer>
+              </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    style={{
+                      padding: 0,
+                      margin: 0,
+                    }}
+                    label="Descripción de revición"
+                    value={revicion.description}
+                    onChange={(event) => {
+                      const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
+                        item.id === revicion.id ? { ...item, description: event.target.value } : item
+                      );
+                      setListDataRevicion(listaActualizada);
+                    }}
+                  />
+                </Grid></Grid>
+            })
+            }
+            <Grid container sx={{ padding: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+
+
+            {
+              solucion ? <>
+
+                <Grid item xs={12}>
+                  Solución:
+                </Grid>
+                <Grid
+                  item
+                  sx={{
+                    height: "100%",
+                  }}
+                  xs={12}
+                  md={6}
+                  paddingBlock={1}
+                  paddingInline={0}
+                >
+
+                  <Grid item xs={12}>
+                    <TextField
+                      disabled
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Numero de evento"
+                      value={solucion.id}
+                    />
+                  </Grid>
+
+                  <Grid item xs={12}>
+                    <TextField
+                      disabled
+                      fullWidth
+                      multiline
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      label="Descripción"
+                      value={solucion.description}
+                    />
+                  </Grid>
+                  <Grid item xs={12}>
+                    <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
+                      <DateTimePicker
+                        disabled
+                        sx={{ width: 1 }}
+
+                        label="Fecha de solucion"
+                        format="DD-MM-YYYY"
+                        defaultValue={dayjs(solucion.date)}
+                      />
+                    </DemoContainer>
+                  </Grid>
+                </Grid>
+
+                <Grid
+                  item
+                  sx={{
+                    height: "100%",
+                  }}
+                  xs={12}
+                  md={6}
+                  paddingBlock={1}
+                >
+                  <Grid display={"flex"} justifyContent={"space-between"}>
+                    <Typography
+                      display={"flex"}
+                      color="text.secondary"
+                      paddingInline={1}
+                      textAlign={"left"}
+                    >
+                      Imagen:
+                    </Typography>
+                  </Grid>
                   <img
                     width={"100%"}
                     style={{
@@ -371,174 +522,28 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                       objectFit: "cover",
                       borderRadius: 4,
                     }}
-                    src={`${url}${data.image}`}
+                    src={`${url}${solucion.image}`}
                     alt={"imagen"}
                     loading="lazy"
                   />
-                }
-              </Grid>
-              <Grid container sx={{ p: 0 }} >
-                <Grid item xs={12}>
-                  <Divider />
-                </Grid>
-              </Grid>
-              <Grid item xs={12} sx={{ p: 0 }}>
-                <Typography
-                  display={"flex"}
-                  color="text.secondary"
-                  paddingInline={1}
-                  textAlign={"left"}
-                >
-                  Reviciones:
-                </Typography>
-              </Grid>
-              {listDataRevicion.map((revicion, i) => {
-                return <Grid sx={{ p: 0, m: 0 }} key={i} container>< Grid item xs={12} md={6}>
-                  <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                    <DateTimePicker
-                      sx={{ width: 1 }}
-                      label="Fecha de revición"
-                      format="DD-MM-YYYY"
-                      defaultValue={dayjs(revicion.date)}
-                      onChange={(date) => {
-                        if (date) {
-                          const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
-                            item.id === revicion.id ? { ...item, date: date.toDate() } : item
-                          );
-                          setListDataRevicion(listaActualizada);
-                        }
-                      }}
-                    />
-                  </DemoContainer>
-                </Grid>
-                  <Grid item xs={12} md={6}>
-                    <TextField
-                      fullWidth
-                      multiline
-                      style={{
-                        padding: 0,
-                        margin: 0,
-                      }}
-                      label="Descripción de revición"
-                      value={revicion.description}
-                      onChange={(event) => {
-                        const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
-                          item.id === revicion.id ? { ...item, description: event.target.value } : item
-                        );
-                        setListDataRevicion(listaActualizada);
-                      }}
-                    />
-                  </Grid></Grid>
-              })
-              }
-              <Grid container sx={{ padding: 0 }} >
-                <Grid item xs={12}>
-                  <Divider />
-                </Grid>
-              </Grid>
-
-
-              {
-                solucion ? <>
-
-                  <Grid item xs={12}>
-                    Solución:
-                  </Grid>
-                  <Grid
-                    item
-                    sx={{
-                      height: "100%",
-                    }}
-                    xs={12}
-                    md={6}
-                    paddingBlock={1}
-                    paddingInline={0}
-                  >
-
-                    <Grid item xs={12}>
-                      <TextField
-                        disabled
-                        fullWidth
-                        style={{
-                          padding: 0,
-                          margin: 0,
-                        }}
-                        type="number"
-                        label="Numero de evento"
-                        value={solucion.id}
-                      />
-                    </Grid>
-
-                    <Grid item xs={12}>
-                      <TextField
-                        disabled
-                        fullWidth
-                        multiline
-                        style={{
-                          padding: 0,
-                          margin: 0,
-                        }}
-                        label="Descripción"
-                        value={solucion.description}
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                        <DateTimePicker
-                          disabled
-                          sx={{ width: 1 }}
-
-                          label="Fecha de solucion"
-                          format="DD-MM-YYYY"
-                          defaultValue={dayjs(solucion.date)}
-                        />
-                      </DemoContainer>
-                    </Grid>
-                  </Grid>
-
-                  <Grid
-                    item
-                    sx={{
-                      height: "100%",
-                    }}
-                    xs={12}
-                    md={6}
-                    paddingBlock={1}
-                  >
-                    <Grid display={"flex"} justifyContent={"space-between"}>
-                      <Typography
-                        display={"flex"}
-                        color="text.secondary"
-                        paddingInline={1}
-                        textAlign={"left"}
-                      >
-                        Imagen:
-                      </Typography>
-                    </Grid>
-                    <img
-                      width={"100%"}
-                      style={{
-                        aspectRatio: "1/1",
-                        objectFit: "cover",
-                        borderRadius: 4,
-                      }}
-                      src={`${url}${solucion.image}`}
-                      alt={"imagen"}
-                      loading="lazy"
-                    />
-                  </Grid></>
-                  : null
-              }
-            </Grid>
-          </DialogContent>
+                </Grid></>
+                : null
+            }
+          </Grid>
+        </DialogContent>
+        {sesion.usuario.id_rol != 3 ?
           <DialogActions style={{
             display: "flex",
             justifyContent: "space-between"
           }}>
             <Grid>
-              <Button onClick={handleClickOpenDelete}>
-                {"Eliminar"}
-              </Button>
+              {sesion.usuario.id_rol === 1 ? <>
+
+                <Button onClick={handleClickOpenDelete}>
+                  {"Eliminar"}
+                </Button>
+              </> : null}
+
             </Grid>
             <ButtonGroup>
               <Button onClick={handleClose}>Cancelar</Button>
@@ -551,34 +556,35 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
             </ButtonGroup>
 
           </DialogActions>
-          {sesion.usuario.id_rol === 1 ? <>
-            <Dialog
-              open={openDelete}
-              onClose={handleCloseDelete}
+          : null}
+        {sesion.usuario.id_rol === 1 ? <>
+          <Dialog
+            open={openDelete}
+            onClose={handleCloseDelete}
 
-            >
-              <DialogTitle>{"Eliminar Evento"}</DialogTitle>
-              <DialogContent>
-                <Grid container width={1} m={0}>
-                  Seguro que quiere eliminar este Evento?
-                </Grid>
-              </DialogContent>
-              <DialogActions>
+          >
+            <DialogTitle>{"Eliminar Evento"}</DialogTitle>
+            <DialogContent>
+              <Grid container width={1} m={0}>
+                Seguro que quiere eliminar este Evento?
+              </Grid>
+            </DialogContent>
+            <DialogActions>
 
-                <Button onClick={handleCloseDelete}>Cancelar</Button>
-                <Button onClick={handleDelete}>Eliminar</Button>
-              </DialogActions>
+              <Button onClick={handleCloseDelete}>Cancelar</Button>
+              <Button onClick={handleDelete}>Eliminar</Button>
+            </DialogActions>
 
-            </Dialog>
-          </> : null}
+          </Dialog>
+        </> : null}
 
-        </Dialog>
-        {cargando && (
-          <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", textAlign: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
-            <CircularProgress sx={{ color: "white" }} />
-          </Box>
-        )}
-      </> : null}
+      </Dialog>
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", textAlign: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
+
     </>
   );
 };

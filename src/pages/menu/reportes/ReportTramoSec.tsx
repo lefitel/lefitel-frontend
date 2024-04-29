@@ -1,32 +1,30 @@
-import { Autocomplete, ButtonGroup, Card, CardActions, CardContent, Grid, TextField, Typography } from '@mui/material'
+import { ButtonGroup, Card, CardActions, CardContent, Grid, Typography } from '@mui/material'
 import { DatePicker } from '@mui/x-date-pickers'
-import { CiudadInterface, ReporteInterface } from '../../../interfaces/interfaces'
+import { ReporteInterface } from '../../../interfaces/interfaces'
 import { Dayjs } from 'dayjs'
-import { useContext, useEffect, useState } from 'react'
-import { getCiudad } from '../../../api/Ciudad.api'
-import { SesionContext } from '../../../context/SesionProvider'
+import { useState } from 'react'
 import ReporteTramoDialog from '../../../components/dialogs/report/ReporteTramoDialog'
 
 const ReportTramoSec = () => {
-    const { sesion } = useContext(SesionContext);
+    //const { sesion } = useContext(SesionContext);
 
     const [filtro, setFiltro] = useState<ReporteInterface>({
         TramoFinal: null,
         TramoInicial: null,
-        fechaFinal: new Date,
-        fechaInicial: new Date,
+        fechaFinal: new Date(),
+        fechaInicial: new Date(),
     });
-    const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
+    //const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
 
-
-    const recibirDatos = async () => {
-        setListCiudad(await getCiudad(sesion.token))
-    }
-
-    useEffect(() => {
-        recibirDatos()
-    }, [])
-
+    /*
+        const recibirDatos = async () => {
+            setListCiudad(await getCiudad(sesion.token))
+        }
+    
+        useEffect(() => {
+            recibirDatos()
+        }, [])
+    */
 
     return (
         <Card sx={{ flex: 1 }} style={{}}>
@@ -74,7 +72,17 @@ const ReportTramoSec = () => {
                                 }
                             }} />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+
+                </Grid>
+            </CardContent>
+        </Card>
+    )
+}
+
+export default ReportTramoSec
+
+/*
+<Grid item xs={12} md={6}>
                         <Autocomplete
                             renderOption={(props, option) => {
                                 return (
@@ -116,10 +124,4 @@ const ReportTramoSec = () => {
                             renderInput={(params) => <TextField {...params} label="Tramo Final" />}
                         />
                     </Grid>
-                </Grid>
-            </CardContent>
-        </Card>
-    )
-}
-
-export default ReportTramoSec
+*/
