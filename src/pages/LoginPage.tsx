@@ -32,7 +32,9 @@ const LoginPage = () => {
 
 
   const ComprobarToken = async () => {
+    setLoading(true);
     try {
+
       const TokenSesion = JSON.parse(window.localStorage.getItem("token") || "").toString();
       if (TokenSesion != "") {
         // console.log("ComprobarToken");
@@ -45,7 +47,7 @@ const LoginPage = () => {
     } catch (e) {
       console.log();
     }
-
+    setLoading(false);
   };
 
   const ValidarDatos = async () => {
