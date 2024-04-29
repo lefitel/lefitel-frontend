@@ -1,7 +1,7 @@
 import { DocumentScanner } from '@mui/icons-material'
 import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography } from '@mui/material'
 import React, { useContext, useEffect, useState } from 'react'
-import { AdssInterface, AdssPosteInterface, CiudadInterface, EventoInterface, EventoObsInterface, MaterialInterface, ObsInterface, PropietarioInterface, ReporteInterface, TipoObsInterface } from '../../../interfaces/interfaces';
+import { AdssInterface, AdssPosteInterface, EventoInterface, EventoObsInterface, MaterialInterface, ObsInterface, PropietarioInterface, ReporteInterface, TipoObsInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
 import { getReporteTramo } from '../../../api/reporte.api';
 import { useSnackbar } from 'notistack';
@@ -11,7 +11,6 @@ import { getPropietario } from '../../../api/Propietario.api';
 import { getObs } from '../../../api/Obs.api';
 import { getTipoObs } from '../../../api/TipoObs.api';
 import { DataGridPremium, GridCloseIcon, GridColDef, GridColumnGroupingModel, GridColumnNode, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
-import { getCiudad } from '../../../api/Ciudad.api';
 
 
 interface ReporteTramoDialogProps {
@@ -31,7 +30,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
     const { enqueueSnackbar } = useSnackbar();
 
     const [listAdss, setListAdss] = React.useState<AdssInterface[]>([]);
-    const [listCiudad, setListCiudad] = React.useState<CiudadInterface[]>([]);
+    //const [listCiudad, setListCiudad] = React.useState<CiudadInterface[]>([]);
 
     const [listMaterial, setListMaterial] = React.useState<MaterialInterface[]>([]);
     const [listPropietario, setListPropietario] = React.useState<PropietarioInterface[]>([]);
@@ -162,7 +161,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
     const recibirDatos = async () => {
         setListAdss(await getAdss(sesion.token))
-        setListCiudad(await getCiudad(sesion.token))
+        //setListCiudad(await getCiudad(sesion.token))
         setListMaterial(await getMaterial(sesion.token))
         setListPropietario(await getPropietario(sesion.token))
         setListObs(await getObs(sesion.token))
@@ -224,7 +223,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
         worksheet.addRow({}); // Add empty row
         worksheet.name = 'Reporte General';
 
-
         //Gneral
         let lastRow = 0;
         let lastCol = 0;
@@ -234,7 +232,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 lastCol = Math.max(lastCol, colNumber);
             });
         });
-
 
         const map = new Map(); // Usamos un mapa para almacenar los arrays por pares únicos
         list.forEach(obj => {
@@ -247,10 +244,203 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
         const datos: EventoInterface[][] = Array.from(map.values());
 
 
+
+
+        for (let i = 7; i <= lastRow; i++) {
+            const fila = worksheet.getRow(i);
+            fila.height = 15;
+        }
+
+
+        worksheet.mergeCells(1, 1, 1, lastCol);
+        worksheet.mergeCells(2, 1, 2, 5);
+        worksheet.mergeCells(2, 6, 2, lastCol);
+        worksheet.mergeCells(3, 1, 3, 5);
+        worksheet.mergeCells(3, 6, 3, lastCol);
+        worksheet.mergeCells(4, 1, 4, 5);
+        worksheet.mergeCells(4, 6, 4, lastCol);
+
+
+        worksheet.getCell('A1').value = 'PLANILLA DE EVENTOS NACIONAL';
+        worksheet.getCell('A2').value = 'Tramo: ';
+
+        worksheet.getCell('A3').value = 'Fecha: ';
+        worksheet.getCell('A4').value = 'Elaborado por:';
+
+        worksheet.getCell('F2').value = "Total";
+        worksheet.getCell('F3').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
+        worksheet.getCell('F4').value = "Lefitel";
+
+        ['A2', 'A3', 'A4', 'F2', 'F3', 'F4'].map(key => {
+            worksheet.getCell(key).font = {
+                bold: true,
+                size: 15,
+            };
+        });
+
+
+        worksheet.getCell('A1').font = {
+            bold: true,
+            size: 20,
+        };
+
+
+        worksheet.columns.forEach((column) => {
+            column.width = 3 // Ajusta el ancho mínimo de la columna
+        });
+
+        worksheet.getRow(6).height = 150;
+
+        for (let row = 1; row <= lastRow; row++) {
+            for (let col = 1; col <= lastCol; col++) {
+                const cell = worksheet.getCell(row, col);
+
+                if (row === 6) {
+                    if (cell.value != "Latitud" && cell.value != "Longitud" && cell.value != "Poste") {
+                        cell.alignment = {
+                            vertical: 'middle',
+                            horizontal: 'center',
+                            wrapText: true,
+                            textRotation: 90
+                        };
+                    }
+                    else {
+                        cell.alignment = {
+                            vertical: 'middle',
+                            horizontal: 'center',
+                            wrapText: true,
+                        };
+                    }
+
+                    cell.fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF92CDDC' }
+                    };
+                } else if (row === 1 || row >= 5) {
+                    cell.alignment = {
+                        vertical: 'middle',
+                        horizontal: 'center',
+                        wrapText: true,
+
+                    };
+                }
+                if (row >= 5) {
+                    cell.border = {
+                        top: { style: 'thin' },
+                        left: { style: 'thin' },
+                        bottom: { style: 'thin' },
+                        right: { style: 'thin' }
+                    };
+                }
+
+                if (cell.value === "Latitud" || cell.value === "Longitud" || cell.value === "Poste") {
+                    worksheet.getColumn(col).width = 15;
+                }
+
+
+                switch (cell.value) {
+                    case 'Material':
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFE06666' } // Rojo
+                        };
+                        break;
+                    case 'Propietario':
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF6FA8DC' } // Rojo
+                        }; break;
+                    case 'Adss':
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFe2ac3f' } // Rojo
+                        }; break;
+                    case 'Coordenadas':
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FFf8ebbe' } // Rojo
+                        }; break;
+                    case 'Observaciones':
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF7ba58d' } // Rojo
+                        }; break;
+                    default:
+                }
+                if (cell.value === true) {
+                    cell.value = "1";
+                }
+            }
+        }
+
+
+
+        worksheet.getRow(5).eachCell(function (cell) {
+            cell.font = { bold: true, size: 13, };
+        });
+        worksheet.getRow(6).eachCell(function (cell) {
+            cell.font = { bold: true };
+        });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         datos.map((hojita) => {
 
             const worksheetTemp = workbook.addWorksheet(`${hojita[0].poste?.ciudadA?.name}-${hojita[0].poste?.ciudadB?.name}`);
 
+            //Datos
+            for (let rowCount = 7; rowCount < hojita.length + 7; rowCount++) {
+
+                const cell = worksheetTemp.getCell(rowCount, 1);
+                console.log(hojita[rowCount - 7].poste)
+                cell.value = hojita[rowCount - 7].poste?.name
+
+                worksheet.eachRow({ includeEmpty: false }, (row) => {
+                    // Obtener el primer valor de la fila actual
+                    const primerValorFila = row.getCell(1).value;
+
+                    // Verificar si el primer valor de la fila actual coincide con el valor de interés
+                    if (primerValorFila === cell.value) {
+                        // Copiar toda la fila a otra hoja o ubicación en la misma hoja (aquí se muestra cómo copiarla a otra hoja)
+                        const nuevaFila = worksheetTemp.getRow(rowCount);
+                        row.eachCell((cell, colNumber) => {
+                            nuevaFila.getCell(colNumber).value = cell.value;
+                        });
+                    }
+                });
+
+            }
 
 
             for (let row = 5; row <= 6; row++) {
@@ -276,9 +466,6 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 }
             }
 
-
-
-
             let lastRowTemp = 0;
             let lastColTemp = 0;
             worksheetTemp.eachRow({ includeEmpty: true }, function (row, rowNumber) {
@@ -288,26 +475,27 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
                 });
             });
 
-            for (let i = 7; i <= lastRow; i++) {
+            for (let i = 7; i <= lastRowTemp; i++) {
                 const fila = worksheetTemp.getRow(i);
                 fila.height = 15;
             }
 
-            /*
-                        worksheetTemp.mergeCells(1, 1, 1, lastCol);
-                        worksheetTemp.mergeCells(2, 1, 2, 5);
-                        worksheetTemp.mergeCells(2, 6, 2, lastCol);
-                        worksheetTemp.mergeCells(3, 1, 3, 5);
-                        worksheetTemp.mergeCells(3, 6, 3, lastCol);
-                        worksheetTemp.mergeCells(4, 1, 4, lastCol);
-            */
+            worksheetTemp.mergeCells(1, 1, 1, lastColTemp);
+            worksheetTemp.mergeCells(2, 1, 2, 5);
+            worksheetTemp.mergeCells(2, 6, 2, lastColTemp);
+            worksheetTemp.mergeCells(3, 1, 3, 5);
+            worksheetTemp.mergeCells(3, 6, 3, lastColTemp);
+            worksheetTemp.mergeCells(4, 1, 4, 5);
+            worksheetTemp.mergeCells(4, 6, 4, lastCol);
+
             worksheetTemp.getCell('A1').value = 'PLANILLA DE EVENTOS NACIONAL';
             worksheetTemp.getCell('A2').value = 'Tramo: ';
 
             worksheetTemp.getCell('A3').value = 'Fecha: ';
-            worksheetTemp.getCell('A4').value = 'Lefitel';
+            worksheetTemp.getCell('A4').value = 'Elaborado por:';
+            worksheetTemp.getCell('F2').value = `${hojita[0].poste?.ciudadA?.name} - ${hojita[0].poste?.ciudadB?.name}`;
             worksheetTemp.getCell('F3').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
-            worksheetTemp.getCell('F2').value = listCiudad?.find(objeto => objeto.id === filtro.TramoInicial)?.name + " - " + listCiudad?.find(objeto => objeto.id === filtro.TramoFinal)?.name;
+            worksheetTemp.getCell('F4').value = "Lefitel";
 
             ['A2', 'A3', 'A4', 'F2', 'F3', 'F4'].map(key => {
                 worksheetTemp.getCell(key).font = {
@@ -329,19 +517,35 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
             worksheetTemp.getRow(6).height = 150;
 
-            for (let row = 5; row <= lastRow; row++) {
-                for (let col = 1; col <= lastCol; col++) {
+
+            //Estilos
+            for (let row = 1; row <= lastRowTemp; row++) {
+                for (let col = 1; col <= lastColTemp; col++) {
                     const cell = worksheetTemp.getCell(row, col);
 
-                    if (row === 6 && cell.value != "Latitud" && cell.value != "Longitud") {
-                        cell.alignment = {
-                            vertical: 'middle',
-                            horizontal: 'center',
-                            wrapText: true,
-                            textRotation: 90
+                    if (row === 6) {
+                        if (cell.value != "Latitud" && cell.value != "Longitud" && cell.value != "Poste") {
+                            cell.alignment = {
+                                vertical: 'middle',
+                                horizontal: 'center',
+                                wrapText: true,
+                                textRotation: 90
+                            };
+                        }
+                        else {
 
+                            cell.alignment = {
+                                vertical: 'middle',
+                                horizontal: 'center',
+                                wrapText: true,
+                            };
+                        }
+                        cell.fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: 'FF92CDDC' }
                         };
-                    } else {
+                    } else if (row === 1 || row >= 5) {
                         cell.alignment = {
                             vertical: 'middle',
                             horizontal: 'center',
@@ -349,13 +553,15 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
                         };
                     }
-                    cell.border = {
-                        top: { style: 'thin' },
-                        left: { style: 'thin' },
-                        bottom: { style: 'thin' },
-                        right: { style: 'thin' }
-                    };
-                    if (cell.value === "Latitud" || cell.value === "Longitud") {
+                    if (row >= 5) {
+                        cell.border = {
+                            top: { style: 'thin' },
+                            left: { style: 'thin' },
+                            bottom: { style: 'thin' },
+                            right: { style: 'thin' }
+                        };
+                    }
+                    if (cell.value === "Latitud" || cell.value === "Longitud" || cell.value === "Poste") {
                         worksheetTemp.getColumn(col).width = 15;
                     }
 
@@ -412,126 +618,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
 
 
 
-        for (let i = 7; i <= lastRow; i++) {
-            const fila = worksheet.getRow(i);
-            fila.height = 15;
-        }
 
-
-        worksheet.mergeCells(1, 1, 1, lastCol);
-        worksheet.mergeCells(2, 1, 2, 5);
-        worksheet.mergeCells(2, 6, 2, lastCol);
-        worksheet.mergeCells(3, 1, 3, 5);
-        worksheet.mergeCells(3, 6, 3, lastCol);
-        worksheet.mergeCells(4, 1, 4, lastCol);
-
-        worksheet.getCell('A1').value = 'PLANILLA DE EVENTOS NACIONAL';
-        worksheet.getCell('A2').value = 'Tramo: ';
-
-        worksheet.getCell('A3').value = 'Fecha: ';
-        worksheet.getCell('A4').value = 'Lefitel';
-        worksheet.getCell('F3').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
-        worksheet.getCell('F2').value = listCiudad?.find(objeto => objeto.id === filtro.TramoInicial)?.name + " - " + listCiudad?.find(objeto => objeto.id === filtro.TramoFinal)?.name;
-
-        ['A2', 'A3', 'A4', 'F2', 'F3', 'F4'].map(key => {
-            worksheet.getCell(key).font = {
-                bold: true,
-                size: 15,
-            };
-        });
-
-
-        worksheet.getCell('A1').font = {
-            bold: true,
-            size: 20,
-        };
-
-
-        worksheet.columns.forEach((column) => {
-            column.width = 3 // Ajusta el ancho mínimo de la columna
-        });
-
-        worksheet.getRow(6).height = 150;
-
-        for (let row = 5; row <= lastRow; row++) {
-            for (let col = 1; col <= lastCol; col++) {
-                const cell = worksheet.getCell(row, col);
-
-                if (row === 6 && cell.value != "Latitud" && cell.value != "Longitud") {
-                    cell.alignment = {
-                        vertical: 'middle',
-                        horizontal: 'center',
-                        wrapText: true,
-                        textRotation: 90
-
-                    };
-                } else {
-                    cell.alignment = {
-                        vertical: 'middle',
-                        horizontal: 'center',
-                        wrapText: true,
-
-                    };
-                }
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-                if (cell.value === "Latitud" || cell.value === "Longitud") {
-                    worksheet.getColumn(col).width = 15;
-                }
-
-
-                switch (cell.value) {
-                    case 'Material':
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FFE06666' } // Rojo
-                        };
-                        break;
-                    case 'Propietario':
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FF6FA8DC' } // Rojo
-                        }; break;
-                    case 'Adss':
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FFe2ac3f' } // Rojo
-                        }; break;
-                    case 'Coordenadas':
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FFf8ebbe' } // Rojo
-                        }; break;
-                    case 'Observaciones':
-                        cell.fill = {
-                            type: 'pattern',
-                            pattern: 'solid',
-                            fgColor: { argb: 'FF7ba58d' } // Rojo
-                        }; break;
-                    default:
-                }
-                if (cell.value === true) {
-                    cell.value = "1";
-                }
-            }
-        }
-
-
-
-        worksheet.getRow(5).eachCell(function (cell) {
-            cell.font = { bold: true, size: 13, };
-        });
-        worksheet.getRow(6).eachCell(function (cell) {
-            cell.font = { bold: true };
-        });
 
 
         //worksheet.addRow(['Lefitel']);
