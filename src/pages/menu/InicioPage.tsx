@@ -196,7 +196,7 @@ const InicioPage = () => {
                 listEventos?.map((item, i) => {
                   if (!item.state) {
                     return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                      <Popup>Poste #{item.poste?.id}</Popup>
+                      <Popup>Poste {item.poste?.name}</Popup>
                     </Marker>
                   }
                   else { return }
@@ -237,7 +237,7 @@ const InicioPage = () => {
                 listPostes?.map((item, i) => {
 
                   return <Marker key={i} position={[item?.lat, item?.lng]}>
-                    <Popup>Poste #{item.id}</Popup>
+                    <Popup>Poste {item.name}</Popup>
                   </Marker>
                 }
                 )

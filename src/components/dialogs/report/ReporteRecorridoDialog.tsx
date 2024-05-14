@@ -1,47 +1,14 @@
 import { DocumentScanner } from '@mui/icons-material'
-import { AppBar, Button, Dialog, DialogContent, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Button, Card, Dialog, DialogContent, Grid, IconButton, Toolbar, Typography } from '@mui/material'
 import React, { useContext, useState } from 'react'
-import { CiudadInterface, ReporteInterface } from '../../../interfaces/interfaces';
+import { EventoInterface, PosteInterface, ReporteInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
 import { getReporteGeneral } from '../../../api/reporte.api';
-import { url } from '../../../api/url';
 import { useSnackbar } from 'notistack';
-import { DataGridPremium, GridCloseIcon, GridColDef, GridExceljsProcessInput, GridToolbar } from '@mui/x-data-grid-premium';
-import { getCiudad } from '../../../api/Ciudad.api';
-import axios from 'axios';
-
-
-const columns: GridColDef[] = [
-    {
-        field: 'id', headerName: 'Id',
-        //renderCell: (params) => { return params.row.poste.lat; },
-        valueGetter(_params, row) { return row.id },
-    },
-    {
-        field: 'name', headerName: 'Nombre',
-        //renderCell: (params) => { return params.row.poste.lat; },
-        valueGetter(_params, row) { return row.name },
-    },
-    {
-        field: 'lat', headerName: 'Latitud',
-        //renderCell: (params) => { return params.row.poste.lat; },
-        valueGetter(_params, row) { return row.lat },
-    },
-    {
-        field: 'lng', headerName: 'Longitud',
-        valueGetter(_params, row) { return row.lng },
-    },
-    {
-        field: 'image', headerName: 'Foto',
-        valueGetter(_params, row) {
-            return `${url}${row.image}`
-        },
-        renderCell: (params) => {
-            return <img src={`${url}${params.row.image}`} style={{ height: 100 }} />;
-        }
-    }
-
-];
+import { GridCloseIcon } from '@mui/x-data-grid-premium';
+import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
+import { getPoste } from '../../../api/Poste.api';
+import { url } from '../../../api/url';
 
 
 interface ReporteRecorridoDialogProps {
@@ -52,7 +19,8 @@ interface ReporteRecorridoDialogProps {
 const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro }) => {
 
     const [open, setOpen] = useState(false);
-    const [list, setList] = useState<CiudadInterface[]>([]);
+    const [list, setList] = useState<EventoInterface[]>([]);
+    const [listPoste, setListPoste] = useState<PosteInterface[]>([]);
 
     const { sesion } = useContext(SesionContext);
     const { enqueueSnackbar } = useSnackbar();
@@ -62,20 +30,38 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
     const handleClickOpen = async () => {
         const TempEvento = await getReporteGeneral(filtro, sesion.token)
-        const Temp: CiudadInterface[] = await getCiudad(sesion.token)
+        //const Temp: CiudadInterface[] = await getCiudad(sesion.token)
+        const TempPoste = await getPoste(sesion.token)
 
-        if (TempEvento.length > 0) {
-            const TempList: CiudadInterface[] = []
-            Temp.map(ciudad => {
-                if (ciudad.id === filtro.TramoInicial || ciudad.id === filtro.TramoFinal) {
-                    TempList.push(ciudad)
+        const TempList: EventoInterface[] = []
+        const TempListPoste: PosteInterface[] = []
 
-                }
-                setList(TempList);
+        TempEvento.map(evento => {
+            const tempCiudadA: number | null = evento.poste?.ciudadA?.id ? evento.poste?.ciudadA?.id : null
+            const tempCiudadB: number | null = evento.poste?.ciudadB?.id ? evento.poste?.ciudadB?.id : null
+            if (tempCiudadA === filtro.TramoInicial && tempCiudadB === filtro.TramoFinal || tempCiudadB === filtro.TramoInicial && tempCiudadA === filtro.TramoFinal) {
+                TempList.push(evento)
+            }
+        })
 
-            })
+        TempPoste.map(poste => {
+            const tempCiudadA: number | null = poste.ciudadA?.id ? poste.ciudadA?.id : null
+            const tempCiudadB: number | null = poste.ciudadB?.id ? poste.ciudadB?.id : null
+            if (tempCiudadA === filtro.TramoInicial && tempCiudadB === filtro.TramoFinal || tempCiudadB === filtro.TramoInicial && tempCiudadA === filtro.TramoFinal) {
+                TempListPoste.push(poste)
+            }
+        })
+
+        if (TempList.length > 0) {
+            setList(TempList)
+            setListPoste(TempListPoste)
+
             setOpen(true);
-        } else {
+            console.log("--------------------------------")
+            console.log(TempList)
+            console.log("--------------------------------")
+        }
+        else {
             enqueueSnackbar("No hay datos", {
                 variant: "warning",
             });
@@ -85,122 +71,6 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
     const handleClose = () => {
         setOpen(false);
     };
-
-
-
-
-
-
-
-
-
-
-    const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
-        workbook.creator = 'Lefitel';
-        workbook.created = new Date();
-        worksheet.properties.defaultRowHeight = 30;
-        worksheet.getCell("A2").value = ""
-
-
-        worksheet.addRow([]);
-    };
-    const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
-        worksheet.addRow({});
-        worksheet.name = 'Reporte';
-
-        let lastRow = 0;
-        let lastCol = 0;
-
-        worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-            lastRow = Math.max(lastRow, rowNumber);
-            row.eachCell({ includeEmpty: true }, function (_cell, colNumber) {
-                lastCol = Math.max(lastCol, colNumber);
-            });
-        });
-
-        for (let i = 5; i <= lastRow; i++) {
-            const fila = worksheet.getRow(i);
-            fila.height = 50;
-            const celda = worksheet.getCell(`E${i}`)
-            if (celda.value != "" && celda.value != undefined) {
-                const imageBuffer = await axios.get(celda.value.toString(), { responseType: 'arraybuffer' });
-                const imageId = workbook.addImage({
-                    buffer: imageBuffer.data,
-                    extension: 'jpeg',
-                });
-                celda.value = ""
-                worksheet.addImage(imageId, `E${i}:E${i}`);
-
-            }
-        }
-
-        worksheet.mergeCells(1, 1, 1, 5);
-        worksheet.mergeCells(2, 1, 2, 5);
-        worksheet.mergeCells(3, 1, 3, 5);
-
-        worksheet.getCell('A1').value = 'REPORTE DE RECORRIDO';
-        worksheet.getCell('A3').value = 'Lefitel';
-        worksheet.getCell('A2').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
-
-        ['A2', 'A3'].map(key => {
-            worksheet.getCell(key).font = {
-                bold: true,
-                size: 15,
-            };
-        });
-
-
-        worksheet.getCell('A1').font = {
-            bold: true,
-            size: 20,
-        };
-
-
-
-
-
-
-
-        worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
-            lastRow = Math.max(lastRow, rowNumber);
-            row.eachCell({ includeEmpty: true }, function (cell, colNumber) {
-                lastCol = Math.max(lastCol, colNumber);
-                cell.alignment = {
-                    vertical: 'middle',
-                    horizontal: 'center',
-                    wrapText: true,
-                };
-                cell.border = {
-                    top: { style: 'thin' },
-                    left: { style: 'thin' },
-                    bottom: { style: 'thin' },
-                    right: { style: 'thin' }
-                };
-                if (cell.value === "Latitud" || cell.value === "Longitud") {
-                    worksheet.getColumn(colNumber).width = 10;
-                }
-
-                if (cell.value === true) {
-                    cell.value = "1";
-                }
-            });
-        });
-
-        worksheet.getRow(4).eachCell(function (cell) {
-            cell.font = {
-                bold: true, size: 13, color: { argb: 'ffffff' }
-            };
-            cell.fill = {
-                type: 'pattern',
-                pattern: 'solid',
-                fgColor: { argb: 'FF6FA8DC' }
-            };
-        });
-
-        //worksheet.addRow(['Lefitel']);
-    };
-
-    const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte de recorrido del " + new Date().toLocaleDateString() };
 
 
     return (
@@ -213,6 +83,7 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
                 fullWidth
                 open={open}
                 onClose={handleClose}
+
             >
                 <AppBar sx={{ position: 'relative' }}>
                     <Toolbar>
@@ -230,21 +101,172 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
                     </Toolbar>
                 </AppBar>
-                <DialogContent>
+                <DialogContent sx={{ backgroundColor: "#cccccc53" }}>
+                    {list.length > 0 ?
+                        <Grid container>
+                            <Grid item md={12}>
+                                <Typography
+                                    sx={{ fontSize: 30, textAlign: 'center' }}
+                                    fontWeight="bold"
+                                    color="text.secondary"
+                                >
+                                    Reporte {listPoste[0].ciudadA?.name} - {listPoste[0].ciudadB?.name}
+                                </Typography>
+                            </Grid>
+                            <Grid item md={12}>
+                                <Typography
+                                    sx={{ fontSize: 20, textAlign: 'center' }}
+                                    color="text.secondary"
+                                >
+                                    Fecha del {filtro.fechaInicial?.toLocaleDateString()} al {filtro.fechaFinal?.toLocaleDateString()}
+                                </Typography>
+                            </Grid>
+                            <Grid item container sm={12} md={4}>
+                                <Grid sm={6} md={12}>
+                                    <Card>
+                                        <Grid>
+                                            <Grid display={"flex"} justifyContent={'center'} >
+                                                <img src={`${url}${listPoste[0].ciudadA?.image}`} style={{ height: 200 }} />
+
+                                            </Grid>
+                                            <Grid display={"flex"} justifyContent={"space-between"} >
+                                                <Grid alignContent={'center'}>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                        fontWeight="bold"
+
+                                                    >
+                                                        L {listPoste[0].ciudadA?.name}
+                                                    </Typography>
+                                                </Grid>
+                                                <Grid>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                    >
+                                                        Lat: {listPoste[0].ciudadA?.lat}
+                                                    </Typography>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                    >
+                                                        Lng: {listPoste[0].ciudadA?.lng}
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+
+                                        </Grid>
+                                    </Card>
+                                </Grid>
+                                <Grid sm={6} md={12}>
+                                    <Card>
+                                        <Grid>
+                                            <Grid display={"flex"} justifyContent={'center'} >
+                                                <img src={`${url}${listPoste[0].ciudadB?.image}`} style={{ height: 200 }} />
+
+                                            </Grid>
+                                            <Grid display={"flex"} justifyContent={"space-between"} >
+                                                <Grid alignContent={'center'}>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                        fontWeight="bold"
+
+                                                    >
+                                                        L {listPoste[0].ciudadB?.name}
+                                                    </Typography>
+                                                </Grid>
+                                                <Grid>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                    >
+                                                        Lat: {listPoste[0].ciudadB?.lat}
+                                                    </Typography>
+                                                    <Typography
+                                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                                        color="text.secondary"
+                                                    >
+                                                        Lng: {listPoste[0].ciudadB?.lng}
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+
+                                        </Grid>
+                                    </Card>
+                                </Grid>
+
+                            </Grid>
+                            <Grid item sm={12} md={4}>
+                                <Card>
 
 
-                    <DataGridPremium
-                        //className="datagrid-content"
-                        rows={list ? list : []}
-                        columns={columns}
-                        slots={{ toolbar: GridToolbar }}
-                        hideFooterPagination
-                        rowHeight={100}
-                        disableRowSelectionOnClick
-                        hideFooter
-                        slotProps={{ toolbar: { excelOptions } }}
+                                    <Typography
+                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                        color="text.secondary"
+                                    >
+                                        Eventos del tramo
+                                    </Typography>
+                                    {/* @ts-expect-error No se sabe el tipo de event */}
+                                    <MapContainer center={[listPoste[0].ciudadA?.lat, listPoste[0].ciudadA?.lng]}
+                                        zoom={8}
+                                        style={{ height: "564px" }}
+                                        scrollWheelZoom={false}
 
-                    />
+                                    >
+                                        <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
+                                        {
+                                            list?.map((item, i) => {
+                                                return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
+                                                    <Popup>Poste {item.poste?.name}</Popup>
+                                                </Marker>
+                                            }
+                                            )
+                                        }
+                                    </MapContainer>
+                                </Card>
+                            </Grid>
+
+                            <Grid item sm={12} md={4}>
+                                <Card>
+                                    <Typography
+                                        sx={{ fontSize: 16, textAlign: 'center' }}
+                                        color="text.secondary"
+                                    >
+                                        Postes del tramo
+                                    </Typography>
+                                    {/* @ts-expect-error No se sabe el tipo de event */}
+                                    <MapContainer center={[listPoste[0].ciudadA?.lat, listPoste[0].ciudadA?.lng]}
+                                        zoom={8}
+                                        style={{ height: "564px" }}
+                                        scrollWheelZoom={false}
+
+                                    >
+                                        <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
+
+                                        {
+                                            listPoste?.map((item, i) => {
+                                                return <Marker key={i} position={[item.lat, item.lng]} >
+                                                    <Popup>Poste {item.name}</Popup>
+                                                </Marker>
+                                            }
+                                            )
+                                        }
+                                        <Marker position={[listPoste[0].ciudadA?.lat, listPoste[0].ciudadA?.lng]} >
+                                            <Popup> {listPoste[0].ciudadA?.name}</Popup>
+                                        </Marker>
+                                        <Marker position={[listPoste[0].ciudadB?.lat, listPoste[0].ciudadB?.lng]} >
+                                            <Popup> {listPoste[0].ciudadB?.name}</Popup>
+                                        </Marker>
+                                    </MapContainer>
+                                </Card>
+                            </Grid>
+                        </Grid>
+                        : null}
+
+
+
                 </DialogContent>
             </Dialog>
         </React.Fragment>

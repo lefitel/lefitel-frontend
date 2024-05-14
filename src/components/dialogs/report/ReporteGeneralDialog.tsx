@@ -91,11 +91,22 @@ const columns: GridColDef[] = [
     },
 
     {
-        field: 'dateSol', headerName: 'Fecha y Hora',
+        field: 'fechaSol', headerName: 'Fecha', type: 'date',
         valueGetter(_params, row) {
             if (row.solucions.length > 0) {
                 const date = new Date(row.solucions[0].date);
-                return date.toLocaleDateString();
+                return date;
+            } else { return "" }
+        },
+
+    },
+    {
+        field: 'horaSol', headerName: 'Hora',
+        valueGetter(_params, row) {
+            if (row.solucions.length > 0) {
+
+                const date = new Date(row.solucions[0].date);
+                return date.toTimeString();
             } else { return "" }
         },
 
@@ -127,12 +138,10 @@ const columnGroupingModel: GridColumnGroupingModel = [
     {
         groupId: 'Poste',
         children: [
-
             { field: 'poste' },
             { field: 'lat' },
             { field: 'lng' },
             { field: 'tramo' },
-
         ],
     },
     {
@@ -144,7 +153,6 @@ const columnGroupingModel: GridColumnGroupingModel = [
             { field: 'revicions' },
             { field: 'fecha' },
             { field: 'hora' },
-
         ],
     },
     {
@@ -152,8 +160,8 @@ const columnGroupingModel: GridColumnGroupingModel = [
         children: [
             { field: 'imageSol' },
             { field: 'descriptionSol' },
-
-            { field: 'dateSol' },
+            { field: 'fechaSol' },
+            { field: 'horaSol' },
         ],
     },
 ];
@@ -212,13 +220,14 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                 lastCol = Math.max(lastCol, colNumber);
             });
         });
+        lastRow--
 
         const imageBufferTigo = await axios.get("/public/tigo.png", { responseType: 'arraybuffer' });
         const imageIdTigo = workbook.addImage({
             buffer: imageBufferTigo.data,
             extension: 'png',
         });
-        worksheet.addImage(imageIdTigo, `L1:L2`);
+        worksheet.addImage(imageIdTigo, `M1:M2`);
 
         const imageBufferLefitel = await axios.get("/public/logo.png", { responseType: 'arraybuffer' });
         const imageIdLefitel = workbook.addImage({
@@ -233,6 +242,36 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             const fila = worksheet.getRow(i);
             fila.height = 75;
             const celda = worksheet.getCell(`I${i}`)
+            const celdaSol = worksheet.getCell(`M${i}`)
+            const reviciones = worksheet.getCell(`H${i}`).value?.toString()
+
+            if (parseInt(reviciones ? reviciones : "0") >= 1) {
+
+                for (let j = 1; j <= lastCol; j++) {
+                    worksheet.getCell(i, j).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'F6BF12' }
+                    };
+                }
+            }
+            else if (parseInt(reviciones ? reviciones : "0") > 1 && parseInt(reviciones ? reviciones : "0") < 5) {
+                for (let j = 1; j <= lastCol; j++) {
+                    worksheet.getCell(i, j).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'FF5500' }
+                    };
+                }
+            } else {
+                for (let j = 1; j <= lastCol; j++) {
+                    worksheet.getCell(i, j).fill = {
+                        type: 'pattern',
+                        pattern: 'solid',
+                        fgColor: { argb: 'DD0031' }
+                    };
+                }
+            }
 
             try {
                 if (celda.value != "" && celda.value != undefined) {
@@ -246,13 +285,26 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                     worksheet.addImage(imageId, `I${i}:I${i}`);
                 }
             } catch (e) { console.log(e); }
+            try {
+                if (celdaSol.value != "" && celdaSol.value != undefined) {
+                    const imageBuffer = await axios.get(celdaSol.value.toString(), { responseType: 'arraybuffer' });
+                    const imageId = workbook.addImage({
+                        buffer: imageBuffer.data,
+                        extension: 'jpeg',
+                    });
+                    celdaSol.value = ""
+
+                    worksheet.addImage(imageId, `M${i}:M${i}`);
+                }
+            } catch (e) { console.log(e); }
+
 
 
         }
 
 
-        worksheet.mergeCells(1, 1, 1, 12);
-        worksheet.mergeCells(2, 1, 2, 12);
+        worksheet.mergeCells(1, 1, 1, 13);
+        worksheet.mergeCells(2, 1, 2, 13);
 
         worksheet.getCell('A1').value = 'RESUMEN DE REPORTES LEFITEL S.R.L.';
         worksheet.getCell('A2').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
@@ -343,6 +395,9 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
         });
         worksheet.getRow(4).eachCell(function (cell) {
             cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+
+
+
             cell.fill = {
                 type: 'pattern',
                 pattern: 'solid',
