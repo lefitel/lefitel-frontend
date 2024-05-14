@@ -1,5 +1,5 @@
 import { DocumentScanner } from '@mui/icons-material'
-import { AppBar, Button, Card, Dialog, DialogContent, Grid, IconButton, Toolbar, Typography } from '@mui/material'
+import { AppBar, Box, Button, Card, CircularProgress, Dialog, DialogContent, Grid, IconButton, Toolbar, Typography } from '@mui/material'
 import React, { useContext, useState } from 'react'
 import { EventoInterface, PosteInterface, ReporteInterface } from '../../../interfaces/interfaces';
 import { SesionContext } from '../../../context/SesionProvider';
@@ -24,11 +24,13 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
     const { sesion } = useContext(SesionContext);
     const { enqueueSnackbar } = useSnackbar();
+    const [cargando, setCargando] = useState(false);
 
 
 
 
     const handleClickOpen = async () => {
+        setCargando(true)
         const TempEvento = await getReporteGeneral(filtro, sesion.token)
         //const Temp: CiudadInterface[] = await getCiudad(sesion.token)
         const TempPoste = await getPoste(sesion.token)
@@ -66,6 +68,8 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
                 variant: "warning",
             });
         }
+        await setCargando(false)
+
     };
 
     const handleClose = () => {
@@ -269,6 +273,11 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
 
                 </DialogContent>
             </Dialog>
+            {cargando && (
+                <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+                    <CircularProgress sx={{ color: "white" }} />
+                </Box>
+            )}
         </React.Fragment>
     )
 }
