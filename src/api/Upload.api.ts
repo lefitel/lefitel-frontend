@@ -14,6 +14,6 @@ export const uploadImage = (data: File, token: string): Promise<string> => {
     })
     .catch((e) => {
       console.log(JSON.stringify(e.response.data.message));
-      return "400";
+      return "500";
     });
 };

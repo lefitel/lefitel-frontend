@@ -16,6 +16,7 @@ import { posteExample } from "../../data/example";
 import EditPosteDialog from "../../components/dialogs/edits/EditPosteDialog";
 import { SesionContext } from "../../context/SesionProvider";
 import { DataGridPremium, GridColDef, GridExceljsProcessInput, GridRowParams, GridToolbar } from "@mui/x-data-grid-premium";
+import axios from "axios";
 
 
 const columns: GridColDef[] = [
@@ -47,14 +48,14 @@ const columns: GridColDef[] = [
     }
   },
   {
-    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    field: 'createdAt', headerName: 'Creación', type: 'date',
     valueGetter: (value) => {
       const date = new Date(value);
       return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    field: 'updatedAt', headerName: 'Edición', type: 'date',
     valueGetter: (value) => {
       const date = new Date(value);
       return date;
@@ -91,17 +92,16 @@ const PostePage = () => {
     workbook.creator = 'Lefitel';
     workbook.created = new Date();
     worksheet.properties.defaultRowHeight = 30;
-    worksheet.getCell("A2").value = ""
-
-
+    worksheet.getCell("A1").value = ""
     worksheet.addRow([]);
   };
-  const exceljsPostProcess = ({ worksheet }: GridExceljsProcessInput) => {
+  const exceljsPostProcess = async ({ workbook, worksheet }: GridExceljsProcessInput) => {
     worksheet.addRow({});
     worksheet.name = 'Reporte';
 
     let lastRow = 0;
     let lastCol = 0;
+
     worksheet.eachRow({ includeEmpty: true }, function (row, rowNumber) {
       lastRow = Math.max(lastRow, rowNumber);
       row.eachCell({ includeEmpty: true }, function (_cell, colNumber) {
@@ -109,31 +109,41 @@ const PostePage = () => {
       });
     });
 
-    for (let i = 6; i <= lastRow; i++) {
+    for (let i = 4; i <= lastRow; i++) {
       const fila = worksheet.getRow(i);
       fila.height = 15;
     }
 
-    worksheet.mergeCells(1, 1, 1, 10);
-    worksheet.mergeCells(2, 1, 2, 10);
-    worksheet.mergeCells(3, 1, 3, 10);
+    const imageBufferTigo = await axios.get("/public/tigo.png", { responseType: 'arraybuffer' });
+    const imageIdTigo = workbook.addImage({
+      buffer: imageBufferTigo.data,
+      extension: 'png',
+    });
+    worksheet.addImage(imageIdTigo, `K1:K2`);
+
+    const imageBufferLefitel = await axios.get("/public/logo.png", { responseType: 'arraybuffer' });
+    const imageIdLefitel = workbook.addImage({
+      buffer: imageBufferLefitel.data,
+      extension: 'png',
+    });
+    worksheet.addImage(imageIdLefitel, `A1:A2`);
+
+    worksheet.mergeCells(1, 1, 1, 11);
+    worksheet.mergeCells(2, 1, 2, 11);
 
     worksheet.getCell('A1').value = 'POSTES';
     worksheet.getCell('A2').value = 'Lefitel';
 
-    ['A2', 'A3'].map(key => {
-      worksheet.getCell(key).font = {
-        bold: true,
-        size: 15,
-      };
-    });
-
-
     worksheet.getCell('A1').font = {
       bold: true,
-      size: 20,
+      size: 36,
     };
-    ['A1', 'A2', 'A3'].map(key => {
+    worksheet.getCell('A2').font = {
+      bold: true,
+      size: 18,
+    };
+
+    ['A1', 'A2'].map(key => {
       worksheet.getCell(key).alignment = {
         vertical: 'middle',
         horizontal: 'center',
@@ -154,8 +164,16 @@ const PostePage = () => {
       });
     });
 
-    worksheet.getRow(4).eachCell(function (cell) {
-      cell.font = { bold: true, size: 13, };
+
+
+    worksheet.getRow(3).eachCell(function (cell) {
+      cell.font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF001F5D' }
+      }
     });
 
 

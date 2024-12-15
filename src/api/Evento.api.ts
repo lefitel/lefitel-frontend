@@ -26,6 +26,8 @@ export const getEvento = (token: string): Promise<EventoInterface[]> => {
           revicions: item.revicions,
           usuario: item.usuario,
 
+          eventoObs: item.eventoObs,
+
           createdAt: item.createdAt,
           updatedAt: item.updatedAt,
         };

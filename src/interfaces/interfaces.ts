@@ -26,6 +26,7 @@ export interface EventoObsInterface {
   id?: number | null;
   id_evento: number;
   id_obs: number;
+  ob: ObsInterface;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }

@@ -77,10 +77,19 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
   };
   /* @ts-expect-error No se sabe el tipo de event */
   const onImageChange = (event) => {
+
+
+
+    const formData = new FormData();
+    formData.append("file", event.target.files[0]);
+    console.log(formData)
+
+
     if (event.target.files && event.target.files[0]) {
       setImage(event.target.files[0]);
     }
   };
+
   function LocationMarker() {
     /* @ts-expect-error No se sabe el tipo de event */
     const map = useMapEvent('click', (event) => {
@@ -102,34 +111,25 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
         if (reponseUpload != "500") {
           const newData: PosteInterface = { ...data, image: reponseUpload, id_usuario: sesion.usuario.id ? sesion.usuario.id : 0 };
           const reponse = await createPoste(newData, sesion.token);
-
           if (Number(reponse.status) === 200) {
             try {
               listAdssSelected.map(async (adss: number) => {
-
                 await createAdssPoste({ id_adss: adss, id_poste: reponse.data.id as number }, sesion.token);
               })
               await enqueueSnackbar("Ingresado con exito", {
                 variant: "success",
               })
-
               await setData(posteExample)
               await setListAdssSelected([])
               await setImage(null)
               await setCargando(false)
               //await handleClose()
-
-
-
             } catch (e) {
               setCargando(false)
               enqueueSnackbar("Error al ingresar los Adss", {
                 variant: "error",
               })
             }
-
-
-
           }
           else {
             setCargando(false)
@@ -139,30 +139,25 @@ const AddPosteDialog: React.FC<AddPosteDialogProps> = ({ functionApp }) => {
           }
         } else {
           setCargando(false)
-
           enqueueSnackbar("No se pudo Ingresar la imagen", {
             variant: "error",
           });
         }
       } else {
         setCargando(false)
-
         enqueueSnackbar("Las ciudades son iguales", {
           variant: "warning",
         });
       }
-
-
     }
     else {
       setCargando(false)
-
       enqueueSnackbar("Rellena todos los espacios", {
         variant: "warning",
       });
     }
-
   }
+
   return (
     <React.Fragment>
       <Button startIcon={<Add />} onClick={handleClickOpen}>

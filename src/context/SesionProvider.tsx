@@ -2,7 +2,7 @@ import React, { createContext } from "react";
 import { SesionInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
 
-
+ 
 
 type contextProps = {
   sesion: SesionInterface
