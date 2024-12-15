@@ -66,7 +66,7 @@ const columns: GridColDef[] = [
   },
   {
     field: 'eventoObs', headerName: 'Observaciones',
-    valueGetter: (value: EventoObsInterface[]) => { return value ? ("(" + value.length + ") " + value.map(item => item.ob.name).join(", ")) : 0 }
+    valueGetter: (value: EventoObsInterface[]) => { return value ? ("(" + value.length + ") " + value.map(item => item.ob?.name).join(", ")) : 0 }
 
     //renderCell: (params) => { return params.row.revicions.length }
     //valueGetter(_params, row) { return row.revicions.length },
