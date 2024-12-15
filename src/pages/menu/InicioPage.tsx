@@ -140,6 +140,7 @@ const InicioPage = () => {
     setEventoGraficData(newEventoGraficData)
     setSoluciónGraficData(newSoluciónGraficData)
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listEventos, listPostes])
 
   const recibirDatos = async () => {

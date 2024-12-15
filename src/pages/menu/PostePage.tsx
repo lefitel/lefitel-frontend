@@ -75,6 +75,7 @@ const PostePage = () => {
 
   useEffect(() => {
     recibirDatos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openEdit])
 
   const recibirDatos = async () => {

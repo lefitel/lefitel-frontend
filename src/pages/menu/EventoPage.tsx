@@ -99,6 +99,7 @@ const EventoPage = () => {
 
   useEffect(() => {
     recibirDatos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
   const recibirDatos = async () => {
     setList(await getEvento(sesion.token))
