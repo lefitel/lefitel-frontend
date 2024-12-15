@@ -51,6 +51,7 @@ const InicioPage = () => {
 
   useEffect(() => {
     recibirDatos()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     let totalEventos = 0;
