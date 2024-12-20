@@ -141,14 +141,14 @@ const EventoPage = () => {
       fila.height = 15;
     }
 
-    const imageBufferTigo = await axios.get("/public/tigo.png", { responseType: 'arraybuffer' });
+    const imageBufferTigo = await axios.get("/tigo.png", { responseType: 'arraybuffer' });
     const imageIdTigo = workbook.addImage({
       buffer: imageBufferTigo.data,
       extension: 'png',
     });
     worksheet.addImage(imageIdTigo, `M1:M2`);
 
-    const imageBufferLefitel = await axios.get("/public/logo.png", { responseType: 'arraybuffer' });
+    const imageBufferLefitel = await axios.get("/logo.png", { responseType: 'arraybuffer' });
     const imageIdLefitel = workbook.addImage({
       buffer: imageBufferLefitel.data,
       extension: 'png',
