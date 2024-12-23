@@ -72,6 +72,7 @@ const PostePage = () => {
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<PosteInterface>(posteExample);
   const { sesion } = useContext(SesionContext);
+  const [cargando, setCargando] = useState(false);
 
   useEffect(() => {
     recibirDatos()
@@ -90,6 +91,7 @@ const PostePage = () => {
   }
 
   const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
+    setCargando(true)
     workbook.creator = 'Lefitel';
     workbook.created = new Date();
     worksheet.properties.defaultRowHeight = 30;
@@ -179,6 +181,7 @@ const PostePage = () => {
 
 
     //worksheet.addRow(['Lefitel']);
+    setCargando(false)
   };
 
   const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte de postes del " + new Date().toLocaleDateString() };
@@ -193,6 +196,11 @@ const PostePage = () => {
         alignItems: "stretch",
       }}
     >
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
         <Card sx={{ flex: 1 }} >
           {list ? <>

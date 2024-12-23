@@ -45,7 +45,7 @@ const columns: GridColDef[] = [
     valueGetter: (value: UsuarioInterface) => { return value ? value.name : ""; }
   },
   {
-    field: 'reviciones', headerName: 'Reviciones', type: 'dateTime',
+    field: 'reviciones', headerName: 'Ultima revición', type: 'dateTime',
     valueGetter(_params, row) {
       let date
       try { date = new Date(row.revicions[row.revicions.length - 1].date); }
@@ -74,14 +74,14 @@ const columns: GridColDef[] = [
 
   },
   {
-    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
+    field: 'createdAt', headerName: 'Creación', type: 'date',
     valueGetter: (value) => {
       const date = new Date(value);
       return date;
     }
   },
   {
-    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
+    field: 'updatedAt', headerName: 'Edición', type: 'date',
     valueGetter: (value) => {
       const date = new Date(value);
       return date
@@ -95,6 +95,7 @@ const EventoPage = () => {
   const [openEdit, setOpenEdit] = useState(false);
   const [data, setData] = useState<EventoInterface>(eventoExample);
   const { sesion } = useContext(SesionContext);
+  const [cargando, setCargando] = useState(false);
 
 
   useEffect(() => {
@@ -116,6 +117,7 @@ const EventoPage = () => {
 
 
   const exceljsPreProcess = ({ workbook, worksheet }: GridExceljsProcessInput) => {
+    setCargando(true)
     workbook.creator = 'Lefitel';
     workbook.created = new Date();
     worksheet.properties.defaultRowHeight = 30;
@@ -207,6 +209,7 @@ const EventoPage = () => {
     });
 
     //worksheet.addRow(['Lefitel']);
+    setCargando(false)
   };
 
   const excelOptions = { exceljsPreProcess, exceljsPostProcess, fileName: "Reporte de eventos del " + new Date().toLocaleDateString() };
@@ -221,6 +224,11 @@ const EventoPage = () => {
         alignItems: "stretch",
       }}
     >
+      {cargando && (
+        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
+          <CircularProgress sx={{ color: "white" }} />
+        </Box>
+      )}
       <Grid display={"flex"} flexDirection={"column"} item xs={12} md={12}>
 
         <Card sx={{ flex: 1 }} style={{}}>
@@ -260,6 +268,7 @@ const EventoPage = () => {
                   onRowClick={EventoSelect}
                   hideFooter
                   slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
+
 
                 />
 
