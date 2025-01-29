@@ -196,6 +196,7 @@ const SeguridadPage = () => {
                   }}
                   onRowClick={userSelect}
                   hideFooter
+                  /* @ts-expect-error No se sabe el tipo de event */
                   slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
 
                 />

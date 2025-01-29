@@ -42,12 +42,25 @@ const StyledDataGrid = styled(DataGridPremium)(() => ({
 }));
 
 const columns: GridColDef[] = [
+    {
+        field: 'num', headerName: '#',
+        renderCell: (params) => {
+            // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
+            const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
+            return <span>{rowIndex + 1}</span>;
+        },
+    },
 
     {
-        field: 'poste', headerName: 'Nmr',
+        field: 'poste', headerName: 'Nmr poste',
         valueGetter(_params, row) {
             return row.poste.name
         },
+    },
+    {
+        field: 'propietario', headerName: 'Propietario',
+        valueGetter(_params, row) { return row.poste.propietario.name; }
+
     },
     {
         field: 'lat', headerName: 'Latitud',
@@ -139,6 +152,7 @@ const columnGroupingModel: GridColumnGroupingModel = [
         groupId: 'Poste',
         children: [
             { field: 'poste' },
+            { field: 'propietario' },
             { field: 'lat' },
             { field: 'lng' },
             { field: 'tramo' },
@@ -227,7 +241,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             buffer: imageBufferTigo.data,
             extension: 'png',
         });
-        worksheet.addImage(imageIdTigo, `M1:M2`);
+        worksheet.addImage(imageIdTigo, `O1:O2`);
 
         const imageBufferLefitel = await axios.get("/logo.png", { responseType: 'arraybuffer' });
         const imageIdLefitel = workbook.addImage({
@@ -239,11 +253,15 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
 
 
         for (let i = 5; i <= lastRow; i++) {
+            worksheet.getCell(`A${i}`).value = i - 4;
             const fila = worksheet.getRow(i);
             fila.height = 75;
-            const celda = worksheet.getCell(`I${i}`)
-            const celdaSol = worksheet.getCell(`M${i}`)
-            const reviciones = worksheet.getCell(`H${i}`).value?.toString()
+            const celda = worksheet.getCell(`K${i}`)
+            const celdaSol = worksheet.getCell(`O${i}`)
+            const reviciones = worksheet.getCell(`J${i}`).value?.toString()
+
+
+
 
             if (parseInt(reviciones ? reviciones : "0") >= 1) {
 
@@ -282,7 +300,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                     });
                     celda.value = ""
 
-                    worksheet.addImage(imageId, `I${i}:I${i}`);
+                    worksheet.addImage(imageId, `K${i}:K${i}`);
                 }
             } catch (e) { console.log(e); }
             try {
@@ -294,7 +312,15 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                     });
                     celdaSol.value = ""
 
-                    worksheet.addImage(imageId, `M${i}:M${i}`);
+                    worksheet.addImage(imageId, `O${i}:O${i}`);
+                    for (let j = 1; j <= lastCol; j++) {
+                        worksheet.getCell(i, j).fill = {
+                            type: 'pattern',
+                            pattern: 'solid',
+                            fgColor: { argb: '91C8A1' }
+                        };
+                    }
+
                 }
             } catch (e) { console.log(e); }
 
@@ -303,8 +329,8 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
         }
 
 
-        worksheet.mergeCells(1, 1, 1, 13);
-        worksheet.mergeCells(2, 1, 2, 13);
+        worksheet.mergeCells(1, 1, 1, 14);
+        worksheet.mergeCells(2, 1, 2, 14);
 
         worksheet.getCell('A1').value = 'RESUMEN DE REPORTES LEFITEL S.R.L.';
         worksheet.getCell('A2').value = filtro.fechaInicial?.toLocaleDateString() + ' - ' + filtro.fechaFinal?.toLocaleDateString();
@@ -334,7 +360,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
             for (let col = 1; col <= lastCol; col++) {
                 const cell = worksheet.getCell(row, col);
                 // Aplica un estilo de fondo de color a cada celda
-                if ((col === 2 || col === 3) && row > 4) {
+                if ((col === 4 || col === 5) && row > 4) {
                     cell.alignment = {
                         vertical: 'middle',
                         horizontal: 'center',
@@ -453,6 +479,7 @@ const ReporteGeneralDialog: React.FC<ReporteGeneralDialogProps> = ({ filtro }) =
                         disableRowSelectionOnClick
                         hideFooter
                         columnGroupingModel={columnGroupingModel}
+                        /* @ts-expect-error No se sabe el tipo de event */
                         slotProps={{ toolbar: { excelOptions } }}
                         getRowClassName={(params) => {
                             if (params.row.revicions.length >= 5) {

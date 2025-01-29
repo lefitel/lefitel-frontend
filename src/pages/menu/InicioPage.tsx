@@ -1,4 +1,5 @@
 import {
+  Button,
   Card,
   CardActions,
   CardContent,
@@ -8,15 +9,19 @@ import {
 } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
 import {
+  eventoExample,
   latExample,
   lngExample,
+  posteExample,
 } from "../../data/example";
 import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 import { EventoInterface, PosteInterface } from "../../interfaces/interfaces";
 import { getEvento } from "../../api/Evento.api";
 import { SesionContext } from "../../context/SesionProvider";
-import { getPoste } from "../../api/Poste.api";
+import { getPoste, searchPoste } from "../../api/Poste.api";
 import { LineChart } from "@mui/x-charts";
+import EditPosteDialog from "../../components/dialogs/edits/EditPosteDialog";
+import EditEventoDialog from "../../components/dialogs/edits/EditEventoDialog";
 
 
 interface EventoGraficDataPoint {
@@ -46,6 +51,12 @@ const InicioPage = () => {
 
   const [eventoGraficData, setEventoGraficData] = useState<EventoGraficDataPoint[]>();
   const [soluciónGraficData, setSoluciónGraficData] = useState<EventoGraficDataPoint[]>();
+
+  const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
+  const [openEditPoste, setOpenEditPoste] = useState(false);
+
+  const [dataEvento, setDataEvento] = useState<EventoInterface>(eventoExample);
+  const [openEditEvento, setOpenEditEvento] = useState(false);
 
 
 
@@ -149,9 +160,6 @@ const InicioPage = () => {
     setListPostes(await getPoste(sesion.token))
 
   }
-
-
-
 
   return (
     <Grid container alignItems={"stretch"}  >
@@ -362,7 +370,19 @@ const InicioPage = () => {
                   if (!item.state) {
                     if (eventoDate.getMonth() === now.getMonth() && eventoDate.getFullYear() === now.getFullYear()) {
                       return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                        <Popup>Poste {item.poste?.name}</Popup>
+                        <Popup>
+                          <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+
+                            Poste {item.poste?.name}
+                            <Button onClick={() => {
+                              if (item.id) {
+                                setOpenEditEvento(true);
+                                setDataEvento(item)
+                              }
+                            }}>Editar Evento</Button>
+                          </Grid>
+
+                        </Popup>
                       </Marker>
                     } else { return }
 
@@ -408,7 +428,17 @@ const InicioPage = () => {
                   if (item.state) {
                     if (eventoDate.getMonth() === now.getMonth() && eventoDate.getFullYear() === now.getFullYear()) {
                       return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                        <Popup>Poste {item.poste?.name}</Popup>
+                        <Popup>
+                          <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+                            Poste {item.poste?.name}
+                            <Button onClick={() => {
+                              if (item.id) {
+                                setOpenEditEvento(true);
+                                setDataEvento(item)
+                              }
+                            }}>Editar Evento</Button>
+                          </Grid>
+                        </Popup>
                       </Marker>
                     } else { return }
 
@@ -576,7 +606,19 @@ const InicioPage = () => {
                 listEventos?.map((item, i) => {
                   if (!item.state) {
                     return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                      <Popup>Poste {item.poste?.name}</Popup>
+                      <Popup>
+                        <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+
+                          Poste {item.poste?.name}
+                          <Button onClick={() => {
+                            if (item.id) {
+                              setOpenEditEvento(true);
+                              setDataEvento(item)
+                            }
+                          }}>Editar Evento</Button>
+                        </Grid>
+
+                      </Popup>
                     </Marker>
                   }
                   else { return }
@@ -615,9 +657,20 @@ const InicioPage = () => {
               <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
               {
                 listPostes?.map((item, i) => {
-
                   return <Marker key={i} position={[item?.lat, item?.lng]} >
-                    <Popup>Poste {item.name}</Popup>
+                    <Popup >
+                      <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+                        Poste {item.name}
+                        <Button onClick={async () => {
+                          if (item.id) {
+                            setOpenEditPoste(true);
+                            setDataPoste(await searchPoste(item.id, sesion.token))
+                          }
+
+                        }}>Editar Poste</Button>
+                      </Grid>
+
+                    </Popup>
                   </Marker>
                 }
                 )
@@ -627,6 +680,9 @@ const InicioPage = () => {
 
         </Card>
       </Grid>
+      {dataPoste.id != null ? <EditPosteDialog functionApp={recibirDatos} poste={dataPoste} setPoste={setDataPoste} open={openEditPoste} setOpen={setOpenEditPoste} /> : null}
+      {dataEvento.id != null ? <EditEventoDialog functionApp={recibirDatos} Evento={dataEvento} setEvento={setDataEvento} open={openEditEvento} setOpen={setOpenEditEvento} /> : null}
+
     </Grid>
   );
 };

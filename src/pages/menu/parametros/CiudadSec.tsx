@@ -28,6 +28,14 @@ import { url } from "../../../api/url";
 import { uploadImage } from "../../../api/Upload.api";
 
 const columns: GridColDef[] = [
+  {
+    field: 'num', headerName: '#',
+    renderCell: (params) => {
+      // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
+      const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
+      return <span>{rowIndex + 1}</span>;
+    },
+  },
   { field: 'id', headerName: 'Id' },
   { field: 'name', headerName: 'Nombre' },
   { field: 'lat', headerName: 'Latitud' },

@@ -7,8 +7,12 @@ import { getReporteGeneral } from '../../../api/reporte.api';
 import { useSnackbar } from 'notistack';
 import { GridCloseIcon } from '@mui/x-data-grid-premium';
 import { MapContainer, Marker, Popup, TileLayer } from 'react-leaflet';
-import { getPoste } from '../../../api/Poste.api';
+import { getPoste, searchPoste } from '../../../api/Poste.api';
 import { url } from '../../../api/url';
+import EditEventoDialog from '../edits/EditEventoDialog';
+import EditPosteDialog from '../edits/EditPosteDialog';
+import { eventoExample, posteExample } from '../../../data/example';
+import { searchEvento } from '../../../api/Evento.api';
 
 
 interface ReporteRecorridoDialogProps {
@@ -26,7 +30,16 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
     const { enqueueSnackbar } = useSnackbar();
     const [cargando, setCargando] = useState(false);
 
+    const [dataEvento, setDataEvento] = useState<EventoInterface>(eventoExample);
+    const [openEditEvento, setOpenEditEvento] = useState(false);
 
+    const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
+    const [openEditPoste, setOpenEditPoste] = useState(false);
+
+
+    const recibirDatos = async () => {
+
+    }
 
 
     const handleClickOpen = async () => {
@@ -222,9 +235,21 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
                                         <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
                                         {
                                             list?.map((item, i) => {
-                                                return <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
-                                                    <Popup>Poste {item.poste?.name}</Popup>
-                                                </Marker>
+                                                return <div onClick={() => { console.log("ola") }}> <Marker key={i} position={[item.poste?.lat, item.poste?.lng]}>
+                                                    <Popup>
+
+                                                        <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+                                                            {item.poste?.name}
+                                                            <Button onClick={async () => {
+                                                                if (item.id) {
+                                                                    setOpenEditEvento(true);
+                                                                    setDataEvento(await searchEvento(item.id, sesion.token))
+                                                                }
+                                                            }}>Editar Evento</Button>
+                                                        </Grid>
+
+                                                    </Popup>
+                                                </Marker></div>
                                             }
                                             )
                                         }
@@ -252,7 +277,19 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
                                         {
                                             listPoste?.map((item, i) => {
                                                 return <Marker key={i} position={[item.lat, item.lng]} >
-                                                    <Popup>Poste {item.name}</Popup>
+                                                    <Popup>
+                                                        <Grid sx={{ display: "flex", justifyContent: "center", alignItems: "center", flexDirection: "column", gap: "8px" }}>
+                                                            Poste {item.name}
+                                                            <Button onClick={async () => {
+                                                                if (item.id) {
+                                                                    setOpenEditPoste(true);
+                                                                    setDataPoste(await searchPoste(item.id, sesion.token))
+                                                                }
+
+                                                            }}>Editar Poste</Button>
+                                                        </Grid>
+
+                                                    </Popup>
                                                 </Marker>
                                             }
                                             )
@@ -266,6 +303,9 @@ const ReporteRecorridoDialog: React.FC<ReporteRecorridoDialogProps> = ({ filtro 
                                     </MapContainer>
                                 </Card>
                             </Grid>
+                            {dataPoste.id != null ? <EditPosteDialog functionApp={recibirDatos} poste={dataPoste} setPoste={setDataPoste} open={openEditPoste} setOpen={setOpenEditPoste} /> : null}
+                            {dataEvento.id != null ? <EditEventoDialog functionApp={recibirDatos} Evento={dataEvento} setEvento={setDataEvento} open={openEditEvento} setOpen={setOpenEditEvento} /> : null}
+
                         </Grid>
                         : null}
 

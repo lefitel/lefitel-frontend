@@ -23,6 +23,14 @@ import { SesionContext } from "../../../context/SesionProvider";
 import { DataGridPremium, GridColDef } from "@mui/x-data-grid-premium";
 
 const columns: GridColDef[] = [
+  {
+    field: 'num', headerName: '#',
+    renderCell: (params) => {
+      // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
+      const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
+      return <span>{rowIndex + 1}</span>;
+    },
+  },
   { field: 'id', headerName: 'Id' },
   { field: 'name', headerName: 'Nombre' },
   { field: 'description', headerName: 'Descripción' },

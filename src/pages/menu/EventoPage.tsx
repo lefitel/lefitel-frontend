@@ -20,10 +20,22 @@ import axios from "axios";
 
 
 const columns: GridColDef[] = [
-  { field: 'id', headerName: 'Id' },
+  {
+    field: 'num', headerName: '#',
+    renderCell: (params) => {
+      // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
+      const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
+      return <span>{rowIndex + 1}</span>;
+    },
+  },
   {
     field: 'poste', headerName: 'poste',
     valueGetter: (value: PosteInterface) => { return value.name; }
+  },
+  {
+    field: 'propietario', headerName: 'Propietario',
+    valueGetter(_params, row) { return row.poste.propietario.name; }
+
   },
   {
     field: 'lat', headerName: 'Lat',
@@ -138,9 +150,11 @@ const EventoPage = () => {
       });
     });
 
-    for (let i = 4; i <= lastRow; i++) {
+    for (let i = 4; i <= (lastRow - 1); i++) {
       const fila = worksheet.getRow(i);
       fila.height = 15;
+      worksheet.getCell(`A${i}`).value = i - 3;
+
     }
 
     const imageBufferTigo = await axios.get("/tigo.png", { responseType: 'arraybuffer' });
@@ -148,7 +162,7 @@ const EventoPage = () => {
       buffer: imageBufferTigo.data,
       extension: 'png',
     });
-    worksheet.addImage(imageIdTigo, `M1:M2`);
+    worksheet.addImage(imageIdTigo, `N1:N2`);
 
     const imageBufferLefitel = await axios.get("/logo.png", { responseType: 'arraybuffer' });
     const imageIdLefitel = workbook.addImage({
@@ -157,8 +171,8 @@ const EventoPage = () => {
     });
     worksheet.addImage(imageIdLefitel, `A1:A2`);
 
-    worksheet.mergeCells(1, 1, 1, 13);
-    worksheet.mergeCells(2, 1, 2, 13);
+    worksheet.mergeCells(1, 1, 1, 14);
+    worksheet.mergeCells(2, 1, 2, 14);
 
     worksheet.getCell('A1').value = 'EVENTOS';
     worksheet.getCell('A2').value = 'Lefitel';
@@ -267,6 +281,7 @@ const EventoPage = () => {
                   }}
                   onRowClick={EventoSelect}
                   hideFooter
+                  /* @ts-expect-error No se sabe el tipo de event */
                   slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
 
 

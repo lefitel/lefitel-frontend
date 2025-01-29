@@ -15,6 +15,7 @@ import {
   Divider,
   FormControlLabel,
   Grid,
+  IconButton,
   Input,
   TextField,
   Typography,
@@ -33,9 +34,11 @@ import { getObs } from "../../../api/Obs.api";
 import { getTipoObs } from "../../../api/TipoObs.api";
 import { createEventoObs, deleteEventoObs, getEventoObs } from "../../../api/EventoObs.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
-import { createRevicion, editRevicion, getRevicion } from "../../../api/Revicion.api";
+import { createRevicion, deleteRevicion, editRevicion, getRevicion } from "../../../api/Revicion.api";
 import AddSolucionDialog from "../add/AddSolucionDialog";
 import { SesionContext } from "../../../context/SesionProvider";
+import DeleteIcon from '@mui/icons-material/Delete';
+import { MapContainer, Marker, Popup, TileLayer } from "react-leaflet";
 
 
 interface EditEventoDialogProps {
@@ -64,6 +67,11 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
   const [listTipoObs, setListTipoObs] = React.useState<TipoObsInterface[]>([]);
 
   const [openDelete, setOpenDelete] = useState(false);
+  const [openDeleteRevicion, setOpenDeleteRevicion] = useState(false);
+
+  const [idRevicion, setIdRevicion] = useState(0);
+
+
   const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
@@ -100,6 +108,40 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
   const handleCloseDelete = () => {
     setOpenDelete(false);
+  };
+
+
+  const handleClickOpenDeleteRevicion = () => {
+    setOpenDeleteRevicion(true)
+  };
+
+  const handleCloseDeleteRevicion = () => {
+    setOpenDeleteRevicion(false);
+
+  };
+
+
+  const handleDeleteRevicion = async () => {
+    setCargando(true)
+
+    const reponse = await deleteRevicion(idRevicion, sesion.token);
+
+
+    if (Number(reponse) === 200) {
+      enqueueSnackbar("Eliminado con exito", {
+        variant: "success",
+      });
+      recibirDatos()
+      handleCloseDeleteRevicion()
+      //handleClose()
+    }
+    else {
+      setCargando(false)
+      enqueueSnackbar("No se pudo Eliminar", {
+        variant: "error",
+      });
+    }
+
   };
 
   /* @ts-expect-error No se sabe el tipo de event */
@@ -231,7 +273,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={5}>
               <TextField
 
                 fullWidth
@@ -244,7 +286,155 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                 disabled
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={5}>
+              <TextField
+                disabled
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                label="Propietario"
+                value={data.poste?.propietario?.name}
+
+              />
+            </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+            <Grid
+              item
+              sx={{ p: 0 }}
+              xs={12}
+              md={12}
+              paddingBlock={1}
+              paddingInline={0}
+            >
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={12} sx={{ p: 0 }}>
+                  <Typography
+                    display={"flex"}
+                    color="text.secondary"
+                    textAlign={"left"}
+                    paddingInline={1}
+                  >
+                    Ubicación:
+                  </Typography>
+                </Grid>
+                <Grid container sx={{ p: 0 }}>
+                  <Grid item xs={6} >
+                    <TextField
+                      disabled
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Latitud"
+                      value={data.poste?.lat}
+
+                    />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField
+                      disabled
+                      fullWidth
+                      style={{
+                        padding: 0,
+                        margin: 0,
+                      }}
+                      type="number"
+                      label="Longitud"
+                      value={data.poste?.lng}
+
+
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+              <Grid item xs={12}>
+                {/* @ts-expect-error No se sabe el tipo de event */}
+                <MapContainer center={[data.poste?.lat, data.poste?.lng]}
+                  zoom={13}
+                  style={{ height: "100px" }}
+                  scrollWheelZoom={false}
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png" />
+                  <Marker position={[data.poste?.lat, data.poste?.lng]}>
+                    <Popup>You are here</Popup>
+                  </Marker>
+                </MapContainer>
+              </Grid>
+            </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+            <Grid item xs={12} paddingInline={0} paddingBlock={1} sx={{ p: 0 }}>
+              <Typography
+                display={"flex"}
+                color="text.secondary"
+                textAlign={"left"}
+                paddingInline={1}
+                pt={1}
+              >
+                Tramo:
+              </Typography>
+
+              <Grid container sx={{ p: 0 }}>
+                <Grid item xs={6}>
+                  <TextField
+                    disabled
+                    fullWidth
+                    multiline
+                    style={{
+                      padding: 0,
+                      margin: 0,
+                    }}
+                    value={data.poste?.ciudadA?.name}
+                    label="Inicio" />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    disabled
+                    fullWidth
+                    multiline
+                    style={{
+                      padding: 0,
+                      margin: 0,
+                    }}
+                    value={data.poste?.ciudadB?.name}
+                    label="Final" />
+                </Grid>
+              </Grid>
+            </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+            <Grid item xs={12} md={12}>
+              <TextField
+                fullWidth
+                disabled
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                label="Usuario creador del evento"
+                value={data.usuario?.name}
+              />
+            </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+            <Grid item xs={12} md={12}>
               <TextField
                 fullWidth
                 multiline
@@ -260,6 +450,12 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                 }}
               />
             </Grid>
+            <Grid container sx={{ p: 0 }} >
+              <Grid item xs={12}>
+                <Divider />
+              </Grid>
+            </Grid>
+
             <Grid
               item
               sx={{ p: 0 }}
@@ -393,25 +589,26 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
               </Typography>
             </Grid>
             {listDataRevicion.map((revicion, i) => {
-              return <Grid sx={{ p: 0, m: 0 }} key={i} container>< Grid item xs={12} md={6}>
-                <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
-                  <DateTimePicker
-                    sx={{ width: 1 }}
-                    label="Fecha de revición"
-                    format="DD-MM-YYYY"
-                    defaultValue={dayjs(revicion.date)}
-                    onChange={(date) => {
-                      if (date) {
-                        const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
-                          item.id === revicion.id ? { ...item, date: date.toDate() } : item
-                        );
-                        setListDataRevicion(listaActualizada);
-                      }
-                    }}
-                  />
-                </DemoContainer>
-              </Grid>
-                <Grid item xs={12} md={6}>
+              return <Grid sx={{ p: 0, m: 0, alignItems: "center" }} key={i} container>
+                < Grid item xs={12} md={5.5}>
+                  <DemoContainer sx={{ p: 0 }} components={["DatePicker"]}>
+                    <DateTimePicker
+                      sx={{ width: 1 }}
+                      label="Fecha de revición"
+                      format="DD-MM-YYYY"
+                      defaultValue={dayjs(revicion.date)}
+                      onChange={(date) => {
+                        if (date) {
+                          const listaActualizada = listDataRevicion.map((item: RevicionInterface) =>
+                            item.id === revicion.id ? { ...item, date: date.toDate() } : item
+                          );
+                          setListDataRevicion(listaActualizada);
+                        }
+                      }}
+                    />
+                  </DemoContainer>
+                </Grid>
+                <Grid item xs={10} md={5.5}>
                   <TextField
                     fullWidth
                     multiline
@@ -428,7 +625,18 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                       setListDataRevicion(listaActualizada);
                     }}
                   />
-                </Grid></Grid>
+                </Grid>
+                <Grid item xs={2} md={1}>
+                  <IconButton aria-label="delete"
+                    onClick={() => {
+                      setIdRevicion(revicion.id ? revicion.id : 0);
+                      handleClickOpenDeleteRevicion()
+                    }
+                    }>
+                    <DeleteIcon />
+                  </IconButton>
+                </Grid>
+              </Grid>
             })
             }
             <Grid container sx={{ padding: 0 }} >
@@ -436,6 +644,7 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                 <Divider />
               </Grid>
             </Grid>
+
 
 
             {
@@ -526,7 +735,11 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
                     alt={"imagen"}
                     loading="lazy"
                   />
-                </Grid></>
+                </Grid>
+
+
+
+              </>
                 : null
             }
           </Grid>
@@ -573,6 +786,26 @@ const EditEventoDialog: React.FC<EditEventoDialogProps> = ({ Evento, setEvento, 
 
               <Button onClick={handleCloseDelete}>Cancelar</Button>
               <Button onClick={handleDelete}>Eliminar</Button>
+            </DialogActions>
+
+          </Dialog>
+        </> : null}
+        {sesion.usuario.id_rol === 1 || sesion.usuario.id_rol === 2 ? <>
+          <Dialog
+            open={openDeleteRevicion}
+            onClose={handleCloseDeleteRevicion}
+
+          >
+            <DialogTitle>{"Eliminar Revición"}</DialogTitle>
+            <DialogContent>
+              <Grid container width={1} m={0}>
+                Seguro que quiere eliminar esta revición?
+              </Grid>
+            </DialogContent>
+            <DialogActions>
+
+              <Button onClick={handleCloseDeleteRevicion}>Cancelar</Button>
+              <Button onClick={handleDeleteRevicion}>Eliminar</Button>
             </DialogActions>
 
           </Dialog>

@@ -9,7 +9,7 @@ import {
   Grid
 } from "@mui/material";
 import { CiudadInterface, MaterialInterface, PosteInterface, PropietarioInterface, UsuarioInterface } from "../../interfaces/interfaces";
-import { getPoste, searchPoste } from "../../api/Poste.api";
+import { getPoste } from "../../api/Poste.api";
 import AddPosteDialog from "../../components/dialogs/add/AddPosteDialog";
 
 import { posteExample } from "../../data/example";
@@ -20,6 +20,15 @@ import axios from "axios";
 
 
 const columns: GridColDef[] = [
+  {
+    field: 'num', headerName: '#',
+
+    renderCell: (params) => {
+      // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
+      const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
+      return <span>{rowIndex + 1}</span>;
+    },
+  },
   { field: 'id', headerName: 'Id' },
   { field: 'name', headerName: 'Número' },
   { field: 'lat', headerName: 'Lat' },
@@ -31,11 +40,13 @@ const columns: GridColDef[] = [
   },
   {
     field: 'propietario', headerName: 'Propietario',
-    valueGetter: (value: PropietarioInterface) => { return value.name }
+    valueGetter: (value: PropietarioInterface) => { return value.name },
+
   },
   {
     field: 'ciudadA', headerName: 'Tramo de Inicio',
-    valueGetter: (value: CiudadInterface) => { return value.name }
+    valueGetter: (value: CiudadInterface) => { return value.name },
+
   },
   {
     field: 'ciudadB', headerName: 'Tramo de Fin',
@@ -85,7 +96,7 @@ const PostePage = () => {
 
   const posteSelect = async (params: GridRowParams) => {
     setOpenEdit(true);
-    setData(await searchPoste(params.row.id, sesion.token))
+    setData(params.row)
     //setData(params.row)
 
   }
@@ -112,17 +123,21 @@ const PostePage = () => {
       });
     });
 
-    for (let i = 4; i <= lastRow; i++) {
+    for (let i = 4; i <= (lastRow - 1); i++) {
       const fila = worksheet.getRow(i);
       fila.height = 15;
+      worksheet.getCell(`A${i}`).value = i - 3;
+
     }
+
+
 
     const imageBufferTigo = await axios.get("/tigo.png", { responseType: 'arraybuffer' });
     const imageIdTigo = workbook.addImage({
       buffer: imageBufferTigo.data,
       extension: 'png',
     });
-    worksheet.addImage(imageIdTigo, `K1:K2`);
+    worksheet.addImage(imageIdTigo, `L1:L2`);
 
     const imageBufferLefitel = await axios.get("/logo.png", { responseType: 'arraybuffer' });
     const imageIdLefitel = workbook.addImage({
@@ -131,8 +146,8 @@ const PostePage = () => {
     });
     worksheet.addImage(imageIdLefitel, `A1:A2`);
 
-    worksheet.mergeCells(1, 1, 1, 11);
-    worksheet.mergeCells(2, 1, 2, 11);
+    worksheet.mergeCells(1, 1, 1, 12);
+    worksheet.mergeCells(2, 1, 2, 12);
 
     worksheet.getCell('A1').value = 'POSTES';
     worksheet.getCell('A2').value = 'Lefitel';
@@ -178,6 +193,8 @@ const PostePage = () => {
         fgColor: { argb: 'FF001F5D' }
       }
     });
+
+
 
 
     //worksheet.addRow(['Lefitel']);
@@ -235,10 +252,10 @@ const PostePage = () => {
                   disableRowSelectionOnClick
                   slots={{
                     toolbar: GridToolbar,
-
                   }}
                   onRowClick={posteSelect}
                   hideFooter
+                  /* @ts-expect-error No se sabe el tipo de event */
                   slotProps={{ toolbar: { excelOptions, showQuickFilter: true } }}
 
                 />

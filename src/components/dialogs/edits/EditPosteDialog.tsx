@@ -61,6 +61,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
   const { sesion } = useContext(SesionContext);
 
   useEffect(() => {
+    console.log(poste)
     recibirDatos()
   }, [open])
 
@@ -232,7 +233,19 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
 
               />
             </Grid>
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={5}>
+              <TextField
+                fullWidth
+                style={{
+                  padding: 0,
+                  margin: 0,
+                }}
+                disabled
+                label="Usuario Creador"
+                value={data.usuario?.name}
+              />
+            </Grid>
+            <Grid item xs={12} md={5}>
               <TextField
 
                 fullWidth
@@ -267,6 +280,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
               </DemoContainer>
             </Grid>
 
+
             <Grid item xs={12} md={6}>
               <Autocomplete
                 renderOption={(props, option) => {
@@ -287,7 +301,7 @@ const EditPosteDialog: React.FC<EditPosteDialogProps> = ({ poste, setPoste, func
                 renderInput={(params) => <TextField {...params} label="Propietario" />}
               />
             </Grid>
-            <Grid item xs={12} md={6}>
+            <Grid item xs={12} md={12}>
               <Autocomplete
                 renderOption={(props, option) => {
                   return (
