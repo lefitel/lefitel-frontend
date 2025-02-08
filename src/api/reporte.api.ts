@@ -31,8 +31,18 @@ export const getReporteGeneral = (
           updatedAt: item.updatedAt,
         };
       });
-      //console.log(dataList);
-      return dataList;
+      const filteredData = dataList.filter((evento) => {
+        const reviciones = evento.revicions || [];
+        // Busca la fecha más reciente en las revisiones
+        const maxFecha = reviciones.reduce((max, rev) => {
+          const fecha = new Date(rev.date);
+          return fecha > max ? fecha : max;
+        }, new Date(0)); // Fecha inicial muy baja
+
+        // Verifica si la fecha está dentro del rango
+        return maxFecha >= filtro.fechaInicial && maxFecha <= filtro.fechaFinal;
+      });
+      return filteredData;
     });
 };
 
@@ -72,6 +82,20 @@ export const getReporteTramo = (
       });
 
       // console.log(dataList);
-      return dataList;
+      const filteredData = dataList.filter((evento) => {
+        const reviciones = evento.revicions || [];
+        // Busca la fecha más reciente en las revisiones
+        const maxFecha = reviciones.reduce((max, rev) => {
+          const fecha = new Date(rev.date);
+          return fecha > max ? fecha : max;
+        }, new Date(0)); // Fecha inicial muy baja
+
+        // Verifica si la fecha está dentro del rango
+        return maxFecha >= filtro.fechaInicial && maxFecha <= filtro.fechaFinal;
+      });
+      //console.log(dataList);
+      return filteredData;
+
+      //return dataList;
     });
 };

@@ -5,8 +5,8 @@ export interface SesionInterface {
 export interface ReporteInterface {
   TramoInicial: number | null;
   TramoFinal: number | null;
-  fechaInicial?: Date | null;
-  fechaFinal?: Date | null;
+  fechaInicial: Date;
+  fechaFinal: Date;
 }
 export interface AdssInterface {
   id?: number | null;

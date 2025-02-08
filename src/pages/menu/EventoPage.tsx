@@ -59,12 +59,23 @@ const columns: GridColDef[] = [
   {
     field: 'reviciones', headerName: 'Ultima revición', type: 'dateTime',
     valueGetter(_params, row) {
+
+      const reviciones = row.revicions || [];
+      // Busca la fecha más reciente en las revisiones
+      //@ts-expect-error blabla
+      const maxFecha = reviciones.reduce((max, rev) => {
+        const fecha = new Date(rev.date);
+        return fecha > max ? fecha : max;
+      }, new Date(0)); // Fecha inicial muy baja
+
+      return maxFecha;
+      /*
       let date
       try { date = new Date(row.revicions[row.revicions.length - 1].date); }
       catch {
         date = null;
       }
-      return date;
+      return date;*/
     },
   },
   {

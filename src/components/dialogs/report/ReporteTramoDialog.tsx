@@ -175,6 +175,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
     }, [listTipoObs])
 
     const recibirDatos = async () => {
+
         setListAdss(await getAdss(sesion.token))
         //setListCiudad(await getCiudad(sesion.token))
         setListMaterial(await getMaterial(sesion.token))
@@ -189,6 +190,7 @@ const ReporteTramoDialog: React.FC<ReporteTramoDialogProps> = ({ filtro }) => {
         setCargando(true)
         console.log(filtro)
         const Temp = await getReporteTramo(filtro, sesion.token)
+
         if (Temp.length > 0) {
             setList(Temp)
             setOpen(true)
