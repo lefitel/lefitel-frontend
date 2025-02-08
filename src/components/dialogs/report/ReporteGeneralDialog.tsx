@@ -95,8 +95,18 @@ const columns: GridColDef[] = [
     {
         field: 'hora', headerName: 'Hora',
         valueGetter(_params, row) {
-            const date = new Date(row.date);
-            return date.toTimeString();
+            const reviciones = row.revicions || [];
+            // Busca la fecha más reciente en las revisiones
+            //@ts-expect-error blabla
+            const maxFecha = reviciones.reduce((max, rev) => {
+                const fecha = new Date(rev.date);
+                return fecha > max ? fecha : max;
+            }, new Date(0)); // Fecha inicial muy baja
+
+            return maxFecha.toTimeString();
+
+            //const date = new Date(row.date);
+            //return date.toTimeString();
         }
     },
     { field: 'description', headerName: 'Descripción' },
