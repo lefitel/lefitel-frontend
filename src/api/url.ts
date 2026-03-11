@@ -1,8 +1,9 @@
-export const url4 = `http://192.168.0.10:3000/`;
-export const urlApi4 = `http://192.168.0.10:3000/api/`;
+const baseUrl: string = import.meta.env.PROD
+  ? import.meta.env.VITE_PROD_API_URL
+  : import.meta.env.VITE_DEV_API_URL;
 
-export const url = `https://lefitel-backend.onrender.com/`;
-export const urlApi = `https://lefitel-backend.onrender.com/api/`;
+export const url = baseUrl;
+export const urlApi = baseUrl + "api/";
 
 export const urlAdss = "adss/";
 export const urlAdssPoste = "adssposte/";

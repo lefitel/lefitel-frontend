@@ -16,7 +16,7 @@ export const loginUsuario = (
         status: response.status,
         message: null,
         usuario: {
-          token: response.data.message,
+          token: response.data.usuario.token,
           usuario: response.data.usuario,
         },
       };
