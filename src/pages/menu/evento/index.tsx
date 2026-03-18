@@ -10,7 +10,7 @@ import autoTable from "jspdf-autotable";
 import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deleteEvento, desarchivarEvento, getEvento, reabrirEvento } from "../../../api/Evento.api";
+import { deleteEvento, desarchivarEvento, exportEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -208,6 +208,12 @@ const EventoPage = () => {
 
     const [list, setList] = useState<EventoInterface[] | null>(null);
     const [loading, setLoading] = useState(true);
+    const [total, setTotal] = useState(0);
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(10);
+    const [filterColumn, setFilterColumn] = useState("");
+    const [filterValue, setFilterValue] = useState("");
+
     const [archivedList, setArchivedList] = useState<EventoInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
 
@@ -225,17 +231,17 @@ const EventoPage = () => {
     const rol    = sesion.usuario.id_rol;
     const canAdd = can(rol, "eventos", "crear");
 
-    const load = useCallback(() => {
+    const load = useCallback((p = page, ps = pageSize, fc = filterColumn, fv = filterValue) => {
         setLoading(true);
-        getEvento(sesion.token)
-            .then((data) => setList(data ?? []))
+        getEvento(sesion.token, { page: p, limit: ps, filterColumn: fc || undefined, filterValue: fv || undefined })
+            .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar eventos"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, [sesion.token]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getEvento(sesion.token, true)
+        exportEventos(sesion.token, true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar eventos archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
@@ -285,7 +291,7 @@ const EventoPage = () => {
             header: "#",
             enableSorting: false,
             cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">{row.index + 1}</span>
+                <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + row.index + 1}</span>
             ),
         },
         {
@@ -337,6 +343,7 @@ const EventoPage = () => {
         {
             accessorKey: "state",
             header: "Estado",
+            enableColumnFilter: false,
             cell: ({ row }) => row.original.state
                 ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
                 : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>,
@@ -344,6 +351,7 @@ const EventoPage = () => {
         {
             accessorKey: "priority",
             header: "Prior.",
+            enableColumnFilter: false,
             cell: ({ row }) => row.original.priority
                 ? <Badge className="bg-red-500/10 text-red-600 border-transparent shadow-none text-xs">Sí</Badge>
                 : <span className="text-xs text-muted-foreground">No</span>,
@@ -373,6 +381,7 @@ const EventoPage = () => {
         {
             accessorKey: "createdAt",
             header: "Registrado",
+            enableColumnFilter: false,
             cell: ({ row }) => (
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString("es-ES") : "—"}
@@ -382,6 +391,7 @@ const EventoPage = () => {
         {
             accessorKey: "updatedAt",
             header: "Última edición",
+            enableColumnFilter: false,
             cell: ({ row }) => (
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString("es-ES") : "—"}
@@ -461,7 +471,7 @@ const EventoPage = () => {
                 );
             },
         },
-    ], [sesion.usuario.id_rol, navigate]);
+    ], [sesion.usuario.id_rol, navigate, page, pageSize]);
 
     const archivedColumns = useMemo<ColumnDef<EventoInterface>[]>(() => [
         {
@@ -492,6 +502,7 @@ const EventoPage = () => {
         {
             accessorKey: "state",
             header: "Estado",
+            enableColumnFilter: false,
             cell: ({ row }) => row.original.state
                 ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
                 : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>,
@@ -541,9 +552,15 @@ const EventoPage = () => {
                     data={list}
                     loading={loading}
                     columns={columns}
-                    onRetry={load}
+                    onRetry={() => load(page, pageSize, filterColumn, filterValue)}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
+                    initialPageSize={10}
+                    serverSide={{
+                        total,
+                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
+                        onFilterChange: (col, val) => { setFilterColumn(col); setFilterValue(val); setPage(1); load(1, pageSize, col, val); },
+                    }}
                     actions={
                         <div className="flex gap-2">
                             <DropdownMenu>
@@ -556,15 +573,15 @@ const EventoPage = () => {
                                     <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportExcel(list ?? [])}>
+                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportExcel)}>
                                         <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
                                         Excel (.xlsx)
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => exportCsv(list ?? [])}>
+                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportCsv)}>
                                         <FileTextIcon className="h-4 w-4 text-blue-500" />
                                         CSV
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportPdf(list ?? [])}>
+                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportPdf)}>
                                         <FileIcon className="h-4 w-4 text-red-500" />
                                         PDF
                                     </DropdownMenuItem>

@@ -283,6 +283,7 @@ export default function CiudadesPage() {
           loading={loading}
           columns={columns}
           onRetry={load}
+          initialPageSize={10}
           actions={<>
             {can(sesion.usuario.id_rol, "ciudades", "crear") && (
               <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setOpenAdd(true)}>

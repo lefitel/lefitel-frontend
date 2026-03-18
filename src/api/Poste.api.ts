@@ -3,14 +3,39 @@ import { urlPoste, urlApi } from "./url";
 import { PosteInterface } from "../interfaces/interfaces";
 import { posteExample } from "../data/example";
 
-export const getPoste = (token: string, archived = false): Promise<PosteInterface[]> => {
+export interface PostePaginatedResponse {
+  data: PosteInterface[];
+  total: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+}
+
+export interface GetPosteParams {
+  page?: number;
+  limit?: number;
+  filterColumn?: string;
+  filterValue?: string;
+  archived?: boolean;
+}
+
+export const getPoste = (token: string, params: GetPosteParams = {}): Promise<PostePaginatedResponse> => {
+  const { archived, ...rest } = params;
   return axios
     .get(urlApi + urlPoste, {
       headers: { Authorization: `Bearer ${token}` },
-      params: archived ? { archived: true } : {},
+      params: { ...(archived ? { archived: true } : {}), ...rest },
     })
     .then((r) => r.data);
 };
+
+export const exportPostes = (token: string, archived = false): Promise<PosteInterface[]> =>
+  axios
+    .get(urlApi + urlPoste, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { export: true, ...(archived ? { archived: true } : {}) },
+    })
+    .then((r) => r.data);
 
 export const getPosteByCiudad = (ciudadId: number, token: string): Promise<PosteInterface[]> =>
   axios
@@ -25,7 +50,7 @@ export const getPosteByTramo = (
   token: string
 ): Promise<PosteInterface[]> => {
   return axios
-    .get(`${urlApi}${urlPoste}?ciudadA=${ciudadA}&ciudadB=${ciudadB}`, {
+    .get(`${urlApi}${urlPoste}?ciudadA=${ciudadA}&ciudadB=${ciudadB}&export=true`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => response.data as PosteInterface[]);

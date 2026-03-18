@@ -10,7 +10,7 @@ import {
     useReactTable,
     VisibilityState,
 } from "@tanstack/react-table";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
@@ -44,6 +44,12 @@ const ROW_SIZE_CLASS: Record<RowSize, string> = {
     lg: "py-3",
 };
 
+interface ServerSideProps {
+    total: number;
+    onPageChange: (page: number, pageSize: number) => void;
+    onFilterChange: (columnId: string, value: string) => void;
+}
+
 interface Props<T extends IGeneral> {
     data: T[] | null;
     actions: ReactNode;
@@ -57,6 +63,8 @@ interface Props<T extends IGeneral> {
     initialColumnVisibility?: VisibilityState;
     getRowId?: (row: T) => string;
     rowSize?: RowSize;
+    serverSide?: ServerSideProps;
+    initialPageSize?: number;
 }
 
 const DataTable = <T extends IGeneral>({
@@ -72,6 +80,8 @@ const DataTable = <T extends IGeneral>({
     initialColumnVisibility = {},
     getRowId,
     rowSize = "sm",
+    serverSide,
+    initialPageSize,
 }: Props<T>) => {
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
@@ -79,8 +89,33 @@ const DataTable = <T extends IGeneral>({
     const [sorting, setSorting] = useState<SortingState>([]);
     const [pagination, setPagination] = useState({
         pageIndex: 0,
-        pageSize: hasPaginated ? 10 : 1_000_000,
+        pageSize: hasPaginated ? (initialPageSize ?? 25) : 1_000_000,
     });
+
+    const isFirstRender = useRef(true);
+
+    // Server-side: debounce filter changes
+    useEffect(() => {
+        if (!serverSide) return;
+        if (isFirstRender.current) { isFirstRender.current = false; return; }
+        const filter = columnFilters[0];
+        const timer = setTimeout(() => {
+            if (filter) {
+                serverSide.onFilterChange(filter.id, String(filter.value ?? ""));
+            } else {
+                serverSide.onFilterChange("", "");
+            }
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [columnFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Server-side: notify page changes (skip on mount)
+    const isFirstPageRender = useRef(true);
+    useEffect(() => {
+        if (!serverSide) return;
+        if (isFirstPageRender.current) { isFirstPageRender.current = false; return; }
+        serverSide.onPageChange(pagination.pageIndex + 1, pagination.pageSize);
+    }, [pagination]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const table = useReactTable({
         data: data ?? [],
@@ -93,6 +128,11 @@ const DataTable = <T extends IGeneral>({
             columnFilters,
             pagination,
         },
+        ...(serverSide ? {
+            manualPagination: true,
+            manualFiltering: true,
+            rowCount: serverSide.total,
+        } : {}),
         enableRowSelection: true,
         onRowSelectionChange: setRowSelection,
         onSortingChange: setSorting,
@@ -105,8 +145,8 @@ const DataTable = <T extends IGeneral>({
         getSortedRowModel: getSortedRowModel(),
     });
 
-    // Estado: Cargando
-    if (loading) {
+    // Estado: Cargando sin datos previos → skeleton completo
+    if (loading && data === null) {
         return (
             <TableSkeleton colums={5} rows={5} hasOptions={hasOptions} hasPaginated={hasPaginated} />
         );
@@ -161,7 +201,12 @@ const DataTable = <T extends IGeneral>({
                     </div>
                 </div>
             )}
-            <div className="overflow-hidden rounded-lg border">
+            <div className="relative overflow-hidden rounded-lg border">
+                {loading && (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    </div>
+                )}
                 <Table>
                     <TableHeader className="bg-muted">
                         {table.getHeaderGroups().map((headerGroup) => (
@@ -231,8 +276,13 @@ const DataTable = <T extends IGeneral>({
             {!hasPaginated ? null : (
                 <div className="flex items-center justify-between px-4">
                     <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
-                        {table.getFilteredSelectedRowModel().rows.length} de{" "}
-                        {table.getFilteredRowModel().rows.length} fila(s) seleccionadas.
+                        {(() => {
+                            const { pageIndex, pageSize: ps } = table.getState().pagination;
+                            const total = serverSide ? serverSide.total : table.getFilteredRowModel().rows.length;
+                            const from = total === 0 ? 0 : pageIndex * ps + 1;
+                            const to = Math.min((pageIndex + 1) * ps, total);
+                            return `Mostrando ${from}–${to} de ${total}`;
+                        })()}
                     </div>
                     <div className="flex w-full items-center gap-8 lg:w-fit ml-auto">
                         <div className="hidden items-center gap-2 lg:flex">
@@ -249,7 +299,7 @@ const DataTable = <T extends IGeneral>({
                                     <SelectValue placeholder={String(table.getState().pagination.pageSize)} />
                                 </SelectTrigger>
                                 <SelectContent side="top">
-                                    {[5, 10, 20, 30, 40, 50].map((pageSize) => (
+                                    {[10, 25, 50, 100].map((pageSize) => (
                                         <SelectItem key={pageSize} value={`${pageSize}`}>
                                             {pageSize}
                                         </SelectItem>

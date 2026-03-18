@@ -9,7 +9,7 @@ import { createRevicion } from "../../../api/Revicion.api";
 import { createEventoObs } from "../../../api/EventoObs.api";
 import { getObs } from "../../../api/Obs.api";
 import { getTipoObs } from "../../../api/TipoObs.api";
-import { getPoste } from "../../../api/Poste.api";
+import { exportPostes } from "../../../api/Poste.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { ObsInterface, PosteInterface, TipoObsInterface } from "../../../interfaces/interfaces";
 import { DatePicker } from "../../ui/date-picker";
@@ -49,7 +49,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     useEffect(() => {
         if (!open) return;
         setLoadingData(true);
-        Promise.all([getPoste(sesion.token), getObs(sesion.token), getTipoObs(sesion.token)])
+        Promise.all([exportPostes(sesion.token), getObs(sesion.token), getTipoObs(sesion.token)])
             .then(([postes, obs, tipos]) => {
                 setListPoste(postes);
                 setListObs(obs);

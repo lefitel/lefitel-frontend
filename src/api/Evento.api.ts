@@ -3,14 +3,39 @@ import { urlEvento, urlApi, urlPoste } from "./url";
 import { EventoInterface } from "../interfaces/interfaces";
 import { eventoExample } from "../data/example";
 
-export const getEvento = (token: string, archived = false): Promise<EventoInterface[]> => {
+export interface EventoPaginatedResponse {
+  data: EventoInterface[];
+  total: number;
+  page: number;
+  totalPages: number;
+  limit: number;
+}
+
+export interface GetEventoParams {
+  page?: number;
+  limit?: number;
+  filterColumn?: string;
+  filterValue?: string;
+  archived?: boolean;
+}
+
+export const getEvento = (token: string, params: GetEventoParams = {}): Promise<EventoPaginatedResponse> => {
+  const { archived, ...rest } = params;
   return axios
     .get(urlApi + urlEvento, {
       headers: { Authorization: `Bearer ${token}` },
-      params: archived ? { archived: true } : {},
+      params: { ...(archived ? { archived: true } : {}), ...rest },
     })
     .then((r) => r.data);
 };
+
+export const exportEventos = (token: string, archived = false): Promise<EventoInterface[]> =>
+  axios
+    .get(urlApi + urlEvento, {
+      headers: { Authorization: `Bearer ${token}` },
+      params: { export: true, ...(archived ? { archived: true } : {}) },
+    })
+    .then((r) => r.data);
 
 export const getEvento_usuario = (id_usuario: number, token: string): Promise<EventoInterface[]> =>
   axios

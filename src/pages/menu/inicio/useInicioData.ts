@@ -56,12 +56,6 @@ export function useInicioData(): InicioData {
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-refresh cada 5 minutos
-  useEffect(() => {
-    const id = setInterval(load, 5 * 60 * 1000);
-    return () => clearInterval(id);
-  }, [load]);
-
   const bounds = useMemo(() => getPeriodBounds(period), [period]);
 
   const kpis = useMemo((): KpiData | null => {
