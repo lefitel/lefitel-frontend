@@ -7,7 +7,12 @@ import {
   deleteFile,
   deleteOrphanFiles,
   getOrphanFiles,
+  getEntityImageStats,
+  getBrokenImageRefs,
+  clearBrokenImageRefs,
   OrphanFileInfo,
+  EntityImageStats,
+  BrokenRef,
 } from "../../api/Files.api";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
@@ -38,11 +43,15 @@ import {
   HardDriveIcon,
   ZoomInIcon,
   MoreVerticalIcon,
+  LinkIcon,
+  ImageOffIcon,
+  ImageIcon as ImageCheckIcon,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../../components/ui/dropdown-menu";
 import DataTable from "../../components/table/DataTable";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 
 const TYPE_STYLES: Record<string, string> = {
   "Poste": "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -78,6 +87,13 @@ const FilesPage = () => {
   const [fileToDelete, setFileToDelete] = useState<OrphanFileInfo | null>(null);
   const [previewFile, setPreviewFile] = useState<OrphanFileInfo | null>(null);
 
+  const [entityStats, setEntityStats] = useState<EntityImageStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [brokenRefs, setBrokenRefs] = useState<BrokenRef[]>([]);
+  const [brokenLoading, setBrokenLoading] = useState(true);
+  const [clearingBroken, setClearingBroken] = useState(false);
+  const [clearBrokenDialogOpen, setClearBrokenDialogOpen] = useState(false);
+
   const load = () => {
     setLoading(true);
     getOrphanFiles(sesion.token)
@@ -86,8 +102,36 @@ const FilesPage = () => {
       .finally(() => setLoading(false));
   };
 
+  const loadStats = () => {
+    setStatsLoading(true);
+    setBrokenLoading(true);
+    getEntityImageStats(sesion.token)
+      .then(setEntityStats)
+      .catch(() => toast.error("No se pudo cargar estadísticas de entidades"))
+      .finally(() => setStatsLoading(false));
+    getBrokenImageRefs(sesion.token)
+      .then(setBrokenRefs)
+      .catch(() => toast.error("No se pudo cargar referencias rotas"))
+      .finally(() => setBrokenLoading(false));
+  };
+
+  const handleClearBroken = async () => {
+    setClearingBroken(true);
+    try {
+      const { cleared } = await clearBrokenImageRefs(sesion.token);
+      toast.success(`${cleared} referencia${cleared !== 1 ? "s" : ""} limpiada${cleared !== 1 ? "s" : ""}`);
+      setClearBrokenDialogOpen(false);
+      loadStats();
+    } catch {
+      toast.error("No se pudieron limpiar las referencias");
+    } finally {
+      setClearingBroken(false);
+    }
+  };
+
   useEffect(() => {
     load();
+    loadStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -222,100 +266,243 @@ const FilesPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [deletingName, navigate]);
 
+  const brokenColumns = useMemo<ColumnDef<BrokenRef>[]>(() => [
+    {
+      accessorKey: "tipo",
+      header: "Tipo",
+      cell: ({ row }) => (
+        <Badge className={`shadow-none ${TYPE_STYLES[row.original.tipo] ?? "bg-muted text-foreground border-muted"}`}>
+          {row.original.tipo}
+        </Badge>
+      ),
+    },
+    {
+      accessorKey: "name",
+      header: "Entidad",
+      cell: ({ row }) => {
+        const routeFn = TYPE_ROUTES[row.original.tipo];
+        return routeFn ? (
+          <button
+            className="text-sm font-medium text-primary hover:underline text-left"
+            onClick={() => navigate(routeFn(row.original.id))}
+          >
+            {row.original.name}
+          </button>
+        ) : (
+          <span className="text-sm font-medium">{row.original.name}</span>
+        );
+      },
+    },
+    {
+      accessorKey: "image",
+      header: "Ruta en BD",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">{row.original.image}</span>
+      ),
+    },
+  ], [navigate]);
+
+  const totalBroken = brokenRefs.length;
+
   return (
-    <div className="@container/card p-6 md:p-8 w-full space-y-8 animate-in fade-in duration-500">
+    <Tabs defaultValue="archivos" className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
 
-      <div className="flex flex-col gap-2">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Gestor de Archivos</h1>
-        <p className="text-muted-foreground">Administre el almacenamiento en la nube, optimice espacio y depure archivos huérfanos del sistema.</p>
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <Card className="shadow-sm border-muted/60 transition-all hover:shadow-md">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total en Disco</CardTitle>
-            <div className="p-2 bg-primary/10 rounded-full">
-              <HardDriveIcon className="h-4 w-4 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{files.length}</div>
-            <p className="text-xs text-muted-foreground mt-1 font-medium">Ocupando {formatSize(totalSize)} de volumen.</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-amber-500/20 transition-all hover:shadow-md hover:border-amber-500/40 relative overflow-hidden">
-          {orphans.length > 0 && <div className="absolute top-0 right-0 w-2 h-full bg-amber-500/80" />}
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Archivos Huérfanos</CardTitle>
-            <div className={`p-2 rounded-full ${orphans.length > 0 ? "bg-amber-500/10" : "bg-muted"}`}>
-              <AlertTriangleIcon className={`h-4 w-4 ${orphans.length > 0 ? "text-amber-600" : "text-muted-foreground"}`} />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-3xl font-bold ${orphans.length > 0 ? "text-amber-600" : "text-foreground"}`}>{orphans.length}</div>
-            <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(orphanSize)} recuperables</p>
-          </CardContent>
-        </Card>
-
-        <Card className="shadow-sm border-primary/20 transition-all hover:shadow-md hover:border-primary/40 relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-2 h-full bg-primary/80" />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Archivos En Uso</CardTitle>
-            <div className="p-2 bg-primary/10 rounded-full">
-              <CheckCircle2Icon className="h-4 w-4 text-primary" />
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-primary">{files.length - orphans.length}</div>
-            <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(totalSize - orphanSize)} vinculados activamente</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* DataTable */}
-      <DataTable
-        data={files}
-        loading={loading}
-        columns={columns}
-        getRowId={(f) => f.name}
-        onRetry={load}
-        actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={load} disabled={loading} className="gap-2 h-8">
-              <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              <span className="hidden sm:inline">Actualizar</span>
-            </Button>
-            {orphans.length > 0 && can(rol, "archivos", "archivar") && (
-              <Button
-                variant="destructive"
-                disabled={deletingOrphans}
-                onClick={() => setOrphansDialogOpen(true)}
-                className="gap-2 h-8"
-              >
-                {deletingOrphans ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
-                Purgar {orphans.length} huérfano{orphans.length > 1 ? "s" : ""}
-              </Button>
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Gestor de Archivos</h1>
+          <p className="text-sm text-muted-foreground mt-1">Administre el almacenamiento, depure huérfanos y revise la cobertura de imágenes.</p>
+        </div>
+        <TabsList>
+          <TabsTrigger value="archivos">Archivos</TabsTrigger>
+          <TabsTrigger value="cobertura" className="relative">
+            Cobertura
+            {totalBroken > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive text-white text-[10px] font-bold h-4 min-w-4 px-1">
+                {totalBroken}
+              </span>
             )}
+          </TabsTrigger>
+        </TabsList>
+      </div>
+
+      {/* ── Tab Archivos ── */}
+      <TabsContent value="archivos" className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="shadow-sm border-muted/60 transition-all hover:shadow-md">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total en Disco</CardTitle>
+              <div className="p-2 bg-primary/10 rounded-full">
+                <HardDriveIcon className="h-4 w-4 text-primary" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold">{files.length}</div>
+              <p className="text-xs text-muted-foreground mt-1 font-medium">Ocupando {formatSize(totalSize)} de volumen.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-amber-500/20 transition-all hover:shadow-md hover:border-amber-500/40 relative overflow-hidden">
+            {orphans.length > 0 && <div className="absolute top-0 right-0 w-2 h-full bg-amber-500/80" />}
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Archivos Huérfanos</CardTitle>
+              <div className={`p-2 rounded-full ${orphans.length > 0 ? "bg-amber-500/10" : "bg-muted"}`}>
+                <AlertTriangleIcon className={`h-4 w-4 ${orphans.length > 0 ? "text-amber-600" : "text-muted-foreground"}`} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className={`text-3xl font-bold ${orphans.length > 0 ? "text-amber-600" : "text-foreground"}`}>{orphans.length}</div>
+              <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(orphanSize)} recuperables</p>
+            </CardContent>
+          </Card>
+
+          <Card className="shadow-sm border-primary/20 transition-all hover:shadow-md hover:border-primary/40 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-2 h-full bg-primary/80" />
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Archivos En Uso</CardTitle>
+              <div className="p-2 bg-primary/10 rounded-full">
+                <CheckCircle2Icon className="h-4 w-4 text-primary" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-primary">{files.length - orphans.length}</div>
+              <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(totalSize - orphanSize)} vinculados activamente</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <DataTable
+          data={files}
+          loading={loading}
+          columns={columns}
+          getRowId={(f) => f.name}
+          onRetry={load}
+          actions={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={load} disabled={loading} className="gap-2 h-8">
+                <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                <span className="hidden sm:inline">Actualizar</span>
+              </Button>
+              {orphans.length > 0 && can(rol, "archivos", "archivar") && (
+                <Button variant="destructive" disabled={deletingOrphans} onClick={() => setOrphansDialogOpen(true)} className="gap-2 h-8">
+                  {deletingOrphans ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
+                  Purgar {orphans.length} huérfano{orphans.length > 1 ? "s" : ""}
+                </Button>
+              )}
+            </div>
+          }
+        />
+      </TabsContent>
+
+      {/* ── Tab Cobertura ── */}
+      <TabsContent value="cobertura" className="space-y-6">
+
+        {/* Cards por entidad */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-semibold">Cobertura de imágenes</h2>
+              <p className="text-sm text-muted-foreground">Entidades sin imagen asignada o con referencia rota en disco.</p>
+            </div>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={loadStats} disabled={statsLoading || brokenLoading}>
+              <RefreshCwIcon className={`h-4 w-4 ${statsLoading || brokenLoading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
-        }
-      />
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {(["postes", "eventos", "ciudades", "usuarios", "soluciones"] as const).map((key) => {
+              const labels: Record<string, string> = { postes: "Postes", eventos: "Eventos", ciudades: "Ciudades", usuarios: "Usuarios", soluciones: "Soluciones" };
+              const stat = entityStats?.[key];
+              const hasBroken = (stat?.referenciaRota ?? 0) > 0;
+              return (
+                <Card key={key} className={`shadow-sm py-0 ${hasBroken ? "border-destructive/30" : "border-muted/60"}`}>
+                  <CardContent className="p-4 space-y-3">
+                    <p className="text-xs font-medium text-muted-foreground">{labels[key]}</p>
+                    {statsLoading ? (
+                      <div className="space-y-1.5">
+                        <div className="h-7 w-12 bg-muted animate-pulse rounded" />
+                        <div className="h-3 w-20 bg-muted animate-pulse rounded" />
+                        <div className="h-3 w-16 bg-muted animate-pulse rounded" />
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-3xl font-bold">{stat?.total ?? 0}</p>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <ImageCheckIcon className="h-3 w-3 text-green-600/60 shrink-0" />
+                            <span className="text-xs text-muted-foreground">
+                              {(stat?.total ?? 0) - (stat?.sinImagen ?? 0) - (stat?.referenciaRota ?? 0)} con imagen
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <ImageOffIcon className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                            <span className="text-xs text-muted-foreground">{stat?.sinImagen ?? 0} sin imagen</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <LinkIcon className={`h-3 w-3 shrink-0 ${hasBroken ? "text-destructive" : "text-muted-foreground/60"}`} />
+                            <span className={`text-xs ${hasBroken ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                              {stat?.referenciaRota ?? 0} ref. rota{(stat?.referenciaRota ?? 0) !== 1 ? "s" : ""}
+                            </span>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Referencias rotas */}
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-base font-semibold">Referencias rotas</h2>
+            <p className="text-sm text-muted-foreground">
+              Entidades con ruta de imagen en BD pero el archivo no existe en disco.
+            </p>
+          </div>
+          <DataTable
+            data={brokenLoading ? null : brokenRefs}
+            loading={brokenLoading}
+            columns={brokenColumns}
+            getRowId={(r) => `${r.tipo}-${r.id}`}
+            onRetry={loadStats}
+            actions={
+              can(rol, "archivos", "archivar") && totalBroken > 0 ? (
+                <Button variant="destructive" className="gap-2 h-8" disabled={clearingBroken} onClick={() => setClearBrokenDialogOpen(true)}>
+                  {clearingBroken ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
+                  Limpiar {totalBroken}
+                </Button>
+              ) : <></>
+            }
+          />
+        </div>
+      </TabsContent>
 
       {/* Lightbox */}
       {previewFile && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out"
-          onClick={() => setPreviewFile(null)}
-        >
-          <img
-            src={url + previewFile.name}
-            alt={previewFile.name}
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out" onClick={() => setPreviewFile(null)}>
+          <img src={url + previewFile.name} alt={previewFile.name} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
+
+      {/* Dialog: limpiar referencias rotas */}
+      <AlertDialog open={clearBrokenDialogOpen} onOpenChange={setClearBrokenDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Limpiar referencias rotas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se pondrá <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">image = null</code> en {totalBroken} entidad{totalBroken !== 1 ? "es" : ""} cuyo archivo ya no existe en disco. Los avatares mostrarán su inicial o un placeholder.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearingBroken}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-white" disabled={clearingBroken} onClick={handleClearBroken}>
+              {clearingBroken ? "Limpiando..." : "Limpiar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialog: eliminar huérfanos */}
       <AlertDialog open={orphansDialogOpen} onOpenChange={setOrphansDialogOpen}>
@@ -323,8 +510,7 @@ const FilesPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar todos los archivos huérfanos?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminarán {orphans.length} archivos ({formatSize(orphanSize)}) que no están
-              vinculados a ningún registro. Esta acción no se puede deshacer.
+              Se eliminarán {orphans.length} archivos ({formatSize(orphanSize)}) que no están vinculados a ningún registro. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -350,13 +536,11 @@ const FilesPage = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => fileToDelete && handleDeleteFile(fileToDelete.name)}>
-              Eliminar
-            </AlertDialogAction>
+            <AlertDialogAction onClick={() => fileToDelete && handleDeleteFile(fileToDelete.name)}>Eliminar</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </Tabs>
   );
 };
 
