@@ -439,88 +439,88 @@ export default function EventoDetallePage() {
         </Card>
       </div>
 
-      {/* ── Revisiones ── */}
-      <Card className="shadow-sm border-muted/60">
-        <CardHeader className="border-b border-border/40 pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-1.5">
-              <ClockIcon className="h-4 w-4 text-muted-foreground" />
-              Revisiones ({d.revicions.length})
-            </CardTitle>
-            {canAct && isPending && !d.loading && (
-              <Button variant="outline" className="gap-1.5" onClick={() => setOpenRevision(true)}>
-                <PlusIcon className="h-3.5 w-3.5" />
-                Agregar
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="pt-5">
-          {d.loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
-            </div>
-          ) : d.revicions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Sin revisiones registradas</p>
-          ) : (
-            <div className="relative">
-              {/* Timeline line */}
-              <div className="absolute left-3.5 top-3 bottom-3 w-px bg-border" />
-              <div className="space-y-4">
-                {[...d.revicions]
-                  .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-                  .map((rev, i) => (
-                    <div key={rev.id ?? i} className="flex gap-4 relative">
-                      <div className="w-7 h-7 rounded-full bg-muted border border-border flex items-center justify-center shrink-0 z-10">
-                        <ClockIcon className="h-3 w-3 text-muted-foreground" />
-                      </div>
-                      <div className="flex-1 rounded-lg border border-border px-3 py-2.5 space-y-0.5">
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <CalendarIcon className="h-3 w-3" />
-                          {new Date(rev.date).toLocaleDateString("es-ES")}
-                        </div>
-                        <p className="text-sm">{rev.description}</p>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ── Solución ── */}
-      {(d.solucion || d.evento?.state) && (
-        <Card className="shadow-sm border-primary/20">
+      {/* ── Revisiones + Solución ── */}
+      <div className={`grid gap-6 ${(d.solucion || d.evento?.state) ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+        <Card className="shadow-sm border-muted/60">
           <CardHeader className="border-b border-border/40 pb-4">
-            <CardTitle className="text-base flex items-center gap-1.5 text-primary">
-              <WrenchIcon className="h-4 w-4" />
-              Solución
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-1.5">
+                <ClockIcon className="h-4 w-4 text-muted-foreground" />
+                Revisiones ({d.revicions.length})
+              </CardTitle>
+              {canAct && isPending && !d.loading && (
+                <Button variant="outline" className="gap-1.5" onClick={() => setOpenRevision(true)}>
+                  <PlusIcon className="h-3.5 w-3.5" />
+                  Agregar
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent className="pt-5">
             {d.loading ? (
               <div className="space-y-3">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-16 w-full" />
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full" />)}
               </div>
-            ) : d.solucion ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <CalendarIcon className="h-3.5 w-3.5" />
-                  {new Date(d.solucion.date).toLocaleDateString("es-ES")}
-                </div>
-                <p className="text-sm leading-relaxed">{d.solucion.description}</p>
-                {d.solucion.image && (
-                  <ImageViewer src={`${url}${d.solucion.image}`} alt="solución" />
-                )}
-              </div>
+            ) : d.revicions.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Sin revisiones registradas</p>
             ) : (
-              <p className="text-sm text-muted-foreground">Evento marcado como resuelto.</p>
+              <div className="relative">
+                <div className="absolute left-3.5 top-3 bottom-3 w-px bg-border" />
+                <div className="space-y-4">
+                  {[...d.revicions]
+                    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                    .map((rev, i) => (
+                      <div key={rev.id ?? i} className="flex gap-4 relative">
+                        <div className="w-7 h-7 rounded-full bg-muted border border-border flex items-center justify-center shrink-0 z-10">
+                          <ClockIcon className="h-3 w-3 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 rounded-lg border border-border px-3 py-2.5 space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <CalendarIcon className="h-3 w-3" />
+                            {new Date(rev.date).toLocaleDateString("es-ES")}
+                          </div>
+                          <p className="text-sm">{rev.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
-      )}
+
+        {(d.solucion || d.evento?.state) && (
+          <Card className="shadow-sm border-primary/20">
+            <CardHeader className="border-b border-border/40 pb-4">
+              <CardTitle className="text-base flex items-center gap-1.5 text-primary">
+                <WrenchIcon className="h-4 w-4" />
+                Solución
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-5">
+              {d.loading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-16 w-full" />
+                </div>
+              ) : d.solucion ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    {new Date(d.solucion.date).toLocaleDateString("es-ES")}
+                  </div>
+                  <p className="text-sm leading-relaxed">{d.solucion.description}</p>
+                  {d.solucion.image && (
+                    <ImageViewer src={`${url}${d.solucion.image}`} alt="solución" />
+                  )}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Evento marcado como resuelto.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       {/* ── Sheets ── */}
       <PermissionGuard module="eventos" action="editar" open={openEdit} onOpenChange={(v) => { if (!v) setOpenEdit(false); }}>
