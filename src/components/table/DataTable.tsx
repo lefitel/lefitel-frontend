@@ -81,7 +81,7 @@ const DataTable = <T extends IGeneral>({
     getRowId,
     rowSize = "sm",
     serverSide,
-    initialPageSize,
+    initialPageSize = 15,
 }: Props<T>) => {
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
@@ -89,7 +89,7 @@ const DataTable = <T extends IGeneral>({
     const [sorting, setSorting] = useState<SortingState>([]);
     const [pagination, setPagination] = useState({
         pageIndex: 0,
-        pageSize: hasPaginated ? (initialPageSize ?? 25) : 1_000_000,
+        pageSize: hasPaginated ? initialPageSize : 1_000_000,
     });
 
     const isFirstRender = useRef(true);
@@ -299,7 +299,7 @@ const DataTable = <T extends IGeneral>({
                                     <SelectValue placeholder={String(table.getState().pagination.pageSize)} />
                                 </SelectTrigger>
                                 <SelectContent side="top">
-                                    {[10, 25, 50, 100].map((pageSize) => (
+                                    {[15, 25, 50, 100].map((pageSize) => (
                                         <SelectItem key={pageSize} value={`${pageSize}`}>
                                             {pageSize}
                                         </SelectItem>

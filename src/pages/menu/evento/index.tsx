@@ -210,7 +210,7 @@ const EventoPage = () => {
     const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
+    const [pageSize, setPageSize] = useState(15);
     const [filterColumn, setFilterColumn] = useState("");
     const [filterValue, setFilterValue] = useState("");
 
@@ -228,7 +228,7 @@ const EventoPage = () => {
     const [unarchiveTarget, setUnarchiveTarget] = useState<EventoInterface | null>(null);
     const [unarchiving, setUnarchiving] = useState(false);
 
-    const rol    = sesion.usuario.id_rol;
+    const rol = sesion.usuario.id_rol;
     const canAdd = can(rol, "eventos", "crear");
 
     const load = useCallback((p = page, ps = pageSize, fc = filterColumn, fv = filterValue) => {
@@ -419,7 +419,7 @@ const EventoPage = () => {
             cell: ({ row }) => {
                 const e = row.original;
                 const isPending = !e.state;
-                const canAct      = can(sesion.usuario.id_rol, "eventos", "editar");
+                const canAct = can(sesion.usuario.id_rol, "eventos", "editar");
                 const canArchivar = can(sesion.usuario.id_rol, "eventos", "archivar");
                 return (
                     <div className="flex justify-end pr-2">
@@ -555,7 +555,6 @@ const EventoPage = () => {
                     onRetry={() => load(page, pageSize, filterColumn, filterValue)}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
-                    initialPageSize={10}
                     serverSide={{
                         total,
                         onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },

@@ -206,7 +206,7 @@ const PostePage = () => {
     const [loading, setLoading] = useState(true);
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
-    const [pageSize, setPageSize] = useState(10);
+    const [pageSize, setPageSize] = useState(15);
     const [filterColumn, setFilterColumn] = useState("");
     const [filterValue, setFilterValue] = useState("");
 
@@ -501,7 +501,6 @@ const PostePage = () => {
                     onRetry={() => load(page, pageSize, filterColumn, filterValue)}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
-                    initialPageSize={10}
                     serverSide={{
                         total,
                         onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
