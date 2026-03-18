@@ -359,6 +359,18 @@ const EventoPage = () => {
             },
         },
         {
+            id: "usuario",
+            header: "Creador",
+            cell: ({ row }) => {
+                const u = row.original.usuario;
+                return (
+                    <span className="text-sm whitespace-nowrap">
+                        {u ? `${u.name} ${u.lastname}` : "—"}
+                    </span>
+                );
+            },
+        },
+        {
             accessorKey: "createdAt",
             header: "Registrado",
             cell: ({ row }) => (

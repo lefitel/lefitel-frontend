@@ -5,7 +5,7 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "
 
 const chartConfig = {
   pending: { label: "Pendientes", color: "#8FA3D0" },
-  solved:  { label: "Solucionados", color: "var(--primary)" },
+  solved: { label: "Solucionados", color: "var(--primary)" },
 } satisfies ChartConfig;
 
 interface ActivityChartProps {
@@ -40,7 +40,7 @@ export function ActivityChart({ chartData, loading, xAxisLabel }: ActivityChartP
             <Skeleton className="h-64 w-full" />
           </div>
         ) : (
-          <ChartContainer config={chartConfig} className="aspect-auto h-[350px] w-full">
+          <ChartContainer config={chartConfig} className="aspect-auto h-87.5 w-full">
             <RechartsLineChart accessibilityLayer data={chartData} margin={{ left: 12, right: 12, top: 12 }}>
               <CartesianGrid vertical={false} strokeDasharray="3 3" />
               <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} />

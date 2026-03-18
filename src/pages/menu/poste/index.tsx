@@ -11,8 +11,8 @@ import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { deletePoste, desarchivarPoste, getPoste, searchPoste } from "../../../api/Poste.api";
-import { getEvento, getEvento_poste } from "../../../api/Evento.api";
-import { EventoInterface, PosteInterface } from "../../../interfaces/interfaces";
+import { getEvento_poste } from "../../../api/Evento.api";
+import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -221,19 +221,11 @@ const PostePage = () => {
     const canEdit = can(rol, "postes", "editar");
     const isAdmin = can(rol, "postes", "archivar");
 
-    const [eventMap, setEventMap] = useState<Map<number, number>>(new Map());
 
     const load = useCallback(() => {
         setLoading(true);
-        Promise.all([getPoste(sesion.token), getEvento(sesion.token)])
-            .then(([postes, eventos]) => {
-                setList(postes ?? []);
-                const map = new Map<number, number>();
-                for (const e of eventos as EventoInterface[]) {
-                    if (e.id_poste && !e.state) map.set(e.id_poste, (map.get(e.id_poste) ?? 0) + 1);
-                }
-                setEventMap(map);
-            })
+        getPoste(sesion.token)
+            .then((postes) => setList(postes ?? []))
             .catch(() => { toast.error("Error al cargar postes"); setList(null); })
             .finally(() => setLoading(false));
     }, [sesion.token]);
@@ -353,7 +345,7 @@ const PostePage = () => {
             header: "Pendientes",
             enableSorting: false,
             cell: ({ row }) => {
-                const count = eventMap.get(row.original.id as number) ?? 0;
+                const count = Number((row.original as PosteInterface & { pendingEvents?: number }).pendingEvents ?? 0);
                 return count > 0
                     ? <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">{count}</Badge>
                     : <span className="text-xs text-muted-foreground">—</span>;
@@ -429,7 +421,7 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, eventMap]);
+    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit]);
 
     const archivedColumns = useMemo<ColumnDef<PosteInterface>[]>(() => [
         { accessorKey: "name", header: "Nombre" },

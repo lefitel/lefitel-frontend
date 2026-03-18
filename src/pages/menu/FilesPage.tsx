@@ -88,7 +88,7 @@ const FilesPage = () => {
 
   useEffect(() => {
     load();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleDeleteFile = async (name: string) => {
@@ -143,7 +143,7 @@ const FilesPage = () => {
       accessorKey: "name",
       header: "Nombre",
       cell: ({ row }) => (
-        <div className="flex items-center gap-2 font-mono text-sm max-w-[260px] truncate">
+        <div className="flex items-center gap-2 font-mono text-sm max-w-65 truncate">
           <ImageIcon className="h-4 w-4 text-muted-foreground/50 shrink-0" />
           <span className="truncate">{row.original.name}</span>
         </div>
@@ -219,7 +219,7 @@ const FilesPage = () => {
         </div>
       ),
     },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [deletingName, navigate]);
 
   return (
