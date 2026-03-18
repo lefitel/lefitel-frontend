@@ -1,27 +1,14 @@
-import { useState, useEffect } from 'react';
+import { Loader2 } from "lucide-react";
 
 const LoadingPage = () => {
-    const [dots, setDots] = useState('');
-
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setDots((prevDots) => {
-                if (prevDots.length >= 3) {
-                    return '';
-                } else {
-                    return prevDots + '.';
-                }
-            });
-        }, 500); // Cambia el tiempo aquí para ajustar la velocidad de los puntos
-
-        return () => clearInterval(interval);
-    }, []);
-
-    return (
-        <div style={{ textAlign: 'center', marginTop: '20vh', fontSize: '24px' }}>
-            <p>Cargando{dots}</p>
-        </div>
-    );
+  return (
+    <div className="flex h-screen w-full items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-3 text-muted-foreground">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm">Verificando sesión...</p>
+      </div>
+    </div>
+  );
 };
 
 export default LoadingPage;

@@ -14,6 +14,7 @@ export interface AdssInterface {
   description: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 export interface AdssPosteInterface {
   id?: number | null;
@@ -41,9 +42,12 @@ export interface RolInterface {
 
 export interface BitacoraInterface {
   id?: number | null;
-  name: string;
-  description: string;
+  action: string;
+  detail: string;
+  entity: string;
+  entity_id?: number | null;
   id_usuario: number;
+  usuario?: UsuarioInterface | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -53,6 +57,7 @@ export interface MaterialInterface {
   description: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 export interface CiudadInterface {
   id?: number | null;
@@ -62,6 +67,7 @@ export interface CiudadInterface {
   lng: number;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 export interface ObsInterface {
   id?: number | null;
@@ -71,6 +77,7 @@ export interface ObsInterface {
   tipoObs?: TipoObsInterface | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 export interface TipoObsInterface {
   id?: number | null;
@@ -78,6 +85,7 @@ export interface TipoObsInterface {
   description: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 
 export interface PropietarioInterface {
@@ -85,6 +93,7 @@ export interface PropietarioInterface {
   name: string;
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 
 export interface PosteInterface {
@@ -111,6 +120,7 @@ export interface PosteInterface {
 
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 
 export interface EventoInterface {
@@ -130,6 +140,8 @@ export interface EventoInterface {
 
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
+  priority?: boolean;
 }
 
 export interface RevicionInterface {
@@ -156,6 +168,7 @@ export interface UsuarioInterface {
 
   createdAt?: Date | null;
   updatedAt?: Date | null;
+  deletedAt?: Date | null;
 }
 
 export interface SolucionInterface {
@@ -165,7 +178,7 @@ export interface SolucionInterface {
   date: Date;
   id_evento: number;
 
-  evento?: RolInterface | null;
+  evento?: EventoInterface | null;
 
   createdAt?: Date | null;
   updatedAt?: Date | null;

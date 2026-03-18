@@ -3,68 +3,28 @@ import { urlEvento, urlApi, urlPoste } from "./url";
 import { EventoInterface } from "../interfaces/interfaces";
 import { eventoExample } from "../data/example";
 
-export const getEvento = (token: string): Promise<EventoInterface[]> => {
+export const getEvento = (token: string, archived = false): Promise<EventoInterface[]> => {
   return axios
     .get(urlApi + urlEvento, {
       headers: { Authorization: `Bearer ${token}` },
+      params: archived ? { archived: true } : {},
     })
-    .then((response) => {
-      /* @ts-expect-error No se sabe el tipo de event */
-      const dataList: EventoInterface[] = response.data.map((item) => {
-        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-        return {
-          id: item.id,
-          description: item.description,
-          image: item.image,
-          state: item.state,
-          date: item.date,
-
-          id_poste: item.id_poste,
-          id_usuario: item.id_usuario,
-
-          poste: item.poste,
-          revicions: item.revicions,
-          usuario: item.usuario,
-
-          eventoObs: item.eventoObs,
-
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-
-      return dataList;
-    });
+    .then((r) => r.data);
 };
 
-export const getEvento_poste = (
-  id_poste: number,
-  token: string
-): Promise<EventoInterface[]> => {
+export const getEvento_usuario = (id_usuario: number, token: string): Promise<EventoInterface[]> =>
+  axios
+    .get(urlApi + urlEvento + "usuario/" + id_usuario, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((r) => r.data);
+
+export const getEvento_poste = (id_poste: number, token: string): Promise<EventoInterface[]> => {
   return axios
     .get(urlApi + urlEvento + urlPoste + id_poste, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    .then((response) => {
-      /* @ts-expect-error No se sabe el tipo de event */
-      const dataList: EventoInterface[] = response.data.map((item) => {
-        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-        return {
-          id: item.id,
-          description: item.description,
-          image: item.image,
-          state: item.state,
-          date: item.date,
-
-          id_poste: item.id_poste,
-
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-      //console.log(dataList);
-      return dataList;
-    });
+    .then((r) => r.data);
 };
 
 export const createEvento = (
@@ -78,37 +38,19 @@ export const createEvento = (
     date: data.date,
     state: data.state,
     id_poste: data.id_poste,
+    priority: data.priority,
     id_usuario: data.id_usuario,
   };
-
   return axios
-    .post(urlApi + urlEvento, newData, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-
-      return { status: response.status, data: response.data };
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return { status: 400, data: eventoExample };
-    });
+    .post(urlApi + urlEvento, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => ({ status: response.status, data: response.data }))
+    .catch(() => ({ status: 400, data: eventoExample }));
 };
 
-export const searchEvento = (
-  dataId: number,
-  token: string
-): Promise<EventoInterface> => {
+export const searchEvento = (dataId: number, token: string): Promise<EventoInterface> => {
   return axios
-    .get(urlApi + urlEvento + dataId, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      const data: EventoInterface = response.data;
-      //console.log(data);
-      return data;
-    });
+    .get(urlApi + urlEvento + dataId, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.data as EventoInterface);
 };
 
 export const editEvento = (
@@ -116,30 +58,27 @@ export const editEvento = (
   token: string
 ): Promise<{ status: number; data: EventoInterface }> => {
   return axios
-    .put(urlApi + urlEvento + data.id, data, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-      return { status: response.status, data: response.data };
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return { status: 400, data: eventoExample };
-    });
+    .put(urlApi + urlEvento + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => ({ status: response.status, data: response.data }))
+    .catch(() => ({ status: 400, data: eventoExample }));
 };
+
+export const reabrirEvento = (id: number, token: string): Promise<number> =>
+  axios
+    .post(urlApi + urlEvento + id + "/reabrir", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.status)
+    .catch(() => 400);
 
 export const deleteEvento = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlEvento + id, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
-    });
+    .delete(urlApi + urlEvento + id, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
+};
+
+export const desarchivarEvento = (id: number, token: string): Promise<number> => {
+  return axios
+    .patch(urlApi + urlEvento + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
 };

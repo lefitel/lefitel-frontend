@@ -5,15 +5,7 @@ export const uploadImage = (data: File, token: string): Promise<string> => {
   const formData = new FormData();
   formData.append("file", data);
   return axios
-    .post(urlApi + urlUpload, formData, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response.data);
-      return response.data.path;
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return "500";
-    });
+    .post(urlApi + urlUpload, formData, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.data.path)
+    .catch(() => "500");
 };

@@ -2,68 +2,28 @@ import axios from "axios";
 import { urlUsuario, urlApi } from "./url";
 import { UsuarioInterface } from "../interfaces/interfaces";
 
-export const getUsuario = (token: string): Promise<UsuarioInterface[]> => {
+export const getUsuario = (token: string, archived = false): Promise<UsuarioInterface[]> => {
   return axios
-    .get(urlApi + urlUsuario, { headers: { Authorization: `Bearer ${token}` } })
-    .then((response) => {
-      /* @ts-expect-error No se sabe el tipo de event */
-      const dataList: UsuarioInterface[] = response.data.map((item) => {
-        // Aquí puedes hacer cualquier transformación que necesites para mapear los datos
-        return {
-          id: item.id,
-          name: item.name,
-          lastname: item.lastname,
-          image: item.image,
-          phone: item.phone,
-          birthday: item.birthday,
-          user: item.user,
-          pass: item.pass,
-          id_rol: item.id_rol,
-          rol: item.rol,
-
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-        };
-      });
-      //console.log(dataList);
-      return dataList;
-    });
-};
-
-export const searchUsuario = (
-  dataId: number,
-  token: string
-): Promise<UsuarioInterface> => {
-  return axios
-    .get(urlApi + urlUsuario + dataId, {
+    .get(urlApi + urlUsuario, {
       headers: { Authorization: `Bearer ${token}` },
+      params: archived ? { archived: true } : {},
     })
-    .then((response) => {
-      const data: UsuarioInterface = response.data;
-      //console.log(data);
-      return data;
-    });
+    .then((r) => r.data);
 };
 
-export const searchUsuario_user = (
-  user: string,
-  token: string
-): Promise<UsuarioInterface> => {
+export const searchUsuario = (dataId: number, token: string): Promise<UsuarioInterface> => {
   return axios
-    .get(urlApi + urlUsuario + "user/" + user, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      const data: UsuarioInterface = response.data;
-      //console.log(data);
-      return data;
-    });
+    .get(urlApi + urlUsuario + dataId, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.data as UsuarioInterface);
 };
 
-export const createUsuario = (
-  data: UsuarioInterface,
-  token: string
-): Promise<number> => {
+export const searchUsuario_user = (user: string, token: string): Promise<UsuarioInterface> => {
+  return axios
+    .get(urlApi + urlUsuario + "user/" + user, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } })
+    .then((response) => response.data as UsuarioInterface);
+};
+
+export const createUsuario = (data: UsuarioInterface, token: string): Promise<number> => {
   type UsuarioWithoutId = Omit<UsuarioInterface, "id">;
   const newData: UsuarioWithoutId = {
     name: data.name,
@@ -75,86 +35,59 @@ export const createUsuario = (
     pass: data.pass,
     id_rol: data.id_rol,
   };
-
   return axios
-    .post(urlApi + urlUsuario, newData, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
-    });
+    .post(urlApi + urlUsuario, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
 };
 
-export const editUsuario = (
-  data: UsuarioInterface,
-  token: string
-): Promise<number> => {
+export const editUsuario = (data: UsuarioInterface, token: string): Promise<number> => {
   return axios
-    .put(urlApi + urlUsuario + data.id, data, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
-    });
+    .put(urlApi + urlUsuario + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
 };
 
 export const editUserName = (
   data: UsuarioInterface,
   token: string
-): Promise<number> => {
+): Promise<{ status: number; message?: string }> => {
   return axios
     .put(urlApi + urlUsuario + "username/" + data.id, data, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
+    .then((response) => ({ status: response.status }))
     .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
+      const msg = e.response?.data?.message || "Error desconocido";
+      return { status: e.response?.status || 500, message: msg };
     });
 };
 
 export const editUserPass = (
-  data: UsuarioInterface,
+  data: UsuarioInterface & { oldPass?: string },
   token: string
-): Promise<number> => {
+): Promise<{ status: number; message?: string }> => {
   return axios
     .put(urlApi + urlUsuario + "userpass/" + data.id, data, {
       headers: { Authorization: `Bearer ${token}` },
     })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
+    .then((response) => ({ status: response.status }))
     .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
+      const msg = e.response?.data?.message || "Error desconocido";
+      return { status: e.response?.status || 500, message: msg };
     });
 };
 
 export const deleteUsuario = (id: number, token: string): Promise<number> => {
   return axios
-    .delete(urlApi + urlUsuario + id, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    .then((response) => {
-      //console.log(response);
-      return response.status;
-    })
-    .catch((e) => {
-      console.log(JSON.stringify(e.response.data.message));
-      return 400;
-    });
+    .delete(urlApi + urlUsuario + id, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
+};
+
+export const desarchivarUsuario = (id: number, token: string): Promise<number> => {
+  return axios
+    .patch(urlApi + urlUsuario + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .then((response) => response.status)
+    .catch(() => 400);
 };

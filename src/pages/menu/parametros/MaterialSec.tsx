@@ -1,283 +1,295 @@
-import {
-  Box,
-  Button,
-  ButtonGroup,
-  Card,
-  CardActions,
-  CardContent,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  Grid,
-  TextField,
-  Typography,
-} from "@mui/material";
-import AddMaterialDialog from "../../../components/dialogs/add/AddMaterialDialog";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { ColumnDef } from "@tanstack/react-table";
+import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { SesionContext } from "../../../context/SesionContext";
+import { can } from "../../../lib/permissions";
+import { createMaterial, deleteMaterial, desarchivarMaterial, editMaterial, getMaterial } from "../../../api/Material.api";
 import { MaterialInterface } from "../../../interfaces/interfaces";
-import { useContext, useEffect, useState } from "react";
-import { deleteMaterial, editMaterial, getMaterial } from "../../../api/Material.api";
-import { useSnackbar } from "notistack";
-import { SesionContext } from "../../../context/SesionProvider";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
+import {
+    Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription,
+} from "../../../components/ui/sheet";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+    AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
+import {
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+    DropdownMenuSeparator, DropdownMenuTrigger,
+} from "../../../components/ui/dropdown-menu";
+import DataTable from "../../../components/table/DataTable";
+import { InnerTab } from "./index";
 
-const columns: GridColDef[] = [
-  {
-    field: 'num', headerName: '#',
-    renderCell: (params) => {
-      // Usa `params.api.getRowIndexRelativeToVisibleRows` para obtener el índice
-      const rowIndex = params.api.getRowIndexRelativeToVisibleRows(params.id);
-      return <span>{rowIndex + 1}</span>;
-    },
-  },
-  { field: 'id', headerName: 'Id' },
-  { field: 'name', headerName: 'Nombre' },
-  { field: 'description', headerName: 'Descripción' },
-  {
-    field: 'createdAt', headerName: 'Creación', type: 'dateTime',
-    valueGetter: (value) => {
-      const date = new Date(value);
-      return date;
-    }
-  },
-  {
-    field: 'updatedAt', headerName: 'Edición', type: 'dateTime',
-    valueGetter: (value) => {
-      const date = new Date(value);
-      return date;
-    }
-  }
+interface Props { innerTab: InnerTab; }
 
-];
-const MaterialSec = () => {
-  const [cargando, setCargando] = useState(false);
+const MaterialSec = ({ innerTab }: Props) => {
+    const { sesion } = useContext(SesionContext);
+    const rol = sesion.usuario.id_rol;
 
-  const [open, setOpen] = useState(false);
-  const [openDelete, setOpenDelete] = useState(false);
+    const [list, setList] = useState<MaterialInterface[] | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [archivedList, setArchivedList] = useState<MaterialInterface[] | null>(null);
+    const [loadingArchived, setLoadingArchived] = useState(false);
+    const [selected, setSelected] = useState<MaterialInterface | null>(null);
+    const [sheetOpen, setSheetOpen] = useState(false);
+    const [deleteOpen, setDeleteOpen] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+    const [unarchiveTarget, setUnarchiveTarget] = useState<MaterialInterface | null>(null);
+    const [unarchiving, setUnarchiving] = useState(false);
 
-  const [data, setData] = useState<MaterialInterface>({ id: 1, name: "", description: "" });
-  const [list, setList] = useState<MaterialInterface[]>();
-  const { enqueueSnackbar } = useSnackbar();
-  const { sesion } = useContext(SesionContext);
+    const [name, setName] = useState("");
+    const [description, setDescription] = useState("");
 
-  useEffect(() => {
-    recibirDatos()
-  }, [open])
+    const load = useCallback(() => {
+        setLoading(true);
+        getMaterial(sesion.token)
+            .then((data) => setList(data ?? []))
+            .catch(() => { toast.error("Error al cargar materiales"); setList(null); })
+            .finally(() => setLoading(false));
+    }, [sesion.token]);
 
+    const loadArchived = useCallback(() => {
+        setLoadingArchived(true);
+        getMaterial(sesion.token, true)
+            .then((data) => setArchivedList(data ?? []))
+            .catch(() => { toast.error("Error al cargar materiales archivados"); setArchivedList(null); })
+            .finally(() => setLoadingArchived(false));
+    }, [sesion.token]);
 
-  const recibirDatos = async () => {
-    setList(await getMaterial(sesion.token))
+    useEffect(() => { load(); }, [load]);
 
-  }
+    useEffect(() => {
+        if (innerTab === "archivados" && archivedList === null) loadArchived();
+    }, [innerTab, archivedList, loadArchived]);
 
-  const handleClickOpen = (rows: MaterialInterface) => {
-    setData(rows);
-    setOpen(true);
-  };
+    const handleUnarchive = async () => {
+        if (!unarchiveTarget) return;
+        setUnarchiving(true);
+        try {
+            const result = await desarchivarMaterial(unarchiveTarget.id as number, sesion.token);
+            if (result === 200) {
+                toast.success("Material desarchivado");
+                setUnarchiveTarget(null);
+                setArchivedList(null);
+                load();
+            } else {
+                toast.error("No se pudo desarchivar");
+            }
+        } finally {
+            setUnarchiving(false);
+        }
+    };
 
-  const handleClose = () => {
-    setOpen(false);
-  };
-  const handleClickOpenDelete = () => {
-    setOpenDelete(true);
-  };
+    const openEdit = useCallback((row: MaterialInterface) => {
+        setSelected(row);
+        setName(row.name);
+        setDescription(row.description);
+        setSheetOpen(true);
+    }, []);
 
-  const handleCloseDelete = () => {
-    setOpenDelete(false);
-  };
-  const handleEdit = async () => {
-    setCargando(true)
-    if (data.name != '' && data.description != '') {
-      const reponse = await editMaterial(data, sesion.token);
-      if (Number(reponse) === 200) {
-        setCargando(false)
-        enqueueSnackbar("Editado con exito", {
-          variant: "success",
-        });
-        handleClose()
-      }
-      else {
-        setCargando(false)
-        enqueueSnackbar("No se pudo editar los datos", {
-          variant: "error",
-        });
-      }
-    }
-    else {
-      setCargando(false)
-      enqueueSnackbar("Rellena todos los espacios", {
-        variant: "warning",
-      });
-    }
-  }
-  const handleDelete = async () => {
-    setCargando(true)
-    const reponse = await deleteMaterial(data.id as number, sesion.token);
-    if (Number(reponse) === 200) {
-      setCargando(false)
-      enqueueSnackbar("Eliminado con exito", {
-        variant: "success",
-      });
-      handleCloseDelete()
-      handleClose()
-    }
-    else {
-      setCargando(false)
-      enqueueSnackbar("No se pudo Eliminar", {
-        variant: "error",
-      });
-    }
-  }
+    const openAdd = () => {
+        setSelected(null);
+        setName("");
+        setDescription("");
+        setSheetOpen(true);
+    };
 
-  return (
-    <Card sx={{ flex: 1 }}>
-      {list ? <>
+    const handleClose = () => { setSheetOpen(false); setSelected(null); };
 
-        <CardActions
-          style={{
-            justifyContent: "space-between",
-          }}
-        >
-          <Typography
-            sx={{ fontSize: 16 }}
-            fontWeight="bold"
-            color="text.secondary"
-          >
-            Material
-          </Typography>
-          {sesion.usuario.id_rol === 1 ? <>
-            <ButtonGroup >
-              <AddMaterialDialog functionApp={recibirDatos} />
-            </ButtonGroup>
-          </> : null}
+    const handleSave = async () => {
+        if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
+        setSaving(true);
+        const payload: MaterialInterface = { ...selected, name, description };
+        const result = await (selected?.id ? editMaterial(payload, sesion.token) : createMaterial(payload, sesion.token));
+        if (Number(result) === 200 || Number(result) === 201) {
+            toast.success(selected?.id ? "Material actualizado" : "Material creado");
+            handleClose();
+            load();
+        } else {
+            toast.error("No se pudo guardar");
+        }
+        setSaving(false);
+    };
 
-        </CardActions>
-        <CardContent>
+    const handleDelete = async () => {
+        if (!selected?.id) return;
+        setDeleting(true);
+        const result = await deleteMaterial(selected.id as number, sesion.token);
+        if (Number(result) === 200) {
+            toast.success("Material archivado");
+            setDeleteOpen(false);
+            handleClose();
+            load();
+        } else {
+            toast.error("No se pudo archivar");
+        }
+        setDeleting(false);
+    };
 
-          <Box
-            sx={{
-              height: {
-                xs: "250px",
-              },
-              width: {
-                xs: "calc(100vw - 110px )",
-                sm: "calc(100vw - 115px )",
-                md: "calc(33vw - 61px )",
-              },
-            }}
-          >
-            <DataGrid
-              //className="datagrid-content"
-              rows={list ? list : []}
-              columns={columns}
-              hideFooterPagination
-              rowHeight={38}
-              disableRowSelectionOnClick
-              onRowClick={(params) => {
-                handleClickOpen(params.row);
-              }}
-              hideFooter
-            />
-          </Box>
-        </CardContent>
-      </> : <Grid sx={{ alignItems: "center", justifyContent: "center", display: "flex", height: "100%" }}> <CircularProgress /> </Grid>}
+    const columns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+        { accessorKey: "name", header: "Nombre" },
+        { accessorKey: "description", header: "Descripción" },
+        {
+            id: "actions",
+            header: "",
+            enableSorting: false,
+            cell: ({ row }) => !can(rol, "parametros", "editar") ? null : (
+                <div className="flex justify-end pr-2">
+                    <DropdownMenu>
+                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
+                            <MoreVerticalIcon className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-36">
+                            <DropdownMenuItem onClick={() => openEdit(row.original)}>Editar</DropdownMenuItem>
+                            {can(rol, "parametros", "archivar") && (
+                                <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                        className="text-destructive focus:text-destructive"
+                                        onClick={() => { setSelected(row.original); setDeleteOpen(true); }}
+                                    >
+                                        Archivar
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            ),
+        },
+    ], [openEdit, rol]);
 
-      {sesion.usuario.id_rol === 1 ? <>
+    const archivedColumns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+        { accessorKey: "name", header: "Nombre" },
+        { accessorKey: "description", header: "Descripción" },
+        {
+            accessorKey: "deletedAt",
+            header: "Archivado el",
+            cell: ({ row }) => (
+                <span className="text-sm text-muted-foreground whitespace-nowrap">
+                    {row.original.deletedAt ? new Date(row.original.deletedAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
+        },
+        {
+            id: "actions",
+            header: "",
+            enableSorting: false,
+            cell: ({ row }) => (
+                <div className="flex justify-end pr-2">
+                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setUnarchiveTarget(row.original)}>
+                        Desarchivar
+                    </Button>
+                </div>
+            ),
+        },
+    ], []);
 
-        <Dialog
-          fullWidth
-          open={open}
-          onClose={handleClose}
-        >
-          <DialogTitle>{"Editar Material"}</DialogTitle>
-          <DialogContent>
-            <Grid container width={1} m={0}>
-              <Grid item xs={12} md={2}>
-                <TextField
-
-                  fullWidth disabled
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Id"
-                  value={data.id}
+    return (
+        <>
+            {innerTab === "activos" && (
+                <DataTable
+                    data={list}
+                    loading={loading}
+                    columns={columns}
+                    onRetry={load}
+                    hasPaginated={false}
+                    actions={
+                        can(rol, "parametros", "crear") ? (
+                            <Button className="gap-2" onClick={openAdd}>
+                                <PlusIcon className="h-4 w-4" />
+                                Nuevo
+                            </Button>
+                        ) : <></>
+                    }
                 />
-              </Grid>
-              <Grid item xs={12} md={3}>
-                <TextField
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Nombre"
-                  value={data.name}
-                  onChange={(event) => {
-                    const newData: MaterialInterface = { ...data, name: event.target.value };
-                    setData(newData)
-                  }}
+            )}
+
+            {innerTab === "archivados" && (
+                <DataTable
+                    data={archivedList}
+                    loading={loadingArchived}
+                    columns={archivedColumns}
+                    onRetry={loadArchived}
+                    hasPaginated={false}
+                    actions={
+                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
+                        </Button>
+                    }
                 />
-              </Grid>
-              <Grid item xs={12} md={7}>
-                <TextField
-                  fullWidth
-                  style={{
-                    padding: 0,
-                    margin: 0,
-                  }}
-                  label="Descripción"
-                  value={data.description}
-                  onChange={(event) => {
-                    const newData: MaterialInterface = { ...data, description: event.target.value };
-                    setData(newData)
-                  }}
-                />
-              </Grid>
+            )}
 
-            </Grid>
-          </DialogContent>
-          <DialogActions style={{
-            display: "flex",
-            justifyContent: "space-between"
-          }}>
-            <Grid>
-              <Button onClick={handleClickOpenDelete}>
-                {"Eliminar"}
-              </Button>
+            {can(rol, "parametros", "editar") && (
+                <>
+                    <Sheet open={sheetOpen} onOpenChange={(v) => { if (!v) handleClose(); }}>
+                        <SheetContent>
+                            <SheetHeader>
+                                <SheetTitle>{selected?.id ? "Editar Material" : "Nuevo Material"}</SheetTitle>
+                                <SheetDescription>Completa los campos y guarda los cambios.</SheetDescription>
+                            </SheetHeader>
+                            <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 py-4">
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="mat-name">Nombre</Label>
+                                    <Input id="mat-name" value={name} onChange={(e) => setName(e.target.value)} />
+                                </div>
+                                <div className="flex flex-col gap-1.5">
+                                    <Label htmlFor="mat-desc">Descripción</Label>
+                                    <Input id="mat-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
+                                </div>
+                            </div>
+                            <SheetFooter className="flex justify-end px-4">
+                                <div className="flex gap-2">
+                                    <Button variant="outline" size="sm" onClick={handleClose} disabled={saving}>Cancelar</Button>
+                                    <Button size="sm" onClick={handleSave} disabled={saving}>
+                                        {saving ? "Guardando..." : "Guardar"}
+                                    </Button>
+                                </div>
+                            </SheetFooter>
+                        </SheetContent>
+                    </Sheet>
 
-            </Grid>
-            <ButtonGroup>
-              <Button onClick={handleClose}>Cancelar</Button>
-              <Button onClick={handleEdit}>Guardar</Button>
-            </ButtonGroup>
-          </DialogActions>
-        </Dialog>
-        <Dialog
-          open={openDelete}
-          onClose={handleCloseDelete}
-        >
-          <DialogTitle>{"Eliminar Material"}</DialogTitle>
-          <DialogContent>
-            <Grid container width={1} m={0}>
-              Seguro que quiere eliminar este Material?
-            </Grid>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={handleCloseDelete}>Cancelar</Button>
-            <Button onClick={handleDelete}>Eliminar</Button>
-          </DialogActions>
-        </Dialog>
-      </> : null}
+                    <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>¿Archivar material?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    El material <strong>{selected?.name}</strong> quedará archivado y dejará de aparecer en las listas.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-white" disabled={deleting} onClick={handleDelete}>
+                                    {deleting ? "Archivando..." : "Archivar"}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                </>
+            )}
 
-      {cargando && (
-        <Box sx={{ height: "100vh", width: "100vw", top: 0, left: 0, alignContent: "center", backgroundColor: 'rgba(0, 0, 0, 0.25)', position: "fixed", zIndex: "1301" }} >
-          <CircularProgress sx={{ color: "white" }} />
-        </Box>
-      )}
-    </Card>
-  );
+            <AlertDialog open={!!unarchiveTarget} onOpenChange={(v) => { if (!v) setUnarchiveTarget(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>¿Desarchivar material?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            El material <strong>{unarchiveTarget?.name}</strong> volverá a aparecer en las listas activas.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel disabled={unarchiving}>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction disabled={unarchiving} onClick={handleUnarchive}>
+                            {unarchiving ? "Desarchivando..." : "Desarchivar"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+        </>
+    );
 };
 
 export default MaterialSec;

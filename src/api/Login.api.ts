@@ -24,7 +24,7 @@ export const loginUsuario = (
     .catch((e) => {
       return {
         status: 500,
-        message: e.response.data.message,
+        message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
         usuario: null,
       };
     });
@@ -43,11 +43,8 @@ export const comprobarToken = (
         usuario: response.data,
       };
     })
-    .catch((e) => {
-      console.log(e);
-      return {
-        status: 500,
-        usuario: null,
-      };
-    });
+    .catch(() => ({
+      status: 500,
+      usuario: null,
+    }));
 };
