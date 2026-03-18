@@ -386,7 +386,7 @@ const FilesPage = () => {
               {orphans.length > 0 && can(rol, "archivos", "archivar") && (
                 <Button variant="destructive" disabled={deletingOrphans} onClick={() => setOrphansDialogOpen(true)} className="gap-2 h-8">
                   {deletingOrphans ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
-                  Purgar {orphans.length} huérfano{orphans.length > 1 ? "s" : ""}
+                  <span className="hidden sm:inline">Purgar {orphans.length} huérfano{orphans.length > 1 ? "s" : ""}</span>
                 </Button>
               )}
             </div>
@@ -471,7 +471,7 @@ const FilesPage = () => {
               can(rol, "archivos", "archivar") && totalBroken > 0 ? (
                 <Button variant="destructive" className="gap-2 h-8" disabled={clearingBroken} onClick={() => setClearBrokenDialogOpen(true)}>
                   {clearingBroken ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
-                  Limpiar {totalBroken}
+                  <span className="hidden sm:inline">Limpiar {totalBroken}</span>
                 </Button>
               ) : <></>
             }

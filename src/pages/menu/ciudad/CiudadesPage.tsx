@@ -292,7 +292,7 @@ export default function CiudadesPage() {
             {can(sesion.usuario.id_rol, "ciudades", "crear") && (
               <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setOpenAdd(true)}>
                 <PlusIcon className="h-4 w-4" />
-                Nueva Ciudad
+                <span className="hidden sm:inline">Nueva Ciudad</span>
               </Button>
             )}
             <Button variant="outline" size="icon" onClick={load} disabled={loading}>

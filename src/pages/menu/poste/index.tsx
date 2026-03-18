@@ -480,7 +480,7 @@ const PostePage = () => {
 
     return (
         <div className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Postes</h1>
                     <p className="text-sm text-muted-foreground mt-1">Red de postes registrados</p>
@@ -514,7 +514,7 @@ const PostePage = () => {
                                     disabled={!hasData}
                                 >
                                     <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                    Exportar
+                                    <span className="hidden sm:inline">Exportar</span>
                                     <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" className="w-44">
@@ -536,7 +536,7 @@ const PostePage = () => {
                             {canAdd && (
                                 <Button className="gap-2" onClick={() => setAddOpen(true)}>
                                     <PlusIcon className="h-4 w-4" />
-                                    Nuevo Poste
+                                    <span className="hidden sm:inline">Nuevo Poste</span>
                                 </Button>
                             )}
                         </div>

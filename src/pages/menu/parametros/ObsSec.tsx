@@ -259,7 +259,7 @@ const ObsSec = ({ innerTab }: Props) => {
                         can(rol, "parametros", "crear") ? (
                             <Button className="gap-2" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
-                                Nueva
+                                <span className="hidden sm:inline">Nueva</span>
                             </Button>
                         ) : <></>
                     }

@@ -16,10 +16,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { DatePicker } from "@/components/ui/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   UserIcon, KeyIcon, PhoneIcon, FingerprintIcon,
-  ShieldCheckIcon, Loader2Icon, CalendarIcon, SaveIcon,
+  ShieldCheckIcon, Loader2Icon, SaveIcon,
 } from "lucide-react";
 import { editUsuario, editUserName, editUserPass, searchUsuario } from "../../api/Usuario.api";
 import { UsuarioInterface } from "../../interfaces/interfaces";
@@ -65,7 +66,7 @@ const PerfilPage = () => {
       })
       .catch(() => toast.error("No se pudieron cargar los datos del perfil."))
       .finally(() => setLoadingProfile(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,7 +155,7 @@ const PerfilPage = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 w-full max-w-5xl mx-auto space-y-6">
+    <div className="p-6 md:p-8 w-full mx-auto space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Mi Perfil</h1>
@@ -211,11 +212,11 @@ const PerfilPage = () => {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="birthday">Fecha de Nacimiento</Label>
-                  <div className="relative">
-                    <CalendarIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-                    <Input id="birthday" type="date" value={formData.birthday} onChange={handleGeneralChange} className="pl-8" />
-                  </div>
+                  <Label>Fecha de Nacimiento</Label>
+                  <DatePicker
+                    value={formData.birthday ? new Date(formData.birthday + "T00:00:00") : undefined}
+                    onSelect={(d) => setFormData((prev) => ({ ...prev, birthday: d ? d.toISOString().slice(0, 10) : "" }))}
+                  />
                 </div>
 
                 <div className="flex justify-end pt-1">

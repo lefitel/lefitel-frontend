@@ -220,7 +220,7 @@ const MaterialSec = ({ innerTab }: Props) => {
                         can(rol, "parametros", "crear") ? (
                             <Button className="gap-2" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
-                                Nuevo
+                                <span className="hidden sm:inline">Nuevo</span>
                             </Button>
                         ) : <></>
                     }

@@ -29,6 +29,7 @@ import {
     ChevronsLeftIcon,
     ChevronsRightIcon,
     ColumnsIcon,
+    SearchIcon,
 } from "lucide-react";
 import { Label } from "../ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
@@ -83,6 +84,7 @@ const DataTable = <T extends IGeneral>({
     serverSide,
     initialPageSize = 15,
 }: Props<T>) => {
+    const [filterOpen, setFilterOpen] = useState(false);
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
@@ -169,38 +171,68 @@ const DataTable = <T extends IGeneral>({
     return (
         <div className="flex flex-col gap-2 overflow-auto">
             {/* Barra superior con filtros y opciones */}
-            {!hasOptions ? null : (
-                <div className="flex items-center justify-between gap-1">
-
-                    <DynamicColumnFilter table={table} />
-                    <div className="flex gap-1">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outlineGray" }), "border-muted h-8 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem]")}>
-                                <ColumnsIcon />
-                                <span className="ml-2 hidden lg:inline">Columnas</span>
-                                <ChevronDownIcon className="ml-1 text-secondary-foreground/30" />
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                                {table.getAllColumns().map((column) => (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) => column.toggleVisibility(value)}
-                                        disabled={!column.getCanHide()}
-                                        onSelect={(event) => event.preventDefault()}
-                                    >
-                                        {typeof column.columnDef.header === "string" && column.columnDef.header
-                                            ? column.columnDef.header
-                                            : column.id}
-                                    </DropdownMenuCheckboxItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        {actions}
+            {!hasOptions ? null : (() => {
+                const hasActiveFilter = columnFilters.length > 0;
+                const columnsDropdown = (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger className={cn(buttonVariants({ variant: "outlineGray" }), "border-muted h-8 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem]")}>
+                            <ColumnsIcon />
+                            <span className="ml-2 hidden lg:inline">Columnas</span>
+                            <ChevronDownIcon className="ml-1 text-secondary-foreground/30" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {table.getAllColumns().map((column) => (
+                                <DropdownMenuCheckboxItem
+                                    key={column.id}
+                                    checked={column.getIsVisible()}
+                                    onCheckedChange={(value) => column.toggleVisibility(value)}
+                                    disabled={!column.getCanHide()}
+                                    onSelect={(event) => event.preventDefault()}
+                                >
+                                    {typeof column.columnDef.header === "string" && column.columnDef.header
+                                        ? column.columnDef.header
+                                        : column.id}
+                                </DropdownMenuCheckboxItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                );
+                return (
+                    <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between gap-1">
+                            {/* Mobile: botón lupa */}
+                            <button
+                                className={cn(
+                                    "relative sm:hidden",
+                                    buttonVariants({ variant: "outlineGray" }),
+                                    "border-muted h-8 w-8 rounded-[min(var(--radius-md),12px)] p-0 flex items-center justify-center"
+                                )}
+                                onClick={() => setFilterOpen((v) => !v)}
+                                aria-label="Filtrar"
+                            >
+                                <SearchIcon className="h-3.5 w-3.5" />
+                                {hasActiveFilter && (
+                                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                                )}
+                            </button>
+                            {/* Desktop: filtro inline */}
+                            <div className="hidden sm:flex flex-1">
+                                <DynamicColumnFilter table={table} />
+                            </div>
+                            <div className="flex gap-1">
+                                {columnsDropdown}
+                                {actions}
+                            </div>
+                        </div>
+                        {/* Mobile: panel de filtro colapsable */}
+                        {filterOpen && (
+                            <div className="sm:hidden">
+                                <DynamicColumnFilter table={table} />
+                            </div>
+                        )}
                     </div>
-                </div>
-            )}
+                );
+            })()}
             <div className="relative overflow-hidden rounded-lg border">
                 {loading && (
                     <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">

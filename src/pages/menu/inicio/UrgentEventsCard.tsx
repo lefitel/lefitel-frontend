@@ -24,17 +24,18 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent">
               <TableHead>Poste</TableHead>
-              <TableHead>Descripción</TableHead>
-              <TableHead>Abierto</TableHead>
+              <TableHead className="hidden sm:table-cell">Descripción</TableHead>
+              <TableHead className="hidden sm:table-cell">Abierto</TableHead>
               <TableHead className="text-right pr-4">Acción</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading && Array.from({ length: 4 }).map((_, i) => (
               <TableRow key={i}>
-                {Array.from({ length: 4 }).map((_, j) => (
-                  <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
-                ))}
+                <TableCell><Skeleton className="h-4 w-full" /></TableCell>
+                <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-full" /></TableCell>
+                <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-full" /></TableCell>
+                <TableCell><Skeleton className="h-4 w-full" /></TableCell>
               </TableRow>
             ))}
             {!loading && urgentEvents.length === 0 && (
@@ -47,8 +48,8 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
             {!loading && urgentEvents.map((evento) => (
               <TableRow key={evento.id} className="hover:bg-muted/40">
                 <TableCell className="font-medium">{evento.poste?.name ?? "—"}</TableCell>
-                <TableCell className="max-w-30 truncate text-sm text-muted-foreground">{evento.description}</TableCell>
-                <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{daysOpen(evento.date)}</TableCell>
+                <TableCell className="hidden sm:table-cell max-w-30 truncate text-sm text-muted-foreground">{evento.description}</TableCell>
+                <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">{daysOpen(evento.date)}</TableCell>
                 <TableCell className="text-right pr-4">
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
                     onClick={() => { if (evento.id) navigate(`/eventos/${evento.id}`); }}>

@@ -130,55 +130,69 @@ const BitacoraPage = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 items-end">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Desde</span>
-          <DatePicker value={from} onSelect={setFrom} placeholder="Desde" className="w-40 h-8" />
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-3 items-end">
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Desde</span>
+            <DatePicker value={from} onSelect={setFrom} placeholder="Desde" className="w-full sm:w-40 h-8" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Hasta</span>
+            <DatePicker value={to} onSelect={setTo} placeholder="Hasta" className="w-full sm:w-40 h-8" />
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Entidad</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex h-8 w-full sm:w-40 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                {entity === "all" ? "Todas" : entity}
+                <ChevronDownIcon className="size-4 opacity-50" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-40">
+                <DropdownMenuRadioGroup value={entity} onValueChange={setEntity}>
+                  <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
+                  {ENTITIES.map((e) => (
+                    <DropdownMenuRadioItem key={e} value={e}>{e}</DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs text-muted-foreground">Límite</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger className="flex h-8 w-full sm:w-24 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                {limitVal}
+                <ChevronDownIcon className="size-4 opacity-50" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-24">
+                <DropdownMenuRadioGroup value={limitVal} onValueChange={setLimitVal}>
+                  {LIMIT_OPTIONS.map((l) => (
+                    <DropdownMenuRadioItem key={l} value={String(l)}>{l}</DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+          {/* Desktop: buttons inline with filters */}
+          <div className="hidden sm:flex items-end gap-2">
+            <Button onClick={handleSearch} disabled={loading}>
+              <SearchIcon className="mr-2 size-4" />
+              Buscar
+            </Button>
+            <Button variant="outline" onClick={handleReset} disabled={loading} size="icon">
+              <RotateCcwIcon className="size-4" />
+            </Button>
+          </div>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Hasta</span>
-          <DatePicker value={to} onSelect={setTo} placeholder="Hasta" className="w-40 h-8" />
+        {/* Mobile: buttons below filters, aligned right */}
+        <div className="flex sm:hidden justify-end gap-2">
+          <Button onClick={handleSearch} disabled={loading}>
+            <SearchIcon className="size-4" />
+          </Button>
+          <Button variant="outline" onClick={handleReset} disabled={loading} size="icon">
+            <RotateCcwIcon className="size-4" />
+          </Button>
         </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Entidad</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex h-8 w-40 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              {entity === "all" ? "Todas" : entity}
-              <ChevronDownIcon className="size-4 opacity-50" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-40">
-              <DropdownMenuRadioGroup value={entity} onValueChange={setEntity}>
-                <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
-                {ENTITIES.map((e) => (
-                  <DropdownMenuRadioItem key={e} value={e}>{e}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Límite</span>
-          <DropdownMenu>
-            <DropdownMenuTrigger className="flex h-8 w-24 items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring">
-              {limitVal}
-              <ChevronDownIcon className="size-4 opacity-50" />
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-24">
-              <DropdownMenuRadioGroup value={limitVal} onValueChange={setLimitVal}>
-                {LIMIT_OPTIONS.map((l) => (
-                  <DropdownMenuRadioItem key={l} value={String(l)}>{l}</DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        <Button onClick={handleSearch} disabled={loading}  >
-          <SearchIcon className="mr-2 size-4" />
-          Buscar
-        </Button>
-        <Button variant="outline" onClick={handleReset} disabled={loading} size={"icon"} >
-          <RotateCcwIcon size={"icon"} />
-        </Button>
       </div>
 
       {/* Table */}

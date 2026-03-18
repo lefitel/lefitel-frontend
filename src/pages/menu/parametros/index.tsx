@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import AdssSec from "./AdssSec";
 import MaterialSec from "./MaterialSec";
 import ObsSec from "./ObsSec";
@@ -35,7 +36,21 @@ const ParametrosPage = () => {
 
       <Tabs value={tab} onValueChange={handleTabChange}>
         <div className="flex items-center justify-between gap-4">
-          <TabsList>
+
+          {/* Mobile: select */}
+          <Select value={tab} onValueChange={(v) => v && handleTabChange(v)}>
+            <SelectTrigger className="sm:hidden w-48">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TABS.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* Desktop: tabs */}
+          <TabsList className="hidden sm:flex">
             {TABS.map((t) => (
               <TabsTrigger key={t.value} value={t.value}>
                 {t.label}
