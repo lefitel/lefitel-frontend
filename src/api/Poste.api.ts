@@ -39,7 +39,7 @@ export const exportPostes = (token: string, archived = false): Promise<PosteInte
 
 export const getPosteByCiudad = (ciudadId: number, token: string): Promise<PosteInterface[]> =>
   axios
-    .get(`${urlApi}${urlPoste}?ciudadId=${ciudadId}`, {
+    .get(`${urlApi}${urlPoste}?ciudadId=${ciudadId}&export=true`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((r) => r.data as PosteInterface[]);

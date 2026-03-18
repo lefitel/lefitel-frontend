@@ -16,6 +16,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
+import { ImageLightbox } from "../../../components/ui/image-viewer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../../components/ui/sheet";
 import DataTable from "../../../components/table/DataTable";
 import EditUserSheet from "../../../components/dialogs/edits/EditUserSheet";
@@ -67,6 +68,8 @@ export default function UsuarioDetallePage() {
   const d = useUsuarioDetalleData(Number(id));
 
   const [openEdit, setOpenEdit]         = useState(false);
+  const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null);
+  const [avatarLoaded, setAvatarLoaded] = useState(false);
   const [openUsername, setOpenUsername] = useState(false);
   const [openPassword, setOpenPassword] = useState(false);
 
@@ -238,8 +241,17 @@ export default function UsuarioDetallePage() {
             </>
           ) : (
             <>
-              <Avatar className="h-16 w-16 border-2 border-border shadow">
-                <AvatarImage src={d.usuario?.image ? url + d.usuario.image : undefined} />
+              <Avatar
+                className={`h-16 w-16 border-2 border-border shadow${avatarLoaded ? " cursor-zoom-in" : ""}`}
+                onClick={avatarLoaded ? () => setLightboxSrc(url + d.usuario!.image) : undefined}
+              >
+                {d.usuario?.image && (
+                  <AvatarImage
+                    src={url + d.usuario.image}
+                    onLoad={() => setAvatarLoaded(true)}
+                    onError={() => setAvatarLoaded(false)}
+                  />
+                )}
                 <AvatarFallback className="text-lg font-bold">{initials}</AvatarFallback>
               </Avatar>
               <div>
@@ -393,6 +405,8 @@ export default function UsuarioDetallePage() {
           </CardContent>
         </Card>
       </div>
+
+      <ImageLightbox src={lightboxSrc ?? ""} open={!!lightboxSrc} onClose={() => setLightboxSrc(null)} />
 
       {/* Sheet: editar datos generales */}
       <EditUserSheet usuario={d.usuario} open={openEdit} setOpen={setOpenEdit} onSuccess={d.load} />

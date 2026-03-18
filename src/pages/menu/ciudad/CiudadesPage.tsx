@@ -8,7 +8,9 @@ import { deleteCiudad, desarchivarCiudad, getCiudad } from "../../../api/Ciudad.
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
 import { Button } from "../../../components/ui/button";
-import { MapPinIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
+import { ImageLightbox } from "../../../components/ui/image-viewer";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +36,32 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui
 
 type Tab = "activos" | "archivados";
 
+function CiudadAvatar({ name, image, faded, onImageClick }: {
+  name: string;
+  image: string | null | undefined;
+  faded?: boolean;
+  onImageClick: (src: string) => void;
+}) {
+  const [loaded, setLoaded] = useState(false);
+  const imgSrc = image ? `${url}${image}` : null;
+  return (
+    <Avatar
+      className={`${faded ? "opacity-60" : ""}${loaded ? " cursor-zoom-in" : ""}`}
+      onClick={loaded ? () => onImageClick(imgSrc!) : undefined}
+    >
+      {imgSrc && (
+        <AvatarImage
+          src={imgSrc}
+          alt={name}
+          onLoad={() => setLoaded(true)}
+          onError={() => setLoaded(false)}
+        />
+      )}
+      <AvatarFallback>{name?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+    </Avatar>
+  );
+}
+
 export default function CiudadesPage() {
   const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
@@ -48,6 +76,7 @@ export default function CiudadesPage() {
   const [deleting, setDeleting] = useState(false);
   const [unarchiveTarget, setUnarchiveTarget] = useState<CiudadInterface | null>(null);
   const [unarchiving, setUnarchiving] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null);
 
   const handleUnarchive = async () => {
     if (!unarchiveTarget) return;
@@ -112,19 +141,7 @@ export default function CiudadesPage() {
       header: "Foto",
       enableSorting: false,
       cell: ({ row }) => (
-        <div className="py-1.5">
-          {row.original.image ? (
-            <img
-              src={`${url}${row.original.image}`}
-              alt={row.original.name}
-              className="h-10 w-14 rounded-md object-cover border border-border"
-            />
-          ) : (
-            <div className="h-10 w-14 rounded-md bg-muted/50 flex items-center justify-center border border-border">
-              <MapPinIcon className="h-4 w-4 text-muted-foreground/40" />
-            </div>
-          )}
-        </div>
+        <CiudadAvatar name={row.original.name} image={row.original.image} onImageClick={setLightboxSrc} />
       ),
     },
     {
@@ -204,19 +221,7 @@ export default function CiudadesPage() {
       header: "Foto",
       enableSorting: false,
       cell: ({ row }) => (
-        <div className="py-1.5">
-          {row.original.image ? (
-            <img
-              src={`${url}${row.original.image}`}
-              alt={row.original.name}
-              className="h-10 w-14 rounded-md object-cover border border-border opacity-60"
-            />
-          ) : (
-            <div className="h-10 w-14 rounded-md bg-muted/50 flex items-center justify-center border border-border">
-              <MapPinIcon className="h-4 w-4 text-muted-foreground/40" />
-            </div>
-          )}
-        </div>
+        <CiudadAvatar name={row.original.name} image={row.original.image} faded onImageClick={setLightboxSrc} />
       ),
     },
     {
@@ -361,6 +366,12 @@ export default function CiudadesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ImageLightbox
+        src={lightboxSrc ?? ""}
+        open={!!lightboxSrc}
+        onClose={() => setLightboxSrc(null)}
+      />
     </Tabs>
   );
 }

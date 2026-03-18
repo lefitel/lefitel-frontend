@@ -32,6 +32,31 @@ import { ImageLightbox } from "../../components/ui/image-viewer";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+function UsuarioAvatar({ name, image, onImageClick }: {
+    name: string;
+    image: string | null | undefined;
+    onImageClick: (src: string) => void;
+}) {
+    const [loaded, setLoaded] = useState(false);
+    const imgSrc = image ? `${url}${image}` : null;
+    return (
+        <Avatar
+            className={loaded ? "cursor-zoom-in" : ""}
+            onClick={loaded ? () => onImageClick(imgSrc!) : undefined}
+        >
+            {imgSrc && (
+                <AvatarImage
+                    src={imgSrc}
+                    alt={name}
+                    onLoad={() => setLoaded(true)}
+                    onError={() => setLoaded(false)}
+                />
+            )}
+            <AvatarFallback>{name?.[0]?.toUpperCase() ?? "?"}</AvatarFallback>
+        </Avatar>
+    );
+}
+
 const HEADERS = ["Nombre", "Apellido", "Usuario", "Teléfono", "Rol", "Nacimiento", "Registrado"];
 const HEADER_COLOR = "001F5D";
 const PRIMARY: [number, number, number] = [0, 31, 93];    // #001F5D
@@ -349,15 +374,7 @@ const SeguridadPage = () => {
             header: "Foto",
             enableSorting: false,
             cell: ({ row }) => (
-                <div
-                    className={row.original.image ? "cursor-zoom-in" : undefined}
-                    onClick={() => row.original.image && setLightboxSrc(`${url}${row.original.image}`)}
-                >
-                    <Avatar>
-                        <AvatarImage src={`${url}${row.original.image}`} alt={row.original.name} />
-                        <AvatarFallback>{row.original.name?.[0] ?? "?"}</AvatarFallback>
-                    </Avatar>
-                </div>
+                <UsuarioAvatar name={row.original.name} image={row.original.image} onImageClick={setLightboxSrc} />
             ),
         },
         {
@@ -441,15 +458,7 @@ const SeguridadPage = () => {
             header: "Foto",
             enableSorting: false,
             cell: ({ row }) => (
-                <div
-                    className={row.original.image ? "cursor-zoom-in" : undefined}
-                    onClick={() => row.original.image && setLightboxSrc(`${url}${row.original.image}`)}
-                >
-                    <Avatar>
-                        <AvatarImage src={`${url}${row.original.image}`} alt={row.original.name} />
-                        <AvatarFallback>{row.original.name?.[0] ?? "?"}</AvatarFallback>
-                    </Avatar>
-                </div>
+                <UsuarioAvatar name={row.original.name} image={row.original.image} onImageClick={setLightboxSrc} />
             ),
         },
         { accessorKey: "name", header: "Nombre" },
