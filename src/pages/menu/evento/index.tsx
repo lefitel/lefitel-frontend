@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -41,7 +41,7 @@ const toRows = (list: EventoInterface[]) =>
     list.map((e, i) => [
         String(i + 1),
         e.poste?.name ?? "",
-        `${e.poste?.ciudadA?.name ?? ""} → ${e.poste?.ciudadB?.name ?? ""}`,
+        `${e.poste?.ciudadA?.name ?? ""} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" />${e.poste?.ciudadB?.name ?? ""}`,
         e.poste?.propietario?.name ?? "",
         e.description,
         e.state ? "Resuelto" : "Pendiente",
@@ -289,12 +289,24 @@ const EventoPage = () => {
             ),
         },
         {
+            accessorKey: "description",
+            header: "Descripción",
+            cell: ({ row }) => (
+                <button
+                    className="font-medium text-sm text-primary hover:underline text-left line-clamp-2 max-w-xs"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/eventos/${row.original.id}`); }}
+                >
+                    {row.original.description}
+                </button>
+            ),
+        },
+        {
             accessorKey: "poste",
             header: "Poste",
             cell: ({ row }) => (
                 <button
-                    className="font-medium text-sm text-primary hover:underline text-left"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/eventos/${row.original.id}`); }}
+                    className="text-sm hover:underline text-left whitespace-nowrap"
+                    onClick={(e) => { e.stopPropagation(); navigate(`/postes/${row.original.id_poste}`); }}
                 >
                     {row.original.poste?.name ?? "—"}
                 </button>
@@ -303,24 +315,23 @@ const EventoPage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {row.original.poste?.ciudadA?.name ?? "—"} → {row.original.poste?.ciudadB?.name ?? "—"}
-                </span>
-            ),
+            cell: ({ row }) => {
+                const a = row.original.poste?.ciudadA;
+                const b = row.original.poste?.ciudadB;
+                return (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                    </span>
+                );
+            },
         },
         {
             id: "propietario",
             header: "Propietario",
             cell: ({ row }) => (
                 <span className="text-sm">{row.original.poste?.propietario?.name ?? "—"}</span>
-            ),
-        },
-        {
-            accessorKey: "description",
-            header: "Descripción",
-            cell: ({ row }) => (
-                <span className="text-sm line-clamp-2 max-w-xs">{row.original.description}</span>
             ),
         },
         {
@@ -346,6 +357,24 @@ const EventoPage = () => {
                 const max = new Date(Math.max(...revs.map((r) => new Date(r.date).getTime())));
                 return <span className="text-xs whitespace-nowrap">{max.toLocaleDateString("es-ES")}</span>;
             },
+        },
+        {
+            accessorKey: "createdAt",
+            header: "Registrado",
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
+        },
+        {
+            accessorKey: "updatedAt",
+            header: "Última edición",
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
         },
         {
             id: "obs",
@@ -431,11 +460,17 @@ const EventoPage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {row.original.poste?.ciudadA?.name ?? "—"} → {row.original.poste?.ciudadB?.name ?? "—"}
-                </span>
-            ),
+            cell: ({ row }) => {
+                const a = row.original.poste?.ciudadA;
+                const b = row.original.poste?.ciudadB;
+                return (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                    </span>
+                );
+            },
         },
         {
             accessorKey: "description",
@@ -470,7 +505,7 @@ const EventoPage = () => {
                 </div>
             ),
         },
-    ], []);
+    ], [navigate]);
 
     const hasData = !!list?.length;
 
@@ -496,6 +531,7 @@ const EventoPage = () => {
                     columns={columns}
                     onRetry={load}
                     hasPaginated={true}
+                    initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     actions={
                         <div className="flex gap-2">
                             <DropdownMenu>

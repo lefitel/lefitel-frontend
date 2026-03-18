@@ -1,4 +1,5 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { SesionContext } from "../../../context/SesionContext";
 import { getAllBitacora, BitacoraFilters } from "../../../api/Bitacora.api";
@@ -20,8 +21,16 @@ const actionColor = (action: string) => {
   return "outline";
 };
 
+const ENTITY_ROUTE: Partial<Record<string, string>> = {
+  Poste:   "/postes",
+  Evento:  "/eventos",
+  Ciudad:  "/ciudades",
+  Usuario: "/seguridad",
+};
+
 const BitacoraPage = () => {
   const { sesion } = useContext(SesionContext);
+  const navigate = useNavigate();
   const [rows, setRows] = useState<BitacoraInterface[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -60,21 +69,31 @@ const BitacoraPage = () => {
       ),
     },
     {
-      accessorKey: "entity",
+      id: "entidad",
       header: "Entidad",
-      cell: ({ row }) => <span className="text-sm">{row.original.entity}</span>,
-    },
-    {
-      accessorKey: "entity_id",
-      header: "ID",
-      cell: ({ row }) => <span className="text-sm text-muted-foreground">{row.original.entity_id ?? "—"}</span>,
+      cell: ({ row }) => {
+        const { entity, entity_id } = row.original;
+        const route = entity ? ENTITY_ROUTE[entity] : undefined;
+        return route && entity_id ? (
+          <button
+            className="text-sm text-primary hover:underline whitespace-nowrap"
+            onClick={() => navigate(`${route}/${entity_id}`)}
+          >
+            {entity} #{entity_id}
+          </button>
+        ) : (
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {entity ?? "—"}{entity_id ? ` #${entity_id}` : ""}
+          </span>
+        );
+      },
     },
     {
       accessorKey: "detail",
       header: "Detalle",
       cell: ({ row }) => <span className="text-sm">{row.original.detail}</span>,
     },
-  ], []);
+  ], [navigate]);
 
   const fetch = useCallback(async () => {
     setLoading(true);

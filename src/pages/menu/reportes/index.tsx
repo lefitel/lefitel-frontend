@@ -3,13 +3,19 @@ import { Button } from "../../../components/ui/button";
 import ReportGeneralSec from "./ReportGeneralSec";
 import ReportTramoSec from "./ReportTramoSec";
 import ReportRecorridoSec from "./ReportRecorrido";
+import ReportEstadoRedSec from "./ReportEstadoRedSec";
+import ReportObsFrecuenciaSec from "./ReportObsFrecuenciaSec";
+import ReportTiemposSec from "./ReportTiemposSec";
 
-type Tab = "general" | "tramo" | "recorrido";
+type Tab = "general" | "tramo" | "recorrido" | "estado" | "observaciones" | "tiempos";
 
 const TABS: { value: Tab; label: string }[] = [
-  { value: "general", label: "General" },
-  { value: "tramo", label: "Por Tramo" },
-  { value: "recorrido", label: "Recorrido" },
+  { value: "general",       label: "General" },
+  { value: "tramo",         label: "Por Tramo" },
+  { value: "recorrido",     label: "Recorrido" },
+  { value: "estado",        label: "Estado de la Red" },
+  { value: "observaciones", label: "Observaciones" },
+  { value: "tiempos",       label: "Tiempos" },
 ];
 
 const ReportePage = () => {
@@ -22,7 +28,7 @@ const ReportePage = () => {
         <p className="text-muted-foreground">Generación y exportación de reportes del sistema.</p>
       </div>
 
-      <div className="flex items-center rounded-lg border border-border bg-muted/30 p-1 gap-1 w-fit">
+      <div className="flex flex-wrap items-center rounded-lg border border-border bg-muted/30 p-1 gap-1 w-fit">
         {TABS.map((t) => (
           <Button
             key={t.value}
@@ -36,9 +42,12 @@ const ReportePage = () => {
         ))}
       </div>
 
-      {tab === "general" && <ReportGeneralSec />}
-      {tab === "tramo" && <ReportTramoSec />}
-      {tab === "recorrido" && <ReportRecorridoSec />}
+      {tab === "general"       && <ReportGeneralSec />}
+      {tab === "tramo"         && <ReportTramoSec />}
+      {tab === "recorrido"     && <ReportRecorridoSec />}
+      {tab === "estado"        && <ReportEstadoRedSec />}
+      {tab === "observaciones" && <ReportObsFrecuenciaSec />}
+      {tab === "tiempos"       && <ReportTiemposSec />}
     </div>
   );
 };

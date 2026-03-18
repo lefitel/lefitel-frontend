@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -11,10 +11,11 @@ import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { deletePoste, desarchivarPoste, getPoste, searchPoste } from "../../../api/Poste.api";
-import { getEvento_poste } from "../../../api/Evento.api";
-import { PosteInterface } from "../../../interfaces/interfaces";
+import { getEvento, getEvento_poste } from "../../../api/Evento.api";
+import { EventoInterface, PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Button } from "../../../components/ui/button";
+import { Badge } from "../../../components/ui/badge";
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
     DropdownMenuSeparator, DropdownMenuTrigger,
@@ -41,7 +42,7 @@ const toRows = (list: PosteInterface[]) =>
     list.map((p, i) => [
         String(i + 1),
         p.name,
-        `${p.ciudadA?.name ?? ""} → ${p.ciudadB?.name ?? ""}`,
+        `${p.ciudadA?.name ?? ""} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" />${p.ciudadB?.name ?? ""}`,
         p.material?.name ?? "",
         p.propietario?.name ?? "",
         p.lat ? String(p.lat) : "",
@@ -184,9 +185,9 @@ const exportPdf = async (list: PosteInterface[]) => {
         doc.setPage(i);
         doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
         doc.setDrawColor(208, 216, 239);
-        doc.line(10, 208, W - 10, 208);
-        doc.text("Lefitel", 10, 212);
-        doc.text(`Página ${i} de ${pageCount}`, W - 10, 212, { align: "right" });
+        doc.line(10, 203, W - 10, 203);
+        doc.text("Lefitel", 10, 207);
+        doc.text(`Página ${i} de ${pageCount}`, W - 10, 207, { align: "right" });
     }
     doc.save(filename("pdf"));
 };
@@ -220,10 +221,19 @@ const PostePage = () => {
     const canEdit = can(rol, "postes", "editar");
     const isAdmin = can(rol, "postes", "archivar");
 
+    const [eventMap, setEventMap] = useState<Map<number, number>>(new Map());
+
     const load = useCallback(() => {
         setLoading(true);
-        getPoste(sesion.token)
-            .then((data) => setList(data ?? []))
+        Promise.all([getPoste(sesion.token), getEvento(sesion.token)])
+            .then(([postes, eventos]) => {
+                setList(postes ?? []);
+                const map = new Map<number, number>();
+                for (const e of eventos as EventoInterface[]) {
+                    if (e.id_poste && !e.state) map.set(e.id_poste, (map.get(e.id_poste) ?? 0) + 1);
+                }
+                setEventMap(map);
+            })
             .catch(() => { toast.error("Error al cargar postes"); setList(null); })
             .finally(() => setLoading(false));
     }, [sesion.token]);
@@ -312,11 +322,17 @@ const PostePage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {row.original.ciudadA?.name ?? "—"} → {row.original.ciudadB?.name ?? "—"}
-                </span>
-            ),
+            cell: ({ row }) => {
+                const a = row.original.ciudadA;
+                const b = row.original.ciudadB;
+                return (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                    </span>
+                );
+            },
         },
         {
             id: "material",
@@ -333,15 +349,24 @@ const PostePage = () => {
             ),
         },
         {
-            id: "coords",
-            header: "Coordenadas",
+            id: "pendientes",
+            header: "Pendientes",
             enableSorting: false,
             cell: ({ row }) => {
-                const { lat, lng } = row.original;
-                if (!lat && !lng) return <span className="text-xs text-muted-foreground">—</span>;
+                const count = eventMap.get(row.original.id as number) ?? 0;
+                return count > 0
+                    ? <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">{count}</Badge>
+                    : <span className="text-xs text-muted-foreground">—</span>;
+            },
+        },
+        {
+            id: "usuario",
+            header: "Creador",
+            cell: ({ row }) => {
+                const u = row.original.usuario;
                 return (
-                    <span className="text-xs text-muted-foreground font-mono whitespace-nowrap">
-                        {lat?.toFixed(4)}, {lng?.toFixed(4)}
+                    <span className="text-sm whitespace-nowrap">
+                        {u ? `${u.name} ${u.lastname}` : "—"}
                     </span>
                 );
             },
@@ -352,6 +377,15 @@ const PostePage = () => {
             cell: ({ row }) => (
                 <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
+        },
+        {
+            accessorKey: "updatedAt",
+            header: "Última edición",
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString("es-ES") : "—"}
                 </span>
             ),
         },
@@ -395,18 +429,24 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit]);
+    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, eventMap]);
 
     const archivedColumns = useMemo<ColumnDef<PosteInterface>[]>(() => [
         { accessorKey: "name", header: "Nombre" },
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {row.original.ciudadA?.name ?? "—"} → {row.original.ciudadB?.name ?? "—"}
-                </span>
-            ),
+            cell: ({ row }) => {
+                const a = row.original.ciudadA;
+                const b = row.original.ciudadB;
+                return (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                    </span>
+                );
+            },
         },
         {
             id: "material",
@@ -434,7 +474,7 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], []);
+    ], [navigate]);
 
     const hasData = !!list?.length;
 
@@ -460,6 +500,7 @@ const PostePage = () => {
                     columns={columns}
                     onRetry={load}
                     hasPaginated={true}
+                    initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     actions={
                         <div className="flex gap-2">
                             <DropdownMenu>

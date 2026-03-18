@@ -74,12 +74,7 @@ const DataTable = <T extends IGeneral>({
     rowSize = "sm",
 }: Props<T>) => {
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({
-        createdAt: false,
-        updatedAt: false,
-        deletedAt: false,
-        ...initialColumnVisibility,
-    });
+    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [sorting, setSorting] = useState<SortingState>([]);
     const [pagination, setPagination] = useState({

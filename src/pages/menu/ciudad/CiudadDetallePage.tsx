@@ -14,7 +14,7 @@ import { url } from "../../../api/url";
 import { useCiudadDetalleData } from "./useCiudadDetalleData";
 import { latExample, lngExample } from "../../../data/example";
 import {
-  CalendarIcon, MapPinIcon, MoreVerticalIcon, PencilIcon, RefreshCwIcon, RouteIcon, ZapIcon,
+  CalendarIcon, ChevronRightIcon, MapPinIcon, MoreVerticalIcon, PencilIcon, RefreshCwIcon, RouteIcon, ZapIcon,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -238,7 +238,7 @@ export default function CiudadDetallePage() {
                 <div className="flex items-center gap-3 px-6 py-3 bg-muted/30">
                   <RouteIcon className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm font-semibold">
-                    {tramo.ciudadA.name} → {tramo.ciudadB.name}
+                    {tramo.ciudadA.name} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {tramo.ciudadB.name}
                   </span>
                   <Badge variant="outline" className="ml-auto text-xs">
                     {tramo.postes.length} {tramo.postes.length === 1 ? "poste" : "postes"}

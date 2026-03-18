@@ -19,7 +19,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from "../../../../components/ui/dropdown-menu";
-import { MoreVerticalIcon, PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { MoreVerticalIcon, PencilIcon, PlusIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
 import EditPosteSheet from "../../../../components/dialogs/edits/EditPosteSheet";
 import EditCiudadSheet from "../../../../components/dialogs/edits/EditCiudadSheet";
 import PermissionGuard from "../../../../components/PermissionGuard";
@@ -206,7 +206,7 @@ export default function PosteDetallePage() {
             <>
               <h1 className="text-2xl font-bold tracking-tight">Poste {d.poste?.name ?? "—"}</h1>
               <p className="text-sm text-muted-foreground">
-                Tramo: {d.poste?.ciudadA?.name ?? "—"} → {d.poste?.ciudadB?.name ?? "—"}
+                Tramo: {d.poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {d.poste?.ciudadB?.name ?? "—"}
               </p>
             </>
           )}

@@ -24,7 +24,7 @@ import { Separator } from "../../../../components/ui/separator";
 import {
   Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
 } from "../../../../components/ui/sheet";
-import { CalendarIcon, ChevronDownIcon, ClockIcon, ExternalLinkIcon, WrenchIcon } from "lucide-react";
+import { CalendarIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, ExternalLinkIcon, WrenchIcon } from "lucide-react";
 import { Switch } from "../../../../components/ui/switch";
 import { Checkbox } from "../../../../components/ui/checkbox";
 
@@ -193,7 +193,7 @@ export default function EditEventoSheet({ eventoId, open, setOpen, onSuccess }: 
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Tramo</span>
                     <span className="font-medium text-right">
-                      {evento?.poste?.ciudadA?.name ?? "—"} → {evento?.poste?.ciudadB?.name ?? "—"}
+                      {evento?.poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {evento?.poste?.ciudadB?.name ?? "—"}
                     </span>
                   </div>
                   <div className="flex justify-between">

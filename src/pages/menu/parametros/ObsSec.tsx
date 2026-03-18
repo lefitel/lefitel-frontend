@@ -163,6 +163,24 @@ const ObsSec = ({ innerTab }: Props) => {
             ),
         },
         {
+            accessorKey: "createdAt",
+            header: "Registrado",
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.createdAt ? new Date(row.original.createdAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
+        },
+        {
+            accessorKey: "updatedAt",
+            header: "Última edición",
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.updatedAt ? new Date(row.original.updatedAt).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
+        },
+        {
             id: "actions",
             header: "",
             enableSorting: false,

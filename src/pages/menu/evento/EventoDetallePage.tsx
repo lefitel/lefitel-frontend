@@ -20,7 +20,7 @@ import {
   PencilIcon, PlusIcon, WrenchIcon,
   RefreshCwIcon, CalendarIcon, MapPinIcon, ClockIcon,
   CheckCircle2Icon, ZapIcon,
-  AlertCircleIcon,
+  AlertCircleIcon, ChevronRightIcon,
 } from "lucide-react";
 import { latExample, lngExample } from "../../../data/example";
 import { ImageViewer } from "../../../components/ui/image-viewer";
@@ -131,7 +131,7 @@ export default function EventoDetallePage() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {poste?.name ?? "—"} · {poste?.ciudadA?.name ?? "—"} → {poste?.ciudadB?.name ?? "—"}
+                  {poste?.name ?? "—"} · {poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {poste?.ciudadB?.name ?? "—"}
                 </p>
               </>
             )}
@@ -238,7 +238,7 @@ export default function EventoDetallePage() {
                   icon={<MapPinIcon className="h-4 w-4 text-muted-foreground" />}
                   bg="bg-muted"
                   label="Tramo"
-                  value={`${poste?.ciudadA?.name ?? "—"} → ${poste?.ciudadB?.name ?? "—"}`}
+                  value={<>{poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {poste?.ciudadB?.name ?? "—"}</>}
                 />
                 {poste?.propietario?.name && (
                   <InfoRow
@@ -594,7 +594,7 @@ function FitBounds({ coords }: { coords: [number, number][] }) {
 }
 
 function InfoRow({ icon, bg, label, value }: {
-  icon: React.ReactNode; bg: string; label: string; value: string;
+  icon: React.ReactNode; bg: string; label: string; value: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3">

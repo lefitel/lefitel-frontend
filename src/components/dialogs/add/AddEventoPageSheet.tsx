@@ -1,6 +1,6 @@
 import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { Switch } from "../../ui/switch";
 import { Checkbox } from "../../ui/checkbox";
 import { SesionContext } from "../../../context/SesionContext";
@@ -166,7 +166,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Tramo</span>
                                 <span className="font-medium">
-                                    {selectedPoste.ciudadA?.name ?? "—"} → {selectedPoste.ciudadB?.name ?? "—"}
+                                    {selectedPoste.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {selectedPoste.ciudadB?.name ?? "—"}
                                 </span>
                             </div>
                             <div className="flex justify-between">

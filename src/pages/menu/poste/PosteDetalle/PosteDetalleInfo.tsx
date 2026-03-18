@@ -1,7 +1,7 @@
 import { PosteInterface } from "../../../../interfaces/interfaces";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { CalendarIcon, MapPinIcon, UserIcon, ZapIcon } from "lucide-react";
+import { CalendarIcon, ChevronRightIcon, MapPinIcon, UserIcon, ZapIcon } from "lucide-react";
 import { ImageViewer } from "../../../../components/ui/image-viewer";
 import { url } from "../../../../api/url";
 
@@ -29,7 +29,7 @@ export default function PosteDetalleInfo({ loading, poste }: Props) {
           ))
         ) : (
           <>
-            <InfoRow icon={<MapPinIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10" label="Tramo" value={`${poste?.ciudadA?.name ?? "—"} → ${poste?.ciudadB?.name ?? "—"}`} />
+            <InfoRow icon={<MapPinIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10" label="Tramo" value={<>{poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {poste?.ciudadB?.name ?? "—"}</>} />
             <InfoRow icon={<ZapIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10" label="Material" value={poste?.material?.name ?? "—"} />
             <InfoRow icon={<UserIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Propietario" value={poste?.propietario?.name ?? "—"} />
             <InfoRow icon={<UserIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Registrado por" value={poste?.usuario ? `${poste.usuario.name} ${poste.usuario.lastname}` : "—"} />
@@ -54,7 +54,7 @@ export default function PosteDetalleInfo({ loading, poste }: Props) {
   );
 }
 
-function InfoRow({ icon, bg, label, value }: { icon: React.ReactNode; bg: string; label: string; value: string }) {
+function InfoRow({ icon, bg, label, value }: { icon: React.ReactNode; bg: string; label: string; value: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3">
       <div className={`p-2 ${bg} rounded-full shrink-0`}>{icon}</div>

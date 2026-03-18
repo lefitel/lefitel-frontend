@@ -140,30 +140,23 @@ export default function CiudadesPage() {
       ),
     },
     {
-      accessorKey: "lat",
-      header: "Latitud",
-      cell: ({ row }) => (
-        <span className="text-xs font-mono text-muted-foreground">
-          {row.original.lat !== 0 ? row.original.lat.toFixed(6) : "—"}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "lng",
-      header: "Longitud",
-      cell: ({ row }) => (
-        <span className="text-xs font-mono text-muted-foreground">
-          {row.original.lng !== 0 ? row.original.lng.toFixed(6) : "—"}
-        </span>
-      ),
-    },
-    {
       accessorKey: "createdAt",
       header: "Registrada",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground whitespace-nowrap">
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {row.original.createdAt
             ? new Date(row.original.createdAt).toLocaleDateString("es-ES")
+            : "—"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "updatedAt",
+      header: "Última edición",
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
+          {row.original.updatedAt
+            ? new Date(row.original.updatedAt).toLocaleDateString("es-ES")
             : "—"}
         </span>
       ),
@@ -301,7 +294,6 @@ export default function CiudadesPage() {
               <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
           </>}
-          initialColumnVisibility={{ createdAt: false }}
         />
       </TabsContent>
 
