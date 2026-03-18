@@ -7,6 +7,7 @@ import ThemedTileLayer from "../../../components/map/ThemedTileLayer";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { PosteInterface, EventoInterface } from "../../../interfaces/interfaces";
+import { DashboardEvento } from "../../../api/dashboard.api";
 import { latExample, lngExample } from "../../../data/example";
 import { MapMarker, MapTab } from "./types";
 import { searchPoste } from "../../../api/Poste.api";
@@ -31,7 +32,7 @@ export function OperationsMap({
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
-  const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
+  const [resolverEvento, setResolverEvento] = useState<DashboardEvento | null>(null);
   const [addRevicionEventoId, setAddRevicionEventoId] = useState<number | null>(null);
 
   return (
@@ -181,7 +182,7 @@ export function OperationsMap({
       </CardContent>
       <PermissionGuard module="eventos" action="editar" open={!!resolverEvento} onOpenChange={(v) => { if (!v) setResolverEvento(null); }}>
         <ResolverEventoSheet
-          evento={resolverEvento}
+          evento={resolverEvento as unknown as EventoInterface}
           open={!!resolverEvento}
           setOpen={(v) => { if (!v) setResolverEvento(null); }}
           onSuccess={load}

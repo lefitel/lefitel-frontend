@@ -1,9 +1,8 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
-import { getEvento } from "../../../api/Evento.api";
-import { getPoste } from "../../../api/Poste.api";
-import { EventoInterface, PosteInterface } from "../../../interfaces/interfaces";
+import { getDashboard, DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
+import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Period, MapTab, KpiData, MapMarker, MONTH_NAMES } from "./types";
 import { getPeriodBounds } from "./helpers";
@@ -19,7 +18,7 @@ export interface InicioData {
   chartData: { label: string; pending: number; solved: number }[];
   xAxisLabel: string;
   showTrend: boolean;
-  urgentEvents: EventoInterface[];
+  urgentEvents: DashboardEvento[];
   topPostes: { name: string; count: number }[];
   mapMarkers: MapMarker[];
   token: string;
@@ -32,8 +31,8 @@ export interface InicioData {
 export function useInicioData(): InicioData {
   const { sesion } = useContext(SesionContext);
 
-  const [listPostes, setListPostes] = useState<PosteInterface[] | null>(null);
-  const [listEventos, setListEventos] = useState<EventoInterface[] | null>(null);
+  const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
+  const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("month");
   const [mapTab, setMapTab] = useState<MapTab>("postes");
@@ -45,12 +44,9 @@ export function useInicioData(): InicioData {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [eventos, postes] = await Promise.all([
-        getEvento(sesion.token),
-        getPoste(sesion.token),
-      ]);
-      setListEventos(eventos);
-      setListPostes(postes);
+      const data = await getDashboard(sesion.token);
+      setListEventos(data.eventos);
+      setListPostes(data.postes);
     } catch {
       toast.error("Error al cargar los datos del dashboard");
     } finally {

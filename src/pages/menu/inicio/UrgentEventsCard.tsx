@@ -2,12 +2,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
-import { EventoInterface } from "../../../interfaces/interfaces";
+import { DashboardEvento } from "../../../api/dashboard.api";
 import { daysOpen } from "./helpers";
 import { useNavigate } from "react-router-dom";
 
 interface UrgentEventsCardProps {
-  urgentEvents: EventoInterface[];
+  urgentEvents: DashboardEvento[];
   loading: boolean;
 }
 

@@ -1,4 +1,4 @@
-import { EventoInterface, PosteInterface } from "../../../interfaces/interfaces";
+import { DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
 
 export type Period = "month" | "quarter" | "year" | "all";
 export type MapTab = "postes" | "pendientes" | "solucionados";
@@ -30,5 +30,5 @@ export interface KpiData {
 }
 
 export type MapMarker =
-  | { lat: number; lng: number; label: string; isPoste: true; item: PosteInterface }
-  | { lat: number; lng: number; label: string; isPoste: false; item: EventoInterface };
+  | { lat: number; lng: number; label: string; isPoste: true; item: DashboardPoste }
+  | { lat: number; lng: number; label: string; isPoste: false; item: DashboardEvento };
