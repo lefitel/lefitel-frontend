@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -410,7 +410,6 @@ const SeguridadPage = () => {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-36">
                             <DropdownMenuItem onClick={() => navigate(`/seguridad/${row.original.id}`)}>
-                                <ExternalLinkIcon className="h-4 w-4 mr-2" />
                                 Ver detalle
                             </DropdownMenuItem>
                             {can(rol, "seguridad", "editar") && (
