@@ -25,6 +25,8 @@ import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Combobox } from "../../../components/ui/combobox";
+import { Switch } from "../../../components/ui/switch";
+import { Badge } from "../../../components/ui/badge";
 import { Loader2Icon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, CheckIcon } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,7 +46,9 @@ const ReportTramoSec = () => {
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal,   setTramoFinal]   = useState<number | null>(null);
   const [listCiudad,   setListCiudad]   = useState<CiudadInterface[]>([]);
+  const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
+  const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading]         = useState(false);
   const [exporting, setExporting]     = useState(false);
 
@@ -64,7 +68,7 @@ const ReportTramoSec = () => {
 
     const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
     const fin    = new Date(fechaFin);    fin.setHours(23, 59, 59, 0);
-    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null };
+    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null, excludeOld };
 
     setLoading(true);
     try {
@@ -94,8 +98,10 @@ const ReportTramoSec = () => {
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
         setList([]);
+        setAppliedRange(null);
       } else {
         setList(data);
+        setAppliedRange({ start: inicio, end: fin });
         toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
       }
     } catch {
@@ -107,10 +113,12 @@ const ReportTramoSec = () => {
 
   const handleLimpiar = () => {
     setList([]);
+    setAppliedRange(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
     setTramoInicial(null);
     setTramoFinal(null);
+    setExcludeOld(false);
   };
 
   const handleExport = async (format: "excel" | "csv" | "pdf") => {
@@ -274,6 +282,17 @@ const ReportTramoSec = () => {
               />
             </div>
           </div>
+          <div className="mt-5">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <Switch checked={excludeOld} onCheckedChange={setExcludeOld} />
+              <span className="text-sm">
+                Excluir incidencias antiguas
+                <span className="block text-xs text-muted-foreground">
+                  Solo eventos creados en el rango (ignora arrastrados de meses anteriores)
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex gap-2 mt-5">
             <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}
@@ -288,14 +307,31 @@ const ReportTramoSec = () => {
         </CardContent>
       </Card>
 
-      {list.length > 0 && (
+      {list.length > 0 && (() => {
+        const nuevas = appliedRange
+          ? list.filter((e) => {
+              if (!e.date) return false;
+              const d = new Date(e.date).getTime();
+              return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+            }).length
+          : 0;
+        const arrastradas = list.length - nuevas;
+        return (
         <Card className="shadow-sm border-muted/60">
           <CardHeader className="border-b border-border/40 pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <CardTitle>Resultados</CardTitle>
-              <span className="text-sm text-muted-foreground">
-                {list.length} {list.length === 1 ? "evento" : "eventos"}
-              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="outline">{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
+                {!excludeOld && arrastradas > 0 && (
+                  <Badge variant="outline" className="text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
+                    {nuevas} nuevas · {arrastradas} arrastradas
+                  </Badge>
+                )}
+                {excludeOld && (
+                  <Badge variant="outline" className="text-blue-600">solo nuevas del período</Badge>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-4">
@@ -337,7 +373,8 @@ const ReportTramoSec = () => {
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
     </div>
   );
 };

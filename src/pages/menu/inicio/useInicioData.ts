@@ -7,6 +7,11 @@ import { posteExample } from "../../../data/example";
 import { Period, MapTab, KpiData, MapMarker, MONTH_NAMES } from "./types";
 import { getPeriodBounds } from "./helpers";
 
+export interface CriticalAlert {
+  events: DashboardEvento[];
+  thresholdDays: number;
+}
+
 export interface InicioData {
   loading: boolean;
   load: () => void;
@@ -21,6 +26,7 @@ export interface InicioData {
   urgentEvents: DashboardEvento[];
   topPostes: { name: string; count: number }[];
   mapMarkers: MapMarker[];
+  criticalAlerts: CriticalAlert;
   token: string;
   dataPoste: PosteInterface;
   setDataPoste: (p: PosteInterface) => void;
@@ -62,10 +68,18 @@ export function useInicioData(): InicioData {
     if (!listEventos || !listPostes) return null;
     const inCurr = period === "all" ? () => true : (d: Date) => d >= bounds.start && d <= bounds.end;
     const inPrev = period === "all" ? () => true : (d: Date) => d >= bounds.prevStart && d <= bounds.prevEnd;
+    const hasRevicionInCurr = (e: DashboardEvento) =>
+      (e.revicions ?? []).some((r) => inCurr(new Date(r.date)));
+    const hasRevicionInPrev = (e: DashboardEvento) =>
+      (e.revicions ?? []).some((r) => inPrev(new Date(r.date)));
 
     const postesTotal = listPostes.length;
     const postesCurr = listPostes.filter((p) => inCurr(new Date(p.date))).length;
     const postesPrev = listPostes.filter((p) => inPrev(new Date(p.date))).length;
+    const postesConPendientes = new Set(listEventos.filter((e) => !e.state).map((e) => e.id_poste));
+    const postesConIncidencias = postesConPendientes.size;
+    const eventosTotal = listEventos.length;
+    const eventosResueltosTotal = listEventos.filter((e) => e.state).length;
     const pendGlobal = listEventos.filter((e) => !e.state).length;
     const pendCurr = listEventos.filter((e) => !e.state && inCurr(new Date(e.date))).length;
     const pendPrev = listEventos.filter((e) => !e.state && inPrev(new Date(e.date))).length;
@@ -76,11 +90,38 @@ export function useInicioData(): InicioData {
     const resRateCurr = openedCurr > 0 ? Math.round((solCurr / openedCurr) * 100) : 0;
     const resRatePrev = openedPrev > 0 ? Math.round((solPrev / openedPrev) * 100) : 0;
 
-    return { postesTotal, postesCurr, postesPrev, pendGlobal, pendCurr, pendPrev, solCurr, solPrev, resRateCurr, resRatePrev, openedCurr };
+    const reviewedList = listEventos.filter(hasRevicionInCurr);
+    const reviewedCurr = reviewedList.length;
+    const reviewedPrev = listEventos.filter(hasRevicionInPrev).length;
+    const reviewedSolved = reviewedList.filter((e) => e.state).length;
+    const reviewedPending = reviewedList.filter((e) => !e.state).length;
+
+    return {
+      postesTotal, postesConIncidencias, eventosTotal, eventosResueltosTotal,
+      postesCurr, postesPrev, pendGlobal, pendCurr, pendPrev,
+      solCurr, solPrev, resRateCurr, resRatePrev, openedCurr, openedPrev,
+      reviewedCurr, reviewedPrev, reviewedSolved, reviewedPending,
+    };
   }, [listEventos, listPostes, bounds, period]);
 
   const chartData = useMemo(() => {
     if (!listEventos) return [];
+    if (period === "fortnight") {
+      return Array.from({ length: 15 }, (_, i) => {
+        const day = new Date(bounds.start);
+        day.setDate(day.getDate() + i);
+        const dayStart = day.getTime();
+        const dayEnd = dayStart + 86_400_000;
+        let pending = 0, solved = 0;
+        listEventos.forEach((e) => {
+          const t = new Date(e.date).getTime();
+          if (t >= dayStart && t < dayEnd) {
+            if (!e.state) pending++; else solved++;
+          }
+        });
+        return { label: `${day.getDate()}/${day.getMonth() + 1}`, pending, solved };
+      });
+    }
     if (period === "month") {
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       return Array.from({ length: daysInMonth }, (_, i) => {
@@ -133,6 +174,7 @@ export function useInicioData(): InicioData {
   }, [listEventos, period, bounds]);
 
   const xAxisLabel =
+    period === "fortnight" ? "Día — últimos 15 días" :
     period === "month"   ? `Día — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` :
     period === "quarter" ? "Últimos 3 meses" :
     period === "year"    ? `Mes — ${now.getFullYear()}` :
@@ -148,6 +190,16 @@ export function useInicioData(): InicioData {
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
       .slice(0, 5);
   }, [listEventos, bounds, period]);
+
+  const criticalAlerts = useMemo<CriticalAlert>(() => {
+    const thresholdDays = 7;
+    if (!listEventos) return { events: [], thresholdDays };
+    const cutoff = Date.now() - thresholdDays * 86_400_000;
+    const events = listEventos
+      .filter((e) => e.priority && !e.state && new Date(e.date).getTime() <= cutoff)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    return { events, thresholdDays };
+  }, [listEventos]);
 
   const topPostes = useMemo(() => {
     if (!listEventos) return [];
@@ -179,7 +231,7 @@ export function useInicioData(): InicioData {
   return {
     loading, load, period, setPeriod, mapTab, setMapTab,
     kpis, chartData, xAxisLabel, showTrend,
-    urgentEvents, topPostes, mapMarkers,
+    urgentEvents, topPostes, mapMarkers, criticalAlerts,
     token: sesion.token,
     dataPoste, setDataPoste, openEditPoste, setOpenEditPoste,
   };

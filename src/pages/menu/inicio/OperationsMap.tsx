@@ -49,7 +49,7 @@ export function OperationsMap({
       </CardHeader>
       <CardContent className="p-0 overflow-hidden rounded-b-xl">
         <div className="isolate">
-        <MapContainer center={[latExample, lngExample]} zoom={5} style={{ height: "420px" }} scrollWheelZoom={true} zoomControl={false}>
+        <MapContainer center={[latExample, lngExample]} zoom={5} className="h-80 sm:h-105" scrollWheelZoom={true} zoomControl={false}>
           <ThemedTileLayer />
           {mapMarkers.map((m, i) => (
             <CircleMarker
@@ -63,7 +63,7 @@ export function OperationsMap({
                 weight: 1.5,
               }}
             >
-              <Popup minWidth={220}>
+              <Popup minWidth={200} maxWidth={260}>
                 {m.isPoste ? (
                   <div style={{ padding: "4px 2px 2px", minWidth: 205 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
@@ -178,6 +178,35 @@ export function OperationsMap({
             </CircleMarker>
           ))}
         </MapContainer>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-3 sm:px-4 py-2.5 border-t border-border/40 text-xs text-muted-foreground">
+          {mapTab === "postes" && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#596BAB" }} />
+              Poste
+            </span>
+          )}
+          {mapTab === "pendientes" && (
+            <>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#FF5500" }} />
+                Pendiente
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#DD0031" }} />
+                Alta prioridad
+              </span>
+            </>
+          )}
+          {mapTab === "solucionados" && (
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#249243" }} />
+              Solucionado
+            </span>
+          )}
+          <span className="ml-auto text-muted-foreground/70">
+            {mapMarkers.length} {mapMarkers.length === 1 ? "marcador" : "marcadores"}
+          </span>
         </div>
       </CardContent>
       <PermissionGuard module="eventos" action="editar" open={!!resolverEvento} onOpenChange={(v) => { if (!v) setResolverEvento(null); }}>

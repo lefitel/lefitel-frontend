@@ -15,6 +15,7 @@ export interface DashboardEvento {
     lng: number;
     propietario?: { name: string } | null;
   } | null;
+  revicions?: { id: number; date: Date }[];
 }
 
 export interface DashboardPoste {

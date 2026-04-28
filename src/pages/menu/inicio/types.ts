@@ -1,9 +1,10 @@
 import { DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
 
-export type Period = "month" | "quarter" | "year" | "all";
+export type Period = "fortnight" | "month" | "quarter" | "year" | "all";
 export type MapTab = "postes" | "pendientes" | "solucionados";
 
 export const PERIOD_LABELS: Record<Period, string> = {
+  fortnight: "15 días",
   month: "Este mes",
   quarter: "3 meses",
   year: "Este año",
@@ -17,6 +18,9 @@ export const MONTH_NAMES = [
 
 export interface KpiData {
   postesTotal: number;
+  postesConIncidencias: number;
+  eventosTotal: number;
+  eventosResueltosTotal: number;
   postesCurr: number;
   postesPrev: number;
   pendGlobal: number;
@@ -27,6 +31,11 @@ export interface KpiData {
   resRateCurr: number;
   resRatePrev: number;
   openedCurr: number;
+  openedPrev: number;
+  reviewedCurr: number;
+  reviewedPrev: number;
+  reviewedSolved: number;
+  reviewedPending: number;
 }
 
 export type MapMarker =

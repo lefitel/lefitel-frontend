@@ -14,6 +14,7 @@ import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Combobox } from "../../../components/ui/combobox";
 import { Badge } from "../../../components/ui/badge";
+import { Switch } from "../../../components/ui/switch";
 import { Loader2Icon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import {
   Select,
@@ -52,7 +53,9 @@ const ReportGeneralSec = () => {
   const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
   const [estado, setEstado] = useState<"todos" | "pendiente" | "solucionado">("todos");
   const [prioridad, setPrioridad] = useState<"todos" | "si" | "no">("todos");
+  const [excludeOld, setExcludeOld] = useState(false);
   const [list, setList] = useState<EventoInterface[]>([]);
+  const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -66,7 +69,7 @@ const ReportGeneralSec = () => {
 
     const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
     const fin = new Date(fechaFin); fin.setHours(23, 59, 59, 0);
-    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null };
+    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null, excludeOld };
 
     setLoading(true);
     try {
@@ -85,8 +88,10 @@ const ReportGeneralSec = () => {
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
         setList([]);
+        setAppliedRange(null);
       } else {
         setList(data);
+        setAppliedRange({ start: inicio, end: fin });
         toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
       }
     } catch {
@@ -98,12 +103,14 @@ const ReportGeneralSec = () => {
 
   const handleLimpiar = () => {
     setList([]);
+    setAppliedRange(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
     setTramoInicial(null);
     setTramoFinal(null);
     setEstado("todos");
     setPrioridad("todos");
+    setExcludeOld(false);
   };
 
   const handleExport = async (format: "excel" | "csv" | "pdf") => {
@@ -295,6 +302,14 @@ const ReportGeneralSec = () => {
   const solucionados = list.filter((e) => e.state).length;
   const criticos     = list.filter((e) => (e.revicions?.length ?? 0) >= 5).length;
   const prioritarios = list.filter((e) => e.priority).length;
+  const nuevas       = appliedRange
+    ? list.filter((e) => {
+        if (!e.date) return false;
+        const d = new Date(e.date).getTime();
+        return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+      }).length
+    : 0;
+  const arrastradas  = list.length - nuevas;
 
   return (
     <div className="space-y-6">
@@ -358,6 +373,17 @@ const ReportGeneralSec = () => {
               </Select>
             </div>
           </div>
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <Switch checked={excludeOld} onCheckedChange={setExcludeOld} />
+              <span className="text-sm">
+                Excluir incidencias antiguas
+                <span className="block text-xs text-muted-foreground">
+                  Solo eventos creados en el rango (ignora arrastrados de meses anteriores)
+                </span>
+              </span>
+            </label>
+          </div>
           <div className="flex gap-2">
             <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}
@@ -376,6 +402,16 @@ const ReportGeneralSec = () => {
         <>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
+            {!excludeOld && arrastradas > 0 && (
+              <Badge variant="outline" className="text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
+                {nuevas} nuevas · {arrastradas} arrastradas
+              </Badge>
+            )}
+            {excludeOld && (
+              <Badge variant="outline" className="text-blue-600">
+                solo nuevas del período
+              </Badge>
+            )}
             <Badge variant="outline" className="text-amber-600">{pendientes} pendientes</Badge>
             <Badge variant="outline" className="text-green-600">{solucionados} solucionados</Badge>
             <Badge variant="outline" className="text-red-600">{criticos} críticos</Badge>

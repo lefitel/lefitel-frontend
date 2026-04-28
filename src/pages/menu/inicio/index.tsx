@@ -13,6 +13,7 @@ import { ActivityChart } from "./ActivityChart";
 import { OperationsMap } from "./OperationsMap";
 import { UrgentEventsCard } from "./UrgentEventsCard";
 import { TopPostesCard } from "./TopPostesCard";
+import { AlertBanner } from "./AlertBanner";
 
 const InicioPage = () => {
   const navigate = useNavigate();
@@ -42,11 +43,21 @@ const InicioPage = () => {
               <span>Registrar Evento</span>
             </Button>
           )}
-          <Button variant="outline" size="icon" onClick={d.load} disabled={d.loading} className="h-8 w-8">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={d.load}
+            disabled={d.loading}
+            className="h-8 w-8"
+            title="Actualizar datos"
+            aria-label="Actualizar datos"
+          >
             <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
+
+      <AlertBanner alerts={d.criticalAlerts} loading={d.loading} />
 
       <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} />
 

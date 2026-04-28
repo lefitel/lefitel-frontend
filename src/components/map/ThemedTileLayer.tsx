@@ -1,8 +1,14 @@
-import { TileLayer } from "react-leaflet";
+import { useEffect } from "react";
+import { TileLayer, useMap } from "react-leaflet";
 import { useTheme } from "../theme-provider";
 
 export default function ThemedTileLayer() {
     const { theme } = useTheme();
+    const map = useMap();
+
+    useEffect(() => {
+        map.attributionControl?.setPrefix(false);
+    }, [map]);
 
     const isDark = theme === "dark" ||
         (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -17,6 +23,7 @@ export default function ThemedTileLayer() {
             url={url}
             subdomains="abcd"
             maxZoom={20}
+            attribution='&copy; OSM &copy; CARTO'
         />
     );
 }

@@ -2,6 +2,16 @@ import { Period } from "./types";
 
 export function getPeriodBounds(period: Period) {
   const now = new Date();
+  if (period === "fortnight") {
+    const start = new Date(now);
+    start.setDate(start.getDate() - 14);
+    start.setHours(0, 0, 0, 0);
+    const prevEnd = new Date(start.getTime() - 1);
+    const prevStart = new Date(prevEnd);
+    prevStart.setDate(prevStart.getDate() - 14);
+    prevStart.setHours(0, 0, 0, 0);
+    return { start, end: now, prevStart, prevEnd };
+  }
   if (period === "month") {
     return {
       start: new Date(now.getFullYear(), now.getMonth(), 1),

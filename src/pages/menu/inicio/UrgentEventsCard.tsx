@@ -5,6 +5,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { DashboardEvento } from "../../../api/dashboard.api";
 import { daysOpen } from "./helpers";
 import { useNavigate } from "react-router-dom";
+import { ArrowRightIcon, InfoIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
 
 interface UrgentEventsCardProps {
   urgentEvents: DashboardEvento[];
@@ -16,8 +18,38 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
   return (
     <Card className="shadow-sm border-muted/60">
       <CardHeader className="border-b border-border/40 pb-5">
-        <CardTitle>Eventos Urgentes</CardTitle>
-        <CardDescription>Eventos de alta prioridad sin resolver en el período seleccionado.</CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <CardTitle>Eventos Urgentes</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button type="button" aria-label="¿Qué eventos aparecen aquí?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                        <InfoIcon className="h-3.5 w-3.5" />
+                      </button>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <span className="block text-left leading-relaxed normal-case">
+                      Eventos con la bandera de <strong className="font-semibold">alta prioridad</strong> activada y aún sin resolver, creados en el período seleccionado. Ordenados por fecha de creación (los más recientes primero). Máximo 5.
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <CardDescription>Eventos de alta prioridad sin resolver en el período seleccionado.</CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => navigate("/eventos")}
+          >
+            Ver todos <ArrowRightIcon className="h-3 w-3" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         <Table>

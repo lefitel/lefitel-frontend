@@ -24,6 +24,7 @@ import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Badge } from "../../../components/ui/badge";
 import { Combobox } from "../../../components/ui/combobox";
+import { Switch } from "../../../components/ui/switch";
 import { DownloadIcon, Loader2Icon, MapPinIcon, RouteIcon } from "lucide-react";
 import ResolverEventoSheet from "../poste/PosteDetalle/ResolverEventoSheet";
 import AddRevicionSheet from "../poste/PosteDetalle/AddRevicionSheet";
@@ -86,7 +87,9 @@ const ReportRecorridoSec = () => {
     const [tramoInicial, setTramoInicial] = useState<number | null>(null);
     const [tramoFinal, setTramoFinal] = useState<number | null>(null);
     const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
+    const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
+    const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
     const [loading, setLoading] = useState(false);
     const [mapTab, setMapTab] = useState<"eventos" | "postes">("eventos");
     const [estadoFilter, setEstadoFilter] = useState<"all" | "pending" | "solved">("all");
@@ -107,7 +110,7 @@ const ReportRecorridoSec = () => {
 
         const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
         const fin = new Date(fechaFin); fin.setHours(23, 59, 59, 0);
-        const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: tramoInicial, TramoFinal: tramoFinal };
+        const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: tramoInicial, TramoFinal: tramoFinal, excludeOld };
 
         setLoading(true);
         try {
@@ -149,8 +152,10 @@ const ReportRecorridoSec = () => {
             if (data.length === 0) {
                 toast.warning("No hay eventos para el tramo y período seleccionado");
                 setList([]);
+                setAppliedRange(null);
             } else {
                 setList(data);
+                setAppliedRange({ start: inicio, end: fin });
                 toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
             }
         } catch {
@@ -226,6 +231,17 @@ const ReportRecorridoSec = () => {
                             />
                         </div>
                     </div>
+                    <div className="mt-5">
+                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                            <Switch checked={excludeOld} onCheckedChange={setExcludeOld} />
+                            <span className="text-sm">
+                                Excluir incidencias antiguas
+                                <span className="block text-xs text-muted-foreground">
+                                    Solo eventos creados en el rango (ignora arrastrados de meses anteriores)
+                                </span>
+                            </span>
+                        </label>
+                    </div>
                     <Button onClick={handleGenerar} disabled={loading} className="mt-5 h-10 px-6">
                         {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <RouteIcon className="h-4 w-4 mr-2" />}
                         Generar
@@ -235,11 +251,29 @@ const ReportRecorridoSec = () => {
 
             {list.length > 0 && ciudadA && ciudadB && (
                 <>
+                    {(() => {
+                        const nuevas = appliedRange
+                            ? list.filter((e) => {
+                                if (!e.date) return false;
+                                const d = new Date(e.date).getTime();
+                                return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+                            }).length
+                            : 0;
+                        const arrastradas = list.length - nuevas;
+                        return (
                     <div className="flex flex-wrap items-center gap-3">
                         <span className="text-sm font-medium">
                             Tramo: <span className="text-primary font-semibold">{ciudadA.name} — {ciudadB.name}</span>
                         </span>
                         <Badge variant="outline" className="gap-1"><MapPinIcon className="h-3 w-3" />{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
+                        {!excludeOld && arrastradas > 0 && (
+                            <Badge variant="outline" className="gap-1 text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
+                                {nuevas} nuevas · {arrastradas} arrastradas
+                            </Badge>
+                        )}
+                        {excludeOld && (
+                            <Badge variant="outline" className="gap-1 text-blue-600">solo nuevas del período</Badge>
+                        )}
                         <Badge variant="outline" className="gap-1">{uniquePostes.length} {uniquePostes.length === 1 ? "poste" : "postes"}</Badge>
                         <Badge variant="outline" className="gap-1 text-amber-600 border-amber-300">{list.filter((e) => !e.state).length} pendientes</Badge>
                         <Badge variant="outline" className="gap-1 text-[#249243] border-[#249243]/40">{list.filter((e) => e.state).length} solucionados</Badge>
@@ -247,6 +281,8 @@ const ReportRecorridoSec = () => {
                             <Badge variant="destructive" className="gap-1">{list.filter((e) => e.priority && !e.state).length} prioritarios</Badge>
                         )}
                     </div>
+                        );
+                    })()}
 
                     {/* Map */}
                     <Card className="shadow-sm border-muted/60">

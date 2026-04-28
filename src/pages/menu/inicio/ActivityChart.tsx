@@ -1,5 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import { InfoIcon } from "lucide-react";
 import { CartesianGrid, Line, LineChart as RechartsLineChart, XAxis } from "recharts";
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "../../../components/ui/chart";
 
@@ -18,9 +20,33 @@ export function ActivityChart({ chartData, loading, xAxisLabel }: ActivityChartP
   return (
     <Card className="shadow-sm border-muted/60">
       <CardHeader className="border-b border-border/40 pb-5">
-        <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
-            <CardTitle>Actividad de Eventos</CardTitle>
+            <div className="flex items-center gap-1.5">
+              <CardTitle>Actividad de Eventos</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button type="button" aria-label="¿Qué muestra este gráfico?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                        <InfoIcon className="h-3.5 w-3.5" />
+                      </button>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-sm">
+                    <span className="block text-left leading-relaxed normal-case">
+                      Eventos <strong className="font-semibold">creados</strong> en el período, agrupados por su estado actual:
+                      <span className="block mt-1">
+                        <strong className="font-semibold">Pendientes</strong> — sin resolver al día de hoy.
+                      </span>
+                      <span className="block">
+                        <strong className="font-semibold">Solucionados</strong> — ya resueltos.
+                      </span>
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <CardDescription>{xAxisLabel}</CardDescription>
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground shrink-0 pt-1">

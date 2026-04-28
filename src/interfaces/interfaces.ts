@@ -7,6 +7,7 @@ export interface ReporteInterface {
   TramoFinal: number | null;
   fechaInicial: Date;
   fechaFinal: Date;
+  excludeOld?: boolean;
 }
 export interface AdssInterface {
   id?: number | null;

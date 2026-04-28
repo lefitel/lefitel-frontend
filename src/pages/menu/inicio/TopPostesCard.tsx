@@ -1,7 +1,10 @@
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { CheckCircle2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckCircle2Icon, InfoIcon } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
 
 interface TopPostesCardProps {
   topPostes: { name: string; count: number }[];
@@ -9,13 +12,44 @@ interface TopPostesCardProps {
 }
 
 export function TopPostesCard({ topPostes, loading }: TopPostesCardProps) {
+  const navigate = useNavigate();
   const maxCount = topPostes[0]?.count ?? 1;
 
   return (
     <Card className="shadow-sm border-muted/60">
       <CardHeader className="border-b border-border/40 pb-5">
-        <CardTitle>Top Postes con Más Incidencias Pendientes</CardTitle>
-        <CardDescription>Postes con mayor cantidad de eventos sin resolver en el período seleccionado.</CardDescription>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-1.5">
+              <CardTitle>Top Postes con Más Incidencias Pendientes</CardTitle>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <button type="button" aria-label="¿Cómo se calcula el top?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                        <InfoIcon className="h-3.5 w-3.5" />
+                      </button>
+                    }
+                  />
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <span className="block text-left leading-relaxed normal-case">
+                      Postes con mayor cantidad de eventos <strong className="font-semibold">sin resolver</strong> creados dentro del período seleccionado. Top 6 ordenado de mayor a menor.
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <CardDescription>Postes con mayor cantidad de eventos sin resolver en el período seleccionado.</CardDescription>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground shrink-0"
+            onClick={() => navigate("/postes")}
+          >
+            Ver todos <ArrowRightIcon className="h-3 w-3" />
+          </Button>
+        </div>
       </CardHeader>
       <CardContent className="pt-6">
         {loading ? (
