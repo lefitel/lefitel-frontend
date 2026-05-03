@@ -4,8 +4,10 @@ import { ColumnDef } from "@tanstack/react-table";
 import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { createPropietario, deletePropietario, desarchivarPropietario, editPropietario, getPropietario } from "../../../api/Propietario.api";
+import { createPropietario, deletePropietario, desarchivarPropietario, editPropietario, getPropietario, getPropietarioStats, PropietarioStats } from "../../../api/Propietario.api";
 import { PropietarioInterface } from "../../../interfaces/interfaces";
+import { ParametrosKpiCards } from "./ParametrosKpiCards";
+import { Building2Icon, MapPinIcon, AlertTriangleIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -42,6 +44,18 @@ const PropietarioSec = ({ innerTab }: Props) => {
     const [unarchiving, setUnarchiving] = useState(false);
 
     const [name, setName] = useState("");
+    const [stats, setStats] = useState<PropietarioStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    const loadStats = useCallback(() => {
+        setStatsLoading(true);
+        getPropietarioStats(sesion.token)
+            .then(setStats)
+            .catch(() => setStats(null))
+            .finally(() => setStatsLoading(false));
+    }, [sesion.token]);
+
+    useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
@@ -106,6 +120,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
             toast.success(selected?.id ? "Propietario actualizado" : "Propietario creado");
             handleClose();
             load();
+            loadStats();
         } else {
             toast.error("No se pudo guardar");
         }
@@ -121,6 +136,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
             setDeleteOpen(false);
             handleClose();
             load();
+            loadStats();
         } else {
             toast.error("No se pudo archivar");
         }
@@ -128,6 +144,16 @@ const PropietarioSec = ({ innerTab }: Props) => {
     };
 
     const columns = useMemo<ColumnDef<PropietarioInterface>[]>(() => [
+        {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
         { accessorKey: "name", header: "Nombre" },
         {
             accessorKey: "createdAt",
@@ -178,6 +204,16 @@ const PropietarioSec = ({ innerTab }: Props) => {
     ], [openEdit, rol]);
 
     const archivedColumns = useMemo<ColumnDef<PropietarioInterface>[]>(() => [
+        {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
         { accessorKey: "name", header: "Nombre" },
         {
             accessorKey: "deletedAt",
@@ -205,20 +241,51 @@ const PropietarioSec = ({ innerTab }: Props) => {
     return (
         <>
             {innerTab === "activos" && (
+                <ParametrosKpiCards
+                    loading={statsLoading}
+                    items={[
+                        {
+                            label: "Total propietarios",
+                            value: stats?.total ?? 0,
+                            hint: "Empresas registradas",
+                            icon: Building2Icon,
+                            tone: "default",
+                        },
+                        {
+                            label: "Más postes",
+                            value: stats?.mostPostes?.count ?? 0,
+                            hint: stats?.mostPostes?.name ?? "Sin postes asignados",
+                            icon: MapPinIcon,
+                            tone: "info",
+                        },
+                        {
+                            label: "Más pendientes",
+                            value: stats?.mostPendientes?.count ?? 0,
+                            hint: stats?.mostPendientes?.name ?? "Sin incidencias",
+                            icon: AlertTriangleIcon,
+                            tone: (stats?.mostPendientes?.count ?? 0) > 0 ? "warning" : "success",
+                        },
+                    ]}
+                />
+            )}
+            {innerTab === "activos" && (
                 <DataTable
                     data={list}
                     loading={loading}
                     columns={columns}
                     onRetry={load}
                     hasPaginated={false}
-                    actions={
-                        can(rol, "parametros", "crear") ? (
+                    actions={<>
+                        <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        </Button>
+                        {can(rol, "parametros", "crear") && (
                             <Button className="gap-2" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo</span>
                             </Button>
-                        ) : <></>
-                    }
+                        )}
+                    </>}
                 />
             )}
 
@@ -230,7 +297,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
                     onRetry={loadArchived}
                     hasPaginated={false}
                     actions={
-                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }

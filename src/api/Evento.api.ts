@@ -65,6 +65,8 @@ export const createEvento = (
     id_poste: data.id_poste,
     priority: data.priority,
     id_usuario: data.id_usuario,
+    ...(data.obs_ids ? { obs_ids: data.obs_ids } : {}),
+    ...(data.revision ? { revision: data.revision } : {}),
   };
   return axios
     .post(urlApi + urlEvento, newData, { headers: { Authorization: `Bearer ${token}` } })
@@ -91,6 +93,16 @@ export const editEvento = (
 export const reabrirEvento = (id: number, token: string): Promise<number> =>
   axios
     .post(urlApi + urlEvento + id + "/reabrir", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.status)
+    .catch(() => 400);
+
+export const resolverEvento = (
+  id: number,
+  data: { description: string; date: Date; image: string },
+  token: string
+): Promise<number> =>
+  axios
+    .post(urlApi + urlEvento + id + "/resolver", data, { headers: { Authorization: `Bearer ${token}` } })
     .then((r) => r.status)
     .catch(() => 400);
 

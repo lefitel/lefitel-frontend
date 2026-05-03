@@ -2,6 +2,12 @@ import axios from "axios";
 import { urlObs, urlApi } from "./url";
 import { ObsInterface } from "../interfaces/interfaces";
 
+export interface ObsStats {
+  total: number;
+  unclassified: number;
+  critical: number;
+}
+
 export const getObs = (token: string, archived = false): Promise<ObsInterface[]> => {
   const url = urlApi + urlObs + (archived ? "?archived=true" : "");
   return axios
@@ -9,9 +15,19 @@ export const getObs = (token: string, archived = false): Promise<ObsInterface[]>
     .then((r) => r.data);
 };
 
+export const getObsStats = (token: string): Promise<ObsStats> =>
+  axios
+    .get(urlApi + urlObs + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.data);
+
 export const createObs = (data: ObsInterface, token: string): Promise<number> => {
   type ObsWithoutId = Omit<ObsInterface, "id">;
-  const newData: ObsWithoutId = { name: data.name, description: data.description, id_tipoObs: data.id_tipoObs };
+  const newData: ObsWithoutId = {
+    name: data.name,
+    description: data.description,
+    id_tipoObs: data.id_tipoObs,
+    criticality: data.criticality ?? null,
+  };
   return axios
     .post(urlApi + urlObs, newData, { headers: { Authorization: `Bearer ${token}` } })
     .then((response) => response.status)

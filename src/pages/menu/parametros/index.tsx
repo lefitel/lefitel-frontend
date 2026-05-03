@@ -28,7 +28,7 @@ const ParametrosPage = () => {
   };
 
   return (
-    <div className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Parámetros</h1>
         <p className="text-sm text-muted-foreground mt-1">Gestión de catálogos del sistema</p>

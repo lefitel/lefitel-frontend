@@ -24,13 +24,11 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
               <CardTitle>Eventos Urgentes</CardTitle>
               <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button type="button" aria-label="¿Qué eventos aparecen aquí?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                        <InfoIcon className="h-3.5 w-3.5" />
-                      </button>
-                    }
-                  />
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="¿Qué eventos aparecen aquí?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                      <InfoIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <span className="block text-left leading-relaxed normal-case">
                       Eventos con la bandera de <strong className="font-semibold">alta prioridad</strong> activada y aún sin resolver, creados en el período seleccionado. Ordenados por fecha de creación (los más recientes primero). Máximo 5.
@@ -45,7 +43,7 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
             variant="ghost"
             size="sm"
             className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground shrink-0"
-            onClick={() => navigate("/eventos")}
+            onClick={() => navigate("/app/eventos")}
           >
             Ver todos <ArrowRightIcon className="h-3 w-3" />
           </Button>
@@ -84,7 +82,7 @@ export function UrgentEventsCard({ urgentEvents, loading }: UrgentEventsCardProp
                 <TableCell className="hidden sm:table-cell text-sm text-muted-foreground whitespace-nowrap">{daysOpen(evento.date)}</TableCell>
                 <TableCell className="text-right pr-4">
                   <Button variant="ghost" size="sm" className="h-7 text-xs"
-                    onClick={() => { if (evento.id) navigate(`/eventos/${evento.id}`); }}>
+                    onClick={() => { if (evento.id) navigate(`/app/eventos/${evento.id}`); }}>
                     Ver
                   </Button>
                 </TableCell>

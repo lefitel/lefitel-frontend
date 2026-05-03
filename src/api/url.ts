@@ -2,7 +2,7 @@ const baseUrl: string = import.meta.env.PROD
   ? import.meta.env.VITE_PROD_API_URL
   : import.meta.env.VITE_DEV_API_URL;
 
-export const url = baseUrl;
+export const url = baseUrl.replace(/\/$/, "");
 export const urlApi = baseUrl + "api/";
 
 export const urlAdss = "adss/";
@@ -22,5 +22,5 @@ export const urlBitacora = "bitacora/";
 export const urlReporte = "reporte/";
 
 export const urlEvento = "evento/";
-export const urlRevicion = "revicion/";
+export const urlRevision = "revision/";
 export const urlSolucion = "solucion/";

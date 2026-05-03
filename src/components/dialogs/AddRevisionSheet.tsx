@@ -1,13 +1,15 @@
 import { useContext, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
-import { createRevicion } from "../../../api/Revicion.api";
-import { DatePicker } from "../../ui/date-picker";
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
+import { SesionContext } from "../../context/SesionContext";
+import { createRevision } from "../../api/Revision.api";
+import { DatePicker } from "../ui/date-picker";
+import { Loader2Icon } from "lucide-react";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import { Label } from "../ui/label";
 import {
     Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../../ui/sheet";
+} from "../ui/sheet";
 
 interface Props {
     eventoId: number | null;
@@ -21,19 +23,23 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
     const [description, setDescription] = useState("");
     const [date, setDate] = useState<Date>(new Date());
     const [saving, setSaving] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const handleClose = () => {
         setDescription("");
         setDate(new Date());
+        setErrors({});
         setOpen(false);
     };
 
     const handleSave = async () => {
         if (!eventoId) return;
-        if (!description.trim()) return toast.warning("La descripción es requerida");
+        const newErrors: Record<string, string> = {};
+        if (!description.trim()) newErrors.description = "La descripción es requerida";
+        if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
         setSaving(true);
         try {
-            await createRevicion({ description, date, id_evento: eventoId }, sesion.token);
+            await createRevision({ description, date, id_evento: eventoId }, sesion.token);
             toast.success("Revisión agregada");
             handleClose();
             onSuccess();
@@ -46,29 +52,30 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
 
     return (
         <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-            <SheetContent>
-                <SheetHeader>
+            <SheetContent className="flex flex-col gap-0 p-0">
+                <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
                     <SheetTitle>Agregar Revisión</SheetTitle>
                     <SheetDescription>Registra una nueva revisión para este evento.</SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto px-4 space-y-4">
+                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
                     <div className="space-y-1.5">
                         <Label>Fecha</Label>
                         <DatePicker value={date} onSelect={(d) => d && setDate(d)} />
                     </div>
                     <div className="space-y-1.5">
                         <Label>Descripción <span className="text-destructive">*</span></Label>
-                        <textarea
-                            className="w-full min-h-28 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 placeholder:text-muted-foreground resize-none"
+                        <Textarea
+                            className={`resize-none min-h-28${errors.description ? " border-destructive" : ""}`}
                             placeholder="Describe la inspección realizada..."
                             value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                            onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
                         />
+                        {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
                     </div>
                 </div>
 
-                <SheetFooter>
+                <SheetFooter className="px-6 py-4 border-t border-border/40">
                     <Button variant="outline" onClick={handleClose} disabled={saving}>
                         Cancelar
                     </Button>
@@ -77,7 +84,7 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
                         disabled={saving}
                         className="bg-primary hover:bg-primary/90 text-white"
                     >
-                        {saving ? "Guardando..." : "Guardar revisión"}
+                        {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar revisión"}
                     </Button>
                 </SheetFooter>
             </SheetContent>

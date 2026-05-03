@@ -30,14 +30,17 @@ import {
   DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
+import { CriticalityBadge } from "../../../components/CriticalityBadge";
+import { getEventCriticality } from "../../../lib/criticality";
 import { exportExcelGeneral, exportCsvGeneral, exportPdfGeneral, latestRevision } from "../../../lib/exports/reportGeneral";
+import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 
 // ─── Row color helpers ────────────────────────────────────────────────────────
 
 const getRowBg = (row: EventoInterface): string => {
   if (row.solucions?.[0]?.image)        return "!bg-[#D4EDDA] hover:!bg-[#C3E6CB]";
-  if ((row.revicions?.length ?? 0) >= 5) return "!bg-[#FAD7D7] hover:!bg-[#F5C0C0]";
-  if ((row.revicions?.length ?? 0) >  1) return "!bg-[#FDE8D0] hover:!bg-[#FAD8B8]";
+  if ((row.revisions?.length ?? 0) >= 5) return "!bg-[#FAD7D7] hover:!bg-[#F5C0C0]";
+  if ((row.revisions?.length ?? 0) >  1) return "!bg-[#FDE8D0] hover:!bg-[#FAD8B8]";
   return "!bg-[#FEF9E0] hover:!bg-[#FBF3C8]";
 };
 
@@ -51,8 +54,10 @@ const ReportGeneralSec = () => {
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal, setTramoFinal] = useState<number | null>(null);
   const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
+  const neighbors = useTramoNeighbors(sesion.token);
   const [estado, setEstado] = useState<"todos" | "pendiente" | "solucionado">("todos");
   const [prioridad, setPrioridad] = useState<"todos" | "si" | "no">("todos");
+  const [criticidad, setCriticidad] = useState<"todos" | "criticas" | "altas" | "medias" | "bajas" | "sin">("todos");
   const [excludeOld, setExcludeOld] = useState(false);
   const [list, setList] = useState<EventoInterface[]>([]);
   const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -62,6 +67,13 @@ const ReportGeneralSec = () => {
   useEffect(() => {
     getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
   }, [sesion.token]);
+
+  useEffect(() => {
+    if (tramoInicial && tramoFinal && neighbors.size > 0) {
+      const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
+      if (!valid) setTramoFinal(null);
+    }
+  }, [tramoInicial, tramoFinal, neighbors]);
 
   const handleGenerar = async () => {
     if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
@@ -84,6 +96,24 @@ const ReportGeneralSec = () => {
       if (estado === "solucionado") data = data.filter((e) => e.state);
       if (prioridad === "si") data = data.filter((e) => e.priority);
       if (prioridad === "no") data = data.filter((e) => !e.priority);
+      if (criticidad !== "todos") {
+        data = data.filter((e) => {
+          const c = getEventCriticality(e);
+          if (criticidad === "sin") return c == null;
+          if (criticidad === "criticas") return c != null && c <= 3;
+          if (criticidad === "altas") return c != null && c >= 4 && c <= 5;
+          if (criticidad === "medias") return c != null && c >= 6 && c <= 7;
+          if (criticidad === "bajas") return c != null && c >= 8;
+          return true;
+        });
+      }
+      // Sort by criticality ASC (1 = most critical first), then by id DESC
+      data = [...data].sort((a, b) => {
+        const ca = getEventCriticality(a) ?? 99;
+        const cb = getEventCriticality(b) ?? 99;
+        if (ca !== cb) return ca - cb;
+        return (b.id ?? 0) - (a.id ?? 0);
+      });
 
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
@@ -110,6 +140,7 @@ const ReportGeneralSec = () => {
     setTramoFinal(null);
     setEstado("todos");
     setPrioridad("todos");
+    setCriticidad("todos");
     setExcludeOld(false);
   };
 
@@ -132,7 +163,11 @@ const ReportGeneralSec = () => {
       id: "num",
       header: "#",
       enableSorting: false,
-      cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.index + 1}</span>,
+      cell: ({ row, table }) => {
+        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+      },
     },
     {
       id: "poste",
@@ -177,9 +212,9 @@ const ReportGeneralSec = () => {
         const b = row.original.poste?.ciudadB;
         return (
           <span className="flex items-center gap-0.5 text-xs whitespace-nowrap">
-            {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+            {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
             <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-            {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+            {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
           </span>
         );
       },
@@ -188,7 +223,7 @@ const ReportGeneralSec = () => {
       id: "fechaRev",
       header: "Fecha rev.",
       cell: ({ row }) => {
-        const max = latestRevision(row.original.revicions);
+        const max = latestRevision(row.original.revisions);
         return max.getTime() === 0
           ? <span className="text-xs text-muted-foreground">—</span>
           : <span className="text-xs whitespace-nowrap">{max.toLocaleDateString("es-ES")}</span>;
@@ -199,7 +234,7 @@ const ReportGeneralSec = () => {
       header: "Hora rev.",
       enableSorting: false,
       cell: ({ row }) => {
-        const max = latestRevision(row.original.revicions);
+        const max = latestRevision(row.original.revisions);
         return max.getTime() === 0
           ? <span className="text-xs text-muted-foreground">—</span>
           : <span className="text-xs whitespace-nowrap font-mono">{max.toLocaleTimeString("es-ES")}</span>;
@@ -222,12 +257,18 @@ const ReportGeneralSec = () => {
       ),
     },
     {
-      id: "revicions",
+      id: "revisions",
       header: "Revisiones",
-      accessorFn: (row) => row.revicions?.length ?? 0,
+      accessorFn: (row) => row.revisions?.length ?? 0,
       cell: ({ row }) => (
-        <span className="text-sm font-semibold">{row.original.revicions?.length ?? 0}</span>
+        <span className="text-sm font-semibold">{row.original.revisions?.length ?? 0}</span>
       ),
+    },
+    {
+      id: "criticality",
+      header: "Criticidad",
+      accessorFn: (row) => getEventCriticality(row) ?? 99,
+      cell: ({ row }) => <CriticalityBadge level={getEventCriticality(row.original)} compact />,
     },
     {
       id: "estado",
@@ -300,7 +341,7 @@ const ReportGeneralSec = () => {
 
   const pendientes   = list.filter((e) => !e.state).length;
   const solucionados = list.filter((e) => e.state).length;
-  const criticos     = list.filter((e) => (e.revicions?.length ?? 0) >= 5).length;
+  const criticos     = list.filter((e) => (e.revisions?.length ?? 0) >= 5).length;
   const prioritarios = list.filter((e) => e.priority).length;
   const nuevas       = appliedRange
     ? list.filter((e) => {
@@ -310,6 +351,19 @@ const ReportGeneralSec = () => {
       }).length
     : 0;
   const arrastradas  = list.length - nuevas;
+  // Criticality breakdown
+  const critCount = useMemo(() => {
+    const counts = { criticas: 0, altas: 0, medias: 0, bajas: 0, sin: 0 };
+    list.forEach((e) => {
+      const c = getEventCriticality(e);
+      if (c == null) counts.sin++;
+      else if (c <= 3) counts.criticas++;
+      else if (c <= 5) counts.altas++;
+      else if (c <= 7) counts.medias++;
+      else counts.bajas++;
+    });
+    return counts;
+  }, [list]);
 
   return (
     <div className="space-y-6">
@@ -320,8 +374,8 @@ const ReportGeneralSec = () => {
             Eventos con revisión en el rango de fechas seleccionado. Incluye datos de poste, evento y solución.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
             <div className="space-y-1.5">
               <Label>Fecha de inicio</Label>
               <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -333,7 +387,13 @@ const ReportGeneralSec = () => {
             <div className="space-y-1.5">
               <Label>Tramo desde <span className="text-muted-foreground text-xs">(opcional)</span></Label>
               <Combobox
-                options={listCiudad.filter((c) => c.id !== tramoFinal).map((c) => ({ value: String(c.id), label: c.name }))}
+                options={listCiudad
+                  .filter((c) => {
+                    if (c.id == null || c.id === tramoFinal) return false;
+                    if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                    return neighbors.get(tramoFinal)?.has(c.id) ?? false;
+                  })
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
                 value={tramoInicial ? String(tramoInicial) : ""}
                 onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
                 placeholder="Todas las ciudades"
@@ -342,18 +402,24 @@ const ReportGeneralSec = () => {
             <div className="space-y-1.5">
               <Label>Tramo hasta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
               <Combobox
-                options={listCiudad.filter((c) => c.id !== tramoInicial).map((c) => ({ value: String(c.id), label: c.name }))}
+                options={listCiudad
+                  .filter((c) => {
+                    if (c.id == null || c.id === tramoInicial) return false;
+                    if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                    return neighbors.get(tramoInicial)?.has(c.id) ?? false;
+                  })
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
                 value={tramoFinal ? String(tramoFinal) : ""}
                 onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
                 placeholder="Todas las ciudades"
               />
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-3 items-end">
             <div className="space-y-1.5">
               <Label>Estado</Label>
               <Select value={estado} onValueChange={(v) => setEstado(v as typeof estado)}>
-                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="pendiente">Pendientes</SelectItem>
@@ -364,11 +430,25 @@ const ReportGeneralSec = () => {
             <div className="space-y-1.5">
               <Label>Prioridad</Label>
               <Select value={prioridad} onValueChange={(v) => setPrioridad(v as typeof prioridad)}>
-                <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="todos">Todos</SelectItem>
                   <SelectItem value="si">Solo prioritarios</SelectItem>
                   <SelectItem value="no">No prioritarios</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Criticidad</Label>
+              <Select value={criticidad} onValueChange={(v) => setCriticidad(v as typeof criticidad)}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  <SelectItem value="criticas">Críticas (1-3)</SelectItem>
+                  <SelectItem value="altas">Altas (4-5)</SelectItem>
+                  <SelectItem value="medias">Medias (6-7)</SelectItem>
+                  <SelectItem value="bajas">Bajas (8-9)</SelectItem>
+                  <SelectItem value="sin">Sin clasificar</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -384,13 +464,13 @@ const ReportGeneralSec = () => {
               </span>
             </label>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button onClick={handleGenerar} disabled={loading}>
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}
               Generar
             </Button>
             {list.length > 0 && (
-              <Button variant="outline" onClick={handleLimpiar} className="h-10 px-6">
+              <Button variant="outline" onClick={handleLimpiar}>
                 Limpiar
               </Button>
             )}
@@ -417,7 +497,35 @@ const ReportGeneralSec = () => {
             <Badge variant="outline" className="text-red-600">{criticos} críticos</Badge>
             {prioritarios > 0 && <Badge variant="destructive">{prioritarios} prioritarios</Badge>}
           </div>
-          <Card className="shadow-sm border-muted/60">
+          <div className="flex flex-wrap gap-2">
+            <span className="text-xs text-muted-foreground self-center mr-1">Por criticidad:</span>
+            {critCount.criticas > 0 && (
+              <Badge variant="outline" className="border-red-500/40 bg-red-500/10 text-red-700">
+                {critCount.criticas} críticas (1-3)
+              </Badge>
+            )}
+            {critCount.altas > 0 && (
+              <Badge variant="outline" className="border-yellow-500/40 bg-yellow-500/10 text-yellow-700">
+                {critCount.altas} altas (4-5)
+              </Badge>
+            )}
+            {critCount.medias > 0 && (
+              <Badge variant="outline" className="border-emerald-500/40 bg-emerald-500/10 text-emerald-700">
+                {critCount.medias} medias (6-7)
+              </Badge>
+            )}
+            {critCount.bajas > 0 && (
+              <Badge variant="outline" className="border-blue-500/40 bg-blue-500/10 text-blue-700">
+                {critCount.bajas} bajas (8-9)
+              </Badge>
+            )}
+            {critCount.sin > 0 && (
+              <Badge variant="outline" className="border-dashed text-muted-foreground">
+                {critCount.sin} sin clasificar
+              </Badge>
+            )}
+          </div>
+          <Card className="shadow-sm border-muted/60 py-0">
             <CardContent className="p-4">
               <DataTable
                 data={list}

@@ -4,8 +4,10 @@ import { ColumnDef } from "@tanstack/react-table";
 import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { createMaterial, deleteMaterial, desarchivarMaterial, editMaterial, getMaterial } from "../../../api/Material.api";
+import { createMaterial, deleteMaterial, desarchivarMaterial, editMaterial, getMaterial, getMaterialStats, MaterialStats } from "../../../api/Material.api";
 import { MaterialInterface } from "../../../interfaces/interfaces";
+import { ParametrosKpiCards } from "./ParametrosKpiCards";
+import { LayersIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -43,6 +45,18 @@ const MaterialSec = ({ innerTab }: Props) => {
 
     const [name, setName] = useState("");
     const [description, setDescription] = useState("");
+    const [stats, setStats] = useState<MaterialStats | null>(null);
+    const [statsLoading, setStatsLoading] = useState(true);
+
+    const loadStats = useCallback(() => {
+        setStatsLoading(true);
+        getMaterialStats(sesion.token)
+            .then(setStats)
+            .catch(() => setStats(null))
+            .finally(() => setStatsLoading(false));
+    }, [sesion.token]);
+
+    useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
@@ -109,6 +123,7 @@ const MaterialSec = ({ innerTab }: Props) => {
             toast.success(selected?.id ? "Material actualizado" : "Material creado");
             handleClose();
             load();
+            loadStats();
         } else {
             toast.error("No se pudo guardar");
         }
@@ -124,6 +139,7 @@ const MaterialSec = ({ innerTab }: Props) => {
             setDeleteOpen(false);
             handleClose();
             load();
+            loadStats();
         } else {
             toast.error("No se pudo archivar");
         }
@@ -131,6 +147,16 @@ const MaterialSec = ({ innerTab }: Props) => {
     };
 
     const columns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+        {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
         { accessorKey: "name", header: "Nombre" },
         { accessorKey: "description", header: "Descripción" },
         {
@@ -182,6 +208,16 @@ const MaterialSec = ({ innerTab }: Props) => {
     ], [openEdit, rol]);
 
     const archivedColumns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+        {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
         { accessorKey: "name", header: "Nombre" },
         { accessorKey: "description", header: "Descripción" },
         {
@@ -210,20 +246,51 @@ const MaterialSec = ({ innerTab }: Props) => {
     return (
         <>
             {innerTab === "activos" && (
+                <ParametrosKpiCards
+                    loading={statsLoading}
+                    items={[
+                        {
+                            label: "Total materiales",
+                            value: stats?.total ?? 0,
+                            hint: "Tipos disponibles",
+                            icon: LayersIcon,
+                            tone: "default",
+                        },
+                        {
+                            label: "Más usado",
+                            value: stats?.mostUsed?.count ?? 0,
+                            hint: stats?.mostUsed?.name ?? "Ningún material en uso",
+                            icon: TrendingUpIcon,
+                            tone: "success",
+                        },
+                        {
+                            label: "Sin postes asociados",
+                            value: stats?.empty ?? 0,
+                            hint: (stats?.empty ?? 0) > 0 ? "Materiales sin uso" : "Todos en uso ✓",
+                            icon: AlertCircleIcon,
+                            tone: (stats?.empty ?? 0) > 0 ? "warning" : "success",
+                        },
+                    ]}
+                />
+            )}
+            {innerTab === "activos" && (
                 <DataTable
                     data={list}
                     loading={loading}
                     columns={columns}
                     onRetry={load}
                     hasPaginated={false}
-                    actions={
-                        can(rol, "parametros", "crear") ? (
+                    actions={<>
+                        <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        </Button>
+                        {can(rol, "parametros", "crear") && (
                             <Button className="gap-2" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo</span>
                             </Button>
-                        ) : <></>
-                    }
+                        )}
+                    </>}
                 />
             )}
 
@@ -235,7 +302,7 @@ const MaterialSec = ({ innerTab }: Props) => {
                     onRetry={loadArchived}
                     hasPaginated={false}
                     actions={
-                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }

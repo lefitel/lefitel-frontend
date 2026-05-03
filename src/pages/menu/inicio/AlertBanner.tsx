@@ -39,13 +39,11 @@ export function AlertBanner({ alerts, loading }: AlertBannerProps) {
               </p>
               <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button type="button" aria-label="¿Qué cuenta esta alerta?" className="text-red-500/60 hover:text-red-600 transition-colors">
-                        <InfoIcon className="h-3 w-3" />
-                      </button>
-                    }
-                  />
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="¿Qué cuenta esta alerta?" className="text-red-500/60 hover:text-red-600 transition-colors">
+                      <InfoIcon className="h-3 w-3" />
+                    </button>
+                  </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <span className="block text-left leading-relaxed normal-case">
                       Eventos marcados como <strong className="font-semibold">alta prioridad</strong>, sin resolver y con más de <strong className="font-semibold">{alerts.thresholdDays} días</strong> desde su creación.
@@ -79,7 +77,7 @@ export function AlertBanner({ alerts, loading }: AlertBannerProps) {
               key={e.id}
               type="button"
               className="w-full flex items-center justify-between gap-3 p-3 sm:px-4 text-left hover:bg-red-500/5 transition-colors"
-              onClick={() => navigate(`/eventos/${e.id}`)}
+              onClick={() => navigate(`/app/eventos/${e.id}`)}
             >
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate">{e.poste?.name ?? "—"}</p>
@@ -97,7 +95,7 @@ export function AlertBanner({ alerts, loading }: AlertBannerProps) {
             <button
               type="button"
               className="w-full p-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-red-500/5 transition-colors"
-              onClick={() => navigate("/eventos")}
+              onClick={() => navigate("/app/eventos")}
             >
               Ver los {count - 5} restantes →
             </button>

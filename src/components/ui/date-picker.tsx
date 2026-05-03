@@ -23,7 +23,7 @@ export function DatePicker({ value, onSelect, placeholder = "Seleccionar fecha",
         <Popover>
             <PopoverTrigger
                 className={cn(
-                    "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-0",
+                    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-0",
                     !value && "text-muted-foreground",
                     className
                 )}

@@ -2,12 +2,23 @@ import axios from "axios";
 import { urlPropietario, urlApi } from "./url";
 import { PropietarioInterface } from "../interfaces/interfaces";
 
+export interface PropietarioStats {
+  total: number;
+  mostPostes: { name: string; count: number } | null;
+  mostPendientes: { name: string; count: number } | null;
+}
+
 export const getPropietario = (token: string, archived = false): Promise<PropietarioInterface[]> => {
   const url = urlApi + urlPropietario + (archived ? "?archived=true" : "");
   return axios
     .get(url, { headers: { Authorization: `Bearer ${token}` } })
     .then((r) => r.data);
 };
+
+export const getPropietarioStats = (token: string): Promise<PropietarioStats> =>
+  axios
+    .get(urlApi + urlPropietario + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.data);
 
 export const createPropietario = (data: PropietarioInterface, token: string): Promise<number> => {
   type PropietarioWithoutId = Omit<PropietarioInterface, "id">;

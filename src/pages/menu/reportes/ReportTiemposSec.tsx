@@ -56,17 +56,19 @@ const ReportTiemposSec = () => {
             Promedio de días que tardó en resolverse cada evento, agrupado por tramo. Solo considera eventos resueltos con revisión en el período. Verde ≤1d, ámbar ≤7d, rojo &gt;7d.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-5">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-1.5">
+        <CardContent>
+          <div className="flex flex-wrap gap-x-2 gap-y-3">
+            <div className="space-y-1.5 min-w-36">
               <Label>Fecha de inicio</Label>
               <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-36">
               <Label>Fecha de fin</Label>
               <DatePicker value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
-            <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
+          </div>
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button onClick={handleGenerar} disabled={loading}>
               {loading && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
               Generar
             </Button>
@@ -110,11 +112,11 @@ const ReportTiemposSec = () => {
                         <TableCell>
                           <span className="flex items-center gap-0.5 text-sm whitespace-nowrap">
                             {t.ciudadAId
-                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/ciudades/${t.ciudadAId}`)}>{t.ciudadAName}</button>
+                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/app/ciudades/${t.ciudadAId}`)}>{t.ciudadAName}</button>
                               : <span>{t.ciudadAName}</span>}
                             <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0 text-muted-foreground" />
                             {t.ciudadBId
-                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/ciudades/${t.ciudadBId}`)}>{t.ciudadBName}</button>
+                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/app/ciudades/${t.ciudadBId}`)}>{t.ciudadBName}</button>
                               : <span>{t.ciudadBName}</span>}
                           </span>
                         </TableCell>

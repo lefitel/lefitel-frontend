@@ -2,6 +2,12 @@ import axios from "axios";
 import { urlAdss, urlApi } from "./url";
 import { AdssInterface } from "../interfaces/interfaces";
 
+export interface AdssStats {
+  total: number;
+  mostUsed: { name: string; count: number } | null;
+  empty: number;
+}
+
 export const getAdss = (token: string, archived = false): Promise<AdssInterface[]> => {
   const url = urlApi + urlAdss + (archived ? "?archived=true" : "");
   return axios
@@ -9,6 +15,11 @@ export const getAdss = (token: string, archived = false): Promise<AdssInterface[
     .then((r) => r.data)
     .catch(() => []);
 };
+
+export const getAdssStats = (token: string): Promise<AdssStats> =>
+  axios
+    .get(urlApi + urlAdss + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .then((r) => r.data);
 
 export const createAdss = (data: AdssInterface, token: string): Promise<number> => {
   const newData: AdssInterface = { name: data.name, description: data.description };

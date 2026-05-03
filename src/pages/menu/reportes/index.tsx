@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Button } from "../../../components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import ReportGeneralSec from "./ReportGeneralSec";
 import ReportTramoSec from "./ReportTramoSec";
 import ReportRecorridoSec from "./ReportRecorrido";
@@ -22,26 +23,36 @@ const ReportePage = () => {
   const [tab, setTab] = useState<Tab>("general");
 
   return (
-    <div className="@container/card  p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-3 animate-in fade-in duration-500">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Reportes</h1>
         <p className="text-muted-foreground">Generación y exportación de reportes del sistema.</p>
       </div>
 
-      <div className="flex flex-wrap items-center rounded-lg border border-border bg-muted/30 p-1 gap-1 w-fit">
-        {TABS.map((t) => (
-          <Button
-            key={t.value}
-            variant={tab === t.value ? "default" : "ghost"}
-            size="sm"
-            className="h-8 text-sm"
-            onClick={() => setTab(t.value)}
-          >
-            {t.label}
-          </Button>
-        ))}
+      {/* Mobile: Select */}
+      <div className="md:hidden">
+        <Select value={tab} onValueChange={(v) => setTab(v as Tab)}>
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {TABS.map((t) => (
+              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
+      {/* Desktop: TabsList only */}
+      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="hidden md:flex">
+        <TabsList>
+          {TABS.map((t) => (
+            <TabsTrigger key={t.value} value={t.value}>{t.label}</TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      {/* Content — shared */}
       {tab === "general"       && <ReportGeneralSec />}
       {tab === "tramo"         && <ReportTramoSec />}
       {tab === "recorrido"     && <ReportRecorridoSec />}

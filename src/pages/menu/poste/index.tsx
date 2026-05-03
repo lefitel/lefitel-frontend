@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
-import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
+import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon, CheckIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -10,9 +10,11 @@ import autoTable from "jspdf-autotable";
 import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deletePoste, desarchivarPoste, exportPostes, getPoste, searchPoste } from "../../../api/Poste.api";
+import { deletePoste, desarchivarPoste, editPoste, exportPostes, getPoste, searchPoste } from "../../../api/Poste.api";
 import { getEvento_poste } from "../../../api/Evento.api";
-import { PosteInterface } from "../../../interfaces/interfaces";
+import { getMaterial } from "../../../api/Material.api";
+import { getPropietario } from "../../../api/Propietario.api";
+import { MaterialInterface, PosteInterface, PropietarioInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -26,9 +28,8 @@ import {
 } from "../../../components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import DataTable from "../../../components/table/DataTable";
-import AddPosteSheet from "../../../components/dialogs/add/AddPosteSheet";
-import EditPosteSheet from "../../../components/dialogs/edits/EditPosteSheet";
-import AddEventoSheet from "./PosteDetalle/AddEventoSheet";
+import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
+import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
@@ -65,7 +66,7 @@ const fetchLogo = async () => {
 const exportExcel = async (list: PosteInterface[]) => {
     const { buffer: logoBuffer } = await fetchLogo();
     const wb = new ExcelJS.Workbook();
-    wb.creator = "Lefitel";
+    wb.creator = "Osefi srl";
     wb.created = new Date();
     const ws = wb.addWorksheet("Postes");
     const COLS = HEADERS.length;
@@ -78,7 +79,7 @@ const exportExcel = async (list: PosteInterface[]) => {
     ws.mergeCells(3, 2, 3, COLS);
 
     const tc = ws.getCell("B1");
-    tc.value = "LEFITEL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
+    tc.value = "OSEFI SRL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
     const sc = ws.getCell("B2");
     sc.value = "Reporte de Postes"; sc.font = { size: 12, color: { argb: "FF374151" } }; sc.alignment = { vertical: "middle" };
     const dc = ws.getCell("B3");
@@ -147,7 +148,7 @@ const exportPdf = async (list: PosteInterface[]) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
     doc.setTextColor(...PRIMARY);
-    doc.text("LEFITEL", 34, 12);
+    doc.text("OSEFI SRL", 34, 12);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(80, 90, 110);
@@ -186,7 +187,7 @@ const exportPdf = async (list: PosteInterface[]) => {
         doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
         doc.setDrawColor(208, 216, 239);
         doc.line(10, 203, W - 10, 203);
-        doc.text("Lefitel", 10, 207);
+        doc.text("Osefi srl", 10, 207);
         doc.text(`Página ${i} de ${pageCount}`, W - 10, 207, { align: "right" });
     }
     doc.save(filename("pdf"));
@@ -214,13 +215,18 @@ const PostePage = () => {
     const [loadingArchived, setLoadingArchived] = useState(false);
 
     const [addOpen, setAddOpen] = useState(false);
-    const [editPoste, setEditPoste] = useState<PosteInterface>(posteExample);
+    const [selectedPoste, setSelectedPoste] = useState<PosteInterface>(posteExample);
     const [openEdit, setOpenEdit] = useState(false);
     const [addEventoId, setAddEventoId] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<PosteInterface | null>(null);
     const [deleting, setDeleting] = useState(false);
     const [unarchiveTarget, setUnarchiveTarget] = useState<PosteInterface | null>(null);
     const [unarchiving, setUnarchiving] = useState(false);
+
+    const [materialList, setMaterialList] = useState<MaterialInterface[]>([]);
+    const [propietarioList, setPropietarioList] = useState<PropietarioInterface[]>([]);
+    const [savingMaterialIds, setSavingMaterialIds] = useState<Set<number>>(new Set());
+    const [savingPropietarioIds, setSavingPropietarioIds] = useState<Set<number>>(new Set());
 
     const rol = sesion.usuario.id_rol;
     const canAdd = can(rol, "postes", "crear");
@@ -250,10 +256,68 @@ const PostePage = () => {
         if (innerTab === "archivados" && archivedList === null) loadArchived();
     }, [innerTab, archivedList, loadArchived]);
 
+    useEffect(() => {
+        if (!canEdit) return;
+        Promise.all([getMaterial(sesion.token), getPropietario(sesion.token)])
+            .then(([mats, props]) => {
+                setMaterialList(mats ?? []);
+                setPropietarioList(props ?? []);
+            })
+            .catch(() => { /* silent: dropdowns just won't populate */ });
+    }, [sesion.token, canEdit]);
+
+    const handleMaterialChange = useCallback(async (poste: PosteInterface, newMaterialId: number) => {
+        if (!poste.id || poste.id_material === newMaterialId) return;
+        const newMaterial = materialList.find((m) => m.id === newMaterialId);
+        if (!newMaterial) return;
+
+        setSavingMaterialIds((prev) => new Set(prev).add(poste.id as number));
+        setList((curr) => (curr ?? []).map((p) =>
+            p.id === poste.id ? { ...p, id_material: newMaterialId, material: newMaterial } : p
+        ));
+
+        const payload: PosteInterface = { ...poste, id_material: newMaterialId };
+        const res = await editPoste(payload, sesion.token);
+        setSavingMaterialIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
+
+        if (Number(res.status) === 200 || Number(res.status) === 201) {
+            toast.success("Material actualizado");
+        } else {
+            toast.error("No se pudo actualizar");
+            setList((curr) => (curr ?? []).map((p) =>
+                p.id === poste.id ? { ...p, id_material: poste.id_material, material: poste.material } : p
+            ));
+        }
+    }, [sesion.token, materialList]);
+
+    const handlePropietarioChange = useCallback(async (poste: PosteInterface, newPropId: number) => {
+        if (!poste.id || poste.id_propietario === newPropId) return;
+        const newProp = propietarioList.find((p) => p.id === newPropId);
+        if (!newProp) return;
+
+        setSavingPropietarioIds((prev) => new Set(prev).add(poste.id as number));
+        setList((curr) => (curr ?? []).map((p) =>
+            p.id === poste.id ? { ...p, id_propietario: newPropId, propietario: newProp } : p
+        ));
+
+        const payload: PosteInterface = { ...poste, id_propietario: newPropId };
+        const res = await editPoste(payload, sesion.token);
+        setSavingPropietarioIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
+
+        if (Number(res.status) === 200 || Number(res.status) === 201) {
+            toast.success("Propietario actualizado");
+        } else {
+            toast.error("No se pudo actualizar");
+            setList((curr) => (curr ?? []).map((p) =>
+                p.id === poste.id ? { ...p, id_propietario: poste.id_propietario, propietario: poste.propietario } : p
+            ));
+        }
+    }, [sesion.token, propietarioList]);
+
     const handleOpenEdit = useCallback(async (id: number) => {
         try {
             const p = await searchPoste(id, sesion.token);
-            setEditPoste(p);
+            setSelectedPoste(p);
             setOpenEdit(true);
         } catch {
             toast.error("No se pudo cargar el poste");
@@ -301,9 +365,12 @@ const PostePage = () => {
             id: "num",
             header: "#",
             enableSorting: false,
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + row.index + 1}</span>
-            ),
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                return (
+                    <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + visibleIndex + 1}</span>
+                );
+            },
         },
         {
             accessorKey: "name",
@@ -311,7 +378,7 @@ const PostePage = () => {
             cell: ({ row }) => (
                 <button
                     className="font-medium text-sm text-primary hover:underline text-left"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/postes/${row.original.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/postes/${row.original.id}`); }}
                 >
                     {row.original.name}
                 </button>
@@ -325,9 +392,9 @@ const PostePage = () => {
                 const b = row.original.ciudadB;
                 return (
                     <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
                         <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
                     </span>
                 );
             },
@@ -335,16 +402,78 @@ const PostePage = () => {
         {
             id: "material",
             header: "Material",
-            cell: ({ row }) => (
-                <span className="text-sm">{row.original.material?.name ?? "—"}</span>
-            ),
+            cell: ({ row }) => {
+                const isSaving = savingMaterialIds.has(row.original.id as number);
+                const name = row.original.material?.name ?? "—";
+
+                if (!canEdit) {
+                    return <span className="text-sm">{name}</span>;
+                }
+
+                return (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            disabled={isSaving}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border bg-muted/50 text-foreground border-border hover:bg-muted cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            title="Click para cambiar material"
+                        >
+                            {name}
+                            <ChevronDownIcon className="h-3 w-3 opacity-60" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56 max-h-72 overflow-y-auto">
+                            {materialList.map((m) => (
+                                <DropdownMenuItem
+                                    key={m.id}
+                                    onClick={(e) => { e.stopPropagation(); handleMaterialChange(row.original, m.id as number); }}
+                                    className="gap-2"
+                                >
+                                    {row.original.id_material === m.id ? <CheckIcon className="h-3.5 w-3.5" /> : <span className="w-3.5" />}
+                                    {m.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                );
+            },
         },
         {
             id: "propietario",
             header: "Propietario",
-            cell: ({ row }) => (
-                <span className="text-sm">{row.original.propietario?.name ?? "—"}</span>
-            ),
+            cell: ({ row }) => {
+                const isSaving = savingPropietarioIds.has(row.original.id as number);
+                const name = row.original.propietario?.name ?? "—";
+
+                if (!canEdit) {
+                    return <span className="text-sm">{name}</span>;
+                }
+
+                return (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger
+                            disabled={isSaving}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border bg-muted/50 text-foreground border-border hover:bg-muted cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            title="Click para cambiar propietario"
+                        >
+                            {name}
+                            <ChevronDownIcon className="h-3 w-3 opacity-60" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className="w-56 max-h-72 overflow-y-auto">
+                            {propietarioList.map((p) => (
+                                <DropdownMenuItem
+                                    key={p.id}
+                                    onClick={(e) => { e.stopPropagation(); handlePropietarioChange(row.original, p.id as number); }}
+                                    className="gap-2"
+                                >
+                                    {row.original.id_propietario === p.id ? <CheckIcon className="h-3.5 w-3.5" /> : <span className="w-3.5" />}
+                                    {p.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                );
+            },
         },
         {
             id: "pendientes",
@@ -400,7 +529,7 @@ const PostePage = () => {
                             <MoreVerticalIcon className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => navigate(`/postes/${row.original.id}`)}>
+                            <DropdownMenuItem onClick={() => navigate(`/app/postes/${row.original.id}`)}>
                                 Ver detalle
                             </DropdownMenuItem>
                             {canEdit && (
@@ -429,7 +558,7 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, page, pageSize]);
+    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, page, pageSize, materialList, propietarioList, savingMaterialIds, savingPropietarioIds, handleMaterialChange, handlePropietarioChange]);
 
     const archivedColumns = useMemo<ColumnDef<PosteInterface>[]>(() => [
         { accessorKey: "name", header: "Nombre" },
@@ -441,9 +570,9 @@ const PostePage = () => {
                 const b = row.original.ciudadB;
                 return (
                     <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
                         <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
                     </span>
                 );
             },
@@ -479,7 +608,7 @@ const PostePage = () => {
     const hasData = !!list?.length;
 
     return (
-        <div className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+        <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Postes</h1>
@@ -506,41 +635,42 @@ const PostePage = () => {
                         onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
                         onFilterChange: (col, val) => { setFilterColumn(col); setFilterValue(val); setPage(1); load(1, pageSize, col, val); },
                     }}
-                    actions={
-                        <div className="flex gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                                    disabled={!hasData}
-                                >
-                                    <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span className="hidden sm:inline">Exportar</span>
-                                    <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportExcel)}>
-                                        <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                        Excel (.xlsx)
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportCsv)}>
-                                        <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                        CSV
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportPdf)}>
-                                        <FileIcon className="h-4 w-4 text-red-500" />
-                                        PDF
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                    actions={<>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                disabled={!hasData}
+                            >
+                                <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="hidden sm:inline">Exportar</span>
+                                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportExcel)}>
+                                    <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
+                                    Excel (.xlsx)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportCsv)}>
+                                    <FileTextIcon className="h-4 w-4 text-blue-500" />
+                                    CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportPdf)}>
+                                    <FileIcon className="h-4 w-4 text-red-500" />
+                                    PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                            {canAdd && (
-                                <Button className="gap-2" onClick={() => setAddOpen(true)}>
-                                    <PlusIcon className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Nuevo Poste</span>
-                                </Button>
-                            )}
-                        </div>
-                    }
+                        <Button variant="outline" size="icon-sm" onClick={() => load()} disabled={loading}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        </Button>
+                        {canAdd && (
+                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                                <PlusIcon className="h-4 w-4" />
+                                <span className="hidden sm:inline">Nuevo Poste</span>
+                            </Button>
+                        )}
+                    </>}
                 />
             )}
 
@@ -552,7 +682,7 @@ const PostePage = () => {
                     onRetry={loadArchived}
                     hasPaginated={true}
                     actions={
-                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }
@@ -560,7 +690,7 @@ const PostePage = () => {
             )}
 
             <PermissionGuard module="postes" action="crear" open={addOpen} onOpenChange={setAddOpen}>
-                <AddPosteSheet
+                <PosteSheet
                     open={addOpen}
                     setOpen={setAddOpen}
                     onSuccess={load}
@@ -568,17 +698,16 @@ const PostePage = () => {
             </PermissionGuard>
 
             <PermissionGuard module="postes" action="editar" open={openEdit} onOpenChange={setOpenEdit}>
-                <EditPosteSheet
+                <PosteSheet
+                    poste={selectedPoste}
                     open={openEdit}
                     setOpen={setOpenEdit}
-                    poste={editPoste}
-                    setPoste={setEditPoste}
-                    functionApp={load}
+                    onSuccess={load}
                 />
             </PermissionGuard>
 
             {addEventoId !== null && (
-                <AddEventoSheet
+                <EventoSheet
                     posteId={addEventoId}
                     open={true}
                     setOpen={(v) => { if (!v) setAddEventoId(null); }}

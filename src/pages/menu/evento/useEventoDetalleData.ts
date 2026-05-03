@@ -2,17 +2,17 @@ import { useCallback, useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { searchEvento } from "../../../api/Evento.api";
-import { getRevicion } from "../../../api/Revicion.api";
+import { getRevision } from "../../../api/Revision.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
 import { getEventoObs } from "../../../api/EventoObs.api";
-import { EventoInterface, EventoObsInterface, RevicionInterface, SolucionInterface } from "../../../interfaces/interfaces";
+import { EventoInterface, EventoObsInterface, RevisionInterface, SolucionInterface } from "../../../interfaces/interfaces";
 
 export function useEventoDetalleData(id: number) {
     const { sesion } = useContext(SesionContext);
 
     const [loading, setLoading]   = useState(true);
     const [evento, setEvento]     = useState<EventoInterface | null>(null);
-    const [revicions, setRevicions] = useState<RevicionInterface[]>([]);
+    const [revisions, setRevisions] = useState<RevisionInterface[]>([]);
     const [solucion, setSolucion] = useState<SolucionInterface | null>(null);
     const [eventoObs, setEventoObs] = useState<EventoObsInterface[]>([]);
 
@@ -21,13 +21,13 @@ export function useEventoDetalleData(id: number) {
         setLoading(true);
         Promise.all([
             searchEvento(id, sesion.token),
-            getRevicion(id, sesion.token),
+            getRevision(id, sesion.token),
             getSolucion_evento(id, sesion.token).catch(() => null),
             getEventoObs(id, sesion.token),
         ])
             .then(([ev, revs, sol, obs]) => {
                 setEvento(ev);
-                setRevicions(revs);
+                setRevisions(revs);
                 setSolucion(sol);
                 setEventoObs(obs);
             })
@@ -37,5 +37,5 @@ export function useEventoDetalleData(id: number) {
 
     useEffect(() => { load(); }, [load]);
 
-    return { evento, revicions, solucion, eventoObs, loading, load };
+    return { evento, revisions, solucion, eventoObs, loading, load };
 }

@@ -1,7 +1,7 @@
 import { PosteInterface } from "../../../../interfaces/interfaces";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
+import { Card, CardContent } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { CalendarIcon, ChevronRightIcon, MapPinIcon, UserIcon, ZapIcon } from "lucide-react";
+import { ImageIcon } from "lucide-react";
 import { ImageViewer } from "../../../../components/ui/image-viewer";
 import { url } from "../../../../api/url";
 
@@ -12,56 +12,57 @@ interface Props {
 
 export default function PosteDetalleInfo({ loading, poste }: Props) {
   return (
-    <Card className="shadow-sm border-muted/60">
-      <CardHeader className="border-b border-border/40 pb-4">
-        <CardTitle className="text-base">Información del poste</CardTitle>
-      </CardHeader>
-      <CardContent className="pt-5 space-y-4">
+    <Card className="shadow-sm border-muted/60 overflow-hidden flex flex-col h-full py-0 gap-0">
+      {/* Hero image */}
+      <div className="aspect-16/10 bg-muted relative shrink-0 border-b border-border/40">
         {loading ? (
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-3">
-              <Skeleton className="h-8 w-8 rounded-full" />
-              <div className="space-y-1.5">
-                <Skeleton className="h-3 w-20" />
+          <Skeleton className="absolute inset-0 rounded-none" />
+        ) : poste?.image ? (
+          <ImageViewer src={`${url}${poste.image}`} alt={`Poste ${poste.name}`} hero />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/40">
+            <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
+            <span className="text-xs">Sin imagen</span>
+          </div>
+        )}
+      </div>
+
+      {/* Datos */}
+      <CardContent className="p-5 flex-1">
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-32" />
               </div>
-            </div>
-          ))
+            ))}
+          </div>
         ) : (
-          <>
-            <InfoRow icon={<MapPinIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10" label="Tramo" value={<>{poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {poste?.ciudadB?.name ?? "—"}</>} />
-            <InfoRow icon={<ZapIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10" label="Material" value={poste?.material?.name ?? "—"} />
-            <InfoRow icon={<UserIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Propietario" value={poste?.propietario?.name ?? "—"} />
-            <InfoRow icon={<UserIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Registrado por" value={poste?.usuario ? `${poste.usuario.name} ${poste.usuario.lastname}` : "—"} />
-            <InfoRow icon={<CalendarIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Fecha de registro" value={poste?.date ? new Date(poste.date).toLocaleDateString("es-ES") : "—"} />
-            {poste?.adss?.name && (
-              <InfoRow icon={<ZapIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted" label="Ferretería (ADSS)" value={poste.adss.name} />
-            )}
-            <div className="pt-1 flex gap-2 text-xs text-muted-foreground">
-              <span>Lat: {poste?.lat ?? "—"}</span>
-              <span>·</span>
-              <span>Lng: {poste?.lng ?? "—"}</span>
-            </div>
-            {poste?.image && (
-              <div className="pt-2">
-                <ImageViewer src={`${url}${poste.image}`} alt={`Poste ${poste.name}`} />
-              </div>
-            )}
-          </>
+          <dl className="space-y-3.5">
+            <Row label="Material" value={poste?.material?.name} />
+            <Row label="Propietario" value={poste?.propietario?.name} />
+            {poste?.adss?.name && <Row label="Ferretería" value={poste.adss.name} />}
+            <Row
+              label="Registrado"
+              value={poste?.date ? new Date(poste.date).toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" }) : undefined}
+            />
+            <Row
+              label="Registrado por"
+              value={poste?.usuario ? `${poste.usuario.name} ${poste.usuario.lastname}` : undefined}
+            />
+          </dl>
         )}
       </CardContent>
     </Card>
   );
 }
 
-function InfoRow({ icon, bg, label, value }: { icon: React.ReactNode; bg: string; label: string; value: React.ReactNode }) {
+function Row({ label, value }: { label: string; value?: string | null }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className={`p-2 ${bg} rounded-full shrink-0`}>{icon}</div>
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value}</p>
-      </div>
+    <div className="flex items-center justify-between gap-3 min-w-0">
+      <dt className="text-xs text-muted-foreground font-medium shrink-0">{label}</dt>
+      <dd className="text-sm font-medium truncate text-right">{value ?? "—"}</dd>
     </div>
   );
 }

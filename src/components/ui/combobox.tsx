@@ -41,7 +41,7 @@ export function Combobox({
         <Popover onOpenChange={(open) => { if (open) { setSearch(""); setTimeout(() => inputRef.current?.focus(), 0) } }}>
             <PopoverTrigger
                 className={cn(
-                    "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-0",
+                    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring active:translate-y-0",
                     !selected && "text-muted-foreground",
                     className
                 )}

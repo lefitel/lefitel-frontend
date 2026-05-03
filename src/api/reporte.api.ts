@@ -52,6 +52,7 @@ export interface EstadoRedRow {
 export interface ObsFrecuenciaRow {
   tipoObs: string;
   obs: string;
+  criticality: number | null;
   count: number;
   pct: number;
 }

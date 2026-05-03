@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { XIcon, ZoomInIcon } from "lucide-react";
+import { cn } from "../../lib/utils";
 
 function LightboxPortal({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 cursor-zoom-out"
+      className="fixed inset-0 z-9999 flex items-center justify-center bg-black/85 cursor-zoom-out"
       onClick={onClose}
     >
       <button
@@ -29,18 +30,23 @@ interface ImageViewerProps {
   src: string;
   alt?: string;
   className?: string;
+  /** Fills parent container (absolute inset-0, object-cover). Parent must be relative+sized. */
+  hero?: boolean;
 }
 
-export function ImageViewer({ src, alt = "", className }: ImageViewerProps) {
+export function ImageViewer({ src, alt = "", className, hero = false }: ImageViewerProps) {
   const [open, setOpen] = useState(false);
+
+  const wrapperClass = hero
+    ? cn("absolute inset-0 overflow-hidden cursor-zoom-in group", className)
+    : cn("relative aspect-square w-full max-w-xs overflow-hidden rounded-lg border border-border cursor-zoom-in group bg-muted/30", className);
+
+  const imgClass = hero ? "w-full h-full object-cover" : "w-full h-full object-contain";
 
   return (
     <>
-      <div
-        className={`relative aspect-square w-full max-w-xs overflow-hidden rounded-lg border border-border cursor-zoom-in group bg-muted/30 ${className ?? ""}`}
-        onClick={() => setOpen(true)}
-      >
-        <img src={src} alt={alt} className="w-full h-full object-contain" />
+      <div className={wrapperClass} onClick={() => setOpen(true)}>
+        <img src={src} alt={alt} className={imgClass} />
         <div className="absolute inset-0 flex items-end justify-end p-2 opacity-0 group-hover:opacity-100 transition-opacity">
           <span className="bg-black/50 rounded p-1">
             <ZoomInIcon className="h-3.5 w-3.5 text-white" />

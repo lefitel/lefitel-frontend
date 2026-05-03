@@ -24,13 +24,11 @@ export function TopPostesCard({ topPostes, loading }: TopPostesCardProps) {
               <CardTitle>Top Postes con Más Incidencias Pendientes</CardTitle>
               <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button type="button" aria-label="¿Cómo se calcula el top?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                        <InfoIcon className="h-3.5 w-3.5" />
-                      </button>
-                    }
-                  />
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="¿Cómo se calcula el top?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                      <InfoIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <span className="block text-left leading-relaxed normal-case">
                       Postes con mayor cantidad de eventos <strong className="font-semibold">sin resolver</strong> creados dentro del período seleccionado. Top 6 ordenado de mayor a menor.
@@ -45,7 +43,7 @@ export function TopPostesCard({ topPostes, loading }: TopPostesCardProps) {
             variant="ghost"
             size="sm"
             className="h-7 text-xs gap-1 text-muted-foreground hover:text-foreground shrink-0"
-            onClick={() => navigate("/postes")}
+            onClick={() => navigate("/app/postes")}
           >
             Ver todos <ArrowRightIcon className="h-3 w-3" />
           </Button>

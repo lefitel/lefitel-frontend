@@ -36,6 +36,7 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { exportExcelTramo, exportCsvTramo, exportPdfTramo } from "../../../lib/exports/reportTramo";
+import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,7 @@ const ReportTramoSec = () => {
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal,   setTramoFinal]   = useState<number | null>(null);
   const [listCiudad,   setListCiudad]   = useState<CiudadInterface[]>([]);
+  const neighbors = useTramoNeighbors(sesion.token);
   const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
   const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -61,6 +63,13 @@ const ReportTramoSec = () => {
   useEffect(() => {
     getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
   }, [sesion.token]);
+
+  useEffect(() => {
+    if (tramoInicial && tramoFinal && neighbors.size > 0) {
+      const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
+      if (!valid) setTramoFinal(null);
+    }
+  }, [tramoInicial, tramoFinal, neighbors]);
 
   const handleGenerar = async () => {
     if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
@@ -164,7 +173,11 @@ const ReportTramoSec = () => {
       id: "num",
       header: "#",
       enableSorting: false,
-      cell: ({ row }) => <span className="text-xs text-muted-foreground">{row.index + 1}</span>,
+      cell: ({ row, table }) => {
+        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+      },
     },
     {
       id: "poste",
@@ -253,8 +266,8 @@ const ReportTramoSec = () => {
             Eventos con revisión en el período. Columnas dinámicas por propietario, material, ADSS y observaciones.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+        <CardContent>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
             <div className="space-y-1.5">
               <Label>Fecha de inicio</Label>
               <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -266,7 +279,13 @@ const ReportTramoSec = () => {
             <div className="space-y-1.5">
               <Label>Tramo desde <span className="text-muted-foreground text-xs">(opcional)</span></Label>
               <Combobox
-                options={listCiudad.filter((c) => c.id !== tramoFinal).map((c) => ({ value: String(c.id), label: c.name }))}
+                options={listCiudad
+                  .filter((c) => {
+                    if (c.id == null || c.id === tramoFinal) return false;
+                    if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                    return neighbors.get(tramoFinal)?.has(c.id) ?? false;
+                  })
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
                 value={tramoInicial ? String(tramoInicial) : ""}
                 onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
                 placeholder="Todas las ciudades"
@@ -275,7 +294,13 @@ const ReportTramoSec = () => {
             <div className="space-y-1.5">
               <Label>Tramo hasta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
               <Combobox
-                options={listCiudad.filter((c) => c.id !== tramoInicial).map((c) => ({ value: String(c.id), label: c.name }))}
+                options={listCiudad
+                  .filter((c) => {
+                    if (c.id == null || c.id === tramoInicial) return false;
+                    if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                    return neighbors.get(tramoInicial)?.has(c.id) ?? false;
+                  })
+                  .map((c) => ({ value: String(c.id), label: c.name }))}
                 value={tramoFinal ? String(tramoFinal) : ""}
                 onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
                 placeholder="Todas las ciudades"
@@ -293,13 +318,13 @@ const ReportTramoSec = () => {
               </span>
             </label>
           </div>
-          <div className="flex gap-2 mt-5">
-            <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button onClick={handleGenerar} disabled={loading}>
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}
               Generar
             </Button>
             {list.length > 0 && (
-              <Button variant="outline" onClick={handleLimpiar} className="h-10 px-6">
+              <Button variant="outline" onClick={handleLimpiar}>
                 Limpiar
               </Button>
             )}

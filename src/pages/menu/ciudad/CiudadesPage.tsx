@@ -28,8 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
-import AddCiudadSheet from "../../../components/dialogs/add/AddCiudadSheet";
-import EditCiudadSheet from "../../../components/dialogs/edits/EditCiudadSheet";
+import CiudadSheet from "../../../components/dialogs/upsert/CiudadSheet";
 import DataTable from "../../../components/table/DataTable";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
@@ -137,6 +136,16 @@ export default function CiudadesPage() {
 
   const columns = useMemo<ColumnDef<CiudadInterface>[]>(() => [
     {
+      id: "num",
+      header: "#",
+      enableSorting: false,
+      cell: ({ row, table }) => {
+        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+      },
+    },
+    {
       accessorKey: "image",
       header: "Foto",
       enableSorting: false,
@@ -150,7 +159,7 @@ export default function CiudadesPage() {
       cell: ({ row }) => (
         <button
           className="font-medium text-sm text-primary hover:underline text-left"
-          onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${row.original.id}`); }}
+          onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${row.original.id}`); }}
         >
           {row.original.name}
         </button>
@@ -189,7 +198,7 @@ export default function CiudadesPage() {
               <MoreVerticalIcon className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
-              <DropdownMenuItem onClick={() => navigate(`/ciudades/${row.original.id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/app/ciudades/${row.original.id}`)}>
                 Ver detalle
               </DropdownMenuItem>
               {can(sesion.usuario.id_rol, "ciudades", "editar") && (
@@ -216,6 +225,16 @@ export default function CiudadesPage() {
   ], [navigate, sesion.usuario.id_rol]);
 
   const archivedColumns = useMemo<ColumnDef<CiudadInterface>[]>(() => [
+    {
+      id: "num",
+      header: "#",
+      enableSorting: false,
+      cell: ({ row, table }) => {
+        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+        const { pageIndex, pageSize } = table.getState().pagination;
+        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+      },
+    },
     {
       accessorKey: "image",
       header: "Foto",
@@ -265,7 +284,7 @@ export default function CiudadesPage() {
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}
-      className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500"
+      className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500"
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -289,15 +308,15 @@ export default function CiudadesPage() {
           columns={columns}
           onRetry={load}
           actions={<>
+            <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
+              <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
             {can(sesion.usuario.id_rol, "ciudades", "crear") && (
               <Button className="gap-2 bg-primary hover:bg-primary/90" onClick={() => setOpenAdd(true)}>
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Nueva Ciudad</span>
               </Button>
             )}
-            <Button variant="outline" size="icon" onClick={load} disabled={loading}>
-              <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-            </Button>
           </>}
         />
       </TabsContent>
@@ -310,7 +329,7 @@ export default function CiudadesPage() {
           columns={archivedColumns}
           onRetry={loadArchived}
           actions={
-            <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+            <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
               <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
             </Button>
           }
@@ -318,10 +337,10 @@ export default function CiudadesPage() {
       </TabsContent>
 
       <PermissionGuard module="ciudades" action="crear" open={openAdd} onOpenChange={setOpenAdd}>
-        <AddCiudadSheet open={openAdd} setOpen={setOpenAdd} onSuccess={load} />
+        <CiudadSheet open={openAdd} setOpen={setOpenAdd} onSuccess={load} />
       </PermissionGuard>
       <PermissionGuard module="ciudades" action="editar" open={!!editCiudad} onOpenChange={(v) => { if (!v) setEditCiudad(null); }}>
-        <EditCiudadSheet
+        <CiudadSheet
           ciudad={editCiudad}
           open={!!editCiudad}
           setOpen={(v) => { if (!v) setEditCiudad(null); }}

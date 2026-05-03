@@ -1,5 +1,5 @@
 import { useContext, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import {
   LogOut,
   ChevronsUpDown,
@@ -45,7 +45,6 @@ import logo from "../assets/images/logo.png";
 
 export const AppSidebar = () => {
   const { sesion, logout } = useContext(SesionContext);
-  const navigate = useNavigate();
   const location = useLocation();
   const rol = sesion.usuario.id_rol;
 
@@ -63,10 +62,10 @@ export const AppSidebar = () => {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" className="pointer-events-none">
               <div className="flex shrink-0 aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-secondary p-1.5">
-                <img src={logo} alt="Lefitel" className="h-full w-full object-contain" />
+                <img src={logo} alt="Osefi srl" className="h-full w-full object-contain" />
               </div>
               <div className="flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">Lefitel</span>
+                <span className="font-semibold">Osefi srl</span>
                 <span className="text-xs text-muted-foreground">Sistema de gestión</span>
               </div>
             </SidebarMenuButton>
@@ -79,16 +78,16 @@ export const AppSidebar = () => {
           <SidebarGroupContent>
             <SidebarMenu className="gap-1">
               {visibleItems.map((item) => {
-                const isActive = location.pathname === item.path;
+                const isActive =
+                  location.pathname === item.path ||
+                  location.pathname.startsWith(item.path + "/");
                 return (
                   <SidebarMenuItem key={item.text}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => navigate(item.path)}
-                      tooltip={item.text}
-                    >
-                      <item.icon />
-                      <span>{item.text}</span>
+                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.text}>
+                      <Link to={item.path}>
+                        <item.icon />
+                        <span>{item.text}</span>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -132,9 +131,11 @@ export const AppSidebar = () => {
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => navigate("/perfil")}>
-                  <UserCircle className="mr-2" />
-                  Mi Perfil
+                <DropdownMenuItem asChild>
+                  <Link to="/app/perfil">
+                    <UserCircle className="mr-2" />
+                    Mi Perfil
+                  </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setLogoutOpen(true)}>

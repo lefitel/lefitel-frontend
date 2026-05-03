@@ -72,6 +72,113 @@
   display: none;
 }
 
+/* Sonar / ripple map marker */
+.sonar-root {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sonar-dot {
+  position: absolute;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px oklch(0 0 0 / 28%);
+}
+
+.sonar-ring {
+  position: absolute;
+  border-radius: 50%;
+  width: var(--dot);
+  height: var(--dot);
+  pointer-events: none;
+}
+
+@keyframes sonar-r1 {
+  0%   { box-shadow: 0 0 0 0    rgba(var(--rgb), 0.45); filter: blur(0px);  }
+  100% { box-shadow: 0 0 0 19px rgba(var(--rgb), 0);    filter: blur(2px); }
+}
+@keyframes sonar-r2 {
+  0%   { box-shadow: 0 0 0 0    rgba(var(--rgb), 0.25); filter: blur(0px); }
+  100% { box-shadow: 0 0 0 34px rgba(var(--rgb), 0);    filter: blur(4px); }
+}
+.sonar-ring-1 { animation: sonar-r1 2.4s ease-out infinite; }
+.sonar-ring-2 { animation: sonar-r2 2.4s ease-out infinite; }
+.sonar-b      { animation-delay: -1.2s; }
+.sonar-marker { transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+
+/* Loading screen animations */
+@keyframes sweep-rtl {
+  0%   { transform: translateX(200%); }
+  100% { transform: translateX(-200%); }
+}
+@keyframes logo-glow {
+  0%, 100% { filter: drop-shadow(0 0 6px color-mix(in oklch, var(--primary) 25%, transparent)); }
+  50%       { filter: drop-shadow(0 0 22px color-mix(in oklch, var(--primary) 55%, transparent)); }
+}
+@keyframes shimmer-sweep {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0px,   0px)  scale(1);    }
+  33%       { transform: translate(25px, -18px) scale(1.06); }
+  66%       { transform: translate(-18px, 12px) scale(0.94); }
+}
+
+.logo-glow {
+  animation: logo-glow 2.5s ease-in-out infinite;
+}
+.shimmer-text {
+  background: linear-gradient(90deg, var(--foreground) 20%, var(--primary) 50%, var(--foreground) 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 2.8s linear infinite;
+}
+.blob-drift-1 { animation: blob-drift  9s ease-in-out infinite; }
+.blob-drift-2 { animation: blob-drift 11s ease-in-out infinite reverse; }
+
+/* Login page */
+@keyframes grid-drift {
+  0%   { background-position: 0 0, 0 0; }
+  100% { background-position: 3rem 3rem, 3rem 3rem; }
+}
+@keyframes line-grow {
+  from { transform: scaleX(0); transform-origin: left center; }
+  to   { transform: scaleX(1); transform-origin: left center; }
+}
+.shimmer-text-light {
+  background: linear-gradient(90deg, rgba(255,255,255,0.75) 20%, rgba(255,255,255,1) 50%, rgba(255,255,255,0.75) 80%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 3s linear infinite;
+}
+
+.shimmer-orange {
+  background: linear-gradient(90deg, #f97316 15%, #fb923c 38%, #fbbf24 50%, #fb923c 62%, #f97316 85%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer-sweep 3.5s linear infinite;
+}
+
+/* Legacy pulsing markers (OperationsMap, CiudadDetallePage) */
+@keyframes circle-marker-pulse {
+  0%, 100% { transform: scale(1); }
+  50%       { transform: scale(1.15); }
+}
+
+.circle-pulse-marker {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: circle-marker-pulse 0.6s ease-in-out infinite;
+}
+
 .leaflet-container {
   width: 100%;
   height: 100%;
@@ -180,4 +287,30 @@
   body {
     @apply bg-background text-foreground;
   }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+:root {
+  --sidebar: hsl(0 0% 98%);
+  --sidebar-foreground: hsl(240 5.3% 26.1%);
+  --sidebar-primary: hsl(240 5.9% 10%);
+  --sidebar-primary-foreground: hsl(0 0% 98%);
+  --sidebar-accent: hsl(240 4.8% 95.9%);
+  --sidebar-accent-foreground: hsl(240 5.9% 10%);
+  --sidebar-border: hsl(220 13% 91%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
+}
+
+.dark {
+  --sidebar: hsl(240 5.9% 10%);
+  --sidebar-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-primary: hsl(224.3 76.3% 48%);
+  --sidebar-primary-foreground: hsl(0 0% 100%);
+  --sidebar-accent: hsl(240 3.7% 15.9%);
+  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+  --sidebar-border: hsl(240 3.7% 15.9%);
+  --sidebar-ring: hsl(217.2 91.2% 59.8%);
 }

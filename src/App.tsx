@@ -1,4 +1,5 @@
 import { Route, Routes, BrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
+import LandingPage from "./pages/LandingPage";
 import { MENU_ITEMS } from "./components/menuItems";
 import LoadingPage from "./pages/LoadingPage";
 import { SesionContext } from "./context/SesionContext";
@@ -32,11 +33,18 @@ const PrivateRoutes = () => {
   return sesion.token !== "" ? <Outlet /> : <Navigate to="/login" state={{ from: location }} replace />;
 };
 
+const PublicRoutes = () => {
+  const { sesion, loading } = useContext(SesionContext);
+
+  if (loading) return <LoadingPage />;
+  return sesion.token === "" ? <Outlet /> : <Navigate to="/app/home" replace />;
+};
+
 const RoleRoute = ({ roles }: { roles: number[] }) => {
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
   if (!roles.includes(rol)) {
-    const fallback = MENU_ITEMS.find((item) => item.roles.includes(rol))?.path ?? "/home";
+    const fallback = MENU_ITEMS.find((item) => item.roles.includes(rol))?.path ?? "/app/home";
     return <Navigate to={fallback} replace />;
   }
   return <Outlet />;
@@ -45,44 +53,49 @@ const RoleRoute = ({ roles }: { roles: number[] }) => {
 const App = () => {
   return (
     <SesionProvider>
-      <ShadcnThemeProvider defaultTheme="light" storageKey="lefitel-theme">
+      <ShadcnThemeProvider defaultTheme="light" storageKey="osefi-theme">
         <TooltipProvider>
           <BrowserRouter>
             <Routes>
+              <Route path="/" element={<LandingPage />} />
+
               <Route element={<PrivateRoutes />}>
-                <Route element={<HomePage />}>
-                  <Route index element={<Navigate to="/home" replace />} />
+                <Route path="/app" element={<HomePage />}>
+                  <Route index element={<Navigate to="/app/home" replace />} />
 
                   {/* Roles 1, 2, 3 */}
                   <Route element={<RoleRoute roles={[1, 2, 3]} />}>
-                    <Route path="/home"     element={<InicioPage />} />
-                    <Route path="/postes"   element={<PostePage />} />
-                    <Route path="/postes/:id" element={<PosteDetallePage />} />
-                    <Route path="/ciudades" element={<CiudadesPage />} />
-                    <Route path="/ciudades/:id" element={<CiudadDetallePageKeyed />} />
-                    <Route path="/eventos"  element={<EventoPage />} />
-                    <Route path="/eventos/:id" element={<EventoDetallePage />} />
-                    <Route path="/reportes" element={<ReportePage />} />
-                    <Route path="/perfil"   element={<PerfilPage />} />
+                    <Route path="home"          element={<InicioPage />} />
+                    <Route path="postes"         element={<PostePage />} />
+                    <Route path="postes/:id"     element={<PosteDetallePage />} />
+                    <Route path="ciudades"        element={<CiudadesPage />} />
+                    <Route path="ciudades/:id"   element={<CiudadDetallePageKeyed />} />
+                    <Route path="eventos"         element={<EventoPage />} />
+                    <Route path="eventos/:id"    element={<EventoDetallePage />} />
+                    <Route path="reportes"        element={<ReportePage />} />
+                    <Route path="perfil"          element={<PerfilPage />} />
                   </Route>
 
                   {/* Roles 1, 2 */}
                   <Route element={<RoleRoute roles={[1, 2]} />}>
-                    <Route path="/parametros" element={<ParametrosPage />} />
+                    <Route path="parametros" element={<ParametrosPage />} />
                   </Route>
 
                   {/* Rol 1 únicamente */}
                   <Route element={<RoleRoute roles={[1]} />}>
-                    <Route path="/seguridad" element={<SeguridadPage />} />
-                    <Route path="/seguridad/:id" element={<UsuarioDetallePageKeyed />} />
-                    <Route path="/archivos"  element={<FilesPage />} />
-                    <Route path="/bitacora"  element={<BitacoraPage />} />
+                    <Route path="seguridad"      element={<SeguridadPage />} />
+                    <Route path="seguridad/:id"  element={<UsuarioDetallePageKeyed />} />
+                    <Route path="archivos"        element={<FilesPage />} />
+                    <Route path="bitacora"        element={<BitacoraPage />} />
                   </Route>
-
                 </Route>
               </Route>
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="*" element={<Navigate to="/home" replace />} />
+
+              <Route element={<PublicRoutes />}>
+                <Route path="/login" element={<LoginPage />} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>
           </BrowserRouter>
           <Toaster position="top-right" richColors closeButton theme="system" />

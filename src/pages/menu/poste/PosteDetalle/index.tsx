@@ -4,35 +4,21 @@ import { useNavigate, useParams } from "react-router-dom";
 import { SesionContext } from "../../../../context/SesionContext";
 import { can } from "../../../../lib/permissions";
 import { getPosteByTramo, searchPoste } from "../../../../api/Poste.api";
-import { CiudadInterface, EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../../components/ui/card";
-import { Button } from "../../../../components/ui/button";
-import { Badge } from "../../../../components/ui/badge";
-import { Skeleton } from "../../../../components/ui/skeleton";
-import { ColumnDef } from "@tanstack/react-table";
-import DataTable from "../../../../components/table/DataTable";
-import {
-  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
-} from "../../../../components/ui/alert-dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "../../../../components/ui/dropdown-menu";
-import { MoreVerticalIcon, PencilIcon, PlusIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
-import EditPosteSheet from "../../../../components/dialogs/edits/EditPosteSheet";
-import EditCiudadSheet from "../../../../components/dialogs/edits/EditCiudadSheet";
+import { CiudadInterface, PosteInterface } from "../../../../interfaces/interfaces";
+import PosteSheet from "../../../../components/dialogs/upsert/PosteSheet";
+import CiudadSheet from "../../../../components/dialogs/upsert/CiudadSheet";
 import PermissionGuard from "../../../../components/PermissionGuard";
 import { fetchOrsRoute } from "../../../../lib/orsRoute";
 import { usePosteDetalleData } from "./usePosteDetalleData";
-import AddEventoSheet from "./AddEventoSheet";
-import AddRevicionSheet from "./AddRevicionSheet";
-import ResolverEventoSheet from "./ResolverEventoSheet";
-import EditEventoSheet from "./EditEventoSheet";
-import PosteDetalleKpis from "./PosteDetalleKpis";
+import EventoSheet from "../../../../components/dialogs/upsert/EventoSheet";
+import AddRevisionSheet from "../../../../components/dialogs/AddRevisionSheet";
+import ResolverEventoSheet from "../../../../components/dialogs/ResolverEventoSheet";
+import PosteDetalleHeader from "./PosteDetalleHeader";
+import PosteDetalleHealthStrip from "./PosteDetalleHealthStrip";
 import PosteDetalleInfo from "./PosteDetalleInfo";
 import PosteDetalleMap from "./PosteDetalleMap";
-import { daysOpen } from "../../inicio/helpers";
+import PosteDetalleHistorial from "./PosteDetalleHistorial";
+import { EventoActionHandlers } from "./PosteDetalleEventosAbiertos";
 
 export default function PosteDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -40,7 +26,6 @@ export default function PosteDetallePage() {
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
 
-  const [confirmReabrir, setConfirmReabrir] = useState<EventoInterface | null>(null);
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [tramoPosotes, setTramoPosotes] = useState<PosteInterface[]>([]);
   const [openEditCiudad, setOpenEditCiudad] = useState(false);
@@ -91,11 +76,6 @@ export default function PosteDetallePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.poste?.id, sesion.token]);
 
-  const total = d.eventos.length;
-  const pendientes = d.eventos.filter((e) => !e.state).length;
-  const resueltos = d.eventos.filter((e) => e.state).length;
-  const tasa = total > 0 ? Math.round((resueltos / total) * 100) : 0;
-
   const hasCoords = (d.poste?.lat ?? 0) !== 0 && (d.poste?.lng ?? 0) !== 0;
   const boundsCoords: [number, number][] = [
     ...(d.poste?.ciudadA?.lat && d.poste.ciudadA.lng ? [[d.poste.ciudadA.lat, d.poste.ciudadA.lng] as [number, number]] : []),
@@ -110,126 +90,35 @@ export default function PosteDetallePage() {
     d.setOpenEditPoste(true);
   }, [sesion.token, d]);
 
-  const eventoColumns = useMemo<ColumnDef<EventoInterface>[]>(() => [
-    {
-      id: "descripcion",
-      header: "Descripción",
-      accessorKey: "description",
-      cell: ({ row }) => (
-        <span className="text-sm max-w-50 truncate block">{row.original.description}</span>
-      ),
-    },
-    {
-      id: "fecha",
-      header: "Fecha",
-      accessorKey: "date",
-      cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground whitespace-nowrap">{daysOpen(row.original.date)}</span>
-      ),
-    },
-    {
-      id: "prioridad",
-      header: "Prioridad",
-      accessorKey: "priority",
-      cell: ({ row }) => row.original.priority
-        ? <Badge className="bg-amber-500/15 text-amber-600 border-transparent shadow-none text-xs">Alta</Badge>
-        : <Badge variant="outline" className="text-xs text-muted-foreground">Normal</Badge>,
-    },
-    {
-      id: "estado",
-      header: "Estado",
-      accessorKey: "state",
-      cell: ({ row }) => row.original.state
-        ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
-        : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>,
-    },
-    {
-      id: "acciones",
-      header: "",
-      enableSorting: false,
-      cell: ({ row }) => {
-        const evento = row.original;
-        return (
-          <div className="flex justify-end pr-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                <MoreVerticalIcon className="h-4 w-4" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={() => navigate(`/eventos/${evento.id}`)}>
-                  Ver detalle
-                </DropdownMenuItem>
-                {can(sesion.usuario.id_rol, "eventos", "editar") && !evento.state && (
-                  <DropdownMenuItem onClick={() => d.setEditEventoId(evento.id as number)}>
-                    Editar
-                  </DropdownMenuItem>
-                )}
-                {can(sesion.usuario.id_rol, "eventos", "editar") && (
-                  <>
-                    <DropdownMenuSeparator />
-                    {!evento.state ? (
-                      <>
-                        <DropdownMenuItem onClick={() => d.setAddRevicionEventoId(evento.id as number)}>
-                          Agregar revisión
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => d.setResolverEvento(evento)} className="text-primary">
-                          Resolver
-                        </DropdownMenuItem>
-                      </>
-                    ) : (
-                      <DropdownMenuItem onClick={() => setConfirmReabrir(evento)}>
-                        Reabrir
-                      </DropdownMenuItem>
-                    )}
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        );
-      },
-    },
-  ], [d, navigate, sesion.usuario.id_rol, setConfirmReabrir]);
+  const eventoActions = useMemo<EventoActionHandlers>(() => ({
+    onVerDetalle: (id) => navigate(`/app/eventos/${id}`),
+    onEditar: (id) => d.setEditEventoId(id),
+    onAddRevision: (id) => d.setAddRevisionEventoId(id),
+    onResolver: (e) => d.setResolverEvento(e),
+  }), [navigate, d]);
+
+  const posicionEnTramo = useMemo(() => {
+    if (!d.poste || tramoPosotes.length === 0) return null;
+    const idx = tramoPosotes.findIndex((p) => p.id === d.poste!.id);
+    if (idx < 0) return null;
+    return { index: idx + 1, total: tramoPosotes.length };
+  }, [d.poste, tramoPosotes]);
 
   return (
-    <div className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          {d.loading ? (
-            <>
-              <Skeleton className="h-7 w-40 mb-1" />
-              <Skeleton className="h-4 w-56" />
-            </>
-          ) : (
-            <>
-              <h1 className="text-2xl font-bold tracking-tight">Poste {d.poste?.name ?? "—"}</h1>
-              <p className="text-sm text-muted-foreground">
-                Tramo: {d.poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {d.poste?.ciudadB?.name ?? "—"}
-              </p>
-            </>
-          )}
-        </div>
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          {can(sesion.usuario.id_rol, "postes", "editar") && (
-            <Button
-              className="gap-2 bg-primary hover:bg-primary/90"
-              onClick={() => d.setOpenEditPoste(true)}
-              disabled={d.loading || !d.poste}
-            >
-              <PencilIcon className="h-4 w-4" />
-              Editar
-            </Button>
-          )}
-          <Button variant="outline" size="icon" onClick={d.load} disabled={d.loading} className="h-8 w-8">
-            <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
+      <PosteDetalleHeader
+        loading={d.loading}
+        poste={d.poste}
+        posicionEnTramo={posicionEnTramo}
+        canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
+        canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
+        onNuevoEvento={() => d.setAddEventoOpen(true)}
+        onEditarPoste={() => d.setOpenEditPoste(true)}
+        onRefrescar={d.load}
+      />
 
-      {/* KPI Cards */}
-      <PosteDetalleKpis loading={d.loading} total={total} pendientes={pendientes} resueltos={resueltos} tasa={tasa} />
+      <PosteDetalleHealthStrip loading={d.loading} eventos={d.eventos} />
 
       {/* Info + Mapa */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -237,12 +126,13 @@ export default function PosteDetallePage() {
         <PosteDetalleMap
           loading={d.loading}
           poste={d.poste}
+          eventos={d.eventos}
           tramoPosotes={tramoPosotes}
           routePath={routePath}
           boundsCoords={boundsCoords}
-          onVerCiudad={(id) => navigate(`/ciudades/${id}`)}
+          onVerCiudad={(id) => navigate(`/app/ciudades/${id}`)}
           onEditarCiudad={(ciudad) => { setSelectedCiudad(ciudad); setOpenEditCiudad(true); }}
-          onVerPoste={(id) => navigate(`/postes/${id}`)}
+          onVerPoste={(id) => navigate(`/app/postes/${id}`)}
           onEditarOtroPoste={handleEditarOtroPoste}
           onEditarEstePoste={() => d.setOpenEditPoste(true)}
           canEditPostes={can(sesion.usuario.id_rol, "postes", "editar")}
@@ -251,47 +141,30 @@ export default function PosteDetallePage() {
       </div>
 
 
-      {/* Historial de Eventos */}
-      <Card className="shadow-sm border-muted/60">
-        <CardHeader className="border-b border-border/40 pb-4">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Historial de Eventos</CardTitle>
-            {can(sesion.usuario.id_rol, "eventos", "crear") && (
-              <Button
-                className="gap-1.5 bg-primary hover:bg-primary/90 text-white"
-                onClick={() => d.setAddEventoOpen(true)}
-                disabled={d.loading || !d.poste}
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Nuevo Evento
-              </Button>
-            )}
-          </div>
-        </CardHeader>
-        <CardContent className="p-4">
-          <DataTable
-            data={d.eventos}
-            loading={d.loading}
-            columns={eventoColumns}
-            hasOptions={false}
-            hasPaginated={false}
-            actions={<></>}
-          />
-        </CardContent>
-      </Card>
+      <PosteDetalleHistorial
+        loading={d.loading}
+        poste={d.poste}
+        eventos={d.eventos}
+        tramoPostes={tramoPosotes}
+        canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
+        canCreateEventos={can(sesion.usuario.id_rol, "eventos", "crear")}
+        onNuevoEvento={() => d.setAddEventoOpen(true)}
+        onVerPoste={(id) => navigate(`/app/postes/${id}`)}
+        actions={eventoActions}
+      />
 
       {/* Sheets */}
-      <AddEventoSheet
+      <EventoSheet
         posteId={Number(id)}
         open={d.addEventoOpen}
         setOpen={d.setAddEventoOpen}
         onSuccess={d.load}
       />
-      <PermissionGuard module="eventos" action="editar" open={d.addRevicionEventoId !== null} onOpenChange={(v) => { if (!v) d.setAddRevicionEventoId(null); }}>
-        <AddRevicionSheet
-          eventoId={d.addRevicionEventoId}
-          open={d.addRevicionEventoId !== null}
-          setOpen={(v) => { if (!v) d.setAddRevicionEventoId(null); }}
+      <PermissionGuard module="eventos" action="editar" open={d.addRevisionEventoId !== null} onOpenChange={(v) => { if (!v) d.setAddRevisionEventoId(null); }}>
+        <AddRevisionSheet
+          eventoId={d.addRevisionEventoId}
+          open={d.addRevisionEventoId !== null}
+          setOpen={(v) => { if (!v) d.setAddRevisionEventoId(null); }}
           onSuccess={d.load}
         />
       </PermissionGuard>
@@ -304,7 +177,7 @@ export default function PosteDetallePage() {
         />
       </PermissionGuard>
       <PermissionGuard module="eventos" action="editar" open={d.editEventoId !== null} onOpenChange={(v) => { if (!v) d.setEditEventoId(null); }}>
-        <EditEventoSheet
+        <EventoSheet
           eventoId={d.editEventoId}
           open={d.editEventoId !== null}
           setOpen={(v) => { if (!v) d.setEditEventoId(null); }}
@@ -312,7 +185,7 @@ export default function PosteDetallePage() {
         />
       </PermissionGuard>
       <PermissionGuard module="ciudades" action="editar" open={openEditCiudad} onOpenChange={(v) => { if (!v) setOpenEditCiudad(false); }}>
-        <EditCiudadSheet
+        <CiudadSheet
           ciudad={selectedCiudad}
           open={openEditCiudad}
           setOpen={(v) => { if (!v) setOpenEditCiudad(false); }}
@@ -321,41 +194,15 @@ export default function PosteDetallePage() {
       </PermissionGuard>
       {d.dataPoste.id != null && (
         <PermissionGuard module="postes" action="editar" open={d.openEditPoste} onOpenChange={d.setOpenEditPoste}>
-          <EditPosteSheet
-            functionApp={d.load}
+          <PosteSheet
             poste={d.dataPoste}
-            setPoste={d.setDataPoste}
             open={d.openEditPoste}
             setOpen={d.setOpenEditPoste}
+            onSuccess={d.load}
           />
         </PermissionGuard>
       )}
 
-      {/* Confirm reabrir */}
-      <AlertDialog open={confirmReabrir !== null} onOpenChange={(o) => !o && setConfirmReabrir(null)}>
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Reabrir evento?</AlertDialogTitle>
-            <AlertDialogDescription>
-              El evento volverá a estado pendiente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmReabrir(null)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                if (confirmReabrir) {
-                  await d.reabrirEvento(confirmReabrir);
-                  setConfirmReabrir(null);
-                }
-              }}
-              className="bg-primary hover:bg-primary/90 text-white"
-            >
-              Reabrir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

@@ -1,5 +1,4 @@
-import { useLocation, useNavigate } from "react-router-dom";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "../components/ui/sidebar";
 import { Separator } from "../components/ui/separator";
 import { AppSidebar } from "../components/AppSidebar";
@@ -10,7 +9,7 @@ import { useTheme } from "../components/theme-provider";
 
 const ALL_ROUTES: { path: string; text: string }[] = [
   ...MENU_ITEMS,
-  { path: "/perfil", text: "Perfil" },
+  { path: "/app/perfil", text: "Perfil" },
 ];
 
 const CHILD_LABELS: Record<string, (id: string) => string> = {
@@ -18,17 +17,18 @@ const CHILD_LABELS: Record<string, (id: string) => string> = {
 };
 
 function buildBreadcrumbs(pathname: string): { label: string; path?: string }[] {
-  const segments = pathname.split("/").filter(Boolean);
+  // Strip the /app prefix and work with the remaining segments
+  const segments = pathname.replace(/^\/app\/?/, "").split("/").filter(Boolean);
   if (segments.length === 0) return [{ label: "Inicio" }];
 
-  const topRoute = ALL_ROUTES.find((r) => r.path === `/${segments[0]}`);
+  const topRoute = ALL_ROUTES.find((r) => r.path === `/app/${segments[0]}`);
   const topLabel = topRoute?.text ?? "Inicio";
 
   if (segments.length === 1) return [{ label: topLabel }];
 
   const childLabel = CHILD_LABELS[segments[0]]?.(segments[1]) ?? `#${segments[1]}`;
   return [
-    { label: topLabel, path: `/${segments[0]}` },
+    { label: topLabel, path: `/app/${segments[0]}` },
     { label: childLabel },
   ];
 }
@@ -43,7 +43,7 @@ const HomePage = () => {
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="bg-sidebar">
-        <div className="bg-background rounded-xl overflow-hidden shadow-sm border flex flex-col h-full m-2">
+        <div className="bg-background overflow-hidden flex flex-col h-full sm:m-2 sm:rounded-xl sm:shadow-sm sm:border">
           <header className="border-b flex shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex items-center gap-2 p-2 w-full">
               <SidebarTrigger />

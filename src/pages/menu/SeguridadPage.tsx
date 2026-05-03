@@ -25,8 +25,7 @@ import {
 } from "../../components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import DataTable from "../../components/table/DataTable";
-import EditUserSheet from "../../components/dialogs/edits/EditUserSheet";
-import AddUserSheet from "../../components/dialogs/add/AddUserSheet";
+import UsuarioSheet from "../../components/dialogs/upsert/UsuarioSheet";
 import PermissionGuard from "../../components/PermissionGuard";
 import { ImageLightbox } from "../../components/ui/image-viewer";
 
@@ -98,7 +97,7 @@ const exportExcel = async (usuarios: UsuarioInterface[]) => {
     const { buffer: logoBuffer } = await fetchLogo();
 
     const wb = new ExcelJS.Workbook();
-    wb.creator = "Lefitel";
+    wb.creator = "Osefi srl";
     wb.created = new Date();
     const ws = wb.addWorksheet("Usuarios");
 
@@ -109,12 +108,12 @@ const exportExcel = async (usuarios: UsuarioInterface[]) => {
     ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 60, height: 60 } });
 
     // Title rows (merged, alongside logo)
-    ws.mergeCells(1, 2, 1, COLS); // B1:G1 — "LEFITEL"
+    ws.mergeCells(1, 2, 1, COLS); // B1:G1 — "OSEFI SRL"
     ws.mergeCells(2, 2, 2, COLS); // B2:G2 — subtitle
     ws.mergeCells(3, 2, 3, COLS); // B3:G3 — date
 
     const titleCell = ws.getCell("B1");
-    titleCell.value = "LEFITEL";
+    titleCell.value = "OSEFI SRL";
     titleCell.font = { bold: true, size: 18, color: { argb: `FF${HEADER_COLOR}` } };
     titleCell.alignment = { vertical: "middle" };
 
@@ -217,7 +216,7 @@ const exportPdf = async (usuarios: UsuarioInterface[]) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
     doc.setTextColor(...PRIMARY);
-    doc.text("LEFITEL", 34, 12);
+    doc.text("OSEFI SRL", 34, 12);
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
@@ -278,7 +277,7 @@ const exportPdf = async (usuarios: UsuarioInterface[]) => {
         doc.setPage(i);
         doc.setFontSize(7.5);
         doc.setTextColor(160, 170, 190);
-        doc.text("Lefitel", 14, 291);
+        doc.text("Osefi srl", 14, 291);
         doc.text(`Página ${i} de ${pageCount}`, W - 14, 291, { align: "right" });
         // thin line above footer
         doc.setDrawColor(208, 216, 239);
@@ -370,6 +369,16 @@ const SeguridadPage = () => {
 
     const columns = useMemo<ColumnDef<UsuarioInterface>[]>(() => [
         {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
+        {
             accessorKey: "image",
             header: "Foto",
             enableSorting: false,
@@ -383,7 +392,7 @@ const SeguridadPage = () => {
             cell: ({ row }) => (
                 <button
                     className="font-medium text-sm text-primary hover:underline text-left"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/seguridad/${row.original.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/seguridad/${row.original.id}`); }}
                 >
                     {row.original.name}
                 </button>
@@ -426,7 +435,7 @@ const SeguridadPage = () => {
                             <MoreVerticalIcon className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-36">
-                            <DropdownMenuItem onClick={() => navigate(`/seguridad/${row.original.id}`)}>
+                            <DropdownMenuItem onClick={() => navigate(`/app/seguridad/${row.original.id}`)}>
                                 Ver detalle
                             </DropdownMenuItem>
                             {can(rol, "seguridad", "editar") && (
@@ -453,6 +462,16 @@ const SeguridadPage = () => {
     ], [navigate, rol]);
 
     const archivedColumns = useMemo<ColumnDef<UsuarioInterface>[]>(() => [
+        {
+            id: "num",
+            header: "#",
+            enableSorting: false,
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                const { pageIndex, pageSize } = table.getState().pagination;
+                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
+            },
+        },
         {
             accessorKey: "image",
             header: "Foto",
@@ -516,51 +535,51 @@ const SeguridadPage = () => {
                     columns={columns}
                     onRetry={load}
                     hasPaginated={true}
-                    actions={
-                        <div className="flex gap-2">
-                            {/* Export dropdown */}
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                                    disabled={!hasData}
+                    actions={<>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                disabled={!hasData}
+                            >
+                                <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="hidden sm:inline">Exportar</span>
+                                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    onClick={() => void exportExcel(list ?? [])}
                                 >
-                                    <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span className="hidden sm:inline">Exportar</span>
-                                    <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem
-                                        className="gap-2"
-                                        onClick={() => void exportExcel(list ?? [])}
-                                    >
-                                        <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                        Excel (.xlsx)
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        className="gap-2"
-                                        onClick={() => exportCsv(list ?? [])}
-                                    >
-                                        <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                        CSV
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem
-                                        className="gap-2"
-                                        onClick={() => void exportPdf(list ?? [])}
-                                    >
-                                        <FileIcon className="h-4 w-4 text-red-500" />
-                                        PDF
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                                    <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
+                                    Excel (.xlsx)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    onClick={() => exportCsv(list ?? [])}
+                                >
+                                    <FileTextIcon className="h-4 w-4 text-blue-500" />
+                                    CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    onClick={() => void exportPdf(list ?? [])}
+                                >
+                                    <FileIcon className="h-4 w-4 text-red-500" />
+                                    PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                            {can(rol, "seguridad", "crear") && (
-                                <Button className="gap-2" onClick={() => setAddOpen(true)}>
-                                    <PlusIcon className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Nuevo Usuario</span>
-                                </Button>
-                            )}
-                        </div>
-                    }
+                        <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        </Button>
+                        {can(rol, "seguridad", "crear") && (
+                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                                <PlusIcon className="h-4 w-4" />
+                                <span className="hidden sm:inline">Nuevo Usuario</span>
+                            </Button>
+                        )}
+                    </>}
                 />
             )}
 
@@ -572,7 +591,7 @@ const SeguridadPage = () => {
                     onRetry={loadArchived}
                     hasPaginated={true}
                     actions={
-                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }
@@ -580,7 +599,7 @@ const SeguridadPage = () => {
             )}
 
             <PermissionGuard module="seguridad" action="editar" open={editOpen} onOpenChange={setEditOpen}>
-                <EditUserSheet
+                <UsuarioSheet
                     usuario={editUser}
                     open={editOpen}
                     setOpen={setEditOpen}
@@ -589,7 +608,7 @@ const SeguridadPage = () => {
             </PermissionGuard>
 
             <PermissionGuard module="seguridad" action="crear" open={addOpen} onOpenChange={setAddOpen}>
-                <AddUserSheet
+                <UsuarioSheet
                     open={addOpen}
                     setOpen={setAddOpen}
                     onSuccess={load}

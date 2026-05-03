@@ -84,7 +84,7 @@ export const exportExcelTramo = async (p: TramoExcelParams) => {
   } = p;
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Lefitel";
+  wb.creator = "Osefi srl";
   wb.created = new Date();
   const ws = wb.addWorksheet("Reporte Por Tramo");
 
@@ -147,7 +147,7 @@ export const exportExcelTramo = async (p: TramoExcelParams) => {
   const META_ROWS: Array<[string, string]> = [
     ["Tramo:",         tramoLabel],
     ["Fecha:",         `${fechaInicio.toLocaleDateString("es-ES")} — ${fechaFin.toLocaleDateString("es-ES")}`],
-    ["Elaborado por:", "Lefitel"],
+    ["Elaborado por:", "Osefi srl"],
   ];
 
   const metaLabelEnd = Math.min(5, totalCols);
@@ -513,7 +513,7 @@ export const exportPdfTramo = async (
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
     doc.setTextColor(...PRIMARY);
-    doc.text("LEFITEL", 34, 12);
+    doc.text("OSEFI SRL", 34, 12);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(80, 90, 110);
@@ -629,7 +629,7 @@ export const exportPdfTramo = async (
     doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
     doc.setDrawColor(208, 216, 239);
     doc.line(10, 203, W - 10, 203);
-    doc.text("Lefitel", 10, 207);
+    doc.text("Osefi srl", 10, 207);
     doc.text(`Página ${i} de ${pageCount}`, W - 10, 207, { align: "right" });
   }
 

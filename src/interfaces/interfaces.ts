@@ -49,6 +49,9 @@ export interface BitacoraInterface {
   entity_id?: number | null;
   id_usuario: number;
   usuario?: UsuarioInterface | null;
+  metadata?: Record<string, unknown> | null;
+  severity?: 'info' | 'warning' | 'critical' | null;
+  ip_address?: string | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -75,6 +78,8 @@ export interface ObsInterface {
   name: string;
   description: string;
   id_tipoObs: number;
+  /** Criticidad 1-9 (1 = catastrófico, 9 = mantenimiento). Null = sin clasificar. */
+  criticality?: number | null;
   tipoObs?: TipoObsInterface | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
@@ -110,6 +115,7 @@ export interface PosteInterface {
   id_ciudadA: number;
   id_ciudadB: number;
   id_usuario: number;
+  adss_ids?: number[];
 
   adss?: AdssInterface | null;
   material?: MaterialInterface | null;
@@ -132,10 +138,12 @@ export interface EventoInterface {
   date: Date;
   id_poste: number;
   id_usuario: number;
+  obs_ids?: number[];
+  revision?: { description: string; date: Date };
 
   poste?: PosteInterface | null;
   solucions?: SolucionInterface[] | null;
-  revicions?: RevicionInterface[] | null;
+  revisions?: RevisionInterface[] | null;
   eventoObs?: EventoObsInterface[] | null;
   usuario?: UsuarioInterface | null;
 
@@ -145,7 +153,7 @@ export interface EventoInterface {
   priority?: boolean;
 }
 
-export interface RevicionInterface {
+export interface RevisionInterface {
   id?: number | null;
   description: string;
   date: Date;

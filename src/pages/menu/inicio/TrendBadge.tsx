@@ -23,7 +23,9 @@ export function TrendBadge({ current, prev, invertTrend = false }: TrendBadgePro
   const wrap = (children: React.ReactNode) => (
     <TooltipProvider>
       <Tooltip>
-        <TooltipTrigger render={<span className="inline-flex">{children as React.ReactElement}</span>} />
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{children as React.ReactElement}</span>
+        </TooltipTrigger>
         <TooltipContent side="bottom" className="max-w-xs">{tooltipText(current, prev)}</TooltipContent>
       </Tooltip>
     </TooltipProvider>

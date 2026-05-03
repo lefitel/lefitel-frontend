@@ -1,7 +1,8 @@
 import { useContext, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Loader2, LogIn, ShieldCheck, Activity, SunIcon, MoonIcon } from "lucide-react";
+import { Loader2, LogIn, SunIcon, MoonIcon } from "lucide-react";
+import { motion } from "motion/react";
 
 import { useTheme } from "../components/theme-provider";
 import { SesionContext } from "../context/SesionContext";
@@ -15,6 +16,31 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+const ease = [0.16, 1, 0.3, 1] as const;
+
+const fadeUp = {
+  hidden: { opacity: 0, y: 20 },
+  visible: { opacity: 1, y: 0 },
+};
+
+const brandStagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.14, delayChildren: 0.1 } },
+};
+
+const rightStagger = {
+  hidden: { opacity: 0, x: 32 },
+  visible: {
+    opacity: 1, x: 0,
+    transition: { duration: 0.7, ease, staggerChildren: 0.14, delayChildren: 0.3 },
+  },
+};
+
+const formItem = {
+  hidden: { opacity: 0, y: 14 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease } },
+};
+
 const LoginPage = () => {
   const { theme, setTheme } = useTheme();
   const { setSesion } = useContext(SesionContext);
@@ -24,7 +50,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
-  const from = !fromPath || fromPath === "/login" ? "/home" : fromPath;
+  const from = !fromPath || fromPath === "/login" ? "/app/home" : fromPath;
 
   const ValidarDatos = async () => {
     if (login.user === "" || login.pass === "") {
@@ -50,6 +76,8 @@ const LoginPage = () => {
 
   return (
     <div className="relative w-full min-h-screen flex lg:grid lg:grid-cols-2 bg-background">
+
+      {/* Theme toggle */}
       <Button
         variant="ghost"
         size="icon"
@@ -58,144 +86,166 @@ const LoginPage = () => {
       >
         {theme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
       </Button>
-      {/* PANEL IZQUIERDO (B2B Showcase) */}
-      <div className="relative hidden lg:flex flex-col justify-between p-12 text-white overflow-hidden">
-        {/* Animated Background */}
-        <div className="absolute inset-0 bg-linear-to-br from-[#1e293b] via-[#334155] to-[#0f172a] opacity-95 transition-all" />
 
-        {/* Decoracion de lineas */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff1a_1px,transparent_1px),linear-gradient(to_bottom,#ffffff1a_1px,transparent_1px)] bg-[size:3rem_3rem] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_50%,#000_70%,transparent_100%)]"></div>
+      {/* ── PANEL IZQUIERDO — Brand ── */}
+      <div className="relative hidden lg:flex flex-col items-center justify-center p-16 text-white overflow-hidden">
 
-        <div className="relative z-20 flex items-center text-3xl font-bold tracking-tight gap-4 drop-shadow-sm">
-          <div className="bg-white/10 p-2.5 rounded-2xl backdrop-blur-md border border-white/20 shadow-xl overflow-hidden flex justify-center items-center">
-            <img src={logo} alt="Lefitel Logo" className="h-10 w-auto scale-110" />
-          </div>
-          Lefitel srl
+        {/* Gradient base */}
+        <div className="absolute inset-0 bg-linear-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]" />
+
+        {/* Grid animado */}
+        <div
+          className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0d_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0d_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_70%_70%_at_50%_50%,#000_60%,transparent_100%)]"
+          style={{ animation: "grid-drift 22s linear infinite" }}
+        />
+
+        {/* Línea de acento superior */}
+        <div className="absolute top-0 left-0 right-0 z-30 h-px overflow-hidden">
+          <motion.div
+            className="h-full bg-linear-to-r from-transparent via-white/30 to-transparent"
+            initial={{ scaleX: 0, originX: 0 }}
+            animate={{ scaleX: 1 }}
+            transition={{ duration: 1.6, ease }}
+          />
         </div>
 
-        <div className="relative z-20 mt-auto">
-          <div className="space-y-10 mb-14 px-2 text-left">
-            <div className="flex items-start gap-5  ">
-              <div className="bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg ">
-                <Activity className="h-6 w-6 text-white" />
-              </div>
-              <div className=" w-full">
-                <h3 className="font-semibold text-xl tracking-tight leading-none mb-2">Gestión de Postes y Eventos</h3>
-                <p className="text-white/70 text-sm leading-relaxed ">Registra, consulta y da seguimiento a los postes y eventos de la red desde cualquier lugar.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-5">
-              <div className="bg-white/10 p-3.5 rounded-2xl backdrop-blur-md border border-white/10 shadow-lg">
-                <ShieldCheck className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h3 className="font-semibold text-xl tracking-tight leading-none mb-2">Control de Acceso por Rol</h3>
-                <p className="text-white/70 text-sm leading-relaxed ">Gerencia, supervisores y cuadrillas con acceso según sus responsabilidades.</p>
-              </div>
-            </div>
-          </div>
+        {/* Contenido centrado */}
+        <motion.div
+          className="relative z-20 flex flex-col items-center text-center gap-6"
+          variants={brandStagger}
+          initial="hidden"
+          animate="visible"
+        >
+          {/* Logo */}
+          <motion.div
+            variants={{ hidden: { opacity: 0, scale: 0.85 }, visible: { opacity: 1, scale: 1 } }}
+            transition={{ duration: 0.8, ease }}
+          >
+            <img src={logo} alt="Osefi srl" className="logo-glow h-36 w-36 object-contain" />
+          </motion.div>
 
-          <blockquote className="space-y-3 border-l-[3px] border-primary pl-5">
-            <p className="text-xl font-medium leading-relaxed italic text-white/90 max-w-lg">
-              "Sistema de gestión interna para el mantenimiento y control de la red de Lefitel."
+
+          {/* Nombre */}
+          <motion.div variants={fadeUp} transition={{ duration: 0.7, ease }} className="space-y-2">
+            <h1 className="shimmer-text-light text-5xl font-bold tracking-tight">Osefi srl</h1>
+            <p className="text-white/45 text-xs font-medium tracking-[0.2em] uppercase">
+              Telecomunicaciones e Infraestructuras
             </p>
-            <footer className="text-sm font-semibold text-white/50 tracking-wider uppercase mt-5">Lefitel srl · Sistema Interno</footer>
-          </blockquote>
-        </div>
+          </motion.div>
+
+          {/* Tagline */}
+          <motion.p
+            variants={fadeUp}
+            transition={{ duration: 0.7, ease }}
+            className="text-white/30 text-sm max-w-xs leading-relaxed"
+          >
+            Sistema de gestión interna para el control y mantenimiento de la red.
+          </motion.p>
+        </motion.div>
+
+        {/* Footer del panel */}
+        <motion.p
+          className="absolute bottom-8 z-20 text-white/20 text-xs tracking-widest uppercase"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1.2, duration: 0.8 }}
+        >
+          Sistema Interno · © {new Date().getFullYear()}
+        </motion.p>
       </div>
 
-      {/* PANEL DERECHO (Formulario Integrado) */}
-      <div className="flex w-full items-center justify-center p-8 lg:p-14 relative z-10 bg-background md:bg-card md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.15)] dark:md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.5)] dark:md:border-l dark:md:border-border">
-        <div className="mx-auto w-full max-w-[420px] pb-6">
-
-          <div className="flex flex-col space-y-3 lg:text-left text-center">
-            {/* Logo para Celular */}
+      {/* ── PANEL DERECHO — Formulario ── */}
+      <div className="flex w-full items-center justify-center p-8 lg:p-14 relative z-10 bg-background md:bg-card md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.12)] dark:md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.5)] dark:md:border-l dark:md:border-border">
+        <motion.div
+          className="mx-auto w-full max-w-105 pb-6"
+          variants={rightStagger}
+          initial="hidden"
+          animate="visible"
+        >
+          {/* Encabezado */}
+          <motion.div className="flex flex-col space-y-2 lg:text-left text-center" variants={formItem}>
+            {/* Logo mobile */}
             <div className="flex lg:hidden justify-center mb-6">
               <div className="bg-muted p-4 rounded-3xl border shadow-sm">
                 <img src={logo} alt="Logo" className="h-14 w-auto drop-shadow-sm dark:invert" />
               </div>
             </div>
-
-            <h1 className="text-4xl font-extrabold tracking-tight text-foreground/90">
-              Bienvenido
-            </h1>
-            <p className="text-base text-muted-foreground mt-2 max-w-sm mx-auto lg:mx-0">
-              Ingrese con su usuario y contraseña para acceder al sistema.
+            <p className="text-xs font-semibold text-primary uppercase tracking-[0.18em]">
+              Osefi srl · Sistema Interno
             </p>
-          </div>
+            <h1 className="text-4xl font-extrabold tracking-tight text-foreground">
+              Acceder
+            </h1>
+            <p className="text-sm text-muted-foreground pt-1">
+              Ingresá con tu usuario y contraseña para continuar.
+            </p>
+          </motion.div>
 
           {/* Formulario */}
-          <div className="mt-10 space-y-6">
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <Label htmlFor="usuario" className="text-sm font-bold text-foreground focus-within:text-primary transition-colors uppercase tracking-wider">Usuario</Label>
-                <Input
-                  id="usuario"
-                  autoCapitalize="none"
-                  autoComplete="username"
-                  autoCorrect="off"
-                  placeholder="ej. carlos.admin"
-                  className="h-14 px-4 shadow-sm bg-muted/30 border-muted focus-visible:ring-primary/40 focus-visible:bg-transparent text-base rounded-xl transition-all"
-                  onChange={(e) => setLogin({ ...login, user: e.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") ValidarDatos();
-                  }}
-                />
-              </div>
-
-              <div className="space-y-2 mt-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="contrasena" className="text-sm font-bold text-foreground focus-within:text-primary transition-colors uppercase tracking-wider">Contraseña</Label>
-                  <button
-                    type="button"
-                    onClick={() => toast.info("Por favor, contacte con el administrador del sistema para restablecer su acceso.")}
-                    className="text-sm font-medium text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-none p-0"
-                  >
-                    ¿Olvidaste tu contraseña?
-                  </button>
-                </div>
-                <Input
-                  id="contrasena"
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••••"
-                  className="h-14 px-4 shadow-sm bg-muted/30 border-muted focus-visible:ring-primary/40 focus-visible:bg-transparent text-lg tracking-widest font-mono rounded-xl transition-all"
-                  onChange={(e) => setLogin({ ...login, pass: e.target.value })}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") ValidarDatos();
-                  }}
-                />
-              </div>
-
-              <Button
-                className="mt-6 h-14 transition-all hover:shadow-lg hover:shadow-primary/20 group relative overflow-hidden text-base w-full rounded-xl bg-primary text-primary-foreground hover:bg-primary/90"
-                disabled={loading}
-                onClick={ValidarDatos}
-              >
-                {loading ? (
-                  <Loader2 className="mr-3 h-5 w-5 animate-spin" />
-                ) : (
-                  <>
-                    <span className="font-bold tracking-wide relative z-10 w-full flex items-center justify-center uppercase">
-                      Iniciar Sesión
-                      <LogIn className="ml-2.5 h-5 w-5 transition-transform group-hover:translate-x-1" />
-                    </span>
-                  </>
-                )}
-              </Button>
+          <motion.div className="mt-10 space-y-5" variants={formItem}>
+            <div className="space-y-2">
+              <Label htmlFor="usuario" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                Usuario
+              </Label>
+              <Input
+                id="usuario"
+                autoCapitalize="none"
+                autoComplete="username"
+                autoCorrect="off"
+                placeholder="ej. carlos.admin"
+                className="h-12 px-4 bg-muted/40 border-muted focus-visible:ring-primary/30 focus-visible:bg-transparent text-base rounded-xl transition-all"
+                onChange={(e) => setLogin({ ...login, user: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") ValidarDatos(); }}
+              />
             </div>
 
-            {/* Disclaimer inferior del form */}
-            <p className="text-center text-xs text-muted-foreground pt-6">
-              Sistema de uso interno · Lefitel srl
-            </p>
-          </div>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="contrasena" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Contraseña
+                </Label>
+                <button
+                  type="button"
+                  onClick={() => toast.info("Contacte con el administrador del sistema para restablecer su acceso.")}
+                  className="text-xs text-muted-foreground/70 hover:text-primary transition-colors cursor-pointer bg-transparent border-none p-0"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+              <Input
+                id="contrasena"
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••••"
+                className="h-12 px-4 bg-muted/40 border-muted focus-visible:ring-primary/30 focus-visible:bg-transparent text-lg tracking-widest font-mono rounded-xl transition-all"
+                onChange={(e) => setLogin({ ...login, pass: e.target.value })}
+                onKeyDown={(e) => { if (e.key === "Enter") ValidarDatos(); }}
+              />
+            </div>
 
-          <div className="lg:hidden mt-12 flex items-center justify-center gap-2 text-xs text-muted-foreground pb-4">
-            <span>Powered by Lefitel srl © {new Date().getFullYear()}</span>
-          </div>
+            <Button
+              className="mt-2 h-12 w-full rounded-xl text-sm font-bold uppercase tracking-widest transition-all hover:shadow-lg hover:shadow-primary/20 group"
+              disabled={loading}
+              onClick={ValidarDatos}
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Iniciar Sesión
+                  <LogIn className="ml-2 h-4 w-4 transition-transform group-hover:translate-x-1" />
+                </>
+              )}
+            </Button>
+          </motion.div>
 
-        </div>
+          <motion.p
+            className="mt-10 text-center text-xs text-muted-foreground/50"
+            variants={formItem}
+          >
+            Acceso restringido · Solo personal autorizado
+          </motion.p>
+        </motion.div>
       </div>
     </div>
   );

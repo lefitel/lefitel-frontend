@@ -44,6 +44,18 @@ export const getPosteByCiudad = (ciudadId: number, token: string): Promise<Poste
     })
     .then((r) => r.data as PosteInterface[]);
 
+export interface TramoPair {
+  id_ciudadA: number;
+  id_ciudadB: number;
+}
+
+export const getTramos = (token: string): Promise<TramoPair[]> =>
+  axios
+    .get(`${urlApi}${urlPoste}tramos`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    .then((r) => r.data as TramoPair[]);
+
 export const getPosteByTramo = (
   ciudadA: number,
   ciudadB: number,

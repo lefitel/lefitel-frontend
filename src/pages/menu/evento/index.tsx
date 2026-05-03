@@ -10,7 +10,7 @@ import autoTable from "jspdf-autotable";
 import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deleteEvento, desarchivarEvento, exportEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
+import { deleteEvento, desarchivarEvento, editEvento, exportEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -24,10 +24,10 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import DataTable from "../../../components/table/DataTable";
-import AddEventoPageSheet from "../../../components/dialogs/add/AddEventoPageSheet";
-import AddRevisionSheet from "../../../components/dialogs/add/AddRevisionSheet";
-import ResolverEventoSheet from "../poste/PosteDetalle/ResolverEventoSheet";
-import EditEventoSheet from "../poste/PosteDetalle/EditEventoSheet";
+import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
+import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
+import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
+import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
@@ -46,8 +46,8 @@ const toRows = (list: EventoInterface[]) =>
         e.description,
         e.state ? "Resuelto" : "Pendiente",
         e.priority ? "Sí" : "No",
-        e.revicions?.length
-            ? new Date(Math.max(...e.revicions.map((r) => new Date(r.date).getTime()))).toLocaleDateString("es-ES")
+        e.revisions?.length
+            ? new Date(Math.max(...e.revisions.map((r) => new Date(r.date).getTime()))).toLocaleDateString("es-ES")
             : "",
         e.eventoObs?.map((eo) => eo.ob?.name).filter(Boolean).join(", ") ?? "",
     ]);
@@ -67,7 +67,7 @@ const fetchLogo = async () => {
 const exportExcel = async (list: EventoInterface[]) => {
     const { buffer: logoBuffer } = await fetchLogo();
     const wb = new ExcelJS.Workbook();
-    wb.creator = "Lefitel";
+    wb.creator = "Osefi srl";
     wb.created = new Date();
     const ws = wb.addWorksheet("Eventos");
     const COLS = HEADERS.length;
@@ -80,7 +80,7 @@ const exportExcel = async (list: EventoInterface[]) => {
     ws.mergeCells(3, 2, 3, COLS);
 
     const tc = ws.getCell("B1");
-    tc.value = "LEFITEL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
+    tc.value = "OSEFI SRL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
     const sc = ws.getCell("B2");
     sc.value = "Eventos del Sistema"; sc.font = { size: 12, color: { argb: "FF374151" } }; sc.alignment = { vertical: "middle" };
     const dc = ws.getCell("B3");
@@ -150,7 +150,7 @@ const exportPdf = async (list: EventoInterface[]) => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
     doc.setTextColor(...PRIMARY);
-    doc.text("LEFITEL", 34, 12);
+    doc.text("OSEFI SRL", 34, 12);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(80, 90, 110);
@@ -190,7 +190,7 @@ const exportPdf = async (list: EventoInterface[]) => {
         doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
         doc.setDrawColor(208, 216, 239);
         doc.line(10, 208, W - 10, 208);
-        doc.text("Lefitel", 10, 212);
+        doc.text("Osefi srl", 10, 212);
         doc.text(`Página ${i} de ${pageCount}`, W - 10, 212, { align: "right" });
     }
     doc.save(filename("pdf"));
@@ -228,8 +228,11 @@ const EventoPage = () => {
     const [unarchiveTarget, setUnarchiveTarget] = useState<EventoInterface | null>(null);
     const [unarchiving, setUnarchiving] = useState(false);
 
+    const [savingPriorityIds, setSavingPriorityIds] = useState<Set<number>>(new Set());
+
     const rol = sesion.usuario.id_rol;
     const canAdd = can(rol, "eventos", "crear");
+    const canEdit = can(rol, "eventos", "editar");
 
     const load = useCallback((p = page, ps = pageSize, fc = filterColumn, fv = filterValue) => {
         setLoading(true);
@@ -252,6 +255,29 @@ const EventoPage = () => {
     useEffect(() => {
         if (innerTab === "archivados" && archivedList === null) loadArchived();
     }, [innerTab, archivedList, loadArchived]);
+
+    const handlePriorityToggle = useCallback(async (evento: EventoInterface) => {
+        if (!evento.id) return;
+        const newPriority = !evento.priority;
+
+        setSavingPriorityIds((prev) => new Set(prev).add(evento.id as number));
+        setList((curr) => (curr ?? []).map((e) =>
+            e.id === evento.id ? { ...e, priority: newPriority } : e
+        ));
+
+        const payload: EventoInterface = { ...evento, priority: newPriority };
+        const res = await editEvento(payload, sesion.token);
+        setSavingPriorityIds((prev) => { const next = new Set(prev); next.delete(evento.id as number); return next; });
+
+        if (Number(res.status) === 200 || Number(res.status) === 201) {
+            toast.success(newPriority ? "Marcado como prioritario" : "Prioridad quitada");
+        } else {
+            toast.error("No se pudo actualizar");
+            setList((curr) => (curr ?? []).map((e) =>
+                e.id === evento.id ? { ...e, priority: evento.priority } : e
+            ));
+        }
+    }, [sesion.token]);
 
     const handleDelete = async () => {
         if (!deleteId) return;
@@ -290,9 +316,12 @@ const EventoPage = () => {
             id: "num",
             header: "#",
             enableSorting: false,
-            cell: ({ row }) => (
-                <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + row.index + 1}</span>
-            ),
+            cell: ({ row, table }) => {
+                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
+                return (
+                    <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + visibleIndex + 1}</span>
+                );
+            },
         },
         {
             accessorKey: "description",
@@ -300,7 +329,7 @@ const EventoPage = () => {
             cell: ({ row }) => (
                 <button
                     className="font-medium text-sm text-primary hover:underline text-left line-clamp-2 max-w-xs"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/eventos/${row.original.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/eventos/${row.original.id}`); }}
                 >
                     {row.original.description}
                 </button>
@@ -312,7 +341,7 @@ const EventoPage = () => {
             cell: ({ row }) => (
                 <button
                     className="text-sm hover:underline text-left whitespace-nowrap"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/postes/${row.original.id_poste}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/postes/${row.original.id_poste}`); }}
                 >
                     {row.original.poste?.name ?? "—"}
                 </button>
@@ -326,9 +355,9 @@ const EventoPage = () => {
                 const b = row.original.poste?.ciudadB;
                 return (
                     <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
                         <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
                     </span>
                 );
             },
@@ -352,15 +381,37 @@ const EventoPage = () => {
             accessorKey: "priority",
             header: "Prior.",
             enableColumnFilter: false,
-            cell: ({ row }) => row.original.priority
-                ? <Badge className="bg-red-500/10 text-red-600 border-transparent shadow-none text-xs">Sí</Badge>
-                : <span className="text-xs text-muted-foreground">No</span>,
+            cell: ({ row }) => {
+                const e = row.original;
+                const isSaving = savingPriorityIds.has(e.id as number);
+                const isPriority = !!e.priority;
+
+                if (!canEdit) {
+                    return isPriority
+                        ? <Badge className="bg-red-500/10 text-red-600 border-transparent shadow-none text-xs">Sí</Badge>
+                        : <span className="text-xs text-muted-foreground">No</span>;
+                }
+
+                return (
+                    <button
+                        type="button"
+                        disabled={isSaving}
+                        onClick={(ev) => { ev.stopPropagation(); handlePriorityToggle(e); }}
+                        title="Click para cambiar prioridad"
+                        className="inline-flex items-center cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+                    >
+                        {isPriority
+                            ? <Badge className="bg-red-500/10 text-red-600 border-transparent shadow-none text-xs hover:bg-red-500/20">Sí</Badge>
+                            : <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium border bg-muted/50 text-muted-foreground border-border hover:bg-muted transition-colors">No</span>}
+                    </button>
+                );
+            },
         },
         {
             id: "ultimaRev",
             header: "Última revisión",
             cell: ({ row }) => {
-                const revs = row.original.revicions ?? [];
+                const revs = row.original.revisions ?? [];
                 if (!revs.length) return <span className="text-xs text-muted-foreground">—</span>;
                 const max = new Date(Math.max(...revs.map((r) => new Date(r.date).getTime())));
                 return <span className="text-xs whitespace-nowrap">{max.toLocaleDateString("es-ES")}</span>;
@@ -428,7 +479,7 @@ const EventoPage = () => {
                                 <MoreVerticalIcon className="h-4 w-4" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem onClick={() => navigate(`/eventos/${e.id}`)}>
+                                <DropdownMenuItem onClick={() => navigate(`/app/eventos/${e.id}`)}>
                                     Ver detalle
                                 </DropdownMenuItem>
                                 {canAct && isPending && (
@@ -471,7 +522,7 @@ const EventoPage = () => {
                 );
             },
         },
-    ], [sesion.usuario.id_rol, navigate, page, pageSize]);
+    ], [sesion.usuario.id_rol, navigate, page, pageSize, canEdit, savingPriorityIds, handlePriorityToggle]);
 
     const archivedColumns = useMemo<ColumnDef<EventoInterface>[]>(() => [
         {
@@ -487,9 +538,9 @@ const EventoPage = () => {
                 const b = row.original.poste?.ciudadB;
                 return (
                     <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
+                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
                         <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
+                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
                     </span>
                 );
             },
@@ -533,7 +584,7 @@ const EventoPage = () => {
     const hasData = !!list?.length;
 
     return (
-        <div className=" @container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+        <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Eventos</h1>
@@ -560,41 +611,42 @@ const EventoPage = () => {
                         onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
                         onFilterChange: (col, val) => { setFilterColumn(col); setFilterValue(val); setPage(1); load(1, pageSize, col, val); },
                     }}
-                    actions={
-                        <div className="flex gap-2">
-                            <DropdownMenu>
-                                <DropdownMenuTrigger
-                                    className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                                    disabled={!hasData}
-                                >
-                                    <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                    <span className="hidden sm:inline">Exportar</span>
-                                    <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-44">
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportExcel)}>
-                                        <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                        Excel (.xlsx)
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportCsv)}>
-                                        <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                        CSV
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportPdf)}>
-                                        <FileIcon className="h-4 w-4 text-red-500" />
-                                        PDF
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                    actions={<>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger
+                                className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                                disabled={!hasData}
+                            >
+                                <FileIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span className="hidden sm:inline">Exportar</span>
+                                <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportExcel)}>
+                                    <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
+                                    Excel (.xlsx)
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportCsv)}>
+                                    <FileTextIcon className="h-4 w-4 text-blue-500" />
+                                    CSV
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportPdf)}>
+                                    <FileIcon className="h-4 w-4 text-red-500" />
+                                    PDF
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
 
-                            {canAdd && (
-                                <Button className="gap-2" onClick={() => setAddOpen(true)}>
-                                    <PlusIcon className="h-4 w-4" />
-                                    <span className="hidden sm:inline">Nuevo Evento</span>
-                                </Button>
-                            )}
-                        </div>
-                    }
+                        <Button variant="outline" size="icon-sm" onClick={() => load()} disabled={loading}>
+                            <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                        </Button>
+                        {canAdd && (
+                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                                <PlusIcon className="h-4 w-4" />
+                                <span className="hidden sm:inline">Nuevo Evento</span>
+                            </Button>
+                        )}
+                    </>}
                 />
             )}
 
@@ -606,7 +658,7 @@ const EventoPage = () => {
                     onRetry={loadArchived}
                     hasPaginated={true}
                     actions={
-                        <Button variant="outline" size="icon" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }
@@ -614,7 +666,7 @@ const EventoPage = () => {
             )}
 
             <PermissionGuard module="eventos" action="editar" open={editId !== null} onOpenChange={(v) => { if (!v) setEditId(null); }}>
-                <EditEventoSheet
+                <EventoSheet
                     eventoId={editId}
                     open={editId !== null}
                     setOpen={(v: boolean) => { if (!v) setEditId(null); }}

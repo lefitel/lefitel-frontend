@@ -171,7 +171,7 @@ const PerfilPage = () => {
               <CardHeader className="border-b border-border/40 pb-4">
                 <Skeleton className="h-5 w-40" />
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
+              <CardContent className="p-5 space-y-4">
                 {[1, 2, 3].map((j) => <Skeleton key={j} className="h-9 w-full" />)}
               </CardContent>
             </Card>
@@ -191,7 +191,7 @@ const PerfilPage = () => {
                   Información Personal
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
+              <CardContent className="p-5 space-y-4">
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label htmlFor="name">Nombres <span className="text-destructive">*</span></Label>
@@ -229,7 +229,7 @@ const PerfilPage = () => {
             </Card>
 
             {/* Rol */}
-            <Card className="shadow-sm border-muted/60">
+            <Card className="shadow-sm border-muted/60 py-0">
               <CardContent className="p-5 flex items-center gap-4">
                 <div className="p-3 bg-primary/10 rounded-lg shrink-0">
                   <ShieldCheckIcon className="h-5 w-5 text-primary" />
@@ -254,7 +254,7 @@ const PerfilPage = () => {
                   Nombre de usuario
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
+              <CardContent className="p-5 space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="user">Usuario</Label>
                   <div className="flex gap-2">
@@ -276,7 +276,7 @@ const PerfilPage = () => {
                   Contraseña
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-5 space-y-4">
+              <CardContent className="p-5 space-y-4">
                 <div className="space-y-1.5">
                   <Label htmlFor="oldPass">Contraseña actual <span className="text-destructive">*</span></Label>
                   <Input id="oldPass" type="password" value={accountData.oldPass} onChange={handleAccountChange} className="font-mono" placeholder="••••••••" />

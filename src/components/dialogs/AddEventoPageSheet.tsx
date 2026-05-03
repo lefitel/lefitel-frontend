@@ -1,26 +1,25 @@
 import { useContext, useEffect, useState } from "react";
+import { Textarea } from "../ui/textarea";
 import { toast } from "sonner";
-import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import { Switch } from "../../ui/switch";
-import { Checkbox } from "../../ui/checkbox";
-import { SesionContext } from "../../../context/SesionContext";
-import { createEvento } from "../../../api/Evento.api";
-import { createRevicion } from "../../../api/Revicion.api";
-import { createEventoObs } from "../../../api/EventoObs.api";
-import { getObs } from "../../../api/Obs.api";
-import { getTipoObs } from "../../../api/TipoObs.api";
-import { exportPostes } from "../../../api/Poste.api";
-import { uploadImage } from "../../../api/Upload.api";
-import { ObsInterface, PosteInterface, TipoObsInterface } from "../../../interfaces/interfaces";
-import { DatePicker } from "../../ui/date-picker";
-import { Button } from "../../ui/button";
-import { Label } from "../../ui/label";
-import { Input } from "../../ui/input";
-import { Combobox } from "../../ui/combobox";
-import { Skeleton } from "../../ui/skeleton";
+import { ChevronDownIcon, ChevronRightIcon, Loader2Icon } from "lucide-react";
+import { Switch } from "../ui/switch";
+import { Checkbox } from "../ui/checkbox";
+import { SesionContext } from "../../context/SesionContext";
+import { createEvento } from "../../api/Evento.api";
+import { getObs } from "../../api/Obs.api";
+import { getTipoObs } from "../../api/TipoObs.api";
+import { exportPostes } from "../../api/Poste.api";
+import { uploadImage } from "../../api/Upload.api";
+import { ObsInterface, PosteInterface, TipoObsInterface } from "../../interfaces/interfaces";
+import { DatePicker } from "../ui/date-picker";
+import { Button } from "../ui/button";
+import { Label } from "../ui/label";
+import { ImageDropzone } from "../ui/image-dropzone";
+import { Combobox } from "../ui/combobox";
+import { Skeleton } from "../ui/skeleton";
 import {
     Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../../ui/sheet";
+} from "../ui/sheet";
 
 interface Props {
     open: boolean;
@@ -45,6 +44,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     const [listTipoObs, setListTipoObs] = useState<TipoObsInterface[]>([]);
     const [loadingData, setLoadingData] = useState(false);
     const [saving, setSaving] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     useEffect(() => {
         if (!open) return;
@@ -72,6 +72,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
         setSelectedObs([]);
         setExpandedTipo(null);
         setSelectedPosteId(0);
+        setErrors({});
     };
 
     const handleClose = () => {
@@ -86,15 +87,17 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     };
 
     const handleSave = async () => {
-        if (!selectedPosteId) return toast.warning("Selecciona un poste");
-        if (!description.trim()) return toast.warning("La descripción es requerida");
-        if (!imageFile) return toast.warning("La imagen es requerida");
-        if (selectedObs.length === 0) return toast.warning("Selecciona al menos una observación");
-        if (!revDesc.trim()) return toast.warning("La descripción de la revisión inicial es requerida");
+        const newErrors: Record<string, string> = {};
+        if (!selectedPosteId) newErrors.poste = "Selecciona un poste";
+        if (!description.trim()) newErrors.description = "La descripción es requerida";
+        if (!imageFile) newErrors.image = "La imagen es requerida";
+        if (selectedObs.length === 0) newErrors.obs = "Selecciona al menos una observación";
+        if (!revDesc.trim()) newErrors.revDesc = "La descripción de la revisión inicial es requerida";
+        if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
 
         setSaving(true);
         try {
-            const uploadResult = await uploadImage(imageFile, sesion.token);
+            const uploadResult = await uploadImage(imageFile!, sesion.token);
             if (uploadResult === "500") {
                 toast.error("No se pudo subir la imagen");
                 return;
@@ -109,6 +112,8 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                     priority,
                     id_poste: selectedPosteId,
                     id_usuario: sesion.usuario.id ?? 0,
+                    obs_ids: selectedObs,
+                    revision: { description: revDesc, date: revDate },
                 },
                 sesion.token
             );
@@ -117,14 +122,6 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                 toast.error("No se pudo crear el evento");
                 return;
             }
-
-            const eventoId = eventoResult.data.id as number;
-            await createRevicion({ description: revDesc, date: revDate, id_evento: eventoId }, sesion.token);
-            await Promise.all(
-                selectedObs.map((obsId) =>
-                    createEventoObs({ id_obs: obsId, id_evento: eventoId }, sesion.token)
-                )
-            );
 
             toast.success("Evento creado");
             handleClose();
@@ -138,13 +135,13 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
 
     return (
         <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-            <SheetContent>
-                <SheetHeader>
+            <SheetContent className="flex flex-col gap-0 p-0">
+                <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
                     <SheetTitle>Nuevo Evento</SheetTitle>
                     <SheetDescription>Registrar un nuevo evento en la red</SheetDescription>
                 </SheetHeader>
 
-                <div className="flex-1 overflow-y-auto px-4 space-y-4">
+                <div className="flex-1 overflow-y-auto px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-4 items-start content-start">
                     {/* Poste selector */}
                     <div className="space-y-1.5">
                         <Label>Poste <span className="text-destructive">*</span></Label>
@@ -154,15 +151,25 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                             <Combobox
                                 options={posteOptions}
                                 value={selectedPosteId ? String(selectedPosteId) : ""}
-                                onValueChange={(v) => setSelectedPosteId(Number(v))}
+                                onValueChange={(v) => { setSelectedPosteId(Number(v)); if (errors.poste) setErrors(p => ({ ...p, poste: "" })); }}
                                 placeholder="Buscar poste..."
                             />
                         )}
+                        {errors.poste && <p className="text-xs text-destructive mt-1">{errors.poste}</p>}
+                    </div>
+
+                    {/* Prioridad — paired with Poste */}
+                    <div className="space-y-1.5">
+                        <Label className="invisible select-none">_</Label>
+                        <div className="flex items-center gap-2 h-10">
+                            <Switch id="priority-page" checked={priority} onCheckedChange={setPriority} />
+                            <Label htmlFor="priority-page" className="cursor-pointer">Evento prioritario</Label>
+                        </div>
                     </div>
 
                     {/* Tramo (read-only, derived from selected poste) */}
                     {selectedPoste && (
-                        <div className="rounded-lg bg-muted/40 px-3 py-2.5 space-y-1 text-sm">
+                        <div className="sm:col-span-2 rounded-lg bg-muted/40 px-3 py-2.5 space-y-1 text-sm">
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Tramo</span>
                                 <span className="font-medium">
@@ -177,47 +184,36 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                     )}
 
                     {/* Descripción */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 sm:col-span-2">
                         <Label>Descripción <span className="text-destructive">*</span></Label>
-                        <textarea
-                            className="w-full min-h-20 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 placeholder:text-muted-foreground resize-none"
+                        <Textarea
+                            className={`resize-none min-h-20${errors.description ? " border-destructive" : ""}`}
                             placeholder="Describe el problema encontrado..."
                             value={description}
-                            onChange={(e) => setDescription(e.target.value)}
+                            onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
                         />
-                    </div>
-
-                    {/* Prioridad */}
-                    <div className="flex items-center gap-2">
-                        <Switch id="priority-page" checked={priority} onCheckedChange={setPriority} />
-                        <Label htmlFor="priority-page" className="cursor-pointer">Evento prioritario</Label>
+                        {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
                     </div>
 
                     {/* Imagen */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 sm:col-span-2">
                         <Label>Imagen <span className="text-destructive">*</span></Label>
-                        <Input
-                            type="file"
-                            accept="image/*"
-                            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+                        <ImageDropzone
+                            file={imageFile}
+                            onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
+                            error={errors.image}
                         />
-                        {imageFile && (
-                            <img
-                                src={URL.createObjectURL(imageFile)}
-                                alt="preview"
-                                className="mt-2 max-h-40 rounded-lg object-contain border border-border"
-                            />
-                        )}
                     </div>
 
                     {/* Observaciones */}
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 sm:col-span-2">
                         <Label>
                             Observaciones <span className="text-destructive">*</span>
                             {selectedObs.length > 0 && (
                                 <span className="ml-2 text-xs text-primary">({selectedObs.length} seleccionadas)</span>
                             )}
                         </Label>
+                        {errors.obs && <p className="text-xs text-destructive">{errors.obs}</p>}
                         {loadingData ? (
                             <div className="space-y-2">
                                 {[1, 2, 3].map((i) => <Skeleton key={i} className="h-9 w-full" />)}
@@ -259,25 +255,26 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                     </div>
 
                     {/* Revisión inicial */}
-                    <div className="space-y-3 pt-1">
+                    <div className="space-y-1.5 sm:col-span-2">
                         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Revisión inicial</p>
-                        <div className="space-y-1.5">
-                            <Label>Fecha</Label>
-                            <DatePicker value={revDate} onSelect={(d) => d && setRevDate(d)} />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Descripción <span className="text-destructive">*</span></Label>
-                            <textarea
-                                className="w-full min-h-16 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 placeholder:text-muted-foreground resize-none"
-                                placeholder="Describe la inspección inicial..."
-                                value={revDesc}
-                                onChange={(e) => setRevDesc(e.target.value)}
-                            />
-                        </div>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Fecha</Label>
+                        <DatePicker value={revDate} onSelect={(d) => d && setRevDate(d)} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label>Descripción <span className="text-destructive">*</span></Label>
+                        <Textarea
+                            className={`resize-none min-h-16${errors.revDesc ? " border-destructive" : ""}`}
+                            placeholder="Describe la inspección inicial..."
+                            value={revDesc}
+                            onChange={(e) => { setRevDesc(e.target.value); if (errors.revDesc) setErrors(p => ({ ...p, revDesc: "" })); }}
+                        />
+                        {errors.revDesc && <p className="text-xs text-destructive mt-1">{errors.revDesc}</p>}
                     </div>
                 </div>
 
-                <SheetFooter>
+                <SheetFooter className="px-6 py-4 border-t border-border/40">
                     <Button variant="outline" onClick={handleClose} disabled={saving}>
                         Cancelar
                     </Button>
@@ -286,7 +283,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                         disabled={saving || loadingData}
                         className="bg-primary hover:bg-primary/90 text-white"
                     >
-                        {saving ? "Guardando..." : "Crear evento"}
+                        {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Crear evento"}
                     </Button>
                 </SheetFooter>
             </SheetContent>

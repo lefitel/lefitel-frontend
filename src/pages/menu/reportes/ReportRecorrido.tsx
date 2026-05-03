@@ -11,6 +11,7 @@ import { can } from "../../../lib/permissions";
 import { getReporteRecorrido } from "../../../api/reporte.api";
 import { getCiudad } from "../../../api/Ciudad.api";
 import { getPosteByTramo } from "../../../api/Poste.api";
+import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
 import {
     CiudadInterface,
@@ -25,35 +26,62 @@ import { DatePicker } from "../../../components/ui/date-picker";
 import { Badge } from "../../../components/ui/badge";
 import { Combobox } from "../../../components/ui/combobox";
 import { Switch } from "../../../components/ui/switch";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { DownloadIcon, Loader2Icon, MapPinIcon, RouteIcon } from "lucide-react";
-import ResolverEventoSheet from "../poste/PosteDetalle/ResolverEventoSheet";
-import AddRevicionSheet from "../poste/PosteDetalle/AddRevicionSheet";
+import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
+import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
+import { CriticalityBadge } from "../../../components/CriticalityBadge";
+import { getEventCriticality, getCriticalityMeta } from "../../../lib/criticality";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Color hex por nivel de criticidad. Si state=true gana verde. Sin criticidad usa fallback prio/default.
 const getEventColor = (e: EventoInterface) => {
-    if (e.state) return "#249243";
+    if (e.state) return "#249243"; // resuelto siempre verde
+    const c = getEventCriticality(e);
+    if (c != null) {
+        if (c <= 3) return "#DC2626"; // crítica — rojo
+        if (c <= 5) return "#EA580C"; // alta — naranja
+        if (c <= 7) return "#CA8A04"; // media — amarillo oscuro
+        return "#2563EB";              // baja — azul
+    }
+    // Sin clasificar
     if (e.priority) return "#DD0031";
     return "#FF5500";
 };
 
 const getEventColorBg = (e: EventoInterface) => {
-    if (e.state) return "rgba(36,146,67,0.1)";
-    if (e.priority) return "rgba(221,0,49,0.1)";
-    return "rgba(255,85,0,0.1)";
+    const color = getEventColor(e);
+    // Convert hex to rgba with 0.1 alpha
+    const r = parseInt(color.slice(1, 3), 16);
+    const g = parseInt(color.slice(3, 5), 16);
+    const b = parseInt(color.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},0.1)`;
+};
+
+const getEventStatusLabel = (e: EventoInterface): string => {
+    if (e.state) return "Solucionado";
+    const c = getEventCriticality(e);
+    if (c != null && c <= 3) return "Crítico";
+    if (e.priority) return "Alta prioridad";
+    return "Pendiente";
 };
 
 const exportCsv = (list: EventoInterface[], ciudadA: string, ciudadB: string) => {
-    const headers = ["Poste", "Descripción", "Fecha", "Revisiones", "Estado", "Prioridad"];
-    const rows = list.map((e) => [
-        e.poste?.name ?? "",
-        e.description,
-        format(new Date(e.date), "dd/MM/yyyy", { locale: es }),
-        String(e.revicions?.length ?? 0),
-        e.state ? "Solucionado" : "Pendiente",
-        e.priority ? "Alta" : "Normal",
-    ]);
+    const headers = ["Poste", "Descripción", "Fecha", "Criticidad", "Revisiones", "Estado", "Prioridad"];
+    const rows = list.map((e) => {
+        const c = getEventCriticality(e);
+        return [
+            e.poste?.name ?? "",
+            e.description,
+            format(new Date(e.date), "dd/MM/yyyy", { locale: es }),
+            c != null ? `${c} - ${getCriticalityMeta(c).label}` : "—",
+            String(e.revisions?.length ?? 0),
+            e.state ? "Solucionado" : "Pendiente",
+            e.priority ? "Alta" : "Normal",
+        ];
+    });
     const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -87,20 +115,29 @@ const ReportRecorridoSec = () => {
     const [tramoInicial, setTramoInicial] = useState<number | null>(null);
     const [tramoFinal, setTramoFinal] = useState<number | null>(null);
     const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
+    const neighbors = useTramoNeighbors(sesion.token);
     const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
     const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
     const [loading, setLoading] = useState(false);
     const [mapTab, setMapTab] = useState<"eventos" | "postes">("eventos");
     const [estadoFilter, setEstadoFilter] = useState<"all" | "pending" | "solved">("all");
+    const [critFilter, setCritFilter] = useState<"all" | "criticas" | "altas" | "medias" | "bajas" | "sin">("all");
     const [routePath, setRoutePath] = useState<[number, number][]>([]);
 
     const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
-    const [addRevicionEventoId, setAddRevicionEventoId] = useState<number | null>(null);
+    const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
 
     useEffect(() => {
         getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
     }, [sesion.token]);
+
+    useEffect(() => {
+        if (tramoInicial && tramoFinal && neighbors.size > 0) {
+            const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
+            if (!valid) setTramoFinal(null);
+        }
+    }, [tramoInicial, tramoFinal, neighbors]);
 
     const handleGenerar = async () => {
         if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
@@ -186,8 +223,16 @@ const ReportRecorridoSec = () => {
     ];
 
     const filteredList = list.filter((e) => {
-        if (estadoFilter === "pending") return !e.state;
-        if (estadoFilter === "solved") return e.state;
+        if (estadoFilter === "pending" && e.state) return false;
+        if (estadoFilter === "solved" && !e.state) return false;
+        if (critFilter !== "all") {
+            const c = getEventCriticality(e);
+            if (critFilter === "sin" && c != null) return false;
+            if (critFilter === "criticas" && (c == null || c > 3)) return false;
+            if (critFilter === "altas" && (c == null || c < 4 || c > 5)) return false;
+            if (critFilter === "medias" && (c == null || c < 6 || c > 7)) return false;
+            if (critFilter === "bajas" && (c == null || c < 8)) return false;
+        }
         return true;
     });
 
@@ -202,8 +247,8 @@ const ReportRecorridoSec = () => {
                         Visualización geográfica de eventos y postes en un tramo específico para el período seleccionado.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
+                <CardContent>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
                         <div className="space-y-1.5">
                             <Label>Fecha de inicio</Label>
                             <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -215,7 +260,13 @@ const ReportRecorridoSec = () => {
                         <div className="space-y-1.5">
                             <Label>Tramo desde</Label>
                             <Combobox
-                                options={listCiudad.filter((c) => c.id !== tramoFinal).map((c) => ({ value: String(c.id), label: c.name }))}
+                                options={listCiudad
+                                    .filter((c) => {
+                                        if (c.id == null || c.id === tramoFinal) return false;
+                                        if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                                        return neighbors.get(tramoFinal)?.has(c.id) ?? false;
+                                    })
+                                    .map((c) => ({ value: String(c.id), label: c.name }))}
                                 value={tramoInicial ? String(tramoInicial) : ""}
                                 onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
                                 placeholder="Seleccionar ciudad"
@@ -224,7 +275,13 @@ const ReportRecorridoSec = () => {
                         <div className="space-y-1.5">
                             <Label>Tramo hasta</Label>
                             <Combobox
-                                options={listCiudad.filter((c) => c.id !== tramoInicial).map((c) => ({ value: String(c.id), label: c.name }))}
+                                options={listCiudad
+                                    .filter((c) => {
+                                        if (c.id == null || c.id === tramoInicial) return false;
+                                        if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
+                                        return neighbors.get(tramoInicial)?.has(c.id) ?? false;
+                                    })
+                                    .map((c) => ({ value: String(c.id), label: c.name }))}
                                 value={tramoFinal ? String(tramoFinal) : ""}
                                 onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
                                 placeholder="Seleccionar ciudad"
@@ -242,10 +299,12 @@ const ReportRecorridoSec = () => {
                             </span>
                         </label>
                     </div>
-                    <Button onClick={handleGenerar} disabled={loading} className="mt-5 h-10 px-6">
-                        {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <RouteIcon className="h-4 w-4 mr-2" />}
-                        Generar
-                    </Button>
+                    <div className="flex gap-2 mt-3 justify-end">
+                        <Button onClick={handleGenerar} disabled={loading}>
+                            {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <RouteIcon className="h-4 w-4 mr-2" />}
+                            Generar
+                        </Button>
+                    </div>
                 </CardContent>
             </Card>
 
@@ -289,13 +348,15 @@ const ReportRecorridoSec = () => {
                         <CardHeader className="border-b border-border/40 pb-3">
                             <div className="flex items-center justify-between">
                                 <CardTitle>Mapa del Recorrido</CardTitle>
-                                <div className="flex items-center rounded-lg border border-border bg-muted/30 p-1 gap-1">
-                                    {(["eventos", "postes"] as const).map((tab) => (
-                                        <Button key={tab} variant={mapTab === tab ? "default" : "ghost"} size="sm" className="h-7 text-xs capitalize" onClick={() => setMapTab(tab)}>
-                                            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                                        </Button>
-                                    ))}
-                                </div>
+                                <SegmentedControl
+                                    options={[
+                                        { value: "eventos", label: "Eventos" },
+                                        { value: "postes", label: "Postes" },
+                                    ]}
+                                    value={mapTab}
+                                    onValueChange={setMapTab}
+                                    ariaLabel="Tipo de marcadores en el mapa"
+                                />
                             </div>
                         </CardHeader>
                         <CardContent className="p-0 overflow-hidden rounded-b-xl">
@@ -334,8 +395,16 @@ const ReportRecorridoSec = () => {
 
                                 {/* Event markers */}
                                 {mapTab === "eventos" && eventMapMarkers.map((e, i) => (
-                                    <CircleMarker key={i} center={[e.poste!.lat, e.poste!.lng]} radius={8}
-                                        pathOptions={{ color: getEventColor(e), fillColor: getEventColor(e), fillOpacity: 0.85, weight: 1.5 }}
+                                    <CircleMarker
+                                        key={i}
+                                        center={[e.poste!.lat, e.poste!.lng]}
+                                        radius={8}
+                                        pathOptions={{
+                                            color: "#fff",
+                                            fillColor: getEventColor(e),
+                                            fillOpacity: 0.95,
+                                            weight: 2.5,
+                                        }}
                                     >
                                         <Popup minWidth={230}>
                                             <div style={{ padding: "4px 2px 2px", minWidth: 215 }}>
@@ -345,8 +414,8 @@ const ReportRecorridoSec = () => {
                                                     </span>
                                                     <div>
                                                         <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.2, color: "var(--foreground)" }}>{e.poste?.name}</p>
-                                                        <p style={{ margin: 0, fontSize: 10, marginTop: 1, color: e.state ? "#249243" : e.priority ? "#DD0031" : "#d97706" }}>
-                                                            {e.state ? "Solucionado" : e.priority ? "Alta prioridad" : "Pendiente"}
+                                                        <p style={{ margin: 0, fontSize: 10, marginTop: 1, color: getEventColor(e) }}>
+                                                            {getEventStatusLabel(e)}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -357,13 +426,17 @@ const ReportRecorridoSec = () => {
                                                 )}
                                                 <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
                                                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                                        <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>Criticidad</span>
+                                                        <CriticalityBadge level={getEventCriticality(e)} compact />
+                                                    </div>
+                                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                         <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>Fecha</span>
                                                         <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground)" }}>{format(new Date(e.date), "dd MMM yyyy", { locale: es })}</span>
                                                     </div>
-                                                    {(e.revicions?.length ?? 0) > 0 && (
+                                                    {(e.revisions?.length ?? 0) > 0 && (
                                                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                                                             <span style={{ fontSize: 11, color: "var(--muted-foreground)" }}>Revisiones</span>
-                                                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground)" }}>{e.revicions!.length}</span>
+                                                            <span style={{ fontSize: 11, fontWeight: 600, color: "var(--foreground)" }}>{e.revisions!.length}</span>
                                                         </div>
                                                     )}
                                                 </div>
@@ -371,7 +444,7 @@ const ReportRecorridoSec = () => {
                                                 <div style={{ display: "flex", gap: 6 }}>
                                                     <button
                                                         style={{ flex: 1, padding: "7px 0", borderRadius: 6, background: "var(--card)", color: "var(--foreground)", border: "1px solid var(--border)", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                                                        onClick={() => navigate(`/eventos/${e.id}`)}
+                                                        onClick={() => navigate(`/app/eventos/${e.id}`)}
                                                     >
                                                         Ver detalle
                                                     </button>
@@ -387,7 +460,7 @@ const ReportRecorridoSec = () => {
                                                 {!e.state && can(sesion.usuario.id_rol, "eventos", "editar") && (
                                                     <button
                                                         style={{ width: "100%", marginTop: 5, padding: "5px 0", borderRadius: 6, background: "transparent", color: "var(--primary)", border: "1px solid var(--primary)", fontSize: 11, fontWeight: 600, cursor: "pointer" }}
-                                                        onClick={() => { if (e.id) setAddRevicionEventoId(e.id as number); }}
+                                                        onClick={() => { if (e.id) setAddRevisionEventoId(e.id as number); }}
                                                     >
                                                         Agregar revisión
                                                     </button>
@@ -400,7 +473,7 @@ const ReportRecorridoSec = () => {
                                 {/* Poste markers */}
                                 {mapTab === "postes" && posteMapMarkers.map((p, i) => (
                                     <CircleMarker key={i} center={[p.lat, p.lng]} radius={8}
-                                        pathOptions={{ color: "var(--primary)", fillColor: "var(--primary)", fillOpacity: 0.85, weight: 1.5 }}
+                                        pathOptions={{ color: "#fff", fillColor: "#596BAB", fillOpacity: 0.95, weight: 2.5 }}
                                     >
                                         <Popup minWidth={220}>
                                             <div style={{ padding: "4px 2px 2px", minWidth: 205 }}>
@@ -440,7 +513,7 @@ const ReportRecorridoSec = () => {
                                                 <div style={{ height: 1, background: "var(--border)", marginBottom: 8 }} />
                                                 <button
                                                     style={{ width: "100%", padding: "7px 0", borderRadius: 6, background: "var(--primary)", color: "#fff", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-                                                    onClick={() => navigate(`/postes/${p.id}`)}
+                                                    onClick={() => navigate(`/app/postes/${p.id}`)}
                                                 >
                                                     Ver poste
                                                 </button>
@@ -452,7 +525,14 @@ const ReportRecorridoSec = () => {
 
                             {mapTab === "eventos" && (
                                 <div className="flex flex-wrap items-center gap-4 px-4 py-2.5 border-t border-border/40 text-xs text-muted-foreground">
-                                    {[{ color: "#DD0031", label: "Pendiente prioritario" }, { color: "#FF5500", label: "Pendiente" }, { color: "#249243", label: "Solucionado" }].map(({ color, label }) => (
+                                    {[
+                                        { color: "#DC2626", label: "Crítica (1-3)" },
+                                        { color: "#EA580C", label: "Alta (4-5)" },
+                                        { color: "#CA8A04", label: "Media (6-7)" },
+                                        { color: "#2563EB", label: "Baja (8-9)" },
+                                        { color: "#FF5500", label: "Sin clasificar" },
+                                        { color: "#249243", label: "Solucionado" },
+                                    ].map(({ color, label }) => (
                                         <span key={label} className="flex items-center gap-1.5">
                                             <span className="inline-block h-3 w-3 rounded-full" style={{ background: color }} />
                                             {label}
@@ -476,14 +556,31 @@ const ReportRecorridoSec = () => {
                         <CardHeader className="border-b border-border/40 pb-3">
                             <div className="flex items-center justify-between flex-wrap gap-3">
                                 <CardTitle>Eventos del Tramo</CardTitle>
-                                <div className="flex items-center gap-2">
-                                    <div className="flex items-center rounded-lg border border-border bg-muted/30 p-1 gap-1">
-                                        {([{ value: "all", label: "Todos" }, { value: "pending", label: "Pendientes" }, { value: "solved", label: "Solucionados" }] as const).map((opt) => (
-                                            <Button key={opt.value} variant={estadoFilter === opt.value ? "default" : "ghost"} size="sm" className="h-7 text-xs" onClick={() => setEstadoFilter(opt.value)}>
-                                                {opt.label}
-                                            </Button>
-                                        ))}
-                                    </div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <SegmentedControl
+                                        options={[
+                                            { value: "all", label: "Todas" },
+                                            { value: "criticas", label: "Críticas" },
+                                            { value: "altas", label: "Altas" },
+                                            { value: "medias", label: "Medias" },
+                                            { value: "bajas", label: "Bajas" },
+                                            { value: "sin", label: "Sin clasif." },
+                                        ]}
+                                        value={critFilter}
+                                        onValueChange={setCritFilter}
+                                        size="sm"
+                                        ariaLabel="Filtro por criticidad"
+                                    />
+                                    <SegmentedControl
+                                        options={[
+                                            { value: "all", label: "Todos" },
+                                            { value: "pending", label: "Pendientes" },
+                                            { value: "solved", label: "Solucionados" },
+                                        ]}
+                                        value={estadoFilter}
+                                        onValueChange={setEstadoFilter}
+                                        ariaLabel="Filtro de estado de eventos"
+                                    />
                                     <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportCsv(list, ciudadA.name, ciudadB.name)}>
                                         <DownloadIcon className="h-3.5 w-3.5" />
                                         CSV
@@ -503,15 +600,16 @@ const ReportRecorridoSec = () => {
                                                 <p className="text-xs text-muted-foreground truncate">{e.description}</p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
                                                     {format(new Date(e.date), "dd/MM/yyyy", { locale: es })}
-                                                    {(e.revicions?.length ?? 0) > 0 && <span className="ml-2">· {e.revicions!.length} {e.revicions!.length === 1 ? "revisión" : "revisiones"}</span>}
+                                                    {(e.revisions?.length ?? 0) > 0 && <span className="ml-2">· {e.revisions!.length} {e.revisions!.length === 1 ? "revisión" : "revisiones"}</span>}
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
+                                                <CriticalityBadge level={getEventCriticality(e)} compact />
                                                 <Badge className={`text-xs border-transparent shadow-none ${e.state ? "bg-primary/10 text-primary" : "bg-amber-500/10 text-amber-600"}`}>
                                                     {e.state ? "Solucionado" : "Pendiente"}
                                                 </Badge>
                                                 {e.priority && <Badge variant="destructive" className="text-xs">Alta prioridad</Badge>}
-                                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate(`/eventos/${e.id}`)}>
+                                                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => navigate(`/app/eventos/${e.id}`)}>
                                                     Ver
                                                 </Button>
                                             </div>
@@ -532,11 +630,11 @@ const ReportRecorridoSec = () => {
                     onSuccess={handleGenerar}
                 />
             </PermissionGuard>
-            <PermissionGuard module="eventos" action="editar" open={!!addRevicionEventoId} onOpenChange={(v) => { if (!v) setAddRevicionEventoId(null); }}>
-                <AddRevicionSheet
-                    eventoId={addRevicionEventoId}
-                    open={!!addRevicionEventoId}
-                    setOpen={(v) => { if (!v) setAddRevicionEventoId(null); }}
+            <PermissionGuard module="eventos" action="editar" open={!!addRevisionEventoId} onOpenChange={(v) => { if (!v) setAddRevisionEventoId(null); }}>
+                <AddRevisionSheet
+                    eventoId={addRevisionEventoId}
+                    open={!!addRevisionEventoId}
+                    setOpen={(v) => { if (!v) setAddRevisionEventoId(null); }}
                     onSuccess={handleGenerar}
                 />
             </PermissionGuard>

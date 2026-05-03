@@ -1,7 +1,7 @@
 import {
   EventoInterface,
   PosteInterface,
-  RevicionInterface,
+  RevisionInterface,
   SolucionInterface,
   UsuarioInterface,
 } from "../interfaces/interfaces";
@@ -50,7 +50,7 @@ export const solucionExample: SolucionInterface = {
   id_evento: 0,
 };
 
-export const revicionExample: RevicionInterface = {
+export const revisionExample: RevisionInterface = {
   description: "",
   date: new Date(),
   id_evento: 0,

@@ -19,7 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avat
 import { ImageLightbox } from "../../../components/ui/image-viewer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../../components/ui/sheet";
 import DataTable from "../../../components/table/DataTable";
-import EditUserSheet from "../../../components/dialogs/edits/EditUserSheet";
+import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
 import {
   CalendarIcon, PhoneIcon, UserIcon, ShieldIcon,
   PencilIcon, RefreshCwIcon, ActivityIcon, CheckCircle2Icon,
@@ -187,7 +187,7 @@ export default function UsuarioDetallePage() {
         ? (
           <button
             className="text-sm text-primary hover:underline"
-            onClick={(e) => { e.stopPropagation(); navigate(`/postes/${row.original.id_poste}`); }}
+            onClick={(e) => { e.stopPropagation(); navigate(`/app/postes/${row.original.id_poste}`); }}
           >
             {row.original.poste.name}
           </button>
@@ -215,7 +215,7 @@ export default function UsuarioDetallePage() {
               <MoreVerticalIcon className="h-4 w-4" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-36">
-              <DropdownMenuItem onClick={() => navigate(`/eventos/${row.original.id}`)}>
+              <DropdownMenuItem onClick={() => navigate(`/app/eventos/${row.original.id}`)}>
                 Ver detalle
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -226,7 +226,7 @@ export default function UsuarioDetallePage() {
   ], [navigate]);
 
   return (
-    <div className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -320,7 +320,7 @@ export default function UsuarioDetallePage() {
         <CardHeader className="border-b border-border/40 pb-4">
           <CardTitle className="text-base">Perfil</CardTitle>
         </CardHeader>
-        <CardContent className="pt-5">
+        <CardContent className="p-5">
           {d.loading ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -376,8 +376,8 @@ export default function UsuarioDetallePage() {
           <h2 className="text-base font-semibold">Actividad reciente</h2>
           <p className="text-sm text-muted-foreground">Últimas 50 acciones registradas del usuario.</p>
         </div>
-        <Card className="shadow-sm border-muted/60">
-          <CardContent className="pt-5">
+        <Card className="shadow-sm border-muted/60 py-0">
+          <CardContent className="p-5">
             {d.loading ? (
               <div className="space-y-4">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -409,7 +409,7 @@ export default function UsuarioDetallePage() {
       <ImageLightbox src={lightboxSrc ?? ""} open={!!lightboxSrc} onClose={() => setLightboxSrc(null)} />
 
       {/* Sheet: editar datos generales */}
-      <EditUserSheet usuario={d.usuario} open={openEdit} setOpen={setOpenEdit} onSuccess={d.load} />
+      <UsuarioSheet usuario={d.usuario} open={openEdit} setOpen={setOpenEdit} onSuccess={d.load} />
 
       {/* Sheet: cambiar nombre de usuario */}
       <Sheet open={openUsername} onOpenChange={(v) => { if (!v) { setOpenUsername(false); setNewUser(""); setCurrentPassUser(""); } }}>

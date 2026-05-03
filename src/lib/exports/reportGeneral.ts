@@ -4,9 +4,11 @@ import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-import { EventoInterface, RevicionInterface } from "../../interfaces/interfaces";
+import { EventoInterface, RevisionInterface } from "../../interfaces/interfaces";
 import { url } from "../../api/url";
+import { getEventCriticality, getCriticalityMeta } from "../criticality";
 import logoUrl from "../../assets/images/logo.png";
+import tigoUrl from "../../assets/images/tigo.png";
 
 // ─── Row layout ───────────────────────────────────────────────────────────────
 //  Row 1  Title  (logos overlay)
@@ -21,14 +23,14 @@ const R = { TITLE: 1, DATE: 2, KPI: 3, GROUP: 4, HEADER: 5, DATA_START: 6 } as c
 //  1  #            2  Nmr Poste    3  Propietario
 //  4  Latitud*     5  Longitud*    6  Tramo
 //  7  Fecha        8  Hora         9  Descripción
-// 10  Prioritario 11  Revisiones  12  Estado      ← Evento group
-// 13  Foto Evento
-// 14  Fecha Sol   15  Hora Sol    16  Desc Sol    17  Foto Sol
+// 10  Criticidad  11  Prioritario 12  Revisiones  13  Estado      ← Evento group
+// 14  Foto Evento
+// 15  Fecha Sol   16  Hora Sol    17  Desc Sol    18  Foto Sol
 //
 // * vertical text, narrow column
-const COL_COUNT   = 17;
-const COL_IMG_EVT = 13;
-const COL_IMG_SOL = 17;
+const COL_COUNT   = 18;
+const COL_IMG_EVT = 14;
+const COL_IMG_SOL = 18;
 const VERTICAL_COLS = new Set([4, 5]);
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -54,8 +56,8 @@ const PRIMARY: [number, number, number] = [0, 31, 93];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-export const latestRevision = (revicions: RevicionInterface[] | null | undefined): Date => {
-  const revs = revicions ?? [];
+export const latestRevision = (revisions: RevisionInterface[] | null | undefined): Date => {
+  const revs = revisions ?? [];
   return revs.reduce((max, rev) => {
     const d = new Date(rev.date);
     return d > max ? d : max;
@@ -122,7 +124,7 @@ const applyUniformBorder = (cell: ExcelJS.Cell, argb: string, style: "thin" | "m
 
 export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: Date, fechaFin: Date) => {
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Lefitel";
+  wb.creator = "Osefi srl";
   wb.created = new Date();
   const ws = wb.addWorksheet("Reporte");
 
@@ -147,12 +149,12 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   ];
 
   // ── Logos ──────────────────────────────────────────────────────────────────
-  const [lefitelBuf, tigoBuf] = await Promise.all([
-    getImgBuffer("/logo.png"),
-    getImgBuffer("/tigo.png"),
+  const [osefiBuf, tigoBuf] = await Promise.all([
+    getImgBuffer(logoUrl),
+    getImgBuffer(tigoUrl),
   ]);
-  if (lefitelBuf) {
-    ws.addImage(wb.addImage({ buffer: lefitelBuf, extension: "png" }), {
+  if (osefiBuf) {
+    ws.addImage(wb.addImage({ buffer: osefiBuf, extension: "png" }), {
       tl: { col: 0, row: 0 }, ext: { width: 70, height: 50 },
     });
   }
@@ -166,7 +168,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   ws.mergeCells(R.TITLE, 1, R.TITLE, COL_COUNT);
   {
     const cell     = ws.getCell(R.TITLE, 1);
-    cell.value     = "RESUMEN DE REPORTES LEFITEL S.R.L.";
+    cell.value     = "RESUMEN DE REPORTES OSEFI S.R.L.";
     cell.font      = { bold: true, size: 18, color: { argb: CLR.navy } };
     cell.alignment = { vertical: "middle", horizontal: "center" };
   }
@@ -187,7 +189,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   const total        = list.length;
   const pendientes   = list.filter((e) => !e.state).length;
   const solucionados = list.filter((e) => e.state).length;
-  const criticos     = list.filter((e) => (e.revicions?.length ?? 0) >= 5).length;
+  const criticos     = list.filter((e) => (e.revisions?.length ?? 0) >= 5).length;
   const prioritarios = list.filter((e) => e.priority).length;
 
   // Left: cols 1-9 merged — KPIs as rich text
@@ -301,7 +303,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   // ── Data rows ──────────────────────────────────────────────────────────────
   for (let i = 0; i < list.length; i++) {
     const e       = list[i];
-    const revs    = e.revicions ?? [];
+    const revs    = e.revisions ?? [];
     const lastRev = latestRevision(revs);
     const sol     = e.solucions?.[0] ?? null;
     const excelRow  = R.DATA_START + i;
@@ -380,15 +382,21 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
 
 export const PDF_HEADERS_GENERAL = [
   "#", "Nmr Poste", "Propietario", "Latitud", "Longitud", "Tramo",
-  "Fecha rev.", "Hora rev.", "Descripción", "Prioritario", "Revisiones",
+  "Fecha rev.", "Hora rev.", "Descripción", "Criticidad", "Prioritario", "Revisiones",
   "Estado", "Foto evt.", "Fecha sol.", "Hora sol.", "Desc. sol.", "Foto sol.",
 ];
 
+const formatCriticality = (e: EventoInterface): string => {
+  const c = getEventCriticality(e);
+  if (c == null) return "—";
+  return `${c} - ${getCriticalityMeta(c).label}`;
+};
+
 export const toRowsGeneral = (list: EventoInterface[]) =>
   list.map((e, i) => {
-    const lastRev = latestRevision(e.revicions);
+    const lastRev = latestRevision(e.revisions);
     const sol = e.solucions?.[0] ?? null;
-    const hasRevs = (e.revicions?.length ?? 0) > 0;
+    const hasRevs = (e.revisions?.length ?? 0) > 0;
     return [
       String(i + 1),
       e.poste?.name ?? "",
@@ -399,8 +407,9 @@ export const toRowsGeneral = (list: EventoInterface[]) =>
       hasRevs ? lastRev.toLocaleDateString("es-ES") : "",
       hasRevs ? lastRev.toLocaleTimeString("es-ES") : "",
       e.description ?? "",
+      formatCriticality(e),
       e.priority ? "SÍ" : "NO",
-      String(e.revicions?.length ?? 0),
+      String(e.revisions?.length ?? 0),
       e.state ? "Solucionado" : "Pendiente",
       e.image ? "✓" : "—",
       sol ? new Date(sol.date).toLocaleDateString("es-ES") : "",
@@ -425,8 +434,8 @@ export const exportCsvGeneral = (list: EventoInterface[]) => {
 
 // ─── PDF ──────────────────────────────────────────────────────────────────────
 
-const IMG_COL_EVT = 12; // 0-indexed
-const IMG_COL_SOL = 16; // 0-indexed
+const IMG_COL_EVT = 13; // 0-indexed
+const IMG_COL_SOL = 17; // 0-indexed
 
 export const exportPdfGeneral = async (list: EventoInterface[], fechaInicio: Date, fechaFin: Date) => {
   // ── Logo ────────────────────────────────────────────────────────────────────
@@ -458,7 +467,7 @@ export const exportPdfGeneral = async (list: EventoInterface[], fechaInicio: Dat
   doc.setFont("helvetica", "bold");
   doc.setFontSize(15);
   doc.setTextColor(...PRIMARY);
-  doc.text("LEFITEL", 34, 12);
+  doc.text("OSEFI SRL", 34, 12);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(80, 90, 110);
@@ -499,7 +508,7 @@ export const exportPdfGeneral = async (list: EventoInterface[], fechaInicio: Dat
       const e = list[data.row.index];
       if (!e) return;
       const hasSolImg = !!(e.solucions?.[0]?.image);
-      const nRevs    = e.revicions?.length ?? 0;
+      const nRevs    = e.revisions?.length ?? 0;
       const fill: [number, number, number] =
         hasSolImg  ? [212, 237, 218] :
         nRevs >= 5 ? [250, 215, 215] :
@@ -538,7 +547,7 @@ export const exportPdfGeneral = async (list: EventoInterface[], fechaInicio: Dat
     doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
     doc.setDrawColor(208, 216, 239);
     doc.line(10, 203, W - 10, 203);
-    doc.text("Lefitel", 10, 207);
+    doc.text("Osefi srl", 10, 207);
     doc.text(`Página ${i} de ${pageCount}`, W - 10, 207, { align: "right" });
   }
 

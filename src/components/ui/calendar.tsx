@@ -11,7 +11,7 @@ import {
 
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
-import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, ChevronDownIcon, CheckIcon } from "lucide-react"
 
 function Calendar({
   className,
@@ -74,12 +74,8 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "relative rounded-(--cell-radius)",
+          "rounded-(--cell-radius)",
           defaultClassNames.dropdown_root
-        ),
-        dropdown: cn(
-          "absolute inset-0 bg-popover opacity-0",
-          defaultClassNames.dropdown
         ),
         caption_label: cn(
           "font-medium select-none",
@@ -162,21 +158,8 @@ function Calendar({
             <ChevronDownIcon className={cn("size-4", className)} {...props} />
           )
         },
-        Dropdown: ({ value, onChange, options }: DropdownProps) => (
-          <div className="relative">
-            <select
-              value={value}
-              onChange={onChange}
-              className="h-7 appearance-none rounded-(--cell-radius) border border-input bg-background pl-2 pr-6 text-sm font-medium text-foreground shadow-none outline-none focus:ring-1 focus:ring-ring cursor-pointer"
-            >
-              {options?.map((opt) => (
-                <option key={opt.value} value={opt.value} disabled={opt.disabled}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDownIcon className="pointer-events-none absolute right-1.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
-          </div>
+        Dropdown: (dropdownProps: DropdownProps) => (
+          <CalendarInlineDropdown {...dropdownProps} />
         ),
         DayButton: ({ ...props }) => (
           <CalendarDayButton locale={locale} {...props} />
@@ -197,6 +180,88 @@ function Calendar({
   )
 }
 
+function CalendarInlineDropdown({ value, onChange, options }: DropdownProps) {
+  const [open, setOpen] = React.useState(false)
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const itemsRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handler)
+    return () => document.removeEventListener("mousedown", handler)
+  }, [open])
+
+  React.useEffect(() => {
+    if (!open || !itemsRef.current) return
+    const selected = itemsRef.current.querySelector<HTMLElement>("[data-selected=true]")
+    selected?.scrollIntoView({ block: "nearest" })
+  }, [open])
+
+  const handleSelect = (next: string) => {
+    if (onChange) {
+      const event = { target: { value: next } } as React.ChangeEvent<HTMLSelectElement>
+      onChange(event)
+    }
+    setOpen(false)
+  }
+
+  const currentLabel =
+    options?.find((o) => String(o.value) === String(value))?.label ?? String(value)
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="inline-flex h-7 items-center gap-1 rounded-(--cell-radius) px-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring cursor-pointer"
+      >
+        {currentLabel}
+        <ChevronDownIcon className="size-3 text-muted-foreground" />
+      </button>
+      {open && (
+        <div
+          ref={itemsRef}
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-1 max-h-60 min-w-full overflow-y-auto rounded-md border border-border bg-popover p-1 shadow-md"
+        >
+          {options?.map((opt) => {
+            const isSelected = String(opt.value) === String(value)
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                role="option"
+                aria-selected={isSelected}
+                data-selected={isSelected}
+                disabled={opt.disabled}
+                onClick={() => handleSelect(String(opt.value))}
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none cursor-pointer hover:bg-muted disabled:pointer-events-none disabled:opacity-50",
+                  isSelected && "font-medium"
+                )}
+              >
+                <span className="flex-1 whitespace-nowrap">{opt.label}</span>
+                {isSelected ? (
+                  <CheckIcon className="size-3.5 shrink-0" />
+                ) : (
+                  <span className="w-3.5 shrink-0" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function CalendarDayButton({
   className,
   day,
@@ -208,7 +273,7 @@ function CalendarDayButton({
 
   const ref = React.useRef<HTMLButtonElement>(null)
   React.useEffect(() => {
-    if (modifiers.focused) ref.current?.focus()
+    if (modifiers.focused) ref.current?.focus({ preventScroll: true })
   }, [modifiers.focused])
 
   return (

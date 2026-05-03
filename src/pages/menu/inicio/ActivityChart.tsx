@@ -26,13 +26,11 @@ export function ActivityChart({ chartData, loading, xAxisLabel }: ActivityChartP
               <CardTitle>Actividad de Eventos</CardTitle>
               <TooltipProvider>
                 <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <button type="button" aria-label="¿Qué muestra este gráfico?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                        <InfoIcon className="h-3.5 w-3.5" />
-                      </button>
-                    }
-                  />
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="¿Qué muestra este gráfico?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                      <InfoIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-sm">
                     <span className="block text-left leading-relaxed normal-case">
                       Eventos <strong className="font-semibold">creados</strong> en el período, agrupados por su estado actual:

@@ -13,6 +13,7 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import { ChevronDownIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
+import { CriticalityBadge } from "../../../components/CriticalityBadge";
 
 const ReportObsFrecuenciaSec = () => {
   const { sesion } = useContext(SesionContext);
@@ -63,17 +64,19 @@ const ReportObsFrecuenciaSec = () => {
             Ranking de observaciones registradas en eventos del período, ordenadas por frecuencia.
           </CardDescription>
         </CardHeader>
-        <CardContent className="pt-5">
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-1.5">
+        <CardContent>
+          <div className="flex flex-wrap gap-x-2 gap-y-3">
+            <div className="space-y-1.5 min-w-36">
               <Label>Fecha de inicio</Label>
               <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 min-w-36">
               <Label>Fecha de fin</Label>
               <DatePicker value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
-            <Button onClick={handleGenerar} disabled={loading} className="h-10 px-6">
+          </div>
+          <div className="flex gap-2 mt-3 justify-end">
+            <Button onClick={handleGenerar} disabled={loading}>
               {loading && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
               Generar
             </Button>
@@ -122,6 +125,7 @@ const ReportObsFrecuenciaSec = () => {
                       <TableHead>#</TableHead>
                       <TableHead>Tipo</TableHead>
                       <TableHead>Observación</TableHead>
+                      <TableHead>Criticidad</TableHead>
                       <TableHead className="text-right">Cantidad</TableHead>
                       <TableHead className="w-40">Frecuencia</TableHead>
                     </TableRow>
@@ -132,6 +136,7 @@ const ReportObsFrecuenciaSec = () => {
                         <TableCell className="text-xs text-muted-foreground">{i + 1}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{r.tipoObs}</TableCell>
                         <TableCell className="text-sm font-medium">{r.obs}</TableCell>
+                        <TableCell><CriticalityBadge level={r.criticality} compact /></TableCell>
                         <TableCell className="text-right text-sm">{r.count}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

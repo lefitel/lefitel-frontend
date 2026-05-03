@@ -23,8 +23,8 @@ export interface PosteDetalleData {
   setAddEventoOpen: (v: boolean) => void;
 
   // Add revision sheet
-  addRevicionEventoId: number | null;
-  setAddRevicionEventoId: (id: number | null) => void;
+  addRevisionEventoId: number | null;
+  setAddRevisionEventoId: (id: number | null) => void;
 
   // Resolver sheet
   resolverEvento: EventoInterface | null;
@@ -47,7 +47,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
 
   const [openEditPoste, setOpenEditPoste] = useState(false);
   const [addEventoOpen, setAddEventoOpen] = useState(false);
-  const [addRevicionEventoId, setAddRevicionEventoId] = useState<number | null>(null);
+  const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
   const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
   const [editEventoId, setEditEventoId] = useState<number | null>(null);
 
@@ -88,7 +88,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
     poste, dataPoste, setDataPoste, eventos, loading, load,
     openEditPoste, setOpenEditPoste,
     addEventoOpen, setAddEventoOpen,
-    addRevicionEventoId, setAddRevicionEventoId,
+    addRevisionEventoId, setAddRevisionEventoId,
     resolverEvento, setResolverEvento,
     editEventoId, setEditEventoId,
     reabrirEvento,

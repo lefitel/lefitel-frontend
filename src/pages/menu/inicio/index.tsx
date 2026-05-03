@@ -4,8 +4,8 @@ import { Button } from "../../../components/ui/button";
 import { ArrowUpRightIcon, BarChart3Icon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import AddEventoPageSheet from "../../../components/dialogs/add/AddEventoPageSheet";
-import EditPosteSheet from "../../../components/dialogs/edits/EditPosteSheet";
+import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
+import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { useInicioData } from "./useInicioData";
 import { KpiCards } from "./KpiCards";
@@ -23,7 +23,7 @@ const InicioPage = () => {
   const d = useInicioData();
 
   return (
-    <div className="@container/card p-6 md:p-8 w-full space-y-8 animate-in fade-in duration-500">
+    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-8 animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -32,7 +32,7 @@ const InicioPage = () => {
           <p className="text-muted-foreground">Resumen operativo de postes y eventos en el sistema.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          <Button variant="outline" onClick={() => navigate("/reportes")} className="gap-2">
+          <Button variant="outline" onClick={() => navigate("/app/reportes")} className="gap-2">
             <BarChart3Icon className="h-4 w-4" />
             <span>Ver Reportes</span>
             <ArrowUpRightIcon className="h-3 w-3 opacity-50" />
@@ -87,7 +87,7 @@ const InicioPage = () => {
       </PermissionGuard>
       {d.dataPoste.id != null && (
         <PermissionGuard module="postes" action="editar" open={d.openEditPoste} onOpenChange={d.setOpenEditPoste}>
-          <EditPosteSheet functionApp={d.load} poste={d.dataPoste} setPoste={d.setDataPoste} open={d.openEditPoste} setOpen={d.setOpenEditPoste} />
+          <PosteSheet poste={d.dataPoste} open={d.openEditPoste} setOpen={d.setOpenEditPoste} onSuccess={d.load} />
         </PermissionGuard>
       )}
     </div>

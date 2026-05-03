@@ -16,12 +16,9 @@ import {
 } from "../../api/Files.api";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "../../components/ui/card";
+import { Card, CardContent } from "../../components/ui/card";
+import { AnimatedNumber } from "../../components/AnimatedNumber";
+import { ParametrosKpiCards } from "./parametros/ParametrosKpiCards";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,11 +59,11 @@ const TYPE_STYLES: Record<string, string> = {
 };
 
 const TYPE_ROUTES: Partial<Record<string, (id: number) => string>> = {
-  "Poste": (id) => `/postes/${id}`,
-  "Evento": (id) => `/eventos/${id}`,
-  "Solución": (id) => `/eventos/${id}`,
-  "Ciudad": (id) => `/ciudades/${id}`,
-  "Usuario": (id) => `/seguridad/${id}`,
+  "Poste": (id) => `/app/postes/${id}`,
+  "Evento": (id) => `/app/eventos/${id}`,
+  "Solución": (id) => `/app/eventos/${id}`,
+  "Ciudad": (id) => `/app/ciudades/${id}`,
+  "Usuario": (id) => `/app/seguridad/${id}`,
 };
 
 const formatSize = (bytes: number): string => {
@@ -305,7 +302,7 @@ const FilesPage = () => {
   const totalBroken = brokenRefs.length;
 
   return (
-    <Tabs defaultValue="archivos" className="@container/card p-6 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+    <Tabs defaultValue="archivos" className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -328,48 +325,32 @@ const FilesPage = () => {
 
       {/* ── Tab Archivos ── */}
       <TabsContent value="archivos" className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Card className="shadow-sm border-muted/60 transition-all hover:shadow-md">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Total en Disco</CardTitle>
-              <div className="p-2 bg-primary/10 rounded-full">
-                <HardDriveIcon className="h-4 w-4 text-primary" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold">{files.length}</div>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">Ocupando {formatSize(totalSize)} de volumen.</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-amber-500/20 transition-all hover:shadow-md hover:border-amber-500/40 relative overflow-hidden">
-            {orphans.length > 0 && <div className="absolute top-0 right-0 w-2 h-full bg-amber-500/80" />}
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Archivos Huérfanos</CardTitle>
-              <div className={`p-2 rounded-full ${orphans.length > 0 ? "bg-amber-500/10" : "bg-muted"}`}>
-                <AlertTriangleIcon className={`h-4 w-4 ${orphans.length > 0 ? "text-amber-600" : "text-muted-foreground"}`} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className={`text-3xl font-bold ${orphans.length > 0 ? "text-amber-600" : "text-foreground"}`}>{orphans.length}</div>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(orphanSize)} recuperables</p>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-sm border-primary/20 transition-all hover:shadow-md hover:border-primary/40 relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-2 h-full bg-primary/80" />
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Archivos En Uso</CardTitle>
-              <div className="p-2 bg-primary/10 rounded-full">
-                <CheckCircle2Icon className="h-4 w-4 text-primary" />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="text-3xl font-bold text-primary">{files.length - orphans.length}</div>
-              <p className="text-xs text-muted-foreground mt-1 font-medium">{formatSize(totalSize - orphanSize)} vinculados activamente</p>
-            </CardContent>
-          </Card>
-        </div>
+        <ParametrosKpiCards
+          loading={loading}
+          items={[
+            {
+              label: "Total en Disco",
+              value: files.length,
+              hint: `Ocupando ${formatSize(totalSize)} de volumen`,
+              icon: HardDriveIcon,
+              tone: "default",
+            },
+            {
+              label: "Archivos Huérfanos",
+              value: orphans.length,
+              hint: `${formatSize(orphanSize)} recuperables`,
+              icon: AlertTriangleIcon,
+              tone: orphans.length > 0 ? "warning" : "default",
+            },
+            {
+              label: "Archivos En Uso",
+              value: files.length - orphans.length,
+              hint: `${formatSize(totalSize - orphanSize)} vinculados activamente`,
+              icon: CheckCircle2Icon,
+              tone: "success",
+            },
+          ]}
+        />
 
         <DataTable
           data={files}
@@ -414,7 +395,8 @@ const FilesPage = () => {
               const stat = entityStats?.[key];
               const hasBroken = (stat?.referenciaRota ?? 0) > 0;
               return (
-                <Card key={key} className={`shadow-sm py-0 ${hasBroken ? "border-destructive/30" : "border-muted/60"}`}>
+                <Card key={key} className={`relative shadow-sm py-0 overflow-hidden transition-all duration-300 ease-out hover:shadow-md ${hasBroken ? "border-destructive/30" : "border-muted/60"}`}>
+                  <div className={`absolute top-0 left-0 right-0 h-0.5 ${hasBroken ? "bg-destructive/70" : "bg-primary/40"}`} />
                   <CardContent className="p-4 space-y-3">
                     <p className="text-xs font-medium text-muted-foreground">{labels[key]}</p>
                     {statsLoading ? (
@@ -425,7 +407,7 @@ const FilesPage = () => {
                       </div>
                     ) : (
                       <>
-                        <p className="text-3xl font-bold">{stat?.total ?? 0}</p>
+                        <p className="text-3xl font-bold"><AnimatedNumber value={stat?.total ?? 0} /></p>
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5">
                             <ImageCheckIcon className="h-3 w-3 text-green-600/60 shrink-0" />

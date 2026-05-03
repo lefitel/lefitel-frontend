@@ -40,7 +40,7 @@ export function useInicioData(): InicioData {
   const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
   const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<Period>("month");
+  const [period, setPeriod] = useState<Period>("fortnight");
   const [mapTab, setMapTab] = useState<MapTab>("postes");
   const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
   const [openEditPoste, setOpenEditPoste] = useState(false);
@@ -68,10 +68,10 @@ export function useInicioData(): InicioData {
     if (!listEventos || !listPostes) return null;
     const inCurr = period === "all" ? () => true : (d: Date) => d >= bounds.start && d <= bounds.end;
     const inPrev = period === "all" ? () => true : (d: Date) => d >= bounds.prevStart && d <= bounds.prevEnd;
-    const hasRevicionInCurr = (e: DashboardEvento) =>
-      (e.revicions ?? []).some((r) => inCurr(new Date(r.date)));
-    const hasRevicionInPrev = (e: DashboardEvento) =>
-      (e.revicions ?? []).some((r) => inPrev(new Date(r.date)));
+    const hasRevisionInCurr = (e: DashboardEvento) =>
+      (e.revisions ?? []).some((r) => inCurr(new Date(r.date)));
+    const hasRevisionInPrev = (e: DashboardEvento) =>
+      (e.revisions ?? []).some((r) => inPrev(new Date(r.date)));
 
     const postesTotal = listPostes.length;
     const postesCurr = listPostes.filter((p) => inCurr(new Date(p.date))).length;
@@ -90,9 +90,9 @@ export function useInicioData(): InicioData {
     const resRateCurr = openedCurr > 0 ? Math.round((solCurr / openedCurr) * 100) : 0;
     const resRatePrev = openedPrev > 0 ? Math.round((solPrev / openedPrev) * 100) : 0;
 
-    const reviewedList = listEventos.filter(hasRevicionInCurr);
+    const reviewedList = listEventos.filter(hasRevisionInCurr);
     const reviewedCurr = reviewedList.length;
-    const reviewedPrev = listEventos.filter(hasRevicionInPrev).length;
+    const reviewedPrev = listEventos.filter(hasRevisionInPrev).length;
     const reviewedSolved = reviewedList.filter((e) => e.state).length;
     const reviewedPending = reviewedList.filter((e) => !e.state).length;
 

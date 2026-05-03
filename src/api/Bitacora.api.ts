@@ -18,15 +18,18 @@ export interface BitacoraFilters {
   id_usuario?: number;
   action?: string;
   entity?: string;
+  entity_id?: number;
   from?: string;
   to?: string;
   limit?: number;
+  page?: number;
+  severity?: string;
 }
 
 export const getAllBitacora = (
   filters: BitacoraFilters,
   token: string
-): Promise<BitacoraInterface[]> =>
+): Promise<{ data: BitacoraInterface[]; total: number }> =>
   axios
     .get(urlApi + urlBitacora, {
       params: filters,

@@ -1,17 +1,18 @@
 import { useContext, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../../context/SesionContext";
-import { editEvento } from "../../../../api/Evento.api";
-import { createSolucion } from "../../../../api/Solucion.api";
-import { uploadImage } from "../../../../api/Upload.api";
-import { EventoInterface } from "../../../../interfaces/interfaces";
-import { DatePicker } from "../../../../components/ui/date-picker";
-import { Button } from "../../../../components/ui/button";
-import { Label } from "../../../../components/ui/label";
-import { Input } from "../../../../components/ui/input";
+import { SesionContext } from "../../context/SesionContext";
+import { resolverEvento } from "../../api/Evento.api";
+import { uploadImage } from "../../api/Upload.api";
+import { EventoInterface } from "../../interfaces/interfaces";
+import { DatePicker } from "../ui/date-picker";
+import { Loader2Icon } from "lucide-react";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import { Label } from "../ui/label";
+import { ImageDropzone } from "../ui/image-dropzone";
 import {
   Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../../../../components/ui/sheet";
+} from "../ui/sheet";
 
 interface Props {
   evento: EventoInterface | null;
@@ -26,20 +27,21 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
   const [date, setDate] = useState<Date>(new Date());
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const handleClose = () => {
     setDescription("");
     setDate(new Date());
     setImageFile(null);
+    setErrors({});
     setOpen(false);
   };
 
   const handleSave = async () => {
     if (!evento?.id) return;
-    if (!description.trim()) {
-      toast.warning("La descripción de la solución es requerida");
-      return;
-    }
+    const newErrors: Record<string, string> = {};
+    if (!description.trim()) newErrors.description = "La descripción de la solución es requerida";
+    if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
     setSaving(true);
     try {
       let imagePath = "";
@@ -53,26 +55,17 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
         imagePath = uploadResult;
       }
 
-      const solucionResult = await createSolucion(
-        { description, date, image: imagePath, id_evento: evento.id as number },
+      const status = await resolverEvento(
+        evento.id as number,
+        { description, date, image: imagePath },
         sesion.token
       );
-      if (solucionResult.status !== 200 && solucionResult.status !== 201) {
-        toast.error("Error al crear la solución");
-        setSaving(false);
-        return;
-      }
-
-      const eventoResult = await editEvento(
-        { ...evento, state: true, id_usuario: evento.id_usuario ?? sesion.usuario.id ?? 0 },
-        sesion.token
-      );
-      if (eventoResult.status === 200) {
+      if (status === 200) {
         toast.success("Evento resuelto");
         handleClose();
         onSuccess();
       } else {
-        toast.error("Solución creada pero no se pudo actualizar el estado");
+        toast.error("No se pudo resolver el evento");
       }
     } finally {
       setSaving(false);
@@ -81,15 +74,30 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent side="right">
-        <SheetHeader>
+      <SheetContent side="right" className="flex flex-col gap-0 p-0">
+        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
           <SheetTitle>Resolver Evento</SheetTitle>
           <SheetDescription>
             Documenta cómo se solucionó este evento para cerrarlo.
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex-1 overflow-y-auto px-4 space-y-4">
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          {evento && (
+            <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-1">
+              <p className="text-xs text-muted-foreground">Evento a resolver</p>
+              <p className="text-sm font-semibold leading-snug line-clamp-2">
+                {evento.description || `Evento #${evento.id}`}
+              </p>
+              {evento.poste?.name && (
+                <p className="text-xs text-muted-foreground">Poste: {evento.poste.name}</p>
+              )}
+              {evento.priority && (
+                <span className="inline-block text-xs font-medium text-destructive">Alta prioridad</span>
+              )}
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <Label>Fecha de resolución</Label>
             <DatePicker value={date} onSelect={(d) => d && setDate(d)} />
@@ -97,33 +105,25 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
 
           <div className="space-y-1.5">
             <Label>Descripción de la solución <span className="text-destructive">*</span></Label>
-            <textarea
-              className="w-full min-h-28 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 placeholder:text-muted-foreground resize-none"
+            <Textarea
+              className={`resize-none min-h-28${errors.description ? " border-destructive" : ""}`}
               placeholder="Describe cómo se resolvió el problema..."
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
             />
+            {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
           </div>
 
           <div className="space-y-1.5">
             <Label>Imagen (opcional)</Label>
-            <Input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-              className="cursor-pointer"
+            <ImageDropzone
+              file={imageFile}
+              onChange={setImageFile}
             />
-            {imageFile && (
-              <img
-                src={URL.createObjectURL(imageFile)}
-                alt="preview"
-                className="mt-2 max-h-40 rounded-lg object-contain border border-border"
-              />
-            )}
           </div>
         </div>
 
-        <SheetFooter>
+        <SheetFooter className="px-6 py-4 border-t border-border/40">
           <Button variant="outline" onClick={handleClose} disabled={saving}>
             Cancelar
           </Button>
@@ -132,7 +132,7 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
             disabled={saving}
             className="bg-primary hover:bg-primary/90 text-white"
           >
-            {saving ? "Guardando..." : "Marcar como resuelto"}
+            {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Marcar como resuelto"}
           </Button>
         </SheetFooter>
       </SheetContent>

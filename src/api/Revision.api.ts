@@ -1,30 +1,30 @@
 import axios from "axios";
-import { urlRevicion, urlApi } from "./url";
-import { RevicionInterface } from "../interfaces/interfaces";
+import { urlRevision, urlApi } from "./url";
+import { RevisionInterface } from "../interfaces/interfaces";
 
-export const getRevicion = (
+export const getRevision = (
   id_evento: number,
   token: string
-): Promise<RevicionInterface[]> => {
+): Promise<RevisionInterface[]> => {
   return axios
-    .get(urlApi + urlRevicion + id_evento, {
+    .get(urlApi + urlRevision + id_evento, {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((r) => r.data);
 };
 
-export const createRevicion = (
-  data: RevicionInterface,
+export const createRevision = (
+  data: RevisionInterface,
   token: string
 ): Promise<number> => {
-  const newData: RevicionInterface = {
+  const newData: RevisionInterface = {
     description: data.description,
     date: data.date,
     id_evento: data.id_evento,
   };
 
   return axios
-    .post(urlApi + urlRevicion, newData, {
+    .post(urlApi + urlRevision, newData, {
       headers: { Authorization: `Bearer ${token}` },
     })
     .then((response) => {
