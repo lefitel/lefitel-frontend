@@ -8,7 +8,7 @@ import { EventoInterface, RevisionInterface } from "../../interfaces/interfaces"
 import { url } from "../../api/url";
 import { getEventCriticality, getCriticalityMeta } from "../criticality";
 import logoUrl from "../../assets/images/logo.png";
-import tigoUrl from "../../assets/images/tigo.png";
+import tigoUrl from "../../assets/images/logo_tigo.png";
 
 // ─── Row layout ───────────────────────────────────────────────────────────────
 //  Row 1  Title  (logos overlay)

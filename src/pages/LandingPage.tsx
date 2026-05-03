@@ -20,7 +20,9 @@ import {
   MailIcon,
 } from "lucide-react";
 import logo from "../assets/images/logo.png";
-import tigoLogo from "../assets/images/tigo.png";
+import tigoLogo from "../assets/images/logo_tigo.png";
+import vivaLogo from "../assets/images/logo_viva.png";
+import entelLogo from "../assets/images/logo_entel.png";
 
 const ease = [0.16, 1, 0.3, 1] as const;
 
@@ -74,7 +76,7 @@ const STATS = [
   { value: 1661, label: "Postes registrados", suffix: "+" },
   { value: 99,   label: "Ciudades cubiertas", suffix: "" },
   { value: 1487, label: "Eventos gestionados", suffix: "+" },
-  { value: 17,   label: "Empresas clientes",   suffix: "" },
+  { value: 3,    label: "Empresas clientes",   suffix: "" },
 ];
 
 const SERVICES = [
@@ -403,10 +405,20 @@ const LandingPage = () => {
             <div className="bg-white/2.5 border border-white/6 rounded-3xl p-8 space-y-7">
               <div>
                 <p className="text-white/25 text-xs uppercase tracking-widest mb-5">Trabajamos con</p>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-6">
                   <img
                     src={tigoLogo}
                     alt="Tigo"
+                    className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
+                  />
+                  <img
+                    src={vivaLogo}
+                    alt="Viva"
+                    className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
+                  />
+                  <img
+                    src={entelLogo}
+                    alt="Entel"
                     className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
                   />
                 </div>
@@ -462,11 +474,15 @@ const LandingPage = () => {
               <p className="text-white/25 text-xs uppercase tracking-widest">Contacto</p>
               <div className="flex items-center gap-2.5 text-sm text-white/45">
                 <MailIcon className="h-4 w-4 text-orange-400 shrink-0" />
-                contacto@osefi.com.bo
+                Osefibolivia@gmail.com
               </div>
               <div className="flex items-center gap-2.5 text-sm text-white/45">
                 <PhoneIcon className="h-4 w-4 text-orange-400 shrink-0" />
-                +591 XXX XXXX
+                +591 76846009
+              </div>
+              <div className="flex items-center gap-2.5 text-sm text-white/45">
+                <MapPinIcon className="h-4 w-4 text-orange-400 shrink-0" />
+                Calle José Peña Castellón No 1065
               </div>
             </div>
 
