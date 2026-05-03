@@ -60,14 +60,16 @@ export const AppSidebar = () => {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" className="pointer-events-none">
-              <div className="flex shrink-0 aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-secondary p-1.5">
-                <img src={logo} alt="Osefi srl" className="h-full w-full object-contain" />
-              </div>
-              <div className="flex flex-col gap-0.5 leading-none">
-                <span className="font-semibold">Osefi srl</span>
-                <span className="text-xs text-muted-foreground">Sistema de gestión</span>
-              </div>
+            <SidebarMenuButton size="lg" asChild>
+              <Link to="/">
+                <div className="flex shrink-0 aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-secondary p-1.5">
+                  <img src={logo} alt="Osefi srl" className="h-full w-full object-contain" />
+                </div>
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">Osefi srl</span>
+                  <span className="text-xs text-muted-foreground">Sistema de gestión</span>
+                </div>
+              </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

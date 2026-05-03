@@ -49,6 +49,7 @@ import {
 } from "../../components/ui/dropdown-menu";
 import DataTable from "../../components/table/DataTable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
 
 const TYPE_STYLES: Record<string, string> = {
   "Poste": "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -83,6 +84,7 @@ const FilesPage = () => {
   const [orphansDialogOpen, setOrphansDialogOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<OrphanFileInfo | null>(null);
   const [previewFile, setPreviewFile] = useState<OrphanFileInfo | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "orphan">("all");
 
   const [entityStats, setEntityStats] = useState<EntityImageStats | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -152,6 +154,12 @@ const FilesPage = () => {
   const totalSize = files.reduce((acc, f) => acc + f.size, 0);
   const orphanSize = orphans.reduce((acc, f) => acc + f.size, 0);
 
+  const filteredFiles = useMemo(() => {
+    if (statusFilter === "active") return files.filter((f) => !f.isOrphan);
+    if (statusFilter === "orphan") return orphans;
+    return files;
+  }, [files, orphans, statusFilter]);
+
   const columns = useMemo<ColumnDef<OrphanFileInfo>[]>(() => [
     {
       id: "preview",
@@ -163,7 +171,7 @@ const FilesPage = () => {
           <div className="w-12 h-12 bg-muted/50 rounded-lg overflow-hidden border shadow-sm flex items-center justify-center relative group/thumb cursor-zoom-in"
             onClick={() => setPreviewFile(row.original)}>
             <img
-              src={url + row.original.name}
+              src={url + "/" + row.original.name}
               alt={row.original.name}
               className="h-full w-full rounded-md object-cover transition-transform group-hover/thumb:scale-110"
               onError={(e) => {
@@ -353,16 +361,25 @@ const FilesPage = () => {
         />
 
         <DataTable
-          data={files}
+          data={filteredFiles}
           loading={loading}
           columns={columns}
           getRowId={(f) => f.name}
           onRetry={load}
           actions={
             <div className="flex gap-2">
-              <Button variant="outline" onClick={load} disabled={loading} className="gap-2 h-8">
+              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "orphan")}>
+                <SelectTrigger className="h-8 w-40 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos ({files.length})</SelectItem>
+                  <SelectItem value="active">En uso ({files.length - orphans.length})</SelectItem>
+                  <SelectItem value="orphan">Huérfanos ({orphans.length})</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button variant="outline" size="icon" onClick={load} disabled={loading} className="h-8 w-8">
                 <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                <span className="hidden sm:inline">Actualizar</span>
               </Button>
               {orphans.length > 0 && can(rol, "archivos", "archivar") && (
                 <Button variant="destructive" disabled={deletingOrphans} onClick={() => setOrphansDialogOpen(true)} className="gap-2 h-8">
@@ -464,7 +481,7 @@ const FilesPage = () => {
       {/* Lightbox */}
       {previewFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm cursor-zoom-out" onClick={() => setPreviewFile(null)}>
-          <img src={url + previewFile.name} alt={previewFile.name} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
+          <img src={url + "/" + previewFile.name} alt={previewFile.name} className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
         </div>
       )}
 
