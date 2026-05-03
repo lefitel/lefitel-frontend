@@ -366,6 +366,7 @@ const FilesPage = () => {
           columns={columns}
           getRowId={(f) => f.name}
           onRetry={load}
+          initialSorting={[{ id: "createdAt", desc: true }]}
           actions={
             <div className="flex gap-2">
               <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as "all" | "active" | "orphan")}>

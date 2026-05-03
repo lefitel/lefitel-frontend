@@ -62,6 +62,7 @@ interface Props<T extends IGeneral> {
     onRowClick?: (row: T) => void;
     getRowClassName?: (row: T) => string;
     initialColumnVisibility?: VisibilityState;
+    initialSorting?: SortingState;
     getRowId?: (row: T) => string;
     rowSize?: RowSize;
     serverSide?: ServerSideProps;
@@ -79,6 +80,7 @@ const DataTable = <T extends IGeneral>({
     onRowClick,
     getRowClassName,
     initialColumnVisibility = {},
+    initialSorting = [],
     getRowId,
     rowSize = "sm",
     serverSide,
@@ -88,7 +90,7 @@ const DataTable = <T extends IGeneral>({
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
     const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
-    const [sorting, setSorting] = useState<SortingState>([]);
+    const [sorting, setSorting] = useState<SortingState>(initialSorting);
     const [pagination, setPagination] = useState({
         pageIndex: 0,
         pageSize: hasPaginated ? initialPageSize : 1_000_000,
