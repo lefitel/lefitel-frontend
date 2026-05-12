@@ -16,6 +16,8 @@ export interface DashboardEvento {
     propietario?: { name: string } | null;
   } | null;
   revisions?: { id: number; date: Date }[];
+  solucions?: { id: number; date: Date }[];
+  eventoObs?: { id: number; ob?: { id: number; name: string; criticality?: number | null } | null }[];
 }
 
 export interface DashboardPoste {

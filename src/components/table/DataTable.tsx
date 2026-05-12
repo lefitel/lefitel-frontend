@@ -45,10 +45,16 @@ const ROW_SIZE_CLASS: Record<RowSize, string> = {
     lg: "py-3",
 };
 
+export interface ActiveFilter {
+    column: string;
+    value: string;
+}
+
 interface ServerSideProps {
     total: number;
     onPageChange: (page: number, pageSize: number) => void;
-    onFilterChange: (columnId: string, value: string) => void;
+    onFilterChange: (filters: ActiveFilter[]) => void;
+    onSortingChange?: (sorting: SortingState) => void;
 }
 
 interface Props<T extends IGeneral> {
@@ -102,16 +108,23 @@ const DataTable = <T extends IGeneral>({
     useEffect(() => {
         if (!serverSide) return;
         if (isFirstRender.current) { isFirstRender.current = false; return; }
-        const filter = columnFilters[0];
         const timer = setTimeout(() => {
-            if (filter) {
-                serverSide.onFilterChange(filter.id, String(filter.value ?? ""));
-            } else {
-                serverSide.onFilterChange("", "");
-            }
+            serverSide.onFilterChange(
+                columnFilters
+                    .filter(f => typeof f.value === "string" && (f.value as string).trim() !== "")
+                    .map(f => ({ column: f.id, value: String(f.value) }))
+            );
         }, 300);
         return () => clearTimeout(timer);
     }, [columnFilters]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Server-side: notify sorting changes (skip on mount)
+    const isFirstSortRender = useRef(true);
+    useEffect(() => {
+        if (!serverSide?.onSortingChange) return;
+        if (isFirstSortRender.current) { isFirstSortRender.current = false; return; }
+        serverSide.onSortingChange(sorting);
+    }, [sorting]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Server-side: notify page changes (skip on mount)
     const isFirstPageRender = useRef(true);
@@ -135,7 +148,9 @@ const DataTable = <T extends IGeneral>({
         ...(serverSide ? {
             manualPagination: true,
             manualFiltering: true,
+            manualSorting: true,
             rowCount: serverSide.total,
+            isMultiSortEvent: () => true,
         } : {}),
         enableRowSelection: true,
         onRowSelectionChange: setRowSelection,
@@ -237,8 +252,8 @@ const DataTable = <T extends IGeneral>({
             })()}
             <div className="relative overflow-hidden rounded-lg border">
                 {loading && (
-                    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/60 backdrop-blur-[1px]">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <div className="absolute inset-x-0 top-0 z-10 h-0.5 overflow-hidden">
+                        <div className="h-full w-full origin-left animate-[progress_1.2s_ease-in-out_infinite] bg-primary" />
                     </div>
                 )}
                 <Table>
@@ -260,13 +275,16 @@ const DataTable = <T extends IGeneral>({
                                                 >
                                                     {flexRender(header.column.columnDef.header, header.getContext())}
                                                     {canSort && (
-                                                        <span className="text-muted-foreground/50">
+                                                        <span className="text-muted-foreground/50 flex items-center gap-0.5">
                                                             {sorted === "asc" ? (
                                                                 <ArrowUpIcon className="h-3.5 w-3.5" />
                                                             ) : sorted === "desc" ? (
                                                                 <ArrowDownIcon className="h-3.5 w-3.5" />
                                                             ) : (
                                                                 <ArrowUpDownIcon className="h-3.5 w-3.5" />
+                                                            )}
+                                                            {sorted && table.getState().sorting.length > 1 && (
+                                                                <span className="text-[10px] leading-none">{header.column.getSortIndex() + 1}</span>
                                                             )}
                                                         </span>
                                                     )}

@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, SortingState } from "@tanstack/react-table";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon, CheckIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -34,7 +34,7 @@ import PermissionGuard from "../../../components/PermissionGuard";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
-const HEADERS = ["#", "Nombre", "Tramo", "Material", "Propietario", "Lat", "Lng", "Registrado"];
+const HEADERS = ["#", "Nombre", "Tramo", "Material", "Propietario", "Coordenadas", "Registrado"];
 const PRIMARY: [number, number, number] = [0, 31, 93];
 const ACCENT: [number, number, number] = [240, 244, 255];
 const filename = (ext: string) => `postes_${new Date().toISOString().slice(0, 10)}.${ext}`;
@@ -43,11 +43,10 @@ const toRows = (list: PosteInterface[]) =>
     list.map((p, i) => [
         String(i + 1),
         p.name,
-        `${p.ciudadA?.name ?? ""} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" />${p.ciudadB?.name ?? ""}`,
+        `${p.ciudadA?.name ?? ""} > ${p.ciudadB?.name ?? ""}`,
         p.material?.name ?? "",
         p.propietario?.name ?? "",
-        p.lat ? String(p.lat) : "",
-        p.lng ? String(p.lng) : "",
+        p.lat != null && p.lng != null ? `${p.lat}, ${p.lng}` : "",
         p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-ES") : "",
     ]);
 
@@ -94,8 +93,7 @@ const exportExcel = async (list: PosteInterface[]) => {
         { key: "tramo", width: 30 },
         { key: "mat", width: 18 },
         { key: "prop", width: 20 },
-        { key: "lat", width: 14 },
-        { key: "lng", width: 14 },
+        { key: "coords", width: 26 },
         { key: "fecha", width: 14 },
     ];
 
@@ -172,9 +170,8 @@ const exportPdf = async (list: PosteInterface[]) => {
             2: { cellWidth: 44 }, // Tramo
             3: { cellWidth: 28 }, // Material
             4: { cellWidth: 32 }, // Propietario
-            5: { cellWidth: 22 }, // Lat
-            6: { cellWidth: 22 }, // Lng
-            7: { cellWidth: 22 }, // Registrado
+            5: { cellWidth: 36 }, // Coordenadas
+            6: { cellWidth: 22 }, // Registrado
         },
         margin: { left: 10, right: 10 },
         tableLineColor: [208, 216, 239],
@@ -208,8 +205,8 @@ const PostePage = () => {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
-    const [filterColumn, setFilterColumn] = useState("");
-    const [filterValue, setFilterValue] = useState("");
+    const [activeFilters, setActiveFilters] = useState<{ column: string; value: string }[]>([]);
+    const [sorting, setSorting] = useState<SortingState>([]);
 
     const [archivedList, setArchivedList] = useState<PosteInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
@@ -234,9 +231,11 @@ const PostePage = () => {
     const isAdmin = can(rol, "postes", "archivar");
 
 
-    const load = useCallback((p = page, ps = pageSize, fc = filterColumn, fv = filterValue) => {
+    const load = useCallback((p = page, ps = pageSize, filters = activeFilters, sort = sorting) => {
+        const sortBy = sort.map(s => s.id);
+        const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
         setLoading(true);
-        getPoste(sesion.token, { page: p, limit: ps, filterColumn: fc || undefined, filterValue: fv || undefined })
+        getPoste(sesion.token, { page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar postes"); setList(null); })
             .finally(() => setLoading(false));
@@ -400,6 +399,28 @@ const PostePage = () => {
             },
         },
         {
+            id: "coords",
+            header: "Coordenadas",
+            enableSorting: false,
+            enableColumnFilter: false,
+            cell: ({ row }) => {
+                const lat = row.original.lat;
+                const lng = row.original.lng;
+                if (lat == null || lng == null) return <span className="text-xs text-muted-foreground">—</span>;
+                return (
+                    <a
+                        href={`https://www.google.com/maps?q=${lat},${lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {lat.toFixed(6)}, {lng.toFixed(6)}
+                    </a>
+                );
+            },
+        },
+        {
             id: "material",
             header: "Material",
             cell: ({ row }) => {
@@ -497,6 +518,16 @@ const PostePage = () => {
                     </span>
                 );
             },
+        },
+        {
+            accessorKey: "date",
+            header: "Fecha en campo",
+            enableColumnFilter: false,
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {row.original.date ? new Date(row.original.date).toLocaleDateString("es-ES") : "—"}
+                </span>
+            ),
         },
         {
             accessorKey: "createdAt",
@@ -627,13 +658,14 @@ const PostePage = () => {
                     data={list}
                     loading={loading}
                     columns={columns}
-                    onRetry={() => load(page, pageSize, filterColumn, filterValue)}
+                    onRetry={() => load(page, pageSize, activeFilters, sorting)}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     serverSide={{
                         total,
-                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
-                        onFilterChange: (col, val) => { setFilterColumn(col); setFilterValue(val); setPage(1); load(1, pageSize, col, val); },
+                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, activeFilters, sorting); },
+                        onFilterChange: (filters) => { setActiveFilters(filters); setPage(1); load(1, pageSize, filters, sorting); },
+                        onSortingChange: (s) => { setSorting(s); setPage(1); load(1, pageSize, activeFilters, s); },
                     }}
                     actions={<>
                         <DropdownMenu>

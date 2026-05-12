@@ -14,17 +14,25 @@ export interface PostePaginatedResponse {
 export interface GetPosteParams {
   page?: number;
   limit?: number;
-  filterColumn?: string;
-  filterValue?: string;
   archived?: boolean;
+  sortBy?: string[];
+  sortOrder?: ('asc' | 'desc')[];
+  filters?: { column: string; value: string }[];
 }
 
 export const getPoste = (token: string, params: GetPosteParams = {}): Promise<PostePaginatedResponse> => {
-  const { archived, ...rest } = params;
+  const { archived, filters, ...rest } = params;
   return axios
     .get(urlApi + urlPoste, {
       headers: { Authorization: `Bearer ${token}` },
-      params: { ...(archived ? { archived: true } : {}), ...rest },
+      params: {
+        ...(archived ? { archived: true } : {}),
+        ...(filters?.length ? {
+          filterColumn: filters.map(f => f.column),
+          filterValue: filters.map(f => f.value),
+        } : {}),
+        ...rest,
+      },
     })
     .then((r) => r.data);
 };

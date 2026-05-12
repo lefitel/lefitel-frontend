@@ -24,6 +24,8 @@ export interface BitacoraFilters {
   limit?: number;
   page?: number;
   severity?: string;
+  sortBy?: string[];
+  sortOrder?: ('asc' | 'desc')[];
 }
 
 export const getAllBitacora = (

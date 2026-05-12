@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, SortingState } from "@tanstack/react-table";
 import { SesionContext } from "../../../context/SesionContext";
 import { getAllBitacora, BitacoraFilters } from "../../../api/Bitacora.api";
 import { getUsuario } from "../../../api/Usuario.api";
@@ -189,6 +189,7 @@ const BitacoraPage = () => {
   const [userId,   setUserId]   = useState("all");
   const [pageSize, setPageSize] = useState(50);
   const [total,    setTotal]    = useState(0);
+  const [sorting,  setSorting]  = useState<SortingState>([]);
   const [rows,     setRows]     = useState<BitacoraInterface[] | null>(null);
   const [loading,  setLoading]  = useState(false);
 
@@ -209,10 +210,17 @@ const BitacoraPage = () => {
   const actionRef   = useRef(action);   actionRef.current   = action;
   const userIdRef   = useRef(userId);   userIdRef.current   = userId;
   const pageSizeRef = useRef(pageSize); pageSizeRef.current = pageSize;
+  const sortingRef  = useRef(sorting);  sortingRef.current  = sorting;
 
   const doFetch = useCallback(async (p: number, ps: number) => {
     setLoading(true);
-    const params: BitacoraFilters = { page: p, limit: ps };
+    const sort = sortingRef.current;
+    const sortBy = sort.map(s => s.id);
+    const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
+    const params: BitacoraFilters = {
+      page: p, limit: ps,
+      ...(sortBy.length ? { sortBy, sortOrder } : {}),
+    };
     const f = fromRef.current, t = toRef.current;
     if (f) { const d = new Date(f); d.setHours(0, 0, 0, 0);    params.from = d.toISOString(); }
     if (t) { const d = new Date(t); d.setHours(23, 59, 59, 0); params.to   = d.toISOString(); }
@@ -446,6 +454,7 @@ const BitacoraPage = () => {
           total,
           onPageChange: handlePageChange,
           onFilterChange: () => {},
+          onSortingChange: (s) => { setSorting(s); sortingRef.current = s; doFetch(1, pageSizeRef.current); },
         }}
       />
     </div>

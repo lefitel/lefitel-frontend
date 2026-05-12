@@ -36,6 +36,9 @@ export function getPeriodBounds(period: Period) {
       prevEnd: new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59),
     };
   }
+  if (period === "custom") {
+    return { start: now, end: now, prevStart: now, prevEnd: now };
+  }
   return {
     start: new Date(2020, 0, 1),
     end: now,

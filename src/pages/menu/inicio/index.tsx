@@ -59,9 +59,9 @@ const InicioPage = () => {
 
       <AlertBanner alerts={d.criticalAlerts} loading={d.loading} />
 
-      <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} />
+      <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} setCustomRange={d.setCustomRange} currentDateRange={d.currentDateRange} />
 
-      <ActivityChart chartData={d.chartData} loading={d.loading} xAxisLabel={d.xAxisLabel} />
+      <ActivityChart chartData={d.chartData} loading={d.loading} xAxisLabel={d.xAxisLabel} period={d.period} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <OperationsMap
@@ -75,6 +75,7 @@ const InicioPage = () => {
         />
         <UrgentEventsCard
           urgentEvents={d.urgentEvents}
+          criticalObsEvents={d.criticalObsEvents}
           loading={d.loading}
         />
       </div>

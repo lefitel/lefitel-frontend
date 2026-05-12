@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
+import { ColumnDef, SortingState } from "@tanstack/react-table";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -32,7 +32,7 @@ import PermissionGuard from "../../../components/PermissionGuard";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
-const HEADERS = ["#", "Poste", "Tramo", "Propietario", "Descripción", "Estado", "Prioritario", "Última revisión", "Observaciones"];
+const HEADERS = ["#", "Poste", "Tramo", "Propietario", "Lat", "Lng", "Descripción", "Estado", "Prioritario", "Última revisión", "Observaciones"];
 const PRIMARY: [number, number, number] = [0, 31, 93];
 const ACCENT: [number, number, number] = [240, 244, 255];
 const filename = (ext: string) => `eventos_${new Date().toISOString().slice(0, 10)}.${ext}`;
@@ -41,8 +41,10 @@ const toRows = (list: EventoInterface[]) =>
     list.map((e, i) => [
         String(i + 1),
         e.poste?.name ?? "",
-        `${e.poste?.ciudadA?.name ?? ""} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" />${e.poste?.ciudadB?.name ?? ""}`,
+        `${e.poste?.ciudadA?.name ?? ""} > ${e.poste?.ciudadB?.name ?? ""}`,
         e.poste?.propietario?.name ?? "",
+        e.poste?.lat != null ? String(e.poste.lat) : "",
+        e.poste?.lng != null ? String(e.poste.lng) : "",
         e.description,
         e.state ? "Resuelto" : "Pendiente",
         e.priority ? "Sí" : "No",
@@ -94,6 +96,8 @@ const exportExcel = async (list: EventoInterface[]) => {
         { key: "poste", width: 18 },
         { key: "tramo", width: 28 },
         { key: "prop", width: 18 },
+        { key: "lat", width: 14 },
+        { key: "lng", width: 14 },
         { key: "desc", width: 32 },
         { key: "estado", width: 12 },
         { key: "prior", width: 12 },
@@ -172,12 +176,14 @@ const exportPdf = async (list: EventoInterface[]) => {
             0: { cellWidth: 8 }, // #
             1: { cellWidth: 24 }, // Poste
             2: { cellWidth: 38 }, // Tramo
-            3: { cellWidth: 26 }, // Propietario
-            4: { cellWidth: 40 }, // Descripción
-            5: { cellWidth: 20 }, // Estado
-            6: { cellWidth: 20 }, // Prioritario
-            7: { cellWidth: 24 }, // Última rev.
-            8: { cellWidth: 49 }, // Observaciones
+            3: { cellWidth: 24 }, // Propietario
+            4: { cellWidth: 18 }, // Lat
+            5: { cellWidth: 18 }, // Lng
+            6: { cellWidth: 36 }, // Descripción
+            7: { cellWidth: 18 }, // Estado
+            8: { cellWidth: 18 }, // Prioritario
+            9: { cellWidth: 22 }, // Última rev.
+            10: { cellWidth: 35 }, // Observaciones
         },
         margin: { left: 10, right: 10 },
         tableLineColor: [208, 216, 239],
@@ -211,8 +217,8 @@ const EventoPage = () => {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
-    const [filterColumn, setFilterColumn] = useState("");
-    const [filterValue, setFilterValue] = useState("");
+    const [activeFilters, setActiveFilters] = useState<{ column: string; value: string }[]>([]);
+    const [sorting, setSorting] = useState<SortingState>([]);
 
     const [archivedList, setArchivedList] = useState<EventoInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
@@ -234,9 +240,11 @@ const EventoPage = () => {
     const canAdd = can(rol, "eventos", "crear");
     const canEdit = can(rol, "eventos", "editar");
 
-    const load = useCallback((p = page, ps = pageSize, fc = filterColumn, fv = filterValue) => {
+    const load = useCallback((p = page, ps = pageSize, filters = activeFilters, sort = sorting) => {
+        const sortBy = sort.map(s => s.id);
+        const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
         setLoading(true);
-        getEvento(sesion.token, { page: p, limit: ps, filterColumn: fc || undefined, filterValue: fv || undefined })
+        getEvento(sesion.token, { page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar eventos"); setList(null); })
             .finally(() => setLoading(false));
@@ -348,6 +356,28 @@ const EventoPage = () => {
             ),
         },
         {
+            id: "coords",
+            header: "Coordenadas",
+            enableSorting: false,
+            enableColumnFilter: false,
+            cell: ({ row }) => {
+                const lat = row.original.poste?.lat;
+                const lng = row.original.poste?.lng;
+                if (lat == null || lng == null) return <span className="text-xs text-muted-foreground">—</span>;
+                return (
+                    <a
+                        href={`https://www.google.com/maps?q=${lat},${lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline whitespace-nowrap"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {lat.toFixed(6)}, {lng.toFixed(6)}
+                    </a>
+                );
+            },
+        },
+        {
             id: "tramo",
             header: "Tramo",
             cell: ({ row }) => {
@@ -365,6 +395,7 @@ const EventoPage = () => {
         {
             id: "propietario",
             header: "Propietario",
+            accessorFn: (row) => row.poste?.propietario?.name ?? null,
             cell: ({ row }) => (
                 <span className="text-sm">{row.original.poste?.propietario?.name ?? "—"}</span>
             ),
@@ -376,6 +407,17 @@ const EventoPage = () => {
             cell: ({ row }) => row.original.state
                 ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
                 : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>,
+        },
+        {
+            id: "fechaResolucion",
+            header: "Fecha resolución",
+            enableColumnFilter: false,
+            accessorFn: (row) => row.solucions?.[0]?.date ?? null,
+            cell: ({ row }) => {
+                const fecha = row.original.solucions?.[0]?.date;
+                if (!fecha) return <span className="text-xs text-muted-foreground">—</span>;
+                return <span className="text-xs whitespace-nowrap">{new Date(fecha).toLocaleDateString("es-ES")}</span>;
+            },
         },
         {
             accessorKey: "priority",
@@ -410,6 +452,11 @@ const EventoPage = () => {
         {
             id: "ultimaRev",
             header: "Última revisión",
+            accessorFn: (row) => {
+                const revs = row.revisions ?? [];
+                if (!revs.length) return null;
+                return Math.max(...revs.map((r) => new Date(r.date).getTime()));
+            },
             cell: ({ row }) => {
                 const revs = row.original.revisions ?? [];
                 if (!revs.length) return <span className="text-xs text-muted-foreground">—</span>;
@@ -420,6 +467,7 @@ const EventoPage = () => {
         {
             id: "usuario",
             header: "Creador",
+            accessorFn: (row) => row.usuario ? `${row.usuario.name} ${row.usuario.lastname}` : null,
             cell: ({ row }) => {
                 const u = row.original.usuario;
                 return (
@@ -603,13 +651,14 @@ const EventoPage = () => {
                     data={list}
                     loading={loading}
                     columns={columns}
-                    onRetry={() => load(page, pageSize, filterColumn, filterValue)}
+                    onRetry={() => load(page, pageSize, activeFilters, sorting)}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     serverSide={{
                         total,
-                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, filterColumn, filterValue); },
-                        onFilterChange: (col, val) => { setFilterColumn(col); setFilterValue(val); setPage(1); load(1, pageSize, col, val); },
+                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, activeFilters, sorting); },
+                        onFilterChange: (filters) => { setActiveFilters(filters); setPage(1); load(1, pageSize, filters, sorting); },
+                        onSortingChange: (s) => { setSorting(s); setPage(1); load(1, pageSize, activeFilters, s); },
                     }}
                     actions={<>
                         <DropdownMenu>

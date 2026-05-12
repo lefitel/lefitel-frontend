@@ -2,10 +2,12 @@ import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
+import { InfoIcon } from "lucide-react";
 import { MapContainer, Popup, CircleMarker } from "react-leaflet";
 import ThemedTileLayer from "../../../components/map/ThemedTileLayer";
 import { Card, CardContent } from "../../../components/ui/card";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
 import { PosteInterface, EventoInterface } from "../../../interfaces/interfaces";
 import { DashboardEvento } from "../../../api/dashboard.api";
 import { latExample, lngExample } from "../../../data/example";
@@ -42,12 +44,30 @@ export function OperationsMap({
         <div className="isolate h-full relative">
 
           <div className="absolute top-3 left-3 z-1000 bg-background/90 supports-backdrop-filter:backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm border border-border/60">
-            <p className="text-sm font-semibold leading-none tracking-tight">Mapa de Operaciones</p>
+            <div className="flex items-center gap-1.5">
+              <p className="text-sm font-semibold leading-none tracking-tight">Mapa de Operaciones</p>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="Información sobre el mapa" className="text-muted-foreground/70 hover:text-foreground transition-colors">
+                      <InfoIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <span className="block text-left leading-relaxed normal-case space-y-1.5">
+                      <span className="block"><strong className="font-semibold">Revisados:</strong> postes con al menos una revisión registrada en el período seleccionado.</span>
+                      <span className="block"><strong className="font-semibold">Pendientes:</strong> eventos sin resolver que tienen revisión en el período. Rojo = alta prioridad.</span>
+                      <span className="block"><strong className="font-semibold">Solucionados:</strong> eventos cuya fecha de resolución cae dentro del período seleccionado.</span>
+                    </span>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
 
           <SegmentedControl
             options={[
-              { value: "postes", label: "Postes" },
+              { value: "postes", label: "Revisados" },
               { value: "pendientes", label: "Pendientes" },
               { value: "solucionados", label: "Solucionados" },
             ]}
@@ -61,7 +81,7 @@ export function OperationsMap({
             {mapTab === "postes" && (
               <span className="flex items-center gap-1.5">
                 <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#596BAB" }} />
-                Poste
+                Poste revisado
               </span>
             )}
             {mapTab === "pendientes" && (

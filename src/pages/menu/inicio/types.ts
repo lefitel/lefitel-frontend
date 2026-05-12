@@ -1,6 +1,6 @@
 import { DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
 
-export type Period = "fortnight" | "month" | "quarter" | "year" | "all";
+export type Period = "fortnight" | "month" | "quarter" | "year" | "all" | "custom";
 export type MapTab = "postes" | "pendientes" | "solucionados";
 
 export const PERIOD_LABELS: Record<Period, string> = {
@@ -9,7 +9,13 @@ export const PERIOD_LABELS: Record<Period, string> = {
   quarter: "3 meses",
   year: "Este año",
   all: "Todo",
+  custom: "Personalizado",
 };
+
+export interface CustomRange {
+  start: Date;
+  end: Date;
+}
 
 export const MONTH_NAMES = [
   "Ene", "Feb", "Mar", "Abr", "May", "Jun",
@@ -19,23 +25,18 @@ export const MONTH_NAMES = [
 export interface KpiData {
   postesTotal: number;
   postesConIncidencias: number;
+  postesConEventos: number;
   eventosTotal: number;
   eventosResueltosTotal: number;
-  postesCurr: number;
-  postesPrev: number;
   pendGlobal: number;
-  pendCurr: number;
-  pendPrev: number;
-  solCurr: number;
-  solPrev: number;
-  resRateCurr: number;
-  resRatePrev: number;
-  openedCurr: number;
-  openedPrev: number;
-  reviewedCurr: number;
-  reviewedPrev: number;
-  reviewedSolved: number;
-  reviewedPending: number;
+  postesCurr: number;
+  postesRevisadosCurr: number;
+  postesRevisadosPrev: number;
+  postesPendientesRevisadosCurr: number;
+  postesSolucionadosCurr: number;
+  postesSolucionadosPrev: number;
+  postesActivosCurr: number;
+  postesActivosPrev: number;
 }
 
 export type MapMarker =
