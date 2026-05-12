@@ -34,10 +34,15 @@ import PermissionGuard from "../../../components/PermissionGuard";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
-const HEADERS = ["#", "Nombre", "Tramo", "Material", "Propietario", "Coordenadas", "Registrado"];
+const HEADERS = ["#", "Nombre", "Tramo", "Material", "Propietario", "Lat", "Lng", "Fecha en campo"];
 const PRIMARY: [number, number, number] = [0, 31, 93];
 const ACCENT: [number, number, number] = [240, 244, 255];
-const filename = (ext: string) => `postes_${new Date().toISOString().slice(0, 10)}.${ext}`;
+const filename = (ext: string) => {
+    const n = new Date();
+    const date = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}`;
+    const time = `${String(n.getHours()).padStart(2, "0")}${String(n.getMinutes()).padStart(2, "0")}${String(n.getSeconds()).padStart(2, "0")}`;
+    return `postes_${date}_${time}.${ext}`;
+};
 
 const toRows = (list: PosteInterface[]) =>
     list.map((p, i) => [
@@ -46,8 +51,9 @@ const toRows = (list: PosteInterface[]) =>
         `${p.ciudadA?.name ?? ""} > ${p.ciudadB?.name ?? ""}`,
         p.material?.name ?? "",
         p.propietario?.name ?? "",
-        p.lat != null && p.lng != null ? `${p.lat}, ${p.lng}` : "",
-        p.createdAt ? new Date(p.createdAt).toLocaleDateString("es-ES") : "",
+        p.lat != null ? String(p.lat) : "",
+        p.lng != null ? String(p.lng) : "",
+        p.date ? new Date(p.date).toLocaleDateString("es-ES") : "",
     ]);
 
 const fetchLogo = async () => {
@@ -71,21 +77,21 @@ const exportExcel = async (list: PosteInterface[]) => {
     const COLS = HEADERS.length;
 
     const imgId = wb.addImage({ buffer: logoBuffer, extension: "png" });
-    ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 60, height: 60 } });
+    ws.mergeCells(1, 1, 3, 2);
+    ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 72, height: 72 } });
 
-    ws.mergeCells(1, 2, 1, COLS);
-    ws.mergeCells(2, 2, 2, COLS);
-    ws.mergeCells(3, 2, 3, COLS);
+    ws.mergeCells(1, 3, 1, COLS);
+    ws.mergeCells(2, 3, 2, COLS);
+    ws.mergeCells(3, 3, 3, COLS);
 
-    const tc = ws.getCell("B1");
+    const tc = ws.getCell("C1");
     tc.value = "OSEFI SRL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
-    const sc = ws.getCell("B2");
+    const sc = ws.getCell("C2");
     sc.value = "Reporte de Postes"; sc.font = { size: 12, color: { argb: "FF374151" } }; sc.alignment = { vertical: "middle" };
-    const dc = ws.getCell("B3");
-    dc.value = `Generado el ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}`;
+    const dc = ws.getCell("C3");
+    dc.value = `Generado el ${new Date().toLocaleString("es-ES", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
     dc.font = { size: 9, color: { argb: "FF9CA3AF" } }; dc.alignment = { vertical: "middle" };
-    ws.getRow(1).height = 22; ws.getRow(2).height = 18; ws.getRow(3).height = 16;
-    ws.addRow([]);
+    ws.getRow(1).height = 26; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
 
     ws.columns = [
         { key: "num", width: 6 },
@@ -93,24 +99,33 @@ const exportExcel = async (list: PosteInterface[]) => {
         { key: "tramo", width: 30 },
         { key: "mat", width: 18 },
         { key: "prop", width: 20 },
-        { key: "coords", width: 26 },
+        { key: "lat", width: 14 },
+        { key: "lng", width: 14 },
         { key: "fecha", width: 14 },
     ];
 
     const hr = ws.addRow(HEADERS);
     hr.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    hr.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF001F5D" } };
     hr.alignment = { vertical: "middle", horizontal: "center" };
     hr.height = 20;
+    for (let c = 1; c <= COLS; c++) {
+        hr.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF001F5D" } };
+    }
+    ws.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
+    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: COLS } };
 
     toRows(list).forEach((row, i) => {
         const r = ws.addRow(row);
         r.height = 16; r.alignment = { vertical: "middle" };
-        if (i % 2 === 1) r.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F4FF" } };
+        if (i % 2 === 1) {
+            for (let c = 1; c <= COLS; c++) {
+                r.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F4FF" } };
+            }
+        }
     });
 
     ws.eachRow((row, rowNum) => {
-        if (rowNum < 5) return;
+        if (rowNum < 4) return;
         row.eachCell((cell) => {
             cell.border = {
                 top: { style: "thin", color: { argb: "FFD0D8EF" } },
