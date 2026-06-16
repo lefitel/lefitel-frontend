@@ -22,15 +22,14 @@ const R = { TITLE: 1, DATE: 2, KPI: 3, GROUP: 4, HEADER: 5, DATA_START: 6 } as c
 // ─── Column map (1-indexed) ───────────────────────────────────────────────────
 //  1  #            2  Nmr Poste    3  Propietario
 //  4  Latitud*     5  Longitud*    6  Tramo
-//  7  Fecha        8  Hora         9  Descripción
-// 10  Criticidad  11  Prioritario 12  Revisiones  13  Estado      ← Evento group
-// 14  Foto Evento
-// 15  Fecha Sol   16  Hora Sol    17  Desc Sol    18  Foto Sol
+//  7  Fecha rev.   8  Descripción  9  Criticidad
+// 10  Prioritario 11  Revisiones  12  Estado      13  Foto Evento  ← Evento group
+// 14  Fecha Sol   15  Desc Sol    16  Foto Sol                     ← Solución group
 //
 // * vertical text, narrow column
-const COL_COUNT   = 18;
-const COL_IMG_EVT = 14;
-const COL_IMG_SOL = 18;
+const COL_COUNT   = 16;
+const COL_IMG_EVT = 13;
+const COL_IMG_SOL = 16;
 const VERTICAL_COLS = new Set([4, 5]);
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
@@ -129,23 +128,22 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   const ws = wb.addWorksheet("Reporte");
 
   ws.columns = [
-    { key: "num",      width: 5  },  // 1
-    { key: "poste",    width: 14 },  // 2
-    { key: "prop",     width: 18 },  // 3
-    { key: "lat",      width: 7  },  // 4  vertical
-    { key: "lng",      width: 7  },  // 5  vertical
-    { key: "tramo",    width: 28 },  // 6
-    { key: "fecha",    width: 12 },  // 7
-    { key: "hora",     width: 10 },  // 8
-    { key: "desc",     width: 30 },  // 9
-    { key: "prio",     width: 10 },  // 10
-    { key: "revs",     width: 10 },  // 11
-    { key: "estado",   width: 13 },  // 12  ← new
-    { key: "foto",     width: 14 },  // 13
-    { key: "fechaSol", width: 12 },  // 14
-    { key: "horaSol",  width: 10 },  // 15
-    { key: "descSol",  width: 30 },  // 16
-    { key: "fotoSol",  width: 14 },  // 17
+    { key: "num",        width: 5  },  // 1
+    { key: "poste",      width: 14 },  // 2
+    { key: "prop",       width: 18 },  // 3
+    { key: "lat",        width: 7  },  // 4  vertical
+    { key: "lng",        width: 7  },  // 5  vertical
+    { key: "tramo",      width: 28 },  // 6
+    { key: "fecha",      width: 12 },  // 7
+    { key: "desc",       width: 30 },  // 8
+    { key: "criticidad", width: 18 },  // 9
+    { key: "prio",       width: 10 },  // 10
+    { key: "revs",       width: 10 },  // 11
+    { key: "estado",     width: 13 },  // 12
+    { key: "foto",       width: 14 },  // 13
+    { key: "fechaSol",   width: 12 },  // 14
+    { key: "descSol",    width: 30 },  // 15
+    { key: "fotoSol",    width: 14 },  // 16
   ];
 
   // ── Logos ──────────────────────────────────────────────────────────────────
@@ -192,8 +190,8 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   const criticos     = list.filter((e) => (e.revisions?.length ?? 0) >= 5).length;
   const prioritarios = list.filter((e) => e.priority).length;
 
-  // Left: cols 1-9 merged — KPIs as rich text
-  ws.mergeCells(R.KPI, 1, R.KPI, 9);
+  // Left: cols 1-8 merged — KPIs as rich text
+  ws.mergeCells(R.KPI, 1, R.KPI, 8);
   {
     const cell = ws.getCell(R.KPI, 1);
     cell.value = {
@@ -215,8 +213,8 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
     cell.border    = { bottom: borderThin(CLR.border), right: borderThin(CLR.border) };
   }
 
-  // Right: cols 10-17 merged — inline legend with colored Unicode squares
-  ws.mergeCells(R.KPI, 10, R.KPI, COL_COUNT);
+  // Right: cols 9-16 merged — inline legend with colored Unicode squares
+  ws.mergeCells(R.KPI, 9, R.KPI, COL_COUNT);
   {
     const legendItems: Array<[string, string]> = [
       [CLR.dataGreen,  "Solucionado"],
@@ -232,7 +230,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
         richText.push({ text: "   –   ", font: { size: 9, color: { argb: CLR.textMuted } } });
       }
     });
-    const legendCell     = ws.getCell(R.KPI, 10);
+    const legendCell     = ws.getCell(R.KPI, 9);
     legendCell.value     = { richText };
     legendCell.alignment = { vertical: "middle", horizontal: "center" };
     legendCell.fill      = { type: "pattern", pattern: "solid", fgColor: { argb: CLR.kpiBg } };
@@ -243,8 +241,8 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
 
   // ── Row 4: Group headers ────────────────────────────────────────────────────
   ws.mergeCells(R.GROUP, 2,  R.GROUP, 6);   // Poste
-  ws.mergeCells(R.GROUP, 7,  R.GROUP, 13);  // Evento  (now includes Estado at col 12)
-  ws.mergeCells(R.GROUP, 14, R.GROUP, 17);  // Solución
+  ws.mergeCells(R.GROUP, 7,  R.GROUP, 13);  // Evento  (Fecha rev. … Foto Evento, incl. Criticidad)
+  ws.mergeCells(R.GROUP, 14, R.GROUP, 16);  // Solución
 
   {
     const cell = ws.getCell(R.GROUP, 1);
@@ -255,7 +253,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   const groupDefs: Array<[string, number, number, string]> = [
     ["Poste",    2,  6,  CLR.groupPoste],
     ["Evento",   7,  13, CLR.groupEvt],
-    ["Solución", 14, 17, CLR.groupSol],
+    ["Solución", 14, 16, CLR.groupSol],
   ];
   for (const [label, from, to, argb] of groupDefs) {
     for (let c = from; c <= to; c++) {
@@ -273,9 +271,10 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
   // ── Row 5: Column headers ───────────────────────────────────────────────────
   const HEADERS = [
     "#", "Nmr Poste", "Propietario", "Latitud", "Longitud", "Tramo",
-    "Fecha rev.", "Hora rev.", "Descripción", "Prioritario", "Revisiones", "Estado",
-    "Foto Evento", "Fecha Solución", "Hora Solución", "Descripción Solución", "Foto Solución",
+    "Fecha rev.", "Descripción", "Criticidad", "Prioritario", "Revisiones", "Estado",
+    "Foto Evento", "Fecha Solución", "Descripción Solución", "Foto Solución",
   ];
+  console.assert(HEADERS.length === COL_COUNT, `HEADERS length ${HEADERS.length} !== COL_COUNT ${COL_COUNT}`);
   for (let c = 1; c <= COL_COUNT; c++) {
     const isVert = VERTICAL_COLS.has(c);
     const cell   = ws.getCell(R.HEADER, c);
@@ -325,17 +324,17 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
       e.poste?.lng               ?? "",
       `${e.poste?.ciudadA?.name ?? ""} - ${e.poste?.ciudadB?.name ?? ""}`,
       revs.length > 0 ? lastRev.toLocaleDateString("es-ES") : "",
-      revs.length > 0 ? lastRev.toLocaleTimeString("es-ES") : "",
       e.description ?? "",
+      formatCriticality(e),                     // col 9 — Criticidad
       e.priority ? "SÍ" : "NO",
       revs.length,
       e.state ? "Solucionado" : "Pendiente",  // col 12 — Estado
       "",                                       // col 13 — Foto Evento (embedded below)
       sol ? new Date(sol.date).toLocaleDateString("es-ES") : "",
-      sol ? new Date(sol.date).toLocaleTimeString("es-ES") : "",
       sol?.description ?? "",
-      "",                                       // col 17 — Foto Solución (embedded below)
+      "",                                       // col 16 — Foto Solución (embedded below)
     ];
+    console.assert(values.length === COL_COUNT, `values length ${values.length} !== COL_COUNT ${COL_COUNT}`);
 
     for (let ci = 0; ci < values.length; ci++) {
       const c      = ci + 1;
