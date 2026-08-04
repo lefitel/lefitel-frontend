@@ -8,6 +8,7 @@ import {
   FolderOpen,
   MapPin,
   ClipboardList,
+  TableProperties,
 } from "lucide-react";
 
 export interface MenuItem {
@@ -24,6 +25,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { text: "Ciudades", path: "/app/ciudades", icon: MapPin, roles: [1, 2, 3] },
   { text: "Parametros", path: "/app/parametros", icon: Settings2, roles: [1, 2] },
   { text: "Reportes", path: "/app/reportes", icon: BarChart2, roles: [1, 2, 3] },
+  { text: "Generador", path: "/app/generador", icon: TableProperties, roles: [1, 2, 3] },
   { text: "Seguridad", path: "/app/seguridad", icon: ShieldCheck, roles: [1] },
   { text: "Archivos", path: "/app/archivos", icon: FolderOpen, roles: [1] },
   { text: "Bitácora", path: "/app/bitacora", icon: ClipboardList, roles: [1] },

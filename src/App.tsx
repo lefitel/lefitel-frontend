@@ -14,6 +14,7 @@ import EventoPage from "./pages/menu/evento";
 import EventoDetallePage from "./pages/menu/evento/EventoDetallePage";
 import ParametrosPage from "./pages/menu/parametros";
 import ReportePage from "./pages/menu/reportes";
+import GeneradorPage from "./pages/menu/generador";
 import SeguridadPage from "./pages/menu/SeguridadPage";
 import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
@@ -73,6 +74,7 @@ const App = () => {
                     <Route path="eventos"         element={<EventoPage />} />
                     <Route path="eventos/:id"    element={<EventoDetallePage />} />
                     <Route path="reportes"        element={<ReportePage />} />
+                    <Route path="generador"       element={<GeneradorPage />} />
                     <Route path="perfil"          element={<PerfilPage />} />
                   </Route>
 
