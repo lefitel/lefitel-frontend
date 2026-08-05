@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { XIcon } from "lucide-react";
 import type {
   CatalogField, CatalogRoot, FilterCondition, Operator, ReportConfig,
@@ -33,7 +34,14 @@ interface Props {
   onSetJoin: (op: "and" | "or") => void;
 }
 
-/** Input shaped by the field type, so a date filter offers a date field. */
+/**
+ * Input shaped by the field type.
+ *
+ * Numbers are kept as text while being edited rather than coerced on every
+ * keystroke: `Number("-")` is NaN, which used to blank the field the moment
+ * someone typed a minus sign, and then serialise to null in the request.
+ * Validation flags a value that never becomes a number.
+ */
 const ValueInput = ({
   field, value, onChange, ariaLabel,
 }: {
@@ -44,8 +52,13 @@ const ValueInput = ({
 }) => {
   if (field?.kind === "boolean") {
     return (
-      <Select value={value === true ? "true" : value === false ? "false" : ""} onValueChange={(v) => onChange(v === "true")}>
-        <SelectTrigger className="h-8 flex-1" aria-label={ariaLabel}><SelectValue placeholder="Elija" /></SelectTrigger>
+      <Select
+        value={value === true ? "true" : value === false ? "false" : ""}
+        onValueChange={(v) => onChange(v === "true")}
+      >
+        <SelectTrigger className="h-8 flex-1" aria-label={ariaLabel}>
+          <SelectValue placeholder="Elija" />
+        </SelectTrigger>
         <SelectContent>
           <SelectItem value="true">Sí</SelectItem>
           <SelectItem value="false">No</SelectItem>
@@ -54,20 +67,133 @@ const ValueInput = ({
     );
   }
 
-  const type = field?.kind === "date" ? "date" : field?.kind === "number" ? "number" : "text";
+  if (field?.kind === "date") {
+    return (
+      <Input
+        type="date"
+        aria-label={ariaLabel}
+        className="h-8 flex-1"
+        value={value === undefined || value === null ? "" : String(value)}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
   return (
     <Input
-      type={type}
+      type="text"
+      inputMode={field?.kind === "number" ? "decimal" : "text"}
       aria-label={ariaLabel}
       className="h-8 flex-1"
       value={value === undefined || value === null ? "" : String(value)}
+      onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)}
+    />
+  );
+};
+
+/** Comma-separated entry for "in", which needs a list and had no way to build one. */
+const ListInput = ({
+  value, onChange, ariaLabel,
+}: {
+  value: unknown;
+  onChange: (v: unknown) => void;
+  ariaLabel: string;
+}) => {
+  const text = Array.isArray(value) ? value.join(", ") : "";
+  return (
+    <Input
+      type="text"
+      aria-label={ariaLabel}
+      placeholder="Separe los valores con comas"
+      className="h-8 flex-1"
+      value={text}
       onChange={(e) => {
-        const raw = e.target.value;
-        onChange(field?.kind === "number" && raw !== "" ? Number(raw) : raw);
+        const parts = e.target.value.split(",").map((p) => p.trim()).filter((p) => p !== "");
+        onChange(parts);
       }}
     />
   );
 };
+
+interface RowProps {
+  condition: FilterCondition;
+  index: number;
+  field: CatalogField | undefined;
+  onUpdate: (index: number, patch: Partial<FilterCondition>) => void;
+  onRemove: (index: number) => void;
+}
+
+/** Memoised: the parent re-renders on every keystroke anywhere in the builder. */
+const FilterRow = memo(function FilterRow({ condition, index, field, onUpdate, onRemove }: RowProps) {
+  const label = field?.label ?? condition.path;
+  const operators = field?.operators ?? ["eq"];
+  const range = operatorNeedsTwoValues(condition.operator);
+  const pair = Array.isArray(condition.value) ? condition.value : ["", ""];
+
+  return (
+    <li className="space-y-1.5 px-2 py-2">
+      <div className="flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
+        <Select
+          value={condition.operator}
+          onValueChange={(v) => onUpdate(index, { operator: v as Operator })}
+        >
+          <SelectTrigger className="h-8 w-44 text-xs" aria-label={`Operador para ${label}`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operators.map((op) => (
+              <SelectItem key={op} value={op}>{OPERATOR_LABEL[op]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="ghost" size="icon"
+          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          aria-label={`Quitar filtro sobre ${label}`}
+          onClick={() => onRemove(index)}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {operatorNeedsValue(condition.operator) && (
+        <div className="flex items-center gap-2 pl-1">
+          {condition.operator === "in" ? (
+            <ListInput
+              value={condition.value}
+              ariaLabel={`Valores para ${label}`}
+              onChange={(v) => onUpdate(index, { value: v })}
+            />
+          ) : range ? (
+            <>
+              <ValueInput
+                field={field}
+                value={pair[0]}
+                ariaLabel={`Desde, ${label}`}
+                onChange={(v) => onUpdate(index, { value: [v, pair[1]] })}
+              />
+              <span className="text-xs text-muted-foreground">y</span>
+              <ValueInput
+                field={field}
+                value={pair[1]}
+                ariaLabel={`Hasta, ${label}`}
+                onChange={(v) => onUpdate(index, { value: [pair[0], v] })}
+              />
+            </>
+          ) : (
+            <ValueInput
+              field={field}
+              value={condition.value}
+              ariaLabel={`Valor para ${label}`}
+              onChange={(v) => onUpdate(index, { value: v })}
+            />
+          )}
+        </div>
+      )}
+    </li>
+  );
+});
 
 const FilterBuilder = ({ config, root, onUpdate, onRemove, onSetJoin }: Props) => {
   const conditions = config.filters?.conditions ?? [];
@@ -97,15 +223,15 @@ const FilterBuilder = ({ config, root, onUpdate, onRemove, onSetJoin }: Props) =
 
       <ul className="divide-y rounded-md border">
         {conditions.map((node, index) => {
-          // Nested groups and existence filters are built by the presets, not
-          // edited here; show them read-only rather than pretending otherwise.
+          // Nested groups and existence filters come from saved configurations;
+          // there is no interface to edit them, so say so rather than pretend.
           if (isFilterGroup(node) || isExists(node)) {
             return (
-              <li key={index} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+              <li key={`adv-${index}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
                 <span className="text-muted-foreground">Filtro avanzado</span>
                 <Button
                   variant="ghost" size="icon" className="h-7 w-7"
-                  aria-label="Quitar filtro avanzado"
+                  aria-label={`Quitar filtro avanzado ${index + 1}`}
                   onClick={() => onRemove(index)}
                 >
                   <XIcon className="h-3.5 w-3.5" />
@@ -115,68 +241,15 @@ const FilterBuilder = ({ config, root, onUpdate, onRemove, onSetJoin }: Props) =
           }
 
           const condition = node as FilterCondition;
-          const field = findField(root, condition.path);
-          const label = field?.label ?? condition.path;
-          const operators = field?.operators ?? ["eq"];
-          const range = operatorNeedsTwoValues(condition.operator);
-          const pair = Array.isArray(condition.value) ? condition.value : ["", ""];
-
           return (
-            <li key={index} className="space-y-1.5 px-2 py-2">
-              <div className="flex items-center gap-2">
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
-                <Select
-                  value={condition.operator}
-                  onValueChange={(v) => onUpdate(index, { operator: v as Operator })}
-                >
-                  <SelectTrigger className="h-8 w-44 text-xs" aria-label={`Operador para ${label}`}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {operators.map((op) => (
-                      <SelectItem key={op} value={op}>{OPERATOR_LABEL[op]}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost" size="icon"
-                  className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                  aria-label={`Quitar filtro sobre ${label}`}
-                  onClick={() => onRemove(index)}
-                >
-                  <XIcon className="h-3.5 w-3.5" />
-                </Button>
-              </div>
-
-              {operatorNeedsValue(condition.operator) && (
-                <div className="flex items-center gap-2 pl-1">
-                  {range ? (
-                    <>
-                      <ValueInput
-                        field={field}
-                        value={pair[0]}
-                        ariaLabel={`Desde, ${label}`}
-                        onChange={(v) => onUpdate(index, { value: [v, pair[1]] })}
-                      />
-                      <span className="text-xs text-muted-foreground">y</span>
-                      <ValueInput
-                        field={field}
-                        value={pair[1]}
-                        ariaLabel={`Hasta, ${label}`}
-                        onChange={(v) => onUpdate(index, { value: [pair[0], v] })}
-                      />
-                    </>
-                  ) : (
-                    <ValueInput
-                      field={field}
-                      value={condition.value}
-                      ariaLabel={`Valor para ${label}`}
-                      onChange={(v) => onUpdate(index, { value: v })}
-                    />
-                  )}
-                </div>
-              )}
-            </li>
+            <FilterRow
+              key={`${condition.path}-${index}`}
+              condition={condition}
+              index={index}
+              field={findField(root, condition.path)}
+              onUpdate={onUpdate}
+              onRemove={onRemove}
+            />
           );
         })}
       </ul>

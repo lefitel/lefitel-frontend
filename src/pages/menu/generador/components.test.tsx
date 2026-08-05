@@ -83,7 +83,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={emptyConfig("evento")} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
@@ -93,11 +93,11 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    const up = screen.getAllByRole("button", { name: "Subir columna" });
-    const down = screen.getAllByRole("button", { name: "Bajar columna" });
+    const up = screen.getAllByRole("button", { name: /^Subir / });
+    const down = screen.getAllByRole("button", { name: /^Bajar / });
     expect(up[0]).toBeDisabled();
     expect(down[down.length - 1]).toBeDisabled();
   });
@@ -108,10 +108,10 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={onMove} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={onMove} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    await user.click(screen.getAllByRole("button", { name: "Bajar columna" })[0]);
+    await user.click(screen.getAllByRole("button", { name: /^Bajar / })[0]);
     expect(onMove).toHaveBeenCalledWith(0, 1);
   });
 
@@ -121,7 +121,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={onRemove} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={vi.fn()} onRemove={onRemove} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Quitar Tramo" }));
@@ -132,7 +132,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveAttribute("placeholder", "Descripción");
@@ -142,7 +142,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={{ ...config, groupBy: ["poste.tramo"] }} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()}
+        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByRole("button", { name: /dejar de agrupar/i })).toHaveAttribute("aria-pressed", "true");
@@ -241,7 +241,7 @@ describe("PreviewTable", () => {
     expect(screen.getByText("Poste inclinado")).toBeInTheDocument();
     expect(screen.getByText("No")).toBeInTheDocument();
     expect(screen.getByText("Sí")).toBeInTheDocument();
-    expect(screen.getByText("3.14")).toBeInTheDocument();
+    expect(screen.getByText("3,14")).toBeInTheDocument();
     expect(screen.getByText("—")).toBeInTheDocument();
   });
 

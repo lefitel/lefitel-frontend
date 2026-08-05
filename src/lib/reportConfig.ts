@@ -110,16 +110,37 @@ export function setColumnAgg(config: ReportConfig, index: number, agg?: AggFn): 
 
 // ─── Grouping ────────────────────────────────────────────────────────────────
 
-export function toggleGroupBy(config: ReportConfig, path: string): ReportConfig {
+/**
+ * Groups (or ungroups) by the column at `index`.
+ *
+ * Takes an index rather than a path because a path can appear more than once —
+ * the minimum and the maximum of the same date, say. The server rejects a
+ * column that is both grouped and aggregated, so grouping strips the aggregate
+ * from every column sharing that path; when that leaves two identical columns,
+ * they collapse into one instead of sitting there indistinguishable.
+ */
+export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig {
+  const column = config.columns[index];
+  if (!column) return config;
+  const path = column.path;
+
   const current = config.groupBy ?? [];
   const grouped = current.includes(path);
   const groupBy = grouped ? current.filter((p) => p !== path) : [...current, path];
 
-  // A grouped column cannot also carry an aggregate; strip it so the config
-  // stays valid while the user toggles.
-  const columns = config.columns.map((c) =>
-    !grouped && c.path === path && c.agg ? { path: c.path, ...(c.label ? { label: c.label } : {}) } : c,
+  if (grouped) return { ...config, groupBy };
+
+  const stripped = config.columns.map((c) =>
+    c.path === path && c.agg ? { path: c.path, ...(c.label ? { label: c.label } : {}) } : c,
   );
+
+  const seen = new Set<string>();
+  const columns = stripped.filter((c) => {
+    const key = `${c.path}|${c.agg ?? ""}|${c.label ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 
   return { ...config, groupBy, columns };
 }
@@ -220,6 +241,16 @@ export function changeRoot(config: ReportConfig, root: CatalogRoot): ReportConfi
   };
 }
 
+/**
+ * Whether two configurations would produce the same rows, ignoring which page
+ * is being asked for. Used to tell when the table on screen no longer matches
+ * the configuration above it.
+ */
+export function sameQuery(a: ReportConfig, b: ReportConfig): boolean {
+  const strip = ({ offset: _offset, ...rest }: ReportConfig) => rest;
+  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
@@ -239,6 +270,21 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
   }
   if (config.columns.length > MAX_COLUMNS) {
     problems.push(`El reporte tiene demasiadas columnas (máximo ${MAX_COLUMNS}).`);
+  }
+
+  // A saved configuration can reference a field that no longer exists, or that
+  // this role cannot see. Saying so beats letting the server answer with an
+  // internal path name.
+  const known = new Set([
+    ...root.fields.map((f) => f.path),
+    ...root.aggregateOnly.map((a) => a.path),
+  ]);
+  for (const column of config.columns) {
+    const reachable = known.has(column.path) ||
+      root.aggregateOnly.some((a) => column.path.startsWith(`${a.path}.`));
+    if (!reachable) {
+      problems.push(`La columna "${column.path}" no está disponible para su perfil.`);
+    }
   }
 
   const grouped = new Set(config.groupBy ?? []);
@@ -280,7 +326,18 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
       value === null ||
       value === "" ||
       (Array.isArray(value) && (value.length === 0 || value.some((v) => v === "" || v == null)));
-    if (empty) problems.push(`El filtro ${index + 1} sobre "${label}" no tiene valor.`);
+    if (empty) {
+      problems.push(`El filtro ${index + 1} sobre "${label}" no tiene valor.`);
+      continue;
+    }
+
+    // Numeric fields hold their text while being edited, so a half-typed "-"
+    // or "1.2.3" has to be caught here rather than by the database.
+    if (field?.kind === "number") {
+      const candidates = Array.isArray(value) ? value : [value];
+      const bad = candidates.some((v) => v !== null && v !== undefined && !Number.isFinite(Number(v)));
+      if (bad) problems.push(`El filtro ${index + 1} sobre "${label}" no es un número válido.`);
+    }
   }
 
   return problems;
@@ -288,11 +345,21 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
 
 // ─── Display ─────────────────────────────────────────────────────────────────
 
+/**
+ * Bolivia has a single time zone and no daylight saving, so pinning it keeps
+ * the screen, the PDF and the Excel telling the same date. Formatting in the
+ * browser's zone showed the previous day for anything stored near midnight.
+ */
+export const REPORT_TIME_ZONE = "America/La_Paz";
+
 const dateFormatter = new Intl.DateTimeFormat("es-BO", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
+  timeZone: REPORT_TIME_ZONE,
 });
+
+const numberFormatter = new Intl.NumberFormat("es-BO", { maximumFractionDigits: 2 });
 
 /** Renders a cell for display. Nulls read as an em-dash rather than "null". */
 export function formatValue(value: unknown, kind: CatalogField["kind"]): string {
@@ -300,16 +367,20 @@ export function formatValue(value: unknown, kind: CatalogField["kind"]): string 
 
   switch (kind) {
     case "boolean":
-      return value === true || value === "true" ? "Sí" : "No";
+      // Postgres drivers can hand booleans back as 1/0 or "t"/"f" depending on
+      // the column and the aggregate applied to it.
+      if (value === true || value === "true" || value === "t" || value === 1) return "Sí";
+      return "No";
     case "date": {
       const date = value instanceof Date ? value : new Date(String(value));
       return Number.isNaN(date.getTime()) ? String(value) : dateFormatter.format(date);
     }
     case "number": {
       const n = Number(value);
-      if (Number.isNaN(n)) return String(value);
-      // Averages come back fractional; whole numbers should not grow decimals.
-      return Number.isInteger(n) ? String(n) : n.toFixed(2);
+      if (!Number.isFinite(n)) return String(value);
+      // Whole numbers keep their exact form (ids must stay readable as ids);
+      // averages are rounded and grouped for the locale.
+      return Number.isInteger(n) ? String(n) : numberFormatter.format(n);
     }
     default:
       return String(value);

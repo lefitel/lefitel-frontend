@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { CatalogRoot, FilterCondition, ReportConfig } from "../api/generador.api";
+import type { CatalogField, CatalogRoot, FilterCondition, ReportConfig } from "../api/generador.api";
 import {
   MAX_COLUMNS,
   addColumn,
@@ -15,6 +15,7 @@ import {
   removeColumn,
   removeFilter,
   renameColumn,
+  sameQuery,
   setColumnAgg,
   toggleGroupBy,
   toggleSort,
@@ -47,6 +48,10 @@ const poste: CatalogRoot = {
   ],
   aggregateOnly: [{ path: "eventos", label: "Eventos", group: "Poste" }],
 };
+
+/** toggleGroupBy takes an index; tests still read better in terms of paths. */
+const groupByPath = (config: ReportConfig, path: string): ReportConfig =>
+  toggleGroupBy(config, config.columns.findIndex((c) => c.path === path));
 
 const withColumns = (...paths: string[]): ReportConfig => ({
   ...emptyConfig("evento"),
@@ -85,21 +90,22 @@ describe("columns", () => {
 
   it("drops grouping and sorting that referenced the removed column", () => {
     let config = withColumns("poste.tramo", "description");
-    config = toggleGroupBy(config, "poste.tramo");
+    config = groupByPath(config, "poste.tramo");
     config = toggleSort(config, "poste.tramo");
     const after = removeColumn(config, 0);
     expect(after.groupBy).toEqual([]);
     expect(after.sort).toEqual([]);
   });
 
-  it("keeps grouping when another column still uses the path", () => {
+  it("keeps grouping while any column still uses the path", () => {
     let config: ReportConfig = {
       ...emptyConfig("evento"),
-      columns: [{ path: "date", agg: "min" }, { path: "date", agg: "max" }],
+      columns: [{ path: "poste.tramo" }, { path: "poste.tramo", label: "Otra vista" }],
     };
-    config = toggleGroupBy(config, "date");
+    config = groupByPath(config, "poste.tramo");
     const after = removeColumn(config, 0);
-    expect(after.groupBy).toEqual(["date"]);
+    expect(after.columns).toHaveLength(1);
+    expect(after.groupBy).toEqual(["poste.tramo"]);
   });
 
   it("reorders columns", () => {
@@ -133,9 +139,9 @@ describe("columns", () => {
 
 describe("grouping", () => {
   it("toggles a path on and off", () => {
-    let config = toggleGroupBy(withColumns("poste.tramo"), "poste.tramo");
+    let config = groupByPath(withColumns("poste.tramo"), "poste.tramo");
     expect(config.groupBy).toEqual(["poste.tramo"]);
-    config = toggleGroupBy(config, "poste.tramo");
+    config = groupByPath(config, "poste.tramo");
     expect(config.groupBy).toEqual([]);
   });
 
@@ -143,14 +149,34 @@ describe("grouping", () => {
     // The server rejects a column that is both grouped and aggregated.
     const config = toggleGroupBy(
       { ...emptyConfig("evento"), columns: [{ path: "state", agg: "count" }] },
-      "state",
+      0,
     );
     expect(config.columns[0]).not.toHaveProperty("agg");
   });
 
+  it("collapses the duplicate that stripping an aggregate would leave", () => {
+    // Grouping by a path removes the aggregate from every column sharing it.
+    // With min and max of the same date that produced two identical columns,
+    // indistinguishable in the interface and duplicated in the output.
+    const config = toggleGroupBy(
+      {
+        ...emptyConfig("evento"),
+        columns: [{ path: "poste.tramo" }, { path: "date", agg: "min" }, { path: "date", agg: "max" }],
+      },
+      1,
+    );
+    expect(config.groupBy).toEqual(["date"]);
+    expect(config.columns).toEqual([{ path: "poste.tramo" }, { path: "date" }]);
+  });
+
+  it("ignores an index that does not exist", () => {
+    const config = withColumns("state");
+    expect(toggleGroupBy(config, 9)).toBe(config);
+  });
+
   it("reports summary mode only when something is grouped", () => {
     expect(isSummary(emptyConfig("evento"))).toBe(false);
-    expect(isSummary(toggleGroupBy(withColumns("state"), "state"))).toBe(true);
+    expect(isSummary(groupByPath(withColumns("state"), "state"))).toBe(true);
   });
 });
 
@@ -208,7 +234,7 @@ describe("filters", () => {
 describe("changing the detail level", () => {
   it("drops what the new root does not offer", () => {
     let config = withColumns("description", "poste.tramo");
-    config = toggleGroupBy(config, "poste.tramo");
+    config = groupByPath(config, "poste.tramo");
     config = toggleSort(config, "description");
     config = addFilter(config, evento.fields[0]);
 
@@ -243,7 +269,7 @@ describe("validation", () => {
   });
 
   it("demands an aggregate for ungrouped columns in summary mode", () => {
-    const config = toggleGroupBy(withColumns("poste.tramo", "description"), "poste.tramo");
+    const config = groupByPath(withColumns("poste.tramo", "description"), "poste.tramo");
     expect(validateConfig(config, evento).join(" ")).toMatch(/necesita un resumen/);
   });
 
@@ -299,6 +325,69 @@ describe("validation", () => {
   });
 });
 
+describe("sameQuery", () => {
+  it("ignores which page is being requested", () => {
+    const a = withColumns("description");
+    expect(sameQuery(a, { ...a, offset: 300 })).toBe(true);
+  });
+
+  it("notices a different filter", () => {
+    const a = withColumns("description");
+    const b = addFilter(a, evento.fields[0]);
+    expect(sameQuery(a, b)).toBe(false);
+  });
+
+  it("notices a different column set", () => {
+    const a = withColumns("description");
+    expect(sameQuery(a, addColumn(a, "state"))).toBe(false);
+  });
+});
+
+describe("numeric filters", () => {
+  const numeric: CatalogField = {
+    path: "lat", label: "Latitud", kind: "number", group: "Evento",
+    operators: ["eq", "gt", "between", "in"], aggregates: ["avg"],
+  };
+  const root: CatalogRoot = { ...evento, fields: [...evento.fields, numeric] };
+
+  it("accepts a negative number", () => {
+    let config = addFilter(withColumns("description"), numeric);
+    config = updateFilter(config, 0, { value: "-17.5" });
+    expect(validateConfig(config, root)).toEqual([]);
+  });
+
+  it("flags a half-typed number instead of sending it", () => {
+    // Coercing on each keystroke turned "-" into NaN, which serialises to null.
+    let config = addFilter(withColumns("description"), numeric);
+    config = updateFilter(config, 0, { value: "-" });
+    expect(validateConfig(config, root).join(" ")).toMatch(/no es un número válido/);
+  });
+
+  it("accepts a list of values for the in operator", () => {
+    let config = addFilter(withColumns("description"), numeric);
+    config = updateFilter(config, 0, { operator: "in" });
+    config = updateFilter(config, 0, { value: [1, 2, 3] });
+    expect(validateConfig(config, root)).toEqual([]);
+  });
+});
+
+describe("unavailable fields", () => {
+  it("flags a column the catalog does not offer", () => {
+    // A saved report can name a field that was removed, or one this role
+    // cannot see; the server would answer with an internal path name.
+    const config = withColumns("usuario.name");
+    expect(validateConfig(config, evento).join(" ")).toMatch(/no está disponible para su perfil/);
+  });
+
+  it("accepts a path reached through a to-many relation", () => {
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "revisiones.date", agg: "max" }],
+    };
+    expect(validateConfig(config, evento)).toEqual([]);
+  });
+});
+
 describe("formatting", () => {
   it("renders empty values as a dash", () => {
     expect(formatValue(null, "string")).toBe("—");
@@ -316,8 +405,28 @@ describe("formatting", () => {
   });
 
   it("leaves whole numbers whole and rounds averages", () => {
+    // Whole numbers keep their exact form so ids stay readable as ids;
+    // fractions are rounded and formatted for es-BO, which uses a comma.
     expect(formatValue(42, "number")).toBe("42");
-    expect(formatValue(3.14159, "number")).toBe("3.14");
+    expect(formatValue(1234567, "number")).toBe("1234567");
+    expect(formatValue(3.14159, "number")).toBe("3,14");
+  });
+
+  it("renders a date the same regardless of the browser time zone", () => {
+    // Formatted in America/La_Paz, not the local zone: a timestamp stored just
+    // after midnight UTC used to render as the previous day.
+    expect(formatValue("2026-03-15T02:00:00.000Z", "date")).toBe("14/03/2026");
+    expect(formatValue("2026-03-15T12:00:00.000Z", "date")).toBe("15/03/2026");
+  });
+
+  it("reads booleans in every shape the driver returns", () => {
+    expect(formatValue(1, "boolean")).toBe("Sí");
+    expect(formatValue("t", "boolean")).toBe("Sí");
+    expect(formatValue(0, "boolean")).toBe("No");
+  });
+
+  it("does not pretend a non-finite number is a number", () => {
+    expect(formatValue(Infinity, "number")).toBe("Infinity");
   });
 
   it("falls back to the raw text for an unparseable date", () => {
@@ -332,7 +441,7 @@ describe("describeConfig", () => {
   });
 
   it("describes a grouped report", () => {
-    const config = toggleGroupBy(withColumns("poste.tramo"), "poste.tramo");
+    const config = groupByPath(withColumns("poste.tramo"), "poste.tramo");
     expect(describeConfig(config, evento)).toContain("agrupado por Tramo");
   });
 
