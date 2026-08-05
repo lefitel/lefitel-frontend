@@ -5,7 +5,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "../../../components/ui/table";
 import { formatValue } from "../../../lib/reportConfig";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 
 interface Props {
   result: ReportResult;
@@ -53,7 +53,7 @@ const PreviewTable = ({ result, onPage, loading }: Props) => {
                         <TableCell key={c.key}>
                           {value ? (
                             <a
-                              href={`${url}/${String(value)}`}
+                              href={imageUrl(value) ?? "#"}
                               target="_blank"
                               rel="noreferrer"
                               className="inline-flex items-center gap-1 text-primary hover:underline"

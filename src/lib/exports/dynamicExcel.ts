@@ -53,6 +53,11 @@ const cellValue = (raw: unknown, kind: string): string | number | Date | null =>
     }
     case "boolean":
       return raw === true || raw === "true" ? "Sí" : "No";
+    case "image":
+      // Never write the stored path. Photos are served from an unauthenticated
+      // static root, so a raw path turns the spreadsheet into a list of
+      // publicly fetchable field photographs. The PDF already prints "Sí".
+      return "Sí";
     default:
       return String(raw);
   }

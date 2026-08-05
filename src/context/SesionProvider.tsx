@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
 import { comprobarToken } from "../api/Login.api";
+import { url } from "../api/url";
 import { SesionContext } from "./SesionContext";
 
 /** Decodifica el campo `exp` del JWT (en ms). No verifica firma. */
@@ -79,19 +80,42 @@ export const SesionProvider = ({ children }: props) => {
       .finally(() => setLoading(false));
   }, []);
 
-  // Interceptor de axios: renueva el token en cada respuesta (sliding) y auto-logout en 401/403
+  // Interceptor de axios: renueva el token en cada respuesta (sliding) y auto-logout en 401
   useEffect(() => {
+    /**
+     * Only our own API may hand us a session token.
+     *
+     * The interceptor is global, so it sees every request the app makes —
+     * including the image fetches the exporters perform against paths stored in
+     * the database. A crafted `image` value such as ".attacker.tld/x.jpg"
+     * concatenated onto the API host produces a request to a host the attacker
+     * owns; if that host replies with an `x-new-token` header, an unconditional
+     * interceptor would adopt the attacker's session as ours.
+     */
+    const isOurApi = (requestUrl: string | undefined): boolean => {
+      if (!requestUrl) return false;
+      try {
+        return new URL(requestUrl, window.location.href).origin === new URL(url).origin;
+      } catch {
+        return false;
+      }
+    };
+
     const interceptor = axios.interceptors.response.use(
       (response) => {
         const newToken = response.headers["x-new-token"];
-        if (newToken) {
+        if (newToken && isOurApi(response.config?.url)) {
           localStorage.setItem("token", newToken);
           setSesion((prev) => (prev.token ? { ...prev, token: newToken } : prev));
         }
         return response;
       },
       (error) => {
-        if (error.response?.status === 401 || error.response?.status === 403) {
+        // 401 means "not authenticated" and ends the session. 403 means
+        // "authenticated but not allowed here", which is an ordinary answer to
+        // an ordinary request: logging out on it threw users to the login
+        // screen, losing unsaved work, merely for opening someone else's report.
+        if (error.response?.status === 401) {
           logout();
         }
         return Promise.reject(error);

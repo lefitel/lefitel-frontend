@@ -5,7 +5,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import { EventoInterface, RevisionInterface } from "../../interfaces/interfaces";
-import { url } from "../../api/url";
+import { imageUrl } from "../imageUrl";
 import { getEventCriticality, getCriticalityMeta } from "../criticality";
 import logoUrl from "../../assets/images/logo.png";
 import tigoUrl from "../../assets/images/logo_tigo.png";
@@ -354,7 +354,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
     }
 
     if (e.image) {
-      const imgBuf = await compressToJpeg(`${url}${e.image}`);
+      const imgBuf = await compressToJpeg(imageUrl(e.image) ?? "");
       if (imgBuf) {
         ws.addImage(wb.addImage({ buffer: imgBuf, extension: "jpeg" }), {
           tl: { col: COL_IMG_EVT - 1, row: excelRow - 1 } as ExcelJS.Anchor,
@@ -363,7 +363,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
       }
     }
     if (sol?.image) {
-      const imgBuf = await compressToJpeg(`${url}${sol.image}`);
+      const imgBuf = await compressToJpeg(imageUrl(sol.image) ?? "");
       if (imgBuf) {
         ws.addImage(wb.addImage({ buffer: imgBuf, extension: "jpeg" }), {
           tl: { col: COL_IMG_SOL - 1, row: excelRow - 1 } as ExcelJS.Anchor,
@@ -450,10 +450,10 @@ export const exportPdfGeneral = async (list: EventoInterface[], fechaInicio: Dat
   const evtImgs: (string | null)[] = [];
   const solImgs: (string | null)[] = [];
   for (const e of list) {
-    const evtBuf = e.image ? await compressToJpeg(`${url}${e.image}`, 120, 0.72) : null;
+    const evtBuf = e.image ? await compressToJpeg(imageUrl(e.image) ?? "", 120, 0.72) : null;
     evtImgs.push(evtBuf ? arrayBufferToBase64(evtBuf) : null);
     const sol    = e.solucions?.[0] ?? null;
-    const solBuf = sol?.image ? await compressToJpeg(`${url}${sol.image}`, 120, 0.72) : null;
+    const solBuf = sol?.image ? await compressToJpeg(imageUrl(sol.image) ?? "", 120, 0.72) : null;
     solImgs.push(solBuf ? arrayBufferToBase64(solBuf) : null);
   }
 
