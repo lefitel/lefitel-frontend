@@ -29,6 +29,7 @@ interface RowProps {
   group: string;
   available: AggFn[];
   isAggregateOnly: boolean;
+  canGroup: boolean;
   isGrouped: boolean;
   sortDir: "asc" | "desc" | undefined;
   onMove: (from: number, to: number) => void;
@@ -47,7 +48,7 @@ interface RowProps {
  * selects each time — measured at over half a second per keypress.
  */
 const ColumnRow = memo(function ColumnRow({
-  column, index, total, label, group, available, isAggregateOnly, isGrouped, sortDir,
+  column, index, total, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir,
   onMove, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
 }: RowProps) {
   const sortLabel =
@@ -124,7 +125,7 @@ const ColumnRow = memo(function ColumnRow({
         <TooltipContent>{sortLabel}</TooltipContent>
       </Tooltip>
 
-      {!isAggregateOnly && (
+      {canGroup && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -213,6 +214,9 @@ const ColumnList = ({
             // for any other aggregate, and the interface has no way to pick one.
             available={isAggregateOnly ? ["count"] : field?.aggregates ?? []}
             isAggregateOnly={isAggregateOnly}
+            // A count cannot define groups; the server rejects it, and the
+            // catalog now says which fields are already summaries.
+            canGroup={!isAggregateOnly && !field?.aggregate}
             isGrouped={grouped.has(column.path)}
             sortDir={sortByPath.get(column.path)}
             onMove={onMove}

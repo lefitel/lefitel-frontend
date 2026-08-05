@@ -17,6 +17,13 @@ export type Operator =
 
 export type AggFn = "count" | "sum" | "avg" | "min" | "max";
 
+/**
+ * What a value means, beyond its type. Sent by the server so presentation
+ * decisions — colouring a row by criticality — never depend on guessing from
+ * a label the user can rename.
+ */
+export type FieldSemantic = "criticality" | "state";
+
 export interface CatalogField {
   /** Dotted path from the root, used in the configuration. */
   path: string;
@@ -27,6 +34,9 @@ export interface CatalogField {
   operators: Operator[];
   aggregates: AggFn[];
   calculated?: boolean;
+  semantic?: FieldSemantic;
+  /** Already a summary of its own row (a count); grouping by it is rejected. */
+  aggregate?: boolean;
 }
 
 export interface CatalogRoot {
@@ -39,8 +49,18 @@ export interface CatalogRoot {
   aggregateOnly: { path: string; label: string; group: string }[];
 }
 
+/** Caps published by the server, so both sides cannot drift apart. */
+export interface CatalogLimits {
+  maxColumns: number;
+  maxConditions: number;
+  maxSorts: number;
+  maxRows: number;
+  maxDepth: number;
+}
+
 export interface Catalog {
   roots: CatalogRoot[];
+  limits: CatalogLimits;
 }
 
 // ─── Report configuration ────────────────────────────────────────────────────
@@ -85,7 +105,7 @@ export interface ReportConfig {
 }
 
 export interface ReportResult {
-  columns: { key: string; label: string; kind: FieldKind }[];
+  columns: { key: string; label: string; kind: FieldKind; semantic?: FieldSemantic }[];
   rows: Record<string, unknown>[];
   total: number;
   limit: number;
