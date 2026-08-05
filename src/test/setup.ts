@@ -6,7 +6,8 @@ afterEach(() => {
   cleanup();
 });
 
-// jsdom implements neither of these, and Radix primitives call both.
+// jsdom implements none of these; Radix primitives and keyboard navigation
+// call them.
 globalThis.ResizeObserver =
   globalThis.ResizeObserver ??
   class {
@@ -14,6 +15,10 @@ globalThis.ResizeObserver =
     unobserve() {}
     disconnect() {}
   };
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = vi.fn();
+}
 
 if (!window.matchMedia) {
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({

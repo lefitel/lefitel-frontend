@@ -27,15 +27,18 @@ const root: CatalogRoot = {
 const wrap = (ui: React.ReactElement) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
 describe("FieldPicker", () => {
+  const openPicker = async (user: ReturnType<typeof userEvent.setup>) =>
+    user.click(screen.getByRole("button", { name: /añadir columna/i }));
+
   it("lists fields grouped by origin and reports the chosen one", async () => {
     const onPick = vi.fn();
     const user = userEvent.setup();
     wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
 
-    await user.click(screen.getByRole("button", { name: /añadir columna/i }));
+    await openPicker(user);
     expect(screen.getByText("Evento › Poste")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: /^Tramo/ }));
+    await user.click(screen.getByRole("option", { name: /^Tramo/ }));
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "poste.tramo" }));
   });
 
@@ -43,32 +46,75 @@ describe("FieldPicker", () => {
     const user = userEvent.setup();
     wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /añadir columna/i }));
+    await openPicker(user);
     await user.type(screen.getByLabelText("Buscar campo"), "tram");
 
-    expect(screen.getByRole("button", { name: /^Tramo/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Descripción" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: /^Tramo/ })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Descripción" })).not.toBeInTheDocument();
+  });
+
+  it("also searches by where the field comes from", async () => {
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    await user.type(screen.getByLabelText("Buscar campo"), "poste");
+
+    expect(screen.getByRole("option", { name: /^Tramo/ })).toBeInTheDocument();
   });
 
   it("explains when nothing matches", async () => {
     const user = userEvent.setup();
     wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
 
-    await user.click(screen.getByRole("button", { name: /añadir columna/i }));
+    await openPicker(user);
     await user.type(screen.getByLabelText("Buscar campo"), "zzzz");
 
     expect(screen.getByText(/ningún campo coincide/i)).toBeInTheDocument();
   });
 
-  it("offers to-many relations as aggregates", async () => {
+  it("picks the first match with the keyboard alone", async () => {
+    // Typing and pressing Enter used to do nothing: the list was a pile of
+    // buttons, so it had to be tabbed through.
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
+
+    await openPicker(user);
+    await user.type(screen.getByLabelText("Buscar campo"), "tram{Enter}");
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "poste.tramo" }));
+  });
+
+  it("moves the selection with the arrow keys", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
+
+    await openPicker(user);
+    const search = screen.getByLabelText("Buscar campo");
+    await user.type(search, "{ArrowDown}{Enter}");
+    // Second entry of the catalog, not the first.
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "date" }));
+  });
+
+  it("marks fields already in the report", async () => {
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set(["description"])} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    const option = screen.getByRole("option", { name: /Descripción/ });
+    expect(option).toHaveClass("text-muted-foreground");
+  });
+
+  it("offers to-many relations as aggregates, showing where they come from", async () => {
     const onPickAggregate = vi.fn();
     const user = userEvent.setup();
     wrap(
       <FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} onPickAggregate={onPickAggregate} />,
     );
 
-    await user.click(screen.getByRole("button", { name: /añadir columna/i }));
-    await user.click(screen.getByRole("button", { name: /nº de revisiones/i }));
+    await openPicker(user);
+    await user.click(screen.getByRole("option", { name: /nº de revisiones/i }));
     expect(onPickAggregate).toHaveBeenCalledWith("revisiones", "Revisiones");
   });
 });
