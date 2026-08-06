@@ -7,18 +7,18 @@ import { toast } from "sonner";
 
 import { SesionContext } from "../../../context/SesionContext";
 import {
-  actualizarReporte, crearReporte, duplicarReporte, eliminarReporte, getCatalogo,
-  getReportesGuardados, mensajeDeError, runReporte,
-  type AggFn, type Catalog, type CatalogField, type ReportConfig, type ReportResult,
-  type SavedReport,
+  actualizarReporte, crearReporte, duplicarReporte, eliminarReporte, exportarReporte,
+  getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync, runReporte,
+  type AggFn, type Catalog, type CatalogField, type ExportFormat, type ReportConfig,
+  type ReportResult, type SavedReport,
 } from "../../../api/generador.api";
 import {
   addColumn, addFilter, changeRoot, describeConfig, emptyConfig, moveColumn,
   removeColumn, removeFilter, renameColumn, sameQuery, setColumnAgg, setFilterJoin,
   toggleGroupBy, toggleSort, updateFilter, validateConfig,
 } from "../../../lib/reportConfig";
-import { exportDynamicExcel } from "../../../lib/exports/dynamicExcel";
-import { exportDynamicPdf } from "../../../lib/exports/dynamicPdf";
+import axios from "axios";
+import { saveAs } from "file-saver";
 
 import { Button } from "../../../components/ui/button";
 import {
@@ -270,52 +270,81 @@ const GeneradorPage = () => {
 
   // ── Exports ────────────────────────────────────────────────────────────────
 
-  const [exporting, setExporting] = useState<"excel" | "pdf" | null>(null);
+  const [exporting, setExporting] = useState<ExportFormat | null>(null);
+  const [exportBytes, setExportBytes] = useState(0);
+  const exportAbort = useRef<AbortController | null>(null);
 
-  /**
-   * Exports the whole report, not the page on screen.
-   *
-   * The preview pages 100 rows at a time; exporting `result` produced a file
-   * that looked complete and held a fragment.
-   */
-  const fetchAll = async (): Promise<ReportResult | null> => {
-    if (!resultConfig || !result) return null;
-    if (result.rows.length >= result.total) return result;
-    return runReporte({ ...resultConfig, offset: 0, limit: result.total }, tokenRef.current);
-  };
+  /** Whether the report has anything to embed, which decides if the switch shows. */
+  const hasPhotoColumns = useMemo(
+    () => (result?.columns ?? []).some((column) => column.kind === "image"),
+    [result],
+  );
+  const [withPhotos, setWithPhotos] = useState(true);
 
   const exportTitle = (current?.name ?? saveName).trim() || "Reporte";
-  const exportSubtitle = resultConfig ? describeConfig(resultConfig, root) : description;
 
-  const handleExcel = async () => {
-    if (!result || exporting) return;
-    setExporting("excel");
+  /**
+   * The root that produced the table, not the one being edited.
+   *
+   * Today they cannot differ: both places that change the detail level — the
+   * selector and opening a saved report — clear the result along with it. This
+   * does not depend on that holding. The subtitle describes `resultConfig`, and
+   * captioning an event report with "una fila por poste" is a file that
+   * describes itself wrongly, which is worse than one that says nothing.
+   */
+  const resultRoot = useMemo(
+    () => catalog?.roots.find((r) => r.key === resultConfig?.root),
+    [catalog, resultConfig?.root],
+  );
+  const exportSubtitle = resultConfig ? describeConfig(resultConfig, resultRoot) : description;
+
+  /**
+   * Asks the server for the file.
+   *
+   * The configuration travels, not the rows. Building it here meant downloading
+   * the whole result set as JSON and fetching one photograph per row over HTTP;
+   * the server has both already, and reads the photographs off its own disk.
+   */
+  const runExport = async (format: ExportFormat) => {
+    if (!resultConfig || exporting) return;
+    const controller = new AbortController();
+    exportAbort.current = controller;
+    setExporting(format);
+    setExportBytes(0);
     try {
-      const full = await fetchAll();
-      if (!full) return;
-      await exportDynamicExcel(full, { title: exportTitle, subtitle: exportSubtitle });
-      toast.success(`Excel generado con ${full.rows.length} filas`);
+      const { blob, filename } = await exportarReporte(
+        resultConfig,
+        {
+          format,
+          title: exportTitle,
+          subtitle: exportSubtitle,
+          photos: format === "excel" && hasPhotoColumns && withPhotos,
+        },
+        tokenRef.current,
+        { signal: controller.signal, onProgress: (received) => setExportBytes(received) },
+      );
+      saveAs(blob, filename);
+      toast.success(`${format === "excel" ? "Excel" : "PDF"} descargado`);
     } catch (error) {
-      toast.error(mensajeDeError(error, "No se pudo generar el Excel"));
+      // A cancellation is the user's own doing, not a failure to report.
+      if (!axios.isCancel(error)) {
+        toast.error(await mensajeDeErrorAsync(
+          error,
+          `No se pudo generar el ${format === "excel" ? "Excel" : "PDF"}`,
+        ));
+      }
     } finally {
+      exportAbort.current = null;
       setExporting(null);
+      setExportBytes(0);
     }
   };
 
-  const handlePdf = async () => {
-    if (!result || exporting) return;
-    setExporting("pdf");
-    try {
-      const full = await fetchAll();
-      if (!full) return;
-      exportDynamicPdf(full, { title: exportTitle, subtitle: exportSubtitle });
-      toast.success(`PDF generado con ${full.rows.length} filas`);
-    } catch (error) {
-      toast.error(mensajeDeError(error, "No se pudo generar el PDF"));
-    } finally {
-      setExporting(null);
-    }
-  };
+  const cancelExport = () => exportAbort.current?.abort();
+
+  // A request left in flight when the page unmounts would resolve into a
+  // component that no longer exists, and keep the server busy for nothing.
+  useEffect(() => () => exportAbort.current?.abort(), []);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -530,18 +559,60 @@ const GeneradorPage = () => {
                     </PopoverContent>
                   </Popover>
 
-                  <Button variant="outline" size="sm" disabled={!result || exporting !== null} onClick={handleExcel}>
+                  {hasPhotoColumns && (
+                    <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
+                      <Switch
+                        id="rep-fotos"
+                        checked={withPhotos}
+                        onCheckedChange={setWithPhotos}
+                        disabled={exporting !== null}
+                      />
+                      <Label htmlFor="rep-fotos" className="cursor-pointer text-xs font-normal">
+                        Fotos en el Excel
+                      </Label>
+                    </div>
+                  )}
+
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={!result || exporting !== null}
+                    onClick={() => runExport("excel")}
+                  >
                     {exporting === "excel"
                       ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
                       : <DownloadIcon className="mr-1.5 h-4 w-4" />}
                     Excel
                   </Button>
-                  <Button variant="outline" size="sm" disabled={!result || exporting !== null} onClick={handlePdf}>
+                  <Button
+                    variant="outline" size="sm"
+                    disabled={!result || exporting !== null}
+                    onClick={() => runExport("pdf")}
+                  >
                     {exporting === "pdf"
                       ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
                       : <FileTextIcon className="mr-1.5 h-4 w-4" />}
                     PDF
                   </Button>
+
+                  {/* Only while a file is being made. The server sends nothing
+                      until it is finished, so there is no honest percentage to
+                      show — only how long it has taken and how much has arrived. */}
+                  {exporting !== null && (
+                    <div className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+                      <span>
+                        {exportBytes > 0
+                          ? `Descargando ${(exportBytes / 1024 / 1024).toFixed(1)} MB…`
+                          : "Generando en el servidor…"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={cancelExport}
+                        className="font-medium text-foreground underline-offset-2 hover:underline"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  )}
                   <Button size="sm" onClick={handleGenerate} disabled={running}>
                     {running
                       ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />

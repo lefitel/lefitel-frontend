@@ -247,7 +247,7 @@ const BitacoraPage = () => {
 
   useEffect(() => {
     doFetch(1, pageSizeRef.current);
-  }, [filtersKey, doFetch]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filtersKey, doFetch]);
 
   const handlePageChange = useCallback((p: number, ps: number) => {
     setPageSize(ps);

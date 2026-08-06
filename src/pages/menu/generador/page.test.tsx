@@ -16,6 +16,7 @@ const api = {
   actualizarReporte: vi.fn(),
   eliminarReporte: vi.fn(),
   duplicarReporte: vi.fn(),
+  exportarReporte: vi.fn(),
 };
 
 vi.mock("../../../api/generador.api", async () => {
@@ -29,8 +30,15 @@ vi.mock("../../../api/generador.api", async () => {
     actualizarReporte: (...a: unknown[]) => api.actualizarReporte(...a),
     eliminarReporte: (...a: unknown[]) => api.eliminarReporte(...a),
     duplicarReporte: (...a: unknown[]) => api.duplicarReporte(...a),
+    exportarReporte: (...a: unknown[]) => api.exportarReporte(...a),
   };
 });
+
+/** file-saver hands the blob to the browser; capture it instead. */
+const downloaded: { name: string; size: number }[] = [];
+vi.mock("file-saver", () => ({
+  saveAs: (blob: Blob, name: string) => { downloaded.push({ name, size: blob.size }); },
+}));
 
 const toasts: { kind: string; text: string }[] = [];
 vi.mock("sonner", () => ({
@@ -42,8 +50,6 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("../../../lib/exports/dynamicExcel", () => ({ exportDynamicExcel: vi.fn() }));
-vi.mock("../../../lib/exports/dynamicPdf", () => ({ exportDynamicPdf: vi.fn() }));
 
 const GeneradorPage = (await import("./index")).default;
 
@@ -106,9 +112,16 @@ const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp)
 beforeEach(() => {
   vi.clearAllMocks();
   toasts.length = 0;
+  downloaded.length = 0;
   api.getCatalogo.mockResolvedValue(catalog);
   api.getReportesGuardados.mockResolvedValue([]);
   api.runReporte.mockImplementation((config: ReportConfig) => Promise.resolve(resultFor(config)));
+  // The server names the file; the page only saves what it is handed.
+  api.exportarReporte.mockImplementation((_config: ReportConfig, options: { format: string }) =>
+    Promise.resolve({
+      blob: new Blob(["contenido"]),
+      filename: `Reporte_06-08-2026_00-00-00.${options.format === "pdf" ? "pdf" : "xlsx"}`,
+    }));
 });
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -292,24 +305,91 @@ describe("saving", () => {
 });
 
 describe("exporting", () => {
-  it("fetches every row rather than exporting the page on screen", async () => {
-    api.runReporte.mockImplementation((config: ReportConfig) =>
-      Promise.resolve(resultFor(config, { total: 4300, rows: [{ c0: "x" }] })));
-
-    const user = userEvent.setup();
+  /** Runs a report so the export buttons have something to act on. */
+  const generate = async (user: ReturnType<typeof userEvent.setup>) => {
     renderPage();
     await ready();
     await addColumn(user, /Descripción/);
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
+  };
+
+  it("sends the configuration to the server rather than building the file here", async () => {
+    // The browser used to download the whole result set as JSON only to rebuild
+    // the file from it, and to fetch one photograph per row over HTTP.
+    const user = userEvent.setup();
+    await generate(user);
+    const runsBefore = api.runReporte.mock.calls.length;
 
     await user.click(screen.getByRole("button", { name: /excel/i }));
 
-    await waitFor(() => {
-      const last = api.runReporte.mock.calls[api.runReporte.mock.calls.length - 1]?.[0] as ReportConfig;
-      expect(last.limit).toBe(4300);
-      expect(last.offset).toBe(0);
-    });
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const [config, options] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig, { format: string }];
+    expect(config.columns).toHaveLength(1);
+    expect(options.format).toBe("excel");
+    // No second pass over the rows: the server re-runs the query itself.
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore);
+  });
+
+  it("downloads the file under the name the server chose", async () => {
+    const user = userEvent.setup();
+    await generate(user);
+
+    await user.click(screen.getByRole("button", { name: /pdf/i }));
+
+    await waitFor(() => expect(downloaded).toHaveLength(1));
+    expect(downloaded[0].name).toBe("Reporte_06-08-2026_00-00-00.pdf");
+    expect(toasts[toasts.length - 1]?.text).toMatch(/PDF descargado/);
+  });
+
+  it("exports the configuration that produced what is on screen", async () => {
+    // Editing after generating must not silently export something else.
+    const user = userEvent.setup();
+    await generate(user);
+    await addColumn(user, /Resuelto/);
+
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
+    expect(config.columns).toHaveLength(1);
+  });
+
+  it("shows the server's own message when the export is refused", async () => {
+    api.exportarReporte.mockRejectedValueOnce(new Error("cualquier cosa"));
+
+    const user = userEvent.setup();
+    await generate(user);
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+
+    await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
+    expect(downloaded).toHaveLength(0);
+  });
+
+  it("offers to leave the photographs out only when there are any", async () => {
+    const user = userEvent.setup();
+    await generate(user);
+
+    expect(screen.queryByLabelText(/Fotos en el Excel/)).not.toBeInTheDocument();
+  });
+
+  it("blocks the second button while one export is running", async () => {
+    let release!: () => void;
+    api.exportarReporte.mockImplementationOnce(
+      () => new Promise((resolve) => {
+        release = () => resolve({ blob: new Blob(["x"]), filename: "r.xlsx" });
+      }),
+    );
+
+    const user = userEvent.setup();
+    await generate(user);
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+
+    await waitFor(() => expect(screen.getByText(/Generando en el servidor/)).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /pdf/i })).toBeDisabled();
+
+    release();
+    await waitFor(() => expect(downloaded).toHaveLength(1));
   });
 });
 

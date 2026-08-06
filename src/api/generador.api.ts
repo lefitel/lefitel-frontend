@@ -164,11 +164,108 @@ export const eliminarReporte = (id: number, token: string): Promise<{ message: s
 export const duplicarReporte = (id: number, token: string): Promise<SavedReport> =>
   axios.post(urlApi + urlGenerador + `reportes/${id}/duplicar`, {}, auth(token)).then((r) => r.data);
 
-/** Extracts the server's message, which is written for the user, not the developer. */
+// ─── Export ──────────────────────────────────────────────────────────────────
+
+export type ExportFormat = "excel" | "pdf";
+
+export interface ExportOptions {
+  format: ExportFormat;
+  title: string;
+  subtitle?: string | null;
+  /** Embed the photographs. Ignored for PDF. */
+  photos?: boolean;
+}
+
+export interface ExportedFile {
+  blob: Blob;
+  filename: string;
+}
+
+/** Last resort when Content-Disposition does not arrive. */
+const FALLBACK_NAME: Record<ExportFormat, string> = {
+  excel: "reporte.xlsx",
+  pdf: "reporte.pdf",
+};
+
+/**
+ * Reads the name the server chose.
+ *
+ * It sends both forms: filename* percent-encoded so accents survive, and a
+ * plain filename for anything that ignores RFC 5987. The header only reaches us
+ * because app.ts lists it in the CORS exposedHeaders; without that the browser
+ * hides it and every download would be called "reporte".
+ */
+export function filenameFromDisposition(header: unknown, format: ExportFormat): string {
+  if (typeof header !== "string") return FALLBACK_NAME[format];
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded[1].trim());
+    } catch {
+      // A malformed header must not cost the user their download.
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain ? plain[1].trim() : FALLBACK_NAME[format];
+}
+
+/**
+ * Builds the file on the server and downloads it.
+ *
+ * The configuration travels, not the rows: the browser used to download the
+ * whole result set as JSON only to rebuild the file from it, and to fetch one
+ * photograph per row over HTTP.
+ */
+export const exportarReporte = async (
+  config: ReportConfig,
+  options: ExportOptions,
+  token: string,
+  extras: { signal?: AbortSignal; onProgress?: (received: number, total?: number) => void } = {},
+): Promise<ExportedFile> => {
+  const response = await axios.post(
+    urlApi + urlGenerador + "exportar",
+    { config, ...options },
+    {
+      ...auth(token),
+      responseType: "blob",
+      signal: extras.signal,
+      onDownloadProgress: (event) => {
+        extras.onProgress?.(event.loaded, event.total);
+      },
+    },
+  );
+
+  return {
+    blob: response.data as Blob,
+    filename: filenameFromDisposition(response.headers["content-disposition"], options.format),
+  };
+};
+
+/**
+ * Extracts the server's message, which is written for the user, not the developer.
+ *
+ * A failed download arrives as a Blob, because that is what the request asked
+ * for: the JSON body is inside it and has to be read out, which is asynchronous.
+ * Callers that can be a download use `mensajeDeErrorAsync`.
+ */
 export const mensajeDeError = (error: unknown, fallback: string): string => {
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { message?: string } | undefined)?.message;
     if (typeof message === "string" && message.trim() !== "") return message;
   }
   return fallback;
+};
+
+export const mensajeDeErrorAsync = async (error: unknown, fallback: string): Promise<string> => {
+  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
+    try {
+      const text = await error.response.data.text();
+      const parsed = JSON.parse(text) as { message?: string };
+      if (typeof parsed.message === "string" && parsed.message.trim() !== "") return parsed.message;
+    } catch {
+      // Not JSON, or an empty body. Fall through to the generic message.
+    }
+    return fallback;
+  }
+  return mensajeDeError(error, fallback);
 };

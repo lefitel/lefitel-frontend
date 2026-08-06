@@ -346,7 +346,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
                   <label key={adss.id} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
                     <Checkbox
                       checked={adss.id ? adssSelected.includes(adss.id) : false}
-                      onCheckedChange={(_checked) => { adss.id && toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
+                      onCheckedChange={() => { if (adss.id) toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
                       disabled={isEditing && !canEdit}
                     />
                     <span className="text-sm">{adss.name}</span>
