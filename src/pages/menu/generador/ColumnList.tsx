@@ -212,7 +212,14 @@ const ColumnList = ({
           <ColumnRow
             // Keyed by identity, not position: keying by index remounted every
             // row on a move and threw keyboard focus back to the document.
-            key={`${column.path}|${column.agg ?? ""}`}
+            //
+            // The renamed header is part of that identity. Two columns of the
+            // same field kept apart only by their header survive grouping —
+            // rightly, someone put them both there — and without the label in
+            // the key they arrived as two children with one key, which leaves
+            // reconciliation undefined: an edit lands on the wrong twin, or
+            // focus jumps out of the box being typed in.
+            key={`${column.path}|${column.agg ?? ""}|${column.label ?? ""}`}
             column={column}
             index={index}
             total={config.columns.length}

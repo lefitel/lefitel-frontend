@@ -120,9 +120,19 @@ const ListInput = ({
   // A value that changed elsewhere — a saved report opened, the operator
   // switched — replaces what is in the box. Comparing against what was last
   // adopted, not against the current text, so this never fights the typing.
-  if (fromConfig !== adopted) {
+  //
+  // And only when it disagrees with what the box already means. The
+  // configuration is re-joined as "uno, dos", so deleting the last character of
+  // the final value made the two strings differ and the box was rewritten from
+  // the list — eating the separator with it: "uno, d" plus one backspace became
+  // "uno", and the next keystroke merged two values into one. That is the same
+  // failure this component was rewritten to remove, reached by editing rather
+  // than by typing.
+  if (fromConfig !== adopted && fromConfig !== toList(text).join(", ")) {
     setAdopted(fromConfig);
     setText(fromConfig);
+  } else if (fromConfig !== adopted) {
+    setAdopted(fromConfig);
   }
 
   return (

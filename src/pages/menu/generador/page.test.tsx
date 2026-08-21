@@ -300,7 +300,7 @@ describe("saving", () => {
 
     // The action reads "Guardar", never "Actualizar", for a report that is not ours.
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
-    expect(screen.getByText(/se guardará como copia suya/i)).toBeInTheDocument();
+    expect(screen.getByText(/se guardará como una copia suya/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /guardar reporte/i }));
     await waitFor(() => expect(api.crearReporte).toHaveBeenCalled());

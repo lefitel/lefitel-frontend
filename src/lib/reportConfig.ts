@@ -46,7 +46,9 @@ export const findField = (root: CatalogRoot | undefined, path: string): CatalogF
  * of it was reached through that relation.
  */
 export const isForeignTotal = (root: CatalogRoot | undefined, path: string): boolean =>
-  (root?.aggregateOnly ?? []).some((a) => a.path === path && a.path.includes("."));
+  (root?.aggregateOnly ?? []).some(
+    (a) => a.path.includes(".") && (a.path === path || path.startsWith(`${a.path}.`)),
+  );
 
 /** Sensible starting operator for each type, so a new filter is usable immediately. */
 export const defaultOperator = (kind: CatalogField["kind"]): Operator => {
@@ -70,9 +72,29 @@ export const operatorNeedsTwoValues = (operator: Operator): boolean => operator 
 export const columnLimitReached = (config: ReportConfig): boolean =>
   config.columns.length >= MAX_COLUMNS;
 
+/**
+ * Every condition in the tree, not just the ones at the top.
+ *
+ * An `exists` carries its own `where`, and a nested group carries a list, so
+ * counting the outer array reports a number the server does not recognise —
+ * and the server counts the tree. Two caps that disagree mean the warning never
+ * fires and the refusal arrives from the far side instead.
+ */
+export const countConditions = (node: unknown): number => {
+  if (!node || typeof node !== "object") return 1;
+  if (isFilterGroup(node)) {
+    return node.conditions.reduce((total, child) => total + countConditions(child), 0);
+  }
+  if (isExists(node)) {
+    const where = (node as { where?: FilterGroup }).where;
+    return 1 + (where ? countConditions(where) : 0);
+  }
+  return 1;
+};
+
 /** True when the report already carries as many filters as it may. */
 export const filterLimitReached = (config: ReportConfig): boolean =>
-  (config.filters?.conditions.length ?? 0) >= MAX_CONDITIONS;
+  (config.filters ? countConditions(config.filters) : 0) >= MAX_CONDITIONS;
 
 export function addColumn(config: ReportConfig, path: string, agg?: AggFn): ReportConfig {
   if (columnLimitReached(config)) return config;
@@ -145,7 +167,13 @@ export function setColumnAgg(config: ReportConfig, index: number, agg?: AggFn): 
   // The sort criterion belongs to the column, and the column just changed
   // identity; leaving the old one behind sorts by something no longer shown.
   const sort = (config.sort ?? []).map((s) =>
-    s.path === target.path && s.agg === target.agg ? { ...s, ...(agg ? { agg } : {}) } : s,
+    // Rebuilt, not spread: spreading kept the previous `agg` alive when the new
+    // one is undefined ("Sin resumen"), which is the exact case this rewrite
+    // exists to handle — the arrow went dark while the criterion stayed, and
+    // the next click added a second one.
+    s.path === target.path && s.agg === target.agg
+      ? { path: s.path, dir: s.dir, ...(agg ? { agg } : {}) }
+      : s,
   );
   return { ...config, columns, sort };
 }
@@ -176,6 +204,10 @@ export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig
     c.path === path && c.agg ? { path: c.path, ...(c.label ? { label: c.label } : {}) } : c,
   );
 
+  // Two columns are the same thing when their path and their summary match;
+  // a renamed header still makes them two, and collapsing those would delete a
+  // column the person put there on purpose. What the header must not do is
+  // collide as a React key — see the key ColumnList builds, which includes it.
   const seen = new Set<string>();
   const columns = stripped.filter((c) => {
     const key = `${c.path}|${c.agg ?? ""}|${c.label ?? ""}`;
@@ -184,7 +216,17 @@ export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig
     return true;
   });
 
-  return { ...config, groupBy, columns };
+  // Grouping strips the aggregates, so every criterion that named one of those
+  // columns now names something that is not there. `removeColumn` and
+  // `setColumnAgg` keep the sort in step and this did not: the arrow went dark
+  // while the criterion survived in the configuration, a second click appended
+  // a duplicate, and the server received an aggregated sort over a grouped
+  // column — the 400 that carrying the aggregate was meant to end.
+  const sort = (config.sort ?? []).filter((s) =>
+    columns.some((c) => c.path === s.path && c.agg === s.agg),
+  );
+
+  return { ...config, groupBy, columns, sort };
 }
 
 // ─── Sorting ─────────────────────────────────────────────────────────────────
@@ -288,12 +330,22 @@ type FilterNode = FilterCondition | FilterGroup | { exists: string; where?: Filt
  * dropped whole, and the drop is counted and announced.
  */
 function nodeSurvives(node: FilterNode, keeps: (path: string) => boolean): boolean {
-  if (isFilterGroup(node)) return node.conditions.every((c) => nodeSurvives(c as FilterNode, keeps));
-  if (isExists(node)) {
-    const exists = node as { exists: string; where?: FilterGroup };
-    return keeps(exists.exists) && (!exists.where || nodeSurvives(exists.where, keeps));
+  // Anything malformed is dropped rather than inspected. A saved configuration
+  // is JSON from a database and can be any shape at all; reading `.path` off a
+  // null threw inside the click handler, so the report neither opened nor said
+  // why — the row in the list just looked dead.
+  if (!node || typeof node !== "object") return false;
+  if (isFilterGroup(node)) {
+    return node.conditions.every((c) => nodeSurvives(c as FilterNode, keeps));
   }
-  return keeps((node as FilterCondition).path);
+  if (isExists(node)) {
+    const exists = node as { exists: string; where?: unknown };
+    if (!keeps(exists.exists)) return false;
+    if (exists.where === undefined) return true;
+    return isFilterGroup(exists.where) && nodeSurvives(exists.where as FilterNode, keeps);
+  }
+  const { path } = node as FilterCondition;
+  return typeof path === "string" && keeps(path);
 }
 
 /**
@@ -340,9 +392,19 @@ export function changeRoot(config: ReportConfig, root: CatalogRoot): ReportConfi
   return { ...pruneToCatalog({ ...config, root: root.key }, root), offset: 0 };
 }
 
-/** How many pieces a configuration is made of, for saying what an open lost. */
+/**
+ * How many pieces a configuration is made of, for saying what an open lost.
+ *
+ * The order and the grouping count. They were left out, so a report whose sort
+ * could not be kept opened with "cargado" and no warning at all, and came back
+ * in a different order than its author saved — the quiet half of the same
+ * defect the warning exists for.
+ */
 export const elementCount = (config: ReportConfig): number =>
-  config.columns.length + (config.filters?.conditions.length ?? 0);
+  config.columns.length +
+  (config.filters ? config.filters.conditions.length : 0) +
+  (config.sort?.length ?? 0) +
+  (config.groupBy?.length ?? 0);
 
 /**
  * Whether two configurations would produce the same rows, ignoring which page
@@ -449,7 +511,14 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
   // user found out only after pressing Generar — with a message telling them to
   // summarise a column they had already summarised.
   for (const sort of config.sort ?? []) {
-    if (!known.has(sort.path)) {
+    // The same reachability rule the columns get, prefix included: `revisiones.date`
+    // is a legal column, and checking membership alone made it an illegal sort —
+    // so a report that opened cleanly could not be run, with a message blaming
+    // the reader's profile for a field sitting in their own column list.
+    const reachable =
+      known.has(sort.path) ||
+      root.aggregateOnly.some((a) => sort.path.startsWith(`${a.path}.`));
+    if (!reachable) {
       problems.push(`El orden usa "${sort.path}", que no está disponible para su perfil.`);
       continue;
     }

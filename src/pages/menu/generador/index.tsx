@@ -286,7 +286,16 @@ const GeneradorPage = () => {
    * report A's rows with report B's name on them, and exporting produced a file
    * titled B containing A.
    */
-  const retireInFlight = () => { runSeq.current += 1; };
+  const retireInFlight = () => {
+    runSeq.current += 1;
+    // And release the spinner it was holding. `run` clears `running` only when
+    // its own sequence is still current — which was safe while `run` was the
+    // only writer, because a superseding run set the flag again and cleared it
+    // itself. Retiring a request without starting another one left the flag
+    // raised with nobody left to lower it: Generar stayed disabled for the rest
+    // of the session, and no later action could clear it.
+    setRunning(false);
+  };
 
   const handleNew = () => {
     retireInFlight();
@@ -311,15 +320,16 @@ const GeneradorPage = () => {
         config,
         visibility: saveShared ? ("shared" as const) : ("private" as const),
       };
-      // Updating only ever touches your own report; someone else's is copied.
-      const report = current && isMine
+      // Updating only ever touches your own report; someone else's is copied,
+      // and so is your own when this role may create but not edit.
+      const report = current && isMine && mayEdit
         ? await actualizarReporte(current.id, payload, tokenRef.current)
         : await crearReporte(payload, tokenRef.current);
       setCurrent(report);
       setSaveName(report.name);
       setSaveOpen(false);
       refreshSaved();
-      toast.success(current && isMine ? "Reporte actualizado" : "Reporte guardado");
+      toast.success(current && isMine && mayEdit ? "Reporte actualizado" : "Reporte guardado");
     } catch (error) {
       toast.error(mensajeDeError(error, "No se pudo guardar el reporte"));
     } finally {
@@ -668,25 +678,29 @@ const GeneradorPage = () => {
                   <CardDescription className="truncate">{description}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {/* Updating an existing report of your own needs `editar`;
-                      anything else creates a row and needs `crear`. */}
-                  {(current && isMine ? mayEdit : mayCreate) && (
+                  {/* Updating your own report needs `editar` and everything
+                      else creates a row and needs `crear` — but holding only
+                      `crear` must not lose the button the moment one of your
+                      own reports is open: `handleSave` already falls back to
+                      creating a copy, and the alternative was telling someone
+                      to press Nuevo and rebuild what they wanted to keep. */}
+                  {(mayCreate || (current !== null && isMine && mayEdit)) && (
                   <Popover open={saveOpen} onOpenChange={setSaveOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm">
                         <SaveIcon className="mr-1.5 h-4 w-4" />
-                        {current && isMine ? "Actualizar" : "Guardar"}
+                        {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
                       </Button>
                     </PopoverTrigger>
                     <PopoverContent align="end" className="w-80 space-y-3">
-                      {current && isMine && (
+                      {current && isMine && mayEdit && (
                         <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
                           Se sobrescribirá «{current.name}».
                         </p>
                       )}
-                      {current && !isMine && (
+                      {current && (!isMine || !mayEdit) && (
                         <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
-                          «{current.name}» es de otra persona: se guardará como copia suya.
+                          «{current.name}» se guardará como una copia suya.
                         </p>
                       )}
                       <div className="space-y-1.5">
@@ -715,7 +729,7 @@ const GeneradorPage = () => {
                       </div>
                       <Button className="w-full" onClick={handleSave} disabled={saving}>
                         {saving && <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />}
-                        {current && isMine ? "Actualizar reporte" : "Guardar reporte"}
+                        {current && isMine && mayEdit ? "Actualizar reporte" : "Guardar reporte"}
                       </Button>
                     </PopoverContent>
                   </Popover>
