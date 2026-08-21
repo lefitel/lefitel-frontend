@@ -5,7 +5,7 @@ import {
   ChevronsUpDown,
   UserCircle,
 } from "lucide-react";
-import { MENU_ITEMS } from "./menuItems";
+import { visibleMenuItems } from "./menuItems";
 import {
   Sidebar,
   SidebarContent,
@@ -48,7 +48,7 @@ export const AppSidebar = () => {
   const location = useLocation();
   const rol = sesion.usuario.id_rol;
 
-  const visibleItems = MENU_ITEMS.filter((item) => item.roles.includes(rol));
+  const visibleItems = visibleMenuItems(rol);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
 

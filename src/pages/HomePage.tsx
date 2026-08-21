@@ -36,7 +36,7 @@ function buildBreadcrumbs(pathname: string): { label: string; path?: string }[] 
 const HomePage = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const breadcrumbs = buildBreadcrumbs(location.pathname);
 
   return (
@@ -69,10 +69,10 @@ const HomePage = () => {
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
                   className="h-8 w-8"
                 >
-                  {theme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
+                  {resolvedTheme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
                 </Button>
               </div>
             </div>

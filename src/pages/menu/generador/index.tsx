@@ -6,16 +6,18 @@ import {
 import { toast } from "sonner";
 
 import { SesionContext } from "../../../context/SesionContext";
+import { can } from "../../../lib/permissions";
 import {
   actualizarReporte, crearReporte, duplicarReporte, eliminarReporte, exportarReporte,
   getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync, runReporte,
-  type AggFn, type Catalog, type CatalogField, type ExportFormat, type ReportConfig,
-  type ReportResult, type SavedReport,
+  type AggFn, type Catalog, type CatalogField, type ExportFormat, type FilterCondition,
+  type ReportConfig, type ReportResult, type SavedReport,
 } from "../../../api/generador.api";
 import {
-  addColumn, addFilter, changeRoot, describeConfig, emptyConfig, moveColumn,
-  removeColumn, removeFilter, renameColumn, sameQuery, setColumnAgg, setFilterJoin,
-  toggleGroupBy, toggleSort, updateFilter, validateConfig,
+  addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
+  emptyConfig, filterLimitReached, MAX_COLUMNS, MAX_CONDITIONS, MAX_SORTS, moveColumn,
+  pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, setColumnAgg,
+  setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
 } from "../../../lib/reportConfig";
 import axios from "axios";
 import { saveAs } from "file-saver";
@@ -44,6 +46,21 @@ const GeneradorPage = () => {
   const token = sesion.token;
   const currentUserId = sesion.usuario.id ?? undefined;
 
+  /**
+   * What this role may do here, from the matrix the server enforces.
+   *
+   * The page asked nothing: every button was drawn for everyone, and the server
+   * answered 403 to whoever pressed one they did not hold. That cost nothing
+   * while all three seeded roles held all four actions — and it breaks the
+   * first time an administrator unticks a box in Seguridad, which is the entire
+   * point of that screen. The server stays the authority; this only stops
+   * offering what it is going to refuse.
+   */
+  const rol = sesion.usuario.id_rol;
+  const mayCreate = can(rol, "generador", "crear");
+  const mayEdit = can(rol, "generador", "editar");
+  const mayArchive = can(rol, "generador", "archivar");
+
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [catalogError, setCatalogError] = useState(false);
   const [config, setConfig] = useState<ReportConfig>(emptyConfig("evento"));
@@ -71,6 +88,19 @@ const GeneradorPage = () => {
 
   /** Discards responses from a request the user has already superseded. */
   const runSeq = useRef(0);
+
+  /**
+   * The current configuration, readable from a handler that never changes.
+   *
+   * Every row of the column list and the filter list is memoised, and the memo
+   * was inert: the parent rebuilt six arrow functions on each render, so the
+   * shallow compare failed for all sixty rows on every keystroke of any rename
+   * or filter value — the half-second-per-keypress the memo was added to
+   * remove. The handlers below are built once; when one needs to look at the
+   * configuration before deciding, it reads it here instead of closing over it.
+   */
+  const configRef = useRef(config);
+  configRef.current = config;
 
   const root = useMemo(
     () => catalog?.roots.find((r) => r.key === config.root),
@@ -128,7 +158,7 @@ const GeneradorPage = () => {
    * user edited while the query was in flight, and could pair a configuration
    * with a different saved report's identity.
    */
-  const run = useCallback(async (target: ReportConfig) => {
+  const run = useCallback(async (target: ReportConfig, keepOnError = false) => {
     const seq = ++runSeq.current;
     setRunning(true);
     try {
@@ -140,10 +170,19 @@ const GeneradorPage = () => {
     } catch (error) {
       if (seq !== runSeq.current) return;
       toast.error(mensajeDeError(error, "No se pudo generar el reporte"));
-      // Do not keep showing rows from a previous configuration under a header
-      // that now describes a different one.
-      setResult(null);
-      setResultConfig(null);
+      // Clearing is right for Generar: rows from a previous configuration under
+      // a header describing a different one is a lie on screen.
+      //
+      // It is wrong for a page. The failure there is usually transient — a
+      // timeout, or the thirty-a-minute limit reached by holding "Siguiente" —
+      // and clearing threw away the table the person was reading, disabled both
+      // export buttons, and left them re-running the very query that had just
+      // timed out. The page they asked for did not arrive; the one they had is
+      // still true.
+      if (!keepOnError) {
+        setResult(null);
+        setResultConfig(null);
+      }
     } finally {
       if (seq === runSeq.current) setRunning(false);
     }
@@ -159,8 +198,74 @@ const GeneradorPage = () => {
   /** Paging must run the configuration that produced the current page. */
   const handlePage = (offset: number) => {
     if (!resultConfig) return;
-    void run({ ...resultConfig, offset });
+    void run({ ...resultConfig, offset }, true);
   };
+
+  // ── Column and filter editing ──────────────────────────────────────────────
+  //
+  // Identity-stable on purpose: see `configRef`. None of these calls a toast
+  // from inside a state updater — an updater has to be pure, React invokes it
+  // twice in development to prove it, and every warning fired from one appeared
+  // twice on screen.
+
+  const handleMove = useCallback((from: number, to: number) => {
+    setConfig((c) => moveColumn(c, from, to));
+  }, []);
+
+  const handleRemoveColumn = useCallback((index: number) => {
+    setConfig((c) => removeColumn(c, index));
+  }, []);
+
+  const handleRename = useCallback((index: number, label: string) => {
+    setConfig((c) => renameColumn(c, index, label));
+  }, []);
+
+  const handleSetAgg = useCallback((index: number, agg?: AggFn) => {
+    const next = setColumnAgg(configRef.current, index, agg);
+    if (next === configRef.current) {
+      return toast.warning("Ya hay una columna igual con ese resumen.");
+    }
+    setConfig(next);
+  }, []);
+
+  const handleToggleGroup = useCallback((index: number) => {
+    const before = configRef.current;
+    const next = toggleGroupBy(before, index);
+    // Grouping strips the aggregates from every column sharing that path and
+    // collapses what is left over into one. That is the right behaviour and it
+    // used to happen in silence: two columns became one and the summaries the
+    // person had chosen were gone with no explanation.
+    const lost = before.columns.length - next.columns.length;
+    if (lost > 0) {
+      toast.info(
+        `Se juntaron ${lost + 1} columnas en una: una columna agrupada no lleva resumen.`,
+      );
+    }
+    setConfig(next);
+  }, []);
+
+  const handleToggleSort = useCallback((path: string, agg?: AggFn) => {
+    const current = configRef.current;
+    const already = (current.sort ?? []).some((s) => s.path === path && s.agg === agg);
+    if (!already && sortLimitReached(current)) {
+      return toast.warning(
+        `Ya hay ${MAX_SORTS} criterios de orden. Quite alguno para añadir otro.`,
+      );
+    }
+    setConfig(toggleSort(current, path, agg));
+  }, []);
+
+  const handleUpdateFilter = useCallback((index: number, patch: Partial<FilterCondition>) => {
+    setConfig((c) => updateFilter(c, index, patch));
+  }, []);
+
+  const handleRemoveFilter = useCallback((index: number) => {
+    setConfig((c) => removeFilter(c, index));
+  }, []);
+
+  const handleSetJoin = useCallback((op: "and" | "or") => {
+    setConfig((c) => setFilterJoin(c, op));
+  }, []);
 
   // ── Saved reports ──────────────────────────────────────────────────────────
 
@@ -171,7 +276,20 @@ const GeneradorPage = () => {
     setSaveShared(false);
   };
 
+  /**
+   * Retires whatever is still in flight.
+   *
+   * `run` bumps this on the way out and checks it on the way back, but nothing
+   * else did — so clearing the table was not enough: a response from a report
+   * abandoned eight seconds ago still passed the check and wrote itself in.
+   * The screen then showed a full table under an empty configuration, or worse,
+   * report A's rows with report B's name on them, and exporting produced a file
+   * titled B containing A.
+   */
+  const retireInFlight = () => { runSeq.current += 1; };
+
   const handleNew = () => {
+    retireInFlight();
     setConfig(emptyConfig(root?.key ?? catalog?.roots[0]?.key ?? "evento"));
     setResult(null);
     setResultConfig(null);
@@ -216,11 +334,17 @@ const GeneradorPage = () => {
     }
     // Drop anything this role's catalog does not offer, instead of loading a
     // configuration that fails with an internal path name on every attempt.
-    const cleaned = changeRoot({ ...report.config, offset: 0 }, target);
-    const dropped =
-      (report.config.columns?.length ?? 0) - cleaned.columns.length +
-      ((report.config.filters?.conditions.length ?? 0) - (cleaned.filters?.conditions.length ?? 0));
+    //
+    // Through `pruneToCatalog`, not `changeRoot`: the detail level is not
+    // changing — it is the one the report was saved with — and `changeRoot`
+    // deleted every advanced filter on its way past, available or not. A report
+    // narrowed to "eventos con alguna revisión en mayo" opened as "todos los
+    // eventos", the warning blamed the reader's profile, and saving wrote the
+    // widened version back over the original.
+    const cleaned = { ...pruneToCatalog(report.config, target), offset: 0 };
+    const dropped = elementCount(report.config) - elementCount(cleaned);
 
+    retireInFlight();
     setConfig(cleaned);
     setCurrent(report);
     setSaveName(report.name);
@@ -230,8 +354,11 @@ const GeneradorPage = () => {
     setResultConfig(null);
 
     if (dropped > 0) {
+      // Not "que su perfil no puede consultar": a piece can also be missing
+      // because the field was retired from the catalog, and naming the wrong
+      // cause sends people to ask for a permission that would not help.
       toast.warning(
-        `«${report.name}» se abrió sin ${dropped} elemento${dropped === 1 ? "" : "s"} que su perfil no puede consultar.`,
+        `«${report.name}» se abrió sin ${dropped} elemento${dropped === 1 ? "" : "s"} que ya no están disponibles.`,
       );
     } else {
       toast.info(`«${report.name}» cargado. Pulse Generar para verlo.`);
@@ -400,19 +527,20 @@ const GeneradorPage = () => {
                 value={config.root}
                 onValueChange={(value) => {
                   const next = catalog.roots.find((r) => r.key === value);
-                  if (!next) return;
-                  setConfig((c) => {
-                    const cleaned = changeRoot(c, next);
-                    const lost =
-                      c.columns.length - cleaned.columns.length +
-                      ((c.filters?.conditions.length ?? 0) - (cleaned.filters?.conditions.length ?? 0));
-                    if (lost > 0) {
-                      toast.warning(
-                        `Se descartaron ${lost} elemento${lost === 1 ? "" : "s"} que no existen en este nivel de detalle.`,
-                      );
-                    }
-                    return cleaned;
-                  });
+                  if (!next || next.key === config.root) return;
+                  // Outside the updater. A state updater must be pure — React
+                  // calls it twice in development on purpose — so every one of
+                  // these warnings appeared twice, and in concurrent rendering
+                  // the double call is not a development-only courtesy.
+                  const cleaned = changeRoot(config, next);
+                  const lost = elementCount(config) - elementCount(cleaned);
+                  if (lost > 0) {
+                    toast.warning(
+                      `Se descartaron ${lost} elemento${lost === 1 ? "" : "s"} que no existen en este nivel de detalle.`,
+                    );
+                  }
+                  retireInFlight();
+                  setConfig(cleaned);
                   setResult(null);
                   setResultConfig(null);
                 }}
@@ -434,14 +562,35 @@ const GeneradorPage = () => {
                 <FieldPicker
                   root={root}
                   chosen={chosen}
-                  onPick={(field: CatalogField) =>
-                    setConfig((c) => {
-                      const next = addColumn(c, field.path);
-                      if (next === c) toast.warning(`"${field.label}" ya está en el reporte.`);
-                      return next;
-                    })}
-                  onPickAggregate={(path) =>
-                    setConfig((c) => addColumn(c, path, "count" as AggFn))}
+                  onPick={(field: CatalogField) => {
+                    // Both refusals used to return the same object, and the
+                    // caller had only identity to go on: at sixty columns,
+                    // picking a field never added before answered "ya está en
+                    // el reporte", which is not true and does not tell anyone
+                    // to remove a column.
+                    if (columnLimitReached(config)) {
+                      return toast.warning(
+                        `El reporte ya tiene el máximo de ${MAX_COLUMNS} columnas. Quite alguna para añadir otra.`,
+                      );
+                    }
+                    const next = addColumn(config, field.path);
+                    if (next === config) {
+                      return toast.warning(`"${field.label}" ya está en el reporte.`);
+                    }
+                    setConfig(next);
+                  }}
+                  onPickAggregate={(path, label) => {
+                    if (columnLimitReached(config)) {
+                      return toast.warning(
+                        `El reporte ya tiene el máximo de ${MAX_COLUMNS} columnas. Quite alguna para añadir otra.`,
+                      );
+                    }
+                    const next = addColumn(config, path, "count" as AggFn);
+                    if (next === config) {
+                      return toast.warning(`"${label ?? path}" ya está en el reporte.`);
+                    }
+                    setConfig(next);
+                  }}
                 />
               </div>
             </CardHeader>
@@ -449,12 +598,12 @@ const GeneradorPage = () => {
               <ColumnList
                 config={config}
                 root={root}
-                onMove={(from, to) => setConfig((c) => moveColumn(c, from, to))}
-                onRemove={(index) => setConfig((c) => removeColumn(c, index))}
-                onRename={(index, label) => setConfig((c) => renameColumn(c, index, label))}
-                onSetAgg={(index, agg) => setConfig((c) => setColumnAgg(c, index, agg))}
-                onToggleGroup={(index) => setConfig((c) => toggleGroupBy(c, index))}
-                onToggleSort={(path) => setConfig((c) => toggleSort(c, path))}
+                onMove={handleMove}
+                onRemove={handleRemoveColumn}
+                onRename={handleRename}
+                onSetAgg={handleSetAgg}
+                onToggleGroup={handleToggleGroup}
+                onToggleSort={handleToggleSort}
               />
             </CardContent>
           </Card>
@@ -467,7 +616,14 @@ const GeneradorPage = () => {
                   root={root}
                   chosen={new Set()}
                   label="Añadir filtro"
-                  onPick={(field) => setConfig((c) => addFilter(c, field))}
+                  onPick={(field) => {
+                    if (filterLimitReached(config)) {
+                      return toast.warning(
+                        `El reporte ya tiene el máximo de ${MAX_CONDITIONS} filtros.`,
+                      );
+                    }
+                    setConfig(addFilter(config, field));
+                  }}
                 />
               </div>
             </CardHeader>
@@ -475,9 +631,9 @@ const GeneradorPage = () => {
               <FilterBuilder
                 config={config}
                 root={root}
-                onUpdate={(index, patch) => setConfig((c) => updateFilter(c, index, patch))}
-                onRemove={(index) => setConfig((c) => removeFilter(c, index))}
-                onSetJoin={(op) => setConfig((c) => setFilterJoin(c, op))}
+                onUpdate={handleUpdateFilter}
+                onRemove={handleRemoveFilter}
+                onSetJoin={handleSetJoin}
               />
             </CardContent>
           </Card>
@@ -492,9 +648,11 @@ const GeneradorPage = () => {
                 currentId={current?.id ?? null}
                 currentUserId={currentUserId}
                 onOpen={handleOpen}
-                onToggleFavorite={handleToggleFavorite}
-                onDuplicate={handleDuplicate}
-                onDelete={handleDelete}
+                // Opening and running are `ver`, which this page already
+                // required to load at all. The three that write are not.
+                onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
+                onDuplicate={mayCreate ? handleDuplicate : undefined}
+                onDelete={mayArchive ? handleDelete : undefined}
               />
             </CardContent>
           </Card>
@@ -510,6 +668,9 @@ const GeneradorPage = () => {
                   <CardDescription className="truncate">{description}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {/* Updating an existing report of your own needs `editar`;
+                      anything else creates a row and needs `crear`. */}
+                  {(current && isMine ? mayEdit : mayCreate) && (
                   <Popover open={saveOpen} onOpenChange={setSaveOpen}>
                     <PopoverTrigger asChild>
                       <Button variant="outline" size="sm">
@@ -558,6 +719,7 @@ const GeneradorPage = () => {
                       </Button>
                     </PopoverContent>
                   </Popover>
+                  )}
 
                   {hasPhotoColumns && (
                     <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { CatalogField, CatalogRoot, FilterCondition, ReportConfig } from "../api/generador.api";
 import {
   MAX_COLUMNS,
+  MAX_SORTS,
   addColumn,
   addFilter,
   changeRoot,
@@ -17,6 +18,8 @@ import {
   renameColumn,
   sameQuery,
   setColumnAgg,
+  pruneToCatalog,
+  sortLimitReached,
   toggleGroupBy,
   toggleSort,
   updateFilter,
@@ -458,5 +461,201 @@ describe("findField", () => {
 
   it("returns undefined for an unknown path", () => {
     expect(findField(evento, "inventado")).toBeUndefined();
+  });
+});
+
+describe("sorting — which column the criterion belongs to", () => {
+  const twoDates: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [
+      { path: "date", agg: "min" },
+      { path: "date", agg: "max" },
+    ],
+    groupBy: ["state"],
+  };
+
+  it("carries the column's aggregate into the criterion", () => {
+    // The parameter was there from the first version and no caller ever passed
+    // it, so every sort in a grouped report was refused by the server: a column
+    // that is not grouped has to say how it is summarised. The button produced
+    // a 400, with a message telling the person to summarise a column they had
+    // already summarised.
+    const sorted = toggleSort(twoDates, "date", "max");
+    expect(sorted.sort).toEqual([{ path: "date", dir: "asc", agg: "max" }]);
+  });
+
+  it("tells two columns of the same field apart", () => {
+    // Keyed by path alone, the minimum and the maximum were one criterion:
+    // clicking either lit both arrows, and only one of them could be sorted.
+    let config = toggleSort(twoDates, "date", "max");
+    config = toggleSort(config, "date", "min");
+
+    expect(config.sort).toEqual([
+      { path: "date", dir: "asc", agg: "max" },
+      { path: "date", dir: "asc", agg: "min" },
+    ]);
+
+    config = toggleSort(config, "date", "max");
+    expect(config.sort?.find((s) => s.agg === "max")?.dir).toBe("desc");
+    expect(config.sort?.find((s) => s.agg === "min")?.dir).toBe("asc");
+
+    config = toggleSort(config, "date", "max");
+    expect(config.sort).toEqual([{ path: "date", dir: "asc", agg: "min" }]);
+  });
+
+  it("reports being full instead of ignoring the click in silence", () => {
+    let config = emptyConfig("evento");
+    for (let i = 0; i < MAX_SORTS; i++) config = toggleSort(config, "campo" + i);
+
+    expect(sortLimitReached(config)).toBe(true);
+    expect(toggleSort(config, "uno-mas")).toBe(config);
+  });
+
+  it("follows the column when its aggregate changes", () => {
+    const config = toggleSort(twoDates, "date", "max");
+    const changed = setColumnAgg(config, 1, "count");
+
+    expect(changed.sort).toEqual([{ path: "date", dir: "asc", agg: "count" }]);
+  });
+
+  it("goes away with the column it belonged to, and only that one", () => {
+    let config = toggleSort(twoDates, "date", "max");
+    config = toggleSort(config, "date", "min");
+
+    const left = removeColumn(config, 1);
+    expect(left.sort).toEqual([{ path: "date", dir: "asc", agg: "min" }]);
+  });
+});
+
+describe("setColumnAgg", () => {
+  it("refuses to make two columns identical", () => {
+    // Both would render under the same React key, which makes reconciliation
+    // undefined: an edit lands on the wrong twin, or focus leaves the box being
+    // typed in. `addColumn` refuses an exact duplicate; this walked into one.
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "date", agg: "min" }, { path: "date", agg: "max" }],
+    };
+
+    expect(setColumnAgg(config, 1, "min")).toBe(config);
+  });
+});
+
+describe("pruneToCatalog", () => {
+  const withAdvanced: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [{ path: "description" }],
+    filters: {
+      op: "and",
+      conditions: [
+        { path: "description", operator: "like", value: "poste" },
+        {
+          exists: "revisiones",
+          where: { op: "and", conditions: [{ path: "date", operator: "gte", value: "2026-01-01" }] },
+        },
+      ],
+    },
+  };
+
+  it("keeps an advanced filter whose paths are all available", () => {
+    // `changeRoot` deleted every `exists` and every nested group on principle,
+    // and opening a saved report ran through it even with the detail level
+    // unchanged. The report silently widened, and saving persisted the loss.
+    const pruned = pruneToCatalog(withAdvanced, evento);
+    expect(pruned.filters?.conditions).toHaveLength(2);
+  });
+
+  it("drops an advanced filter whole rather than in pieces", () => {
+    // Removing one clause of a sentence does not narrow it, it changes what it
+    // says: an "exists" stripped of its date range matches rows the person
+    // filtered out on purpose.
+    const sinRevisiones: CatalogRoot = { ...evento, aggregateOnly: [] };
+    const pruned = pruneToCatalog(withAdvanced, sinRevisiones);
+
+    expect(pruned.filters?.conditions).toHaveLength(1);
+    expect(pruned.filters?.conditions[0]).toEqual({
+      path: "description",
+      operator: "like",
+      value: "poste",
+    });
+  });
+
+  it("leaves the detail level alone", () => {
+    expect(pruneToCatalog(withAdvanced, evento).root).toBe("evento");
+  });
+});
+
+describe("sameQuery — key order", () => {
+  it("does not mind which order the keys were written in", () => {
+    // `JSON.stringify` follows insertion order and the builders disagree on
+    // one: `addColumn` writes `agg` before `label`, `setColumnAgg` rebuilds it
+    // after. Setting an aggregate to "promedio" and back to "suma" produced a
+    // different string for an identical report, and the screen announced
+    // "cambió la configuración" over a table that matched it exactly. A banner
+    // that cries wolf is one nobody reads — and this is the banner that warns
+    // the rows no longer match the header.
+    const a: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "date", agg: "min", label: "Primera" }],
+    };
+    const b: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "date", label: "Primera", agg: "min" }],
+    };
+
+    expect(sameQuery(a, b)).toBe(true);
+  });
+
+  it("still notices a real difference", () => {
+    const a: ReportConfig = { ...emptyConfig("evento"), columns: [{ path: "date", agg: "min" }] };
+    const b: ReportConfig = { ...emptyConfig("evento"), columns: [{ path: "date", agg: "max" }] };
+
+    expect(sameQuery(a, b)).toBe(false);
+  });
+});
+
+describe("validation — the order", () => {
+  it("catches a sort the server would refuse, before it is sent", () => {
+    // Nothing here looked at `config.sort` at all, so the problems panel stayed
+    // empty and the round trip came back 400.
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "state" }, { path: "description", agg: "count" }],
+      groupBy: ["state"],
+      sort: [{ path: "description", dir: "asc" }],
+    };
+
+    expect(validateConfig(config, evento).join(" ")).toMatch(/sin un resumen/);
+  });
+
+  it("accepts a sort that carries its aggregate", () => {
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "state" }, { path: "description", agg: "count" }],
+      groupBy: ["state"],
+      sort: [{ path: "description", dir: "asc", agg: "count" }],
+    };
+
+    expect(validateConfig(config, evento)).toEqual([]);
+  });
+
+  it("refuses to summarise a total that belongs to another entity", () => {
+    // `eventos` on a report of postes is the row's own count. Reached through a
+    // relation it is not, and summing it across a group squares it: 1.390
+    // events reported where 1.376 exist.
+    const conPrefijo: CatalogRoot = {
+      ...evento,
+      aggregateOnly: [
+        ...evento.aggregateOnly,
+        { path: "poste.eventos", label: "Eventos del poste", group: "Poste" },
+      ],
+    };
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "poste.tramo" }, { path: "poste.eventos", agg: "count" }],
+      groupBy: ["poste.tramo"],
+    };
+
+    expect(validateConfig(config, conPrefijo).join(" ")).toMatch(/total de otra entidad/);
   });
 });

@@ -266,6 +266,50 @@ describe("FilterBuilder", () => {
   });
 });
 
+describe("FilterBuilder — the list operator", () => {
+  const inFilter = (value?: unknown): ReportConfig => ({
+    ...emptyConfig("evento"),
+    filters: {
+      op: "and",
+      conditions: [{ path: "description", operator: "in", ...(value !== undefined ? { value } : {}) }],
+    },
+  });
+
+  it("lets a comma be typed", async () => {
+    // The list was derived from the configuration and the configuration dropped
+    // the empty last segment — correctly — so "1," turned straight back into
+    // "1", React wrote that into the box, and the separator vanished under the
+    // caret. Typing `poste,cable` produced the single value `postecable`: the
+    // report came back empty and the screen said no record matched a filter the
+    // person never built. Pasting was the only way in.
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+
+    render(
+      <FilterBuilder config={inFilter([])} root={root} onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()} />,
+    );
+
+    const box = screen.getByLabelText(/Valores para Descripción/i);
+    await user.type(box, "poste,cable");
+
+    expect((box as HTMLInputElement).value).toBe("poste,cable");
+    expect(onUpdate).toHaveBeenLastCalledWith(0, { value: ["poste", "cable"] });
+  });
+
+  it("adopts a value that changed elsewhere", async () => {
+    // Holding the text locally must not stop a saved report from filling it in.
+    const { rerender } = render(
+      <FilterBuilder config={inFilter([])} root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()} />,
+    );
+    rerender(
+      <FilterBuilder config={inFilter(["uno", "dos"])} root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()} />,
+    );
+
+    expect((screen.getByLabelText(/Valores para Descripción/i) as HTMLInputElement).value)
+      .toBe("uno, dos");
+  });
+});
+
 describe("PreviewTable", () => {
   const result: ReportResult = {
     columns: [

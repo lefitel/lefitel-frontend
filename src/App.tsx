@@ -1,6 +1,7 @@
 import { Route, Routes, BrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
-import { MENU_ITEMS } from "./components/menuItems";
+import { visibleMenuItems } from "./components/menuItems";
+import { can, type Modulo } from "./lib/permissions";
 import LoadingPage from "./pages/LoadingPage";
 import { SesionContext } from "./context/SesionContext";
 import { SesionProvider } from "./context/SesionProvider";
@@ -41,11 +42,25 @@ const PublicRoutes = () => {
   return sesion.token === "" ? <Outlet /> : <Navigate to="/app/home" replace />;
 };
 
-const RoleRoute = ({ roles }: { roles: number[] }) => {
+/**
+ * Who may open a screen, asked of the same matrix that draws the menu.
+ *
+ * This used to be a list of role numbers written here by hand while the sidebar
+ * already asked the matrix, so the two disagreed in both directions. Untick
+ * `generador.ver` for a role and the menu entry vanished while the URL still
+ * worked — the page mounted, the catalogue came back 403, and the screen
+ * offered a "Reintentar" button for a refusal that was permanent. Create a
+ * fourth role from Seguridad and grant it anything, and every route redirected
+ * it to a route that redirected it back: sidebar drawn, content area blank,
+ * no error, nothing to click.
+ */
+const ModuleRoute = ({ modulo }: { modulo: Modulo }) => {
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
-  if (!roles.includes(rol)) {
-    const fallback = MENU_ITEMS.find((item) => item.roles.includes(rol))?.path ?? "/app/home";
+  if (!can(rol, modulo, "ver")) {
+    // Somewhere they can actually be. `/app/home` belongs to no module and is
+    // open to any session, so this always lands.
+    const fallback = visibleMenuItems(rol)[0]?.path ?? "/app/home";
     return <Navigate to={fallback} replace />;
   }
   return <Outlet />;
@@ -64,31 +79,50 @@ const App = () => {
                 <Route path="/app" element={<HomePage />}>
                   <Route index element={<Navigate to="/app/home" replace />} />
 
-                  {/* Roles 1, 2, 3 */}
-                  <Route element={<RoleRoute roles={[1, 2, 3]} />}>
-                    <Route path="home"          element={<InicioPage />} />
-                    <Route path="postes"         element={<PostePage />} />
-                    <Route path="postes/:id"     element={<PosteDetallePage />} />
-                    <Route path="ciudades"        element={<CiudadesPage />} />
-                    <Route path="ciudades/:id"   element={<CiudadDetallePageKeyed />} />
-                    <Route path="eventos"         element={<EventoPage />} />
-                    <Route path="eventos/:id"    element={<EventoDetallePage />} />
-                    <Route path="reportes"        element={<ReportePage />} />
-                    <Route path="generador"       element={<GeneradorPage />} />
-                    <Route path="perfil"          element={<PerfilPage />} />
+                  {/* Belongs to no module: anyone with a session. Their own
+                      profile is theirs, and the home page is where every
+                      redirect lands. */}
+                  <Route path="home"   element={<InicioPage />} />
+                  <Route path="perfil" element={<PerfilPage />} />
+
+                  <Route element={<ModuleRoute modulo="postes" />}>
+                    <Route path="postes"        element={<PostePage />} />
+                    <Route path="postes/:id"    element={<PosteDetallePage />} />
                   </Route>
 
-                  {/* Roles 1, 2 */}
-                  <Route element={<RoleRoute roles={[1, 2]} />}>
-                    <Route path="parametros" element={<ParametrosPage />} />
+                  <Route element={<ModuleRoute modulo="ciudades" />}>
+                    <Route path="ciudades"      element={<CiudadesPage />} />
+                    <Route path="ciudades/:id"  element={<CiudadDetallePageKeyed />} />
                   </Route>
 
-                  {/* Rol 1 únicamente */}
-                  <Route element={<RoleRoute roles={[1]} />}>
-                    <Route path="seguridad"      element={<SeguridadPage />} />
-                    <Route path="seguridad/:id"  element={<UsuarioDetallePageKeyed />} />
-                    <Route path="archivos"        element={<FilesPage />} />
-                    <Route path="bitacora"        element={<BitacoraPage />} />
+                  <Route element={<ModuleRoute modulo="eventos" />}>
+                    <Route path="eventos"       element={<EventoPage />} />
+                    <Route path="eventos/:id"   element={<EventoDetallePage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="reportes" />}>
+                    <Route path="reportes"      element={<ReportePage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="generador" />}>
+                    <Route path="generador"     element={<GeneradorPage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="parametros" />}>
+                    <Route path="parametros"    element={<ParametrosPage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="seguridad" />}>
+                    <Route path="seguridad"     element={<SeguridadPage />} />
+                    <Route path="seguridad/:id" element={<UsuarioDetallePageKeyed />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="archivos" />}>
+                    <Route path="archivos"      element={<FilesPage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="bitacora" />}>
+                    <Route path="bitacora"      element={<BitacoraPage />} />
                   </Route>
                 </Route>
               </Route>
@@ -100,7 +134,7 @@ const App = () => {
               <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>
           </BrowserRouter>
-          <Toaster position="top-right" richColors closeButton theme="system" />
+          <Toaster position="top-right" richColors closeButton />
         </TooltipProvider>
       </ShadcnThemeProvider>
     </SesionProvider>

@@ -1,6 +1,14 @@
+import type { Permisos } from "../lib/permissions";
+
 export interface SesionInterface {
   usuario: UsuarioInterface;
   token: string;
+  /**
+   * What this session may do, as the server says. Optional because the shape is
+   * also used for the empty session before anybody logs in; absent means the
+   * same as all-denied.
+   */
+  permisos?: Permisos;
 }
 export interface ReporteInterface {
   TramoInicial: number | null;

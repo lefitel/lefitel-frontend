@@ -53,6 +53,24 @@ vi.mock("sonner", () => ({
 
 const GeneradorPage = (await import("./index")).default;
 
+const { setPermisos, olvidarPermisos, sinPermisos } = await import("../../../lib/permissions");
+
+/**
+ * What the session provider does at login, done by hand.
+ *
+ * These tests mount the page under a fake context rather than the real
+ * provider, so nothing fills the permission matrix — and the page now asks it
+ * before drawing anything that writes. Granting the four here is what a role
+ * that can use this screen actually holds; the test below takes them away
+ * again on purpose.
+ */
+const grantGenerador = (over: Partial<Record<"ver" | "crear" | "editar" | "archivar", boolean>> = {}) => {
+  setPermisos(usuarioExample.id_rol, {
+    ...sinPermisos(),
+    generador: { ver: true, crear: true, editar: true, archivar: true, ...over },
+  });
+};
+
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const catalog: Catalog = {
@@ -64,7 +82,10 @@ const catalog: Catalog = {
         { path: "description", label: "Descripción", kind: "string", group: "Evento", operators: ["like"], aggregates: ["count"] },
         { path: "state", label: "Resuelto", kind: "boolean", group: "Evento", operators: ["eq"], aggregates: ["count"] },
       ],
-      aggregateOnly: [],
+      // A to-many relation the report can count and filter on with `exists`.
+      // The fixture had none, so nothing here ever exercised the branch that
+      // decides whether an advanced filter survives being opened.
+      aggregateOnly: [{ path: "revisiones", label: "Revisiones", group: "Evento" }],
     },
     {
       key: "poste", label: "Poste", rowMeaning: "Una fila por poste",
@@ -113,6 +134,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   toasts.length = 0;
   downloaded.length = 0;
+  olvidarPermisos();
+  grantGenerador();
   api.getCatalogo.mockResolvedValue(catalog);
   api.getReportesGuardados.mockResolvedValue([]);
   api.runReporte.mockImplementation((config: ReportConfig) => Promise.resolve(resultFor(config)));
@@ -299,8 +322,45 @@ describe("saving", () => {
     await ready();
     await user.click(await screen.findByText("Con campos ajenos"));
 
-    expect(toasts[toasts.length - 1]?.text).toMatch(/sin 2 elementos que su perfil no puede consultar/);
+    // "que ya no están disponibles", not "que su perfil no puede consultar":
+    // a field can also be gone from the catalog, and blaming permissions sends
+    // people to ask for one that would not bring the column back.
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin 2 elementos que ya no están disponibles/);
     expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+  });
+
+  it("keeps an advanced filter that the catalog still offers", async () => {
+    // Opening ran the stored configuration through `changeRoot`, which deleted
+    // every `exists` and every nested group on principle — even with the detail
+    // level unchanged and every path available. The report silently widened:
+    // "eventos con alguna revisión" instead of "…en un rango de fechas". The
+    // warning blamed the reader's profile, and pressing Actualizar wrote the
+    // widened version back over the original, for its author and for everyone
+    // it was shared with.
+    api.getReportesGuardados.mockResolvedValue([{
+      id: 9, name: "Con filtro avanzado", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: {
+        root: "evento",
+        columns: [{ path: "description" }],
+        filters: {
+          op: "and",
+          conditions: [
+            { path: "description", operator: "like", value: "poste" },
+            { exists: "revisiones", where: { op: "and", conditions: [] } },
+          ],
+        },
+      },
+    }]);
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await user.click(await screen.findByText("Con filtro avanzado"));
+
+    expect(toasts[toasts.length - 1]?.text).toMatch(/cargado/);
+    expect(toasts[toasts.length - 1]?.text).not.toMatch(/sin \d+ elemento/);
+    expect(screen.getByText(/Filtro avanzado/)).toBeInTheDocument();
   });
 });
 
@@ -416,5 +476,130 @@ describe("starting over", () => {
 
     expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+  });
+});
+
+describe("a request the user has moved on from", () => {
+  it("does not land on the report that replaced it", async () => {
+    // `run` retires its own outgoing requests, and nothing else did. Opening
+    // another saved report while one was generating cleared the table but left
+    // the sequence untouched, so the old response still passed the check and
+    // wrote itself in: report A's rows appeared under report B's name, both
+    // export buttons went live, and pressing Excel produced a file titled B
+    // containing A. The header of the file argues at length that it must never
+    // describe itself wrongly; the title did exactly that.
+    api.getReportesGuardados.mockResolvedValue([{
+      id: 11, name: "Otro reporte", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "state" }] },
+    }]);
+
+    let land: () => void = () => {};
+    api.runReporte.mockImplementationOnce(
+      (config: ReportConfig) =>
+        new Promise<ReportResult>((resolve) => {
+          land = () => resolve(resultFor(config, { rows: [{ c0: "de la anterior" }] }));
+        }),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+
+    // The person gives up on it and opens something else.
+    await user.click(await screen.findByText("Otro reporte"));
+    land();
+
+    await waitFor(() =>
+      expect(toasts.some((t) => t.text.includes("cargado"))).toBe(true),
+    );
+    expect(screen.queryByText("de la anterior")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /excel/i })).toBeDisabled();
+  });
+});
+
+describe("paging", () => {
+  it("keeps the table when the next page fails", async () => {
+    // Clearing is right for Generar — rows from one configuration under a
+    // header describing another is a lie on screen. It is wrong for a page: the
+    // failure is usually transient (a timeout, or the thirty-a-minute limit
+    // reached by holding "Siguiente"), and clearing threw away the table being
+    // read, disabled both export buttons, and left the person re-running the
+    // very query that had just timed out.
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      Promise.resolve(resultFor(config, {
+        rows: [{ c0: "primera página" }],
+        total: 250,
+        limit: 100,
+      })),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await screen.findByText("primera página");
+
+    api.runReporte.mockRejectedValueOnce(new Error("se cayó la red"));
+    await user.click(screen.getByRole("button", { name: /siguiente/i }));
+
+    await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
+    expect(screen.getByText("primera página")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled();
+  });
+});
+
+describe("what the matrix says this role may do", () => {
+  // The page asked nothing and drew every button for everyone, so the server
+  // answered 403 to whoever pressed one they did not hold. That cost nothing
+  // while all three seeded roles held all four actions, and breaks the first
+  // time someone unticks a box in Seguridad — which is the whole purpose of
+  // that screen.
+
+  it("does not offer to save without `crear`", async () => {
+    grantGenerador({ crear: false });
+
+    renderPage();
+    await ready();
+
+    expect(screen.queryByRole("button", { name: /^guardar$/i })).not.toBeInTheDocument();
+  });
+
+  it("does not offer to duplicate or archive without their permissions", async () => {
+    grantGenerador({ crear: false, archivar: false });
+    api.getReportesGuardados.mockResolvedValue([{
+      id: 12, name: "De alguien", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]);
+
+    renderPage();
+    await ready();
+    await screen.findByText("De alguien");
+
+    expect(screen.queryByRole("button", { name: /duplicar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /eliminar/i })).not.toBeInTheDocument();
+  });
+
+  it("still offers everything to a role that holds it", async () => {
+    // The other direction matters just as much: fail-closed that hides the
+    // screen from the people who may use it is the same defect wearing a
+    // different coat.
+    api.getReportesGuardados.mockResolvedValue([{
+      id: 13, name: "Mío", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]);
+
+    renderPage();
+    await ready();
+    await screen.findByText("Mío");
+
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /duplicar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /eliminar/i })).toBeInTheDocument();
   });
 });

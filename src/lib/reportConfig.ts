@@ -11,6 +11,7 @@ import type {
   FilterGroup,
   Operator,
   ReportConfig,
+  SortSpec,
 } from "../api/generador.api";
 
 /** Mirrors the server-side caps so the UI can warn before a request is rejected. */
@@ -35,6 +36,18 @@ export const isSummary = (config: ReportConfig): boolean => (config.groupBy?.len
 export const findField = (root: CatalogRoot | undefined, path: string): CatalogField | undefined =>
   root?.fields.find((f) => f.path === path);
 
+/**
+ * A total that is counted at another entity's grain.
+ *
+ * `revisiones` on a report of events belongs to the row: each event has its
+ * own. `poste.eventos` does not — it is the poste's number, read once per event
+ * of that poste, so adding it up across a group squares it. The catalog spells
+ * the difference as a prefix: an aggregate-only path with a relation in front
+ * of it was reached through that relation.
+ */
+export const isForeignTotal = (root: CatalogRoot | undefined, path: string): boolean =>
+  (root?.aggregateOnly ?? []).some((a) => a.path === path && a.path.includes("."));
+
 /** Sensible starting operator for each type, so a new filter is usable immediately. */
 export const defaultOperator = (kind: CatalogField["kind"]): Operator => {
   switch (kind) {
@@ -53,8 +66,16 @@ export const operatorNeedsTwoValues = (operator: Operator): boolean => operator 
 
 // ─── Columns ─────────────────────────────────────────────────────────────────
 
+/** True when the report already carries as many columns as it may. */
+export const columnLimitReached = (config: ReportConfig): boolean =>
+  config.columns.length >= MAX_COLUMNS;
+
+/** True when the report already carries as many filters as it may. */
+export const filterLimitReached = (config: ReportConfig): boolean =>
+  (config.filters?.conditions.length ?? 0) >= MAX_CONDITIONS;
+
 export function addColumn(config: ReportConfig, path: string, agg?: AggFn): ReportConfig {
-  if (config.columns.length >= MAX_COLUMNS) return config;
+  if (columnLimitReached(config)) return config;
   // The same field can legitimately appear twice with different aggregates
   // (min and max of the same value), but not twice identically.
   const duplicate = config.columns.some((c) => c.path === path && c.agg === agg);
@@ -69,11 +90,16 @@ export function removeColumn(config: ReportConfig, index: number): ReportConfig 
   // Dropping a column that was also grouped or sorted would leave dangling
   // references the server rejects, so clean them up together.
   const stillUsed = columns.some((c) => c.path === removed.path);
+  // Sorting is per column, aggregate included, so removing "Fecha (máximo)"
+  // must not take the sort belonging to "Fecha (mínimo)" with it.
+  const stillSortable = columns.some((c) => c.path === removed.path && c.agg === removed.agg);
   return {
     ...config,
     columns,
     groupBy: stillUsed ? config.groupBy : (config.groupBy ?? []).filter((p) => p !== removed.path),
-    sort: stillUsed ? config.sort : (config.sort ?? []).filter((s) => s.path !== removed.path),
+    sort: stillSortable
+      ? config.sort
+      : (config.sort ?? []).filter((s) => !(s.path === removed.path && s.agg === removed.agg)),
   };
 }
 
@@ -100,12 +126,28 @@ export function renameColumn(config: ReportConfig, index: number, label: string)
 }
 
 export function setColumnAgg(config: ReportConfig, index: number, agg?: AggFn): ReportConfig {
+  const target = config.columns[index];
+  if (!target) return config;
+  // `addColumn` refuses an exact duplicate, and changing an aggregate could
+  // walk right into one: two rows of "Fecha" both set to "mínimo" render under
+  // the same React key, which makes reconciliation undefined — an edit lands on
+  // the wrong twin, or focus jumps out of the box being typed in.
+  const collides = config.columns.some(
+    (c, i) => i !== index && c.path === target.path && c.agg === agg,
+  );
+  if (collides) return config;
+
   const columns = config.columns.map((c, i) => {
     if (i !== index) return c;
     const { agg: _drop, ...rest } = c;
     return agg ? { ...rest, agg } : rest;
   });
-  return { ...config, columns };
+  // The sort criterion belongs to the column, and the column just changed
+  // identity; leaving the old one behind sorts by something no longer shown.
+  const sort = (config.sort ?? []).map((s) =>
+    s.path === target.path && s.agg === target.agg ? { ...s, ...(agg ? { agg } : {}) } : s,
+  );
+  return { ...config, columns, sort };
 }
 
 // ─── Grouping ────────────────────────────────────────────────────────────────
@@ -147,9 +189,23 @@ export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig
 
 // ─── Sorting ─────────────────────────────────────────────────────────────────
 
+/**
+ * Sorts by a column, identified the way a column is identified.
+ *
+ * By path alone, the minimum and the maximum of the same date were the same
+ * criterion: clicking sort on one lit the arrow on both, and only one of them
+ * could ever be sorted. `toggleGroupBy` already takes this care — the comment
+ * above it says a path can appear more than once — and sorting did not.
+ *
+ * The aggregate travels too. Without it the server refuses every sort in a
+ * grouped report, because a column that is not grouped has to say how it is
+ * summarised: the parameter existed here from the start and no caller ever
+ * passed it, so the button produced a 400 every single time.
+ */
 export function toggleSort(config: ReportConfig, path: string, agg?: AggFn): ReportConfig {
   const current = config.sort ?? [];
-  const existing = current.find((s) => s.path === path);
+  const same = (s: SortSpec) => s.path === path && s.agg === agg;
+  const existing = current.find(same);
   if (!existing) {
     if (current.length >= MAX_SORTS) return config;
     return { ...config, sort: [...current, { path, dir: "asc", ...(agg ? { agg } : {}) }] };
@@ -158,11 +214,15 @@ export function toggleSort(config: ReportConfig, path: string, agg?: AggFn): Rep
   if (existing.dir === "asc") {
     return {
       ...config,
-      sort: current.map((s) => (s.path === path ? { ...s, dir: "desc" as const } : s)),
+      sort: current.map((s) => (same(s) ? { ...s, dir: "desc" as const } : s)),
     };
   }
-  return { ...config, sort: current.filter((s) => s.path !== path) };
+  return { ...config, sort: current.filter((s) => !same(s)) };
 }
+
+/** True when the report already carries as many sort criteria as it may. */
+export const sortLimitReached = (config: ReportConfig): boolean =>
+  (config.sort ?? []).length >= MAX_SORTS;
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
@@ -174,7 +234,7 @@ export const isExists = (node: unknown): boolean =>
 
 export function addFilter(config: ReportConfig, field: CatalogField): ReportConfig {
   const filters = config.filters ?? { op: "and", conditions: [] };
-  if (filters.conditions.length >= MAX_CONDITIONS) return config;
+  if (filterLimitReached(config)) return config;
   const condition: FilterCondition = {
     path: field.path,
     operator: defaultOperator(field.kind),
@@ -215,31 +275,74 @@ export function setFilterJoin(config: ReportConfig, op: "and" | "or"): ReportCon
 
 // ─── Root ────────────────────────────────────────────────────────────────────
 
+type FilterNode = FilterCondition | FilterGroup | { exists: string; where?: FilterGroup };
+
+/**
+ * Whether a whole filter node survives, all of it or none of it.
+ *
+ * A plain condition stands on its own path. An advanced one — an `exists`, or a
+ * nested group — is a sentence, and removing one clause of a sentence does not
+ * narrow it, it changes what it says: an "eventos con alguna revisión en mayo"
+ * stripped of its date range becomes "eventos con alguna revisión", which
+ * returns rows the person filtered out on purpose. So those are kept whole or
+ * dropped whole, and the drop is counted and announced.
+ */
+function nodeSurvives(node: FilterNode, keeps: (path: string) => boolean): boolean {
+  if (isFilterGroup(node)) return node.conditions.every((c) => nodeSurvives(c as FilterNode, keeps));
+  if (isExists(node)) {
+    const exists = node as { exists: string; where?: FilterGroup };
+    return keeps(exists.exists) && (!exists.where || nodeSurvives(exists.where, keeps));
+  }
+  return keeps((node as FilterCondition).path);
+}
+
+/**
+ * Drops whatever this catalog does not offer, and keeps everything else.
+ *
+ * Used on every saved report as it opens, because a configuration can name a
+ * field that was removed, or one this role cannot see. It used to run through
+ * `changeRoot` even when the detail level had not changed at all — and
+ * `changeRoot` deleted every advanced filter unconditionally, whether or not
+ * its paths were available. Opening a report silently widened it, the warning
+ * blamed the reader's profile, and pressing "Actualizar" wrote the loss back to
+ * the database for its author and for everyone it was shared with.
+ */
+export function pruneToCatalog(config: ReportConfig, root: CatalogRoot): ReportConfig {
+  const valid = new Set(root.fields.map((f) => f.path));
+  const aggregable = new Set(root.aggregateOnly.map((a) => a.path));
+  const keeps = (path: string) =>
+    valid.has(path) ||
+    aggregable.has(path) ||
+    root.aggregateOnly.some((a) => path.startsWith(`${a.path}.`));
+
+  const filters = config.filters ?? { op: "and", conditions: [] };
+  const columns = config.columns.filter((c) => keeps(c.path));
+  return {
+    ...config,
+    columns,
+    groupBy: (config.groupBy ?? []).filter(keeps),
+    // A sort belongs to a column, so it goes when its column does.
+    sort: (config.sort ?? []).filter(
+      (s) => keeps(s.path) && columns.some((c) => c.path === s.path && c.agg === s.agg),
+    ),
+    filters: {
+      ...filters,
+      conditions: filters.conditions.filter((c) => nodeSurvives(c as FilterNode, keeps)),
+    },
+  };
+}
+
 /**
  * Switching the detail level changes which paths exist, so anything the new
  * root does not offer is dropped rather than sent and rejected.
  */
 export function changeRoot(config: ReportConfig, root: CatalogRoot): ReportConfig {
-  const valid = new Set(root.fields.map((f) => f.path));
-  const aggregable = new Set(root.aggregateOnly.map((a) => a.path));
-  const keeps = (path: string) => valid.has(path) || aggregable.has(path);
-
-  const filters = config.filters ?? { op: "and", conditions: [] };
-  return {
-    ...config,
-    root: root.key,
-    columns: config.columns.filter((c) => keeps(c.path)),
-    groupBy: (config.groupBy ?? []).filter(keeps),
-    sort: (config.sort ?? []).filter((s) => keeps(s.path)),
-    filters: {
-      ...filters,
-      conditions: filters.conditions.filter((c) =>
-        isFilterGroup(c) || isExists(c) ? false : keeps((c as FilterCondition).path),
-      ),
-    },
-    offset: 0,
-  };
+  return { ...pruneToCatalog({ ...config, root: root.key }, root), offset: 0 };
 }
+
+/** How many pieces a configuration is made of, for saying what an open lost. */
+export const elementCount = (config: ReportConfig): number =>
+  config.columns.length + (config.filters?.conditions.length ?? 0);
 
 /**
  * Whether two configurations would produce the same rows, ignoring which page
@@ -248,7 +351,29 @@ export function changeRoot(config: ReportConfig, root: CatalogRoot): ReportConfi
  */
 export function sameQuery(a: ReportConfig, b: ReportConfig): boolean {
   const strip = ({ offset: _offset, ...rest }: ReportConfig) => rest;
-  return JSON.stringify(strip(a)) === JSON.stringify(strip(b));
+  return canonical(strip(a)) === canonical(strip(b));
+}
+
+/**
+ * A stable string for a configuration, whatever order its keys were built in.
+ *
+ * `JSON.stringify` writes keys in insertion order, and the builders do not
+ * agree on one: `addColumn` puts `agg` before `label`, `setColumnAgg` rebuilds
+ * it after. So setting an aggregate to "promedio" and back to "suma" produced a
+ * different string for an identical report, and the screen announced "cambió la
+ * configuración" over a table that matched it perfectly. A banner that cries
+ * wolf is a banner nobody reads — and this one is what warns that the rows no
+ * longer match the header.
+ */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
 }
 
 // ─── Validation ──────────────────────────────────────────────────────────────
@@ -300,6 +425,11 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
       }
       if (!column.agg) {
         problems.push(`Agrupó el reporte, así que "${label}" necesita un resumen o hay que quitarla.`);
+      } else if (isForeignTotal(root, column.path)) {
+        problems.push(
+          `"${label}" ya es un total de otra entidad: resumirlo en un reporte agrupado ` +
+            `lo contaría una vez por fila. Quítelo, o quite la agrupación.`,
+        );
       }
     }
   } else {
@@ -311,6 +441,30 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
           `"${column.label ?? field?.label ?? column.path}" usa un resumen, pero el reporte no está agrupado.`,
         );
       }
+    }
+  }
+
+  // The order was never checked here at all, so the sort button built a
+  // configuration the server refuses on every single grouped report and the
+  // user found out only after pressing Generar — with a message telling them to
+  // summarise a column they had already summarised.
+  for (const sort of config.sort ?? []) {
+    if (!known.has(sort.path)) {
+      problems.push(`El orden usa "${sort.path}", que no está disponible para su perfil.`);
+      continue;
+    }
+    const label = findField(root, sort.path)?.label ?? sort.path;
+    if (grouped.size > 0 && !grouped.has(sort.path) && !sort.agg) {
+      problems.push(`Agrupó el reporte, así que no puede ordenar por "${label}" sin un resumen.`);
+    }
+    // A total that belongs to another entity counts once per row of this one,
+    // so summing it across a group squares it. The server refuses it; saying so
+    // here saves the round trip and explains it next to the control.
+    if (grouped.size > 0 && isForeignTotal(root, sort.path)) {
+      problems.push(
+        `No se puede ordenar por "${label}": ya es un total de otra entidad y ` +
+          `resumirlo aquí lo contaría una vez por fila.`,
+      );
     }
   }
 

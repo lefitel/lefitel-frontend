@@ -46,6 +46,7 @@ export const ACTION_LABELS: Record<string, string> = {
   CREATE_ROL:          "Nuevo rol",
   UPDATE_ROL:          "Editó rol",
   DELETE_ROL:          "Eliminó rol",
+  UPDATE_PERMISOS:     "Cambió permisos",
 
   CREATE_USUARIO:      "Nuevo usuario",
   UPDATE_USUARIO:      "Editó usuario",
@@ -54,6 +55,7 @@ export const ACTION_LABELS: Record<string, string> = {
 
   CHANGE_PASSWORD:     "Cambió contraseña",
   CHANGE_USERNAME:     "Cambió usuario",
+  ROLE_CHANGE_DENIED:  "Intento de cambio de rol",
   LOGIN:               "Inició sesión",
   LOGIN_FAILED:        "Sesión fallida",
 

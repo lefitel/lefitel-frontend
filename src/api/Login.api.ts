@@ -1,6 +1,7 @@
 import axios from "axios";
 import { urlApi } from "./url";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
+import type { Permisos } from "../lib/permissions";
 
 export const loginUsuario = (
   data: UsuarioInterface
@@ -18,6 +19,7 @@ export const loginUsuario = (
         usuario: {
           token: response.data.usuario.token,
           usuario: response.data.usuario,
+          permisos: response.data.permisos,
         },
       };
     })
@@ -30,9 +32,16 @@ export const loginUsuario = (
     });
 };
 
+/**
+ * Who this token belongs to, and what they may do.
+ *
+ * The answer comes from the database rather than from the token's own payload:
+ * a token lasts a week, and somebody moved to another role in the meantime would
+ * otherwise keep the old one — and the old buttons with it — until it expired.
+ */
 export const comprobarToken = (
   token: string
-): Promise<{ status: number; usuario: UsuarioInterface | null }> => {
+): Promise<{ status: number; usuario: UsuarioInterface | null; permisos?: Permisos }> => {
   return axios
     .get(urlApi + "login", {
       headers: { Authorization: `Bearer ${token}` },
@@ -41,6 +50,7 @@ export const comprobarToken = (
       return {
         status: response.status,
         usuario: response.data,
+        permisos: response.data?.permisos as Permisos | undefined,
       };
     })
     .catch(() => ({

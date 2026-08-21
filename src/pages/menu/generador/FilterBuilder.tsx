@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { XIcon } from "lucide-react";
 import type {
   CatalogField, CatalogRoot, FilterCondition, Operator, ReportConfig,
@@ -91,7 +91,21 @@ const ValueInput = ({
   );
 };
 
-/** Comma-separated entry for "in", which needs a list and had no way to build one. */
+/** The list the configuration carries, from what the person typed. */
+const toList = (text: string): string[] =>
+  text.split(",").map((p) => p.trim()).filter((p) => p !== "");
+
+/**
+ * Comma-separated entry for "in", which needs a list and had no way to build one.
+ *
+ * The text is held here and the list is derived from it, rather than the other
+ * way round. Deriving the text from the list ate the comma the moment it was
+ * typed: an empty last segment is dropped from the list — correctly — so
+ * "1," turned back into "1", React wrote that into the box, and the caret lost
+ * the separator. Typing `poste,cable` produced the single value
+ * `postecable`, the report came back empty, and the screen said no record
+ * matched a filter the person never built. Only pasting worked.
+ */
 const ListInput = ({
   value, onChange, ariaLabel,
 }: {
@@ -99,7 +113,18 @@ const ListInput = ({
   onChange: (v: unknown) => void;
   ariaLabel: string;
 }) => {
-  const text = Array.isArray(value) ? value.join(", ") : "";
+  const fromConfig = Array.isArray(value) ? value.join(", ") : "";
+  const [text, setText] = useState(fromConfig);
+  const [adopted, setAdopted] = useState(fromConfig);
+
+  // A value that changed elsewhere — a saved report opened, the operator
+  // switched — replaces what is in the box. Comparing against what was last
+  // adopted, not against the current text, so this never fights the typing.
+  if (fromConfig !== adopted) {
+    setAdopted(fromConfig);
+    setText(fromConfig);
+  }
+
   return (
     <Input
       type="text"
@@ -108,9 +133,11 @@ const ListInput = ({
       className="h-8 flex-1"
       value={text}
       onChange={(e) => {
-        const parts = e.target.value.split(",").map((p) => p.trim()).filter((p) => p !== "");
-        onChange(parts);
+        setText(e.target.value);
+        onChange(toList(e.target.value));
       }}
+      // What is sent is what the person can see, tidied once they are done.
+      onBlur={() => setText(toList(text).join(", "))}
     />
   );
 };

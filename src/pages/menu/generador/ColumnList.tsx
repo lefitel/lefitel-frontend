@@ -37,7 +37,7 @@ interface RowProps {
   onRename: (index: number, label: string) => void;
   onSetAgg: (index: number, agg?: AggFn) => void;
   onToggleGroup: (index: number) => void;
-  onToggleSort: (path: string) => void;
+  onToggleSort: (path: string, agg?: AggFn) => void;
 }
 
 /**
@@ -115,7 +115,11 @@ const ColumnRow = memo(function ColumnRow({
             size="icon"
             className="h-7 w-7"
             aria-label={sortLabel}
-            onClick={() => onToggleSort(column.path)}
+            // The aggregate travels with the path. Without it the server
+            // refuses every sort in a grouped report — a column that is not
+            // grouped has to say how it is summarised — and two rows of the
+            // same field could not be sorted apart.
+            onClick={() => onToggleSort(column.path, column.agg)}
           >
             {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
               : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
@@ -166,7 +170,7 @@ interface Props {
   onRename: (index: number, label: string) => void;
   onSetAgg: (index: number, agg?: AggFn) => void;
   onToggleGroup: (index: number) => void;
-  onToggleSort: (path: string) => void;
+  onToggleSort: (path: string, agg?: AggFn) => void;
 }
 
 /**
@@ -181,7 +185,11 @@ const ColumnList = ({
 }: Props) => {
   const summary = isSummary(config);
   const grouped = new Set(config.groupBy ?? []);
-  const sortByPath = new Map((config.sort ?? []).map((s) => [s.path, s.dir]));
+  // Keyed by column, not by field: the minimum and the maximum of the same
+  // date are two columns, and keyed by path alone one arrow lit both of them
+  // while only one could ever be sorted.
+  const sortKey = (path: string, agg?: AggFn) => `${path}|${agg ?? ""}`;
+  const sortByColumn = new Map((config.sort ?? []).map((s) => [sortKey(s.path, s.agg), s.dir]));
 
   if (config.columns.length === 0) {
     return (
@@ -218,7 +226,7 @@ const ColumnList = ({
             // catalog now says which fields are already summaries.
             canGroup={!isAggregateOnly && !field?.aggregate}
             isGrouped={grouped.has(column.path)}
-            sortDir={sortByPath.get(column.path)}
+            sortDir={sortByColumn.get(sortKey(column.path, column.agg))}
             onMove={onMove}
             onRemove={onRemove}
             onRename={onRename}

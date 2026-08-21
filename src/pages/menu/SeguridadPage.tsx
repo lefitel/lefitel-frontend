@@ -27,6 +27,7 @@ import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import DataTable from "../../components/table/DataTable";
 import UsuarioSheet from "../../components/dialogs/upsert/UsuarioSheet";
 import PermissionGuard from "../../components/PermissionGuard";
+import PermisosPanel from "../../components/PermisosPanel";
 import { ImageLightbox } from "../../components/ui/image-viewer";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -289,7 +290,7 @@ const exportPdf = async (usuarios: UsuarioInterface[]) => {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type InnerTab = "activos" | "archivados";
+type InnerTab = "activos" | "archivados" | "permisos";
 
 const SeguridadPage = () => {
     const { sesion } = useContext(SesionContext);
@@ -524,6 +525,9 @@ const SeguridadPage = () => {
                     <TabsList>
                         <TabsTrigger value="activos">Activos</TabsTrigger>
                         <TabsTrigger value="archivados">Archivados</TabsTrigger>
+                        {can(sesion.usuario.id_rol, "roles", "ver") && (
+                            <TabsTrigger value="permisos">Permisos</TabsTrigger>
+                        )}
                     </TabsList>
                 </Tabs>
             </div>
@@ -597,6 +601,8 @@ const SeguridadPage = () => {
                     }
                 />
             )}
+
+            {innerTab === "permisos" && <PermisosPanel />}
 
             <PermissionGuard module="seguridad" action="editar" open={editOpen} onOpenChange={setEditOpen}>
                 <UsuarioSheet

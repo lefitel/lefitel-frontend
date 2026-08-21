@@ -2,12 +2,15 @@ import { useTheme } from "@/components/theme-provider"
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { CircleCheckIcon, InfoIcon, TriangleAlertIcon, OctagonXIcon, Loader2Icon } from "lucide-react"
 
-const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme()
+/** `theme` is owned by the app's ThemeProvider — passing it in would let a
+ * caller drift the toasts away from the rest of the UI. */
+type OsefiToasterProps = Omit<ToasterProps, "theme">
+
+const Toaster = ({ ...props }: OsefiToasterProps) => {
+  const { resolvedTheme } = useTheme()
 
   return (
     <Sonner
-      theme={theme as ToasterProps["theme"]}
       className="toaster group"
       icons={{
         success: (
@@ -40,6 +43,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         },
       }}
       {...props}
+      theme={resolvedTheme}
     />
   )
 }

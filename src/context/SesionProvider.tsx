@@ -6,6 +6,7 @@ import { usuarioExample } from "../data/example";
 import { comprobarToken } from "../api/Login.api";
 import { url } from "../api/url";
 import { SesionContext } from "./SesionContext";
+import { olvidarPermisos, setPermisos } from "../lib/permissions";
 
 /** Decodifica el campo `exp` del JWT (en ms). No verifica firma. */
 const getTokenExp = (token: string): number | null => {
@@ -34,6 +35,7 @@ export const SesionProvider = ({ children }: props) => {
   const logout = useCallback(() => {
     clearTimers();
     localStorage.removeItem("token");
+    olvidarPermisos();
     setSesion({ token: "", usuario: usuarioExample });
   }, []);
 
@@ -71,7 +73,11 @@ export const SesionProvider = ({ children }: props) => {
     comprobarToken(stored)
       .then((res) => {
         if (res.status === 200 && res.usuario) {
-          setSesion({ token: stored, usuario: res.usuario as UsuarioInterface });
+          setSesion({
+            token: stored,
+            usuario: res.usuario as UsuarioInterface,
+            permisos: res.permisos,
+          });
         } else {
           localStorage.removeItem("token");
         }
@@ -123,6 +129,16 @@ export const SesionProvider = ({ children }: props) => {
     );
     return () => axios.interceptors.response.eject(interceptor);
   }, [logout]);
+
+  // Mirrored during render, not in an effect.
+  //
+  // `can()` is a plain function reading a module-level value, because it is
+  // called from inside render expressions in 57 places. An effect runs *after*
+  // the children have rendered, so the first paint of every screen would ask the
+  // question before the answer had arrived and draw an empty application. Doing
+  // it here means React has updated the mirror before it renders anything below.
+  // It is a pure function of state and running it twice changes nothing.
+  if (sesion.permisos) setPermisos(sesion.usuario.id_rol, sesion.permisos);
 
   return (
     <SesionContext.Provider value={{ sesion, setSesion, loading, logout }}>

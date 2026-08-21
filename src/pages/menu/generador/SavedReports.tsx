@@ -14,9 +14,17 @@ interface Props {
   currentId: number | null;
   currentUserId: number | undefined;
   onOpen: (report: SavedReport) => void;
-  onToggleFavorite: (report: SavedReport) => void;
-  onDuplicate: (report: SavedReport) => void;
-  onDelete: (report: SavedReport) => void;
+  /**
+   * The three that write.
+   *
+   * Undefined means this role does not hold the permission, and the control is
+   * not drawn at all: the server gates each of them separately, and a button
+   * whose only outcome is "No tiene permiso" is worse than no button. Opening
+   * is not here — it is `ver`, which the page already required to load.
+   */
+  onToggleFavorite?: (report: SavedReport) => void;
+  onDuplicate?: (report: SavedReport) => void;
+  onDelete?: (report: SavedReport) => void;
   loading?: boolean;
 }
 
@@ -76,7 +84,7 @@ const SavedReports = ({
               </span>
             </button>
 
-            {mine && (
+            {mine && onToggleFavorite && (
               <Button
                 variant="ghost" size="icon" className="h-7 w-7"
                 aria-label={report.favorite ? `Quitar ${report.name} de favoritos` : `Marcar ${report.name} como favorito`}
@@ -89,15 +97,17 @@ const SavedReports = ({
               </Button>
             )}
 
-            <Button
-              variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-              aria-label={`Duplicar ${report.name}`}
-              onClick={() => onDuplicate(report)}
-            >
-              <CopyIcon className="h-3.5 w-3.5" />
-            </Button>
+            {onDuplicate && (
+              <Button
+                variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                aria-label={`Duplicar ${report.name}`}
+                onClick={() => onDuplicate(report)}
+              >
+                <CopyIcon className="h-3.5 w-3.5" />
+              </Button>
+            )}
 
-            {mine && (
+            {mine && onDelete && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button

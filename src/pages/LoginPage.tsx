@@ -42,7 +42,7 @@ const formItem = {
 };
 
 const LoginPage = () => {
-  const { theme, setTheme } = useTheme();
+  const { resolvedTheme, setTheme } = useTheme();
   const { setSesion } = useContext(SesionContext);
   const [login, setLogin] = useState<UsuarioInterface>(usuarioExample);
   const [loading, setLoading] = useState(false);
@@ -53,12 +53,27 @@ const LoginPage = () => {
   const from = !fromPath || fromPath === "/login" ? "/app/home" : fromPath;
 
   const ValidarDatos = async () => {
-    if (login.user === "" || login.pass === "") {
+    /**
+     * The username loses the spaces at its ends; the password loses nothing.
+     *
+     * Somebody who pastes their username with a trailing space, or types one by
+     * accident on a phone keyboard, would otherwise be told the user does not
+     * exist — and there is nothing on screen that shows why. Spaces in the
+     * middle stay: `Omar Mita` is a real account here.
+     *
+     * The password is sent exactly as typed. A space is a character like any
+     * other in a secret, and quietly removing one would accept a different
+     * password than the one chosen and lock out anyone whose own begins or ends
+     * with a space. Only the "did you type anything at all" check ignores
+     * whitespace, so a field holding nothing but spaces still counts as empty.
+     */
+    const user = login.user.trim();
+    if (user === "" || login.pass.trim() === "") {
       return toast.warning("Rellena todos los espacios");
     }
     setLoading(true);
     try {
-      const responde = await loginUsuario(login);
+      const responde = await loginUsuario({ ...login, user });
       if (responde.status !== 500) {
         window.localStorage.setItem("token", responde.usuario?.token ?? "");
         setSesion(responde.usuario as SesionInterface);
@@ -81,10 +96,10 @@ const LoginPage = () => {
       <Button
         variant="ghost"
         size="icon"
-        onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+        onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
         className="absolute top-4 right-4 z-50 h-9 w-9 rounded-full"
       >
-        {theme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
+        {resolvedTheme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
       </Button>
 
       {/* ── PANEL IZQUIERDO — Brand ── */}
@@ -166,8 +181,12 @@ const LoginPage = () => {
           <motion.div className="flex flex-col space-y-2 lg:text-left text-center" variants={formItem}>
             {/* Logo mobile */}
             <div className="flex lg:hidden justify-center mb-6">
+              {/* Sin `dark:invert`: el logo tiene sus propios colores de marca y
+                  invertirlos en modo oscuro los cambia por sus complementarios.
+                  La versión de escritorio nunca lo hizo, así que además las dos
+                  no coincidían. */}
               <div className="bg-muted p-4 rounded-3xl border shadow-sm">
-                <img src={logo} alt="Logo" className="h-14 w-auto drop-shadow-sm dark:invert" />
+                <img src={logo} alt="Osefi srl" className="h-14 w-auto drop-shadow-sm" />
               </div>
             </div>
             <p className="text-xs font-semibold text-primary uppercase tracking-[0.18em]">
@@ -195,6 +214,10 @@ const LoginPage = () => {
                 placeholder="ej. carlos.admin"
                 className="h-12 px-4 bg-muted/40 border-muted focus-visible:ring-primary/30 focus-visible:bg-transparent text-base rounded-xl transition-all"
                 onChange={(e) => setLogin({ ...login, user: e.target.value })}
+                // Tidied when the field loses focus, so what gets sent is what
+                // the person can see. Trimming on every keystroke would stop
+                // anyone typing a name with a space in it.
+                onBlur={(e) => setLogin((prev) => ({ ...prev, user: e.target.value.trim() }))}
                 onKeyDown={(e) => { if (e.key === "Enter") ValidarDatos(); }}
               />
             </div>
