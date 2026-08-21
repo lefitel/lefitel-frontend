@@ -3,7 +3,15 @@
 ## Stack
 - React + TypeScript + Vite
 - TanStack Table v8
-- Desplegado en Vercel
+- Desplegado en Vercel (`www.osefi.net`); la API vive en `api.osefi.net`
+
+> **La documentación transversal está en el repositorio del backend**, en
+> `api/docs/`: la auditoría de seguridad, el estado del generador y los
+> documentos de diseño (`api/docs/specs/`). Varios de ellos describen cambios
+> que tocan este repositorio —la exportación que se movió al servidor, el
+> rediseño de la autenticación—, así que conviene leerlos antes de tocar lo que
+> cubren. Viven allí porque son de todo el sistema y partirlos por la mitad los
+> dejaría sin sentido; aquí solo se documenta lo que es exclusivo del frontend.
 
 ---
 
