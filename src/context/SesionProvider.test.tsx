@@ -55,16 +55,23 @@ const Salir = () => {
 };
 
 let onResponse: ((response: unknown) => unknown) | null = null;
+// The error half of the same interceptor. Capturing only `onResponse`, as
+// this file did before, means the auto-logout-on-401 branch never runs in
+// any test here — which is exactly how a self-triggered logout loop through
+// this same branch went unnoticed.
+let onError: ((error: unknown) => Promise<unknown>) | null = null;
 
 beforeEach(() => {
   vi.clearAllMocks();
   olvidarPermisos();
   localStorage.clear();
   onResponse = null;
+  onError = null;
   // The interceptor is registered once, on the global axios. Capturing it is
   // how this test reaches the code without a server to answer.
-  vi.spyOn(axios.interceptors.response, "use").mockImplementation(((ok: never) => {
+  vi.spyOn(axios.interceptors.response, "use").mockImplementation(((ok: never, fail: never) => {
     onResponse = ok as unknown as (response: unknown) => unknown;
+    onError = fail as unknown as (error: unknown) => Promise<unknown>;
     return 1;
   }) as never);
 });
@@ -185,5 +192,54 @@ describe("logout", () => {
     // behind the network call at all, so a version that `await`s the server
     // before clearing has nothing to show here yet.
     expect(localStorage.getItem("token")).toBeNull();
+  });
+
+  it("does not call the server when there is no session to close", async () => {
+    // Nothing logged in this render at all (no <Establecer>) — the ordinary
+    // case a cheap guard exists for, not the loop the next test is about.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Salir />
+      </SesionProvider>,
+    );
+
+    fireEvent.click(getByText("salir"));
+
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("does not call logout again when the 401 came from logout's own request", async () => {
+    // The self-triggered loop this exists to break: a session that has
+    // already died makes *any* request come back 401, the interceptor's
+    // error handler reacts by calling logout(), logout() posts to its own
+    // endpoint with that same dead credential, that request also 401s, and
+    // the interceptor sees a 401 again. Without an exclusion, that last step
+    // calls logout() a second time — which posts again, forever.
+    //
+    // A session is established below (not skipped, unlike the test above)
+    // on purpose: with an active session, the cheap "nothing to close" guard
+    // would not save this test on its own, so a second POST here can only
+    // mean the interceptor called logout() again for the request that IS
+    // its own logout call.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    post.mockClear();
+
+    // Exactly what the interceptor sees once the logout call itself fails:
+    // a 401 whose request was the logout endpoint.
+    await onError!({
+      response: { status: 401 },
+      config: { url: `${urlApi}auth/logout` },
+    }).catch(() => undefined);
+
+    expect(post).not.toHaveBeenCalled();
   });
 });

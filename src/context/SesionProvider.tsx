@@ -27,6 +27,14 @@ interface props {
   children: React.ReactNode;
 }
 
+/**
+ * `logout()`'s own request. Read by both halves of the loop this exists to
+ * break: `logout()` itself, and the response interceptor below that would
+ * otherwise treat this request's own 401 as one more reason to call
+ * `logout()` again.
+ */
+const LOGOUT_URL = `${urlApi}auth/logout`;
+
 export const SesionProvider = ({ children }: props) => {
   const [sesion, setSesion] = React.useState<SesionInterface>({ token: "", usuario: usuarioExample });
   const [loading, setLoading] = React.useState(true);
@@ -39,6 +47,25 @@ export const SesionProvider = ({ children }: props) => {
    * stale role is the same as not comparing at all.
    */
   const roleRef = useRef<number | undefined>(undefined);
+  /**
+   * Whether there is currently a session for `logout` to end, kept in a ref
+   * for the same reason `roleRef` is: `logout` is a stable callback with no
+   * dependencies (the response interceptor's registration effect depends on
+   * its identity, and re-registering it on every login would be its own
+   * source of bugs), so it cannot close over `sesion.token` directly without
+   * reading it stale.
+   *
+   * This is the cheap of the two guards against calling the server with
+   * nothing to revoke — most commonly, `logout` running again after its own
+   * request already cleared the session. It is not what actually stops that
+   * case from looping: see `LOGOUT_URL`'s use in the interceptor below for
+   * the guard that does, and does so even if something else calls `logout`
+   * a second time before this ref catches up.
+   */
+  const hasSessionRef = useRef(false);
+  useEffect(() => {
+    hasSessionRef.current = Boolean(sesion.token);
+  }, [sesion.token]);
 
   const clearTimers = () => {
     if (timers.current.warning) clearTimeout(timers.current.warning);
@@ -52,10 +79,18 @@ export const SesionProvider = ({ children }: props) => {
     // reach, so without this call "logging out" left it alive and sliding
     // for up to a week on a shared computer anyone could pick up next.
     //
-    // Fired and forgotten: the local cleanup below must happen whether this
-    // succeeds or not, so nobody ends up stuck looking authenticated on a
-    // screen that already sent them back to the login form.
-    axios.post(`${urlApi}auth/logout`).catch(() => undefined);
+    // Skipped when there is no session to begin with: a request that can
+    // only answer 401 (see the interceptor below for the request this one
+    // has to be told apart from) is not merely wasted, it is the other half
+    // of the loop this whole guard exists to break.
+    //
+    // Fired and forgotten otherwise: the local cleanup below must happen
+    // whether this succeeds or not, so nobody ends up stuck looking
+    // authenticated on a screen that already sent them back to the login
+    // form.
+    if (hasSessionRef.current) {
+      axios.post(LOGOUT_URL).catch(() => undefined);
+    }
     clearTimers();
     localStorage.removeItem("token");
     olvidarPermisos();
@@ -201,7 +236,18 @@ export const SesionProvider = ({ children }: props) => {
         // "authenticated but not allowed here", which is an ordinary answer to
         // an ordinary request: logging out on it threw users to the login
         // screen, losing unsaved work, merely for opening someone else's report.
-        if (error.response?.status === 401) {
+        //
+        // Excluding LOGOUT_URL is the guard that actually stops the loop, not
+        // just makes it rarer: this interceptor is global and unconditional,
+        // so a session that is already dead makes *any* request 401,
+        // including the one `logout()` itself just sent. Without this check,
+        // that response would call `logout()` again, which would call the
+        // server again, which would 401 again — self-sustaining, and the
+        // most ordinary way to reach it is simply a session that expired on
+        // its own. This is the barrier that holds even if something else
+        // calls `logout()` from elsewhere in the future; `hasSessionRef`
+        // above only makes the ordinary, non-looping case cheaper.
+        if (error.response?.status === 401 && error.config?.url !== LOGOUT_URL) {
           logout();
         }
         return Promise.reject(error);
