@@ -74,10 +74,11 @@ const WRITE_METHODS = ["post", "put", "patch", "delete"] as const;
  * could not follow, for the host-only reason above; with it, the request does not
  * leave in the first place.
  *
- * The one genuinely third-party call this application makes, OpenRouteService in
- * `lib/orsRoute.ts`, does not go through axios at all — it uses `fetch`, whose
- * own default is `credentials: "same-origin"`. So neither of these settings
- * reaches it, and `http.test.ts` keeps it that way.
+ * The genuinely third-party calls this application makes — OpenRouteService in
+ * `lib/orsRoute.ts` and Nominatim in `components/map/MapSearch.tsx` — do not go
+ * through axios at all; both use `fetch`, whose own default is
+ * `credentials: "same-origin"`. So neither of these settings reaches either of
+ * them, and `http.test.ts` keeps it that way.
  */
 axios.defaults.withCredentials = true;
 

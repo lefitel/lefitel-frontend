@@ -103,16 +103,24 @@ describe("the reach of a global default", () => {
     expect(main).toMatch(/import\s+['"]\.\/api\/http['"]/);
   });
 
-  it("leaves the one third-party call outside axios, so neither setting reaches it", () => {
+  it("leaves every third-party call outside axios, so neither setting reaches it", () => {
     // The safety argument for setting these globally rests on there being no
-    // third-party axios call. OpenRouteService is the only external service this
-    // application talks to and it uses `fetch`, whose own default is
-    // `credentials: "same-origin"` — so the cookie cannot go there and neither
-    // can the header. Rewriting that file with axios would send an unknown header
-    // and a credentialed request to a host that answers
-    // `Access-Control-Allow-Origin: *`, which a browser refuses outright: every
-    // route on the map would stop drawing.
-    const ors = readFileSync(join(__dirname, "..", "lib", "orsRoute.ts"), "utf-8");
-    expect(ors).not.toMatch(/\baxios\b/);
+    // third-party axios call. OpenRouteService is not the only external service
+    // this application talks to — a previous version of this test claimed it
+    // was, overlooking Nominatim in `components/map/MapSearch.tsx`, called with
+    // its own `fetch` and no test pinning it either. Both use `fetch`, whose own
+    // default is `credentials: "same-origin"` — so the cookie cannot go to
+    // either of them and neither can the header. Rewriting either file with
+    // axios would send an unknown header and a credentialed request to a host
+    // that answers `Access-Control-Allow-Origin: *`, which a browser refuses
+    // outright: every route on the map would stop drawing, or the place search
+    // would stop returning results.
+    const thirdParty = [
+      join(__dirname, "..", "lib", "orsRoute.ts"),
+      join(__dirname, "..", "components", "map", "MapSearch.tsx"),
+    ];
+    for (const path of thirdParty) {
+      expect(readFileSync(path, "utf-8"), path).not.toMatch(/\baxios\b/);
+    }
   });
 });
