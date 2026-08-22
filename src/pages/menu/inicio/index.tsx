@@ -1,7 +1,7 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../../components/ui/button";
-import { ArrowUpRightIcon, BarChart3Icon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ArrowUpRightIcon, BarChart3Icon, CloudOffIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
@@ -57,6 +57,33 @@ const InicioPage = () => {
         </div>
       </div>
 
+      {/*
+        A failed load is not an empty dashboard.
+        Every card below reads `kpis?.x ?? 0`, so without this branch an outage
+        rendered "0 postes · 0 pendientes", "No hay incidencias pendientes" and
+        an empty map: the failure state drawn exactly like a system in perfect
+        health, behind a toast that clears itself after four seconds. Somebody
+        could walk away believing the backlog was empty.
+      */}
+      {d.error && !d.loading ? (
+        <div className="flex flex-col items-center justify-center gap-3 py-20 text-center">
+          <div className="p-3 bg-destructive/10 rounded-full">
+            <CloudOffIcon className="h-6 w-6 text-destructive" />
+          </div>
+          <div>
+            <p className="font-medium">No se pudieron cargar los datos</p>
+            <p className="text-sm text-muted-foreground max-w-sm">
+              No hay conexión con el servidor, así que no podemos decirte cómo está la red.
+              Las cifras de esta pantalla no son cero: es que no las tenemos.
+            </p>
+          </div>
+          <Button onClick={d.load} disabled={d.loading} className="gap-2 mt-1">
+            <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
+            Volver a intentar
+          </Button>
+        </div>
+      ) : (
+      <>
       <AlertBanner alerts={d.criticalAlerts} loading={d.loading} />
 
       <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} setCustomRange={d.setCustomRange} currentDateRange={d.currentDateRange} />
@@ -81,6 +108,8 @@ const InicioPage = () => {
       </div>
 
       <TopPostesCard topPostes={d.topPostes} loading={d.loading} />
+      </>
+      )}
 
       {/* Dialogs */}
       <PermissionGuard module="eventos" action="crear" open={openAddEvento} onOpenChange={setOpenAddEvento}>

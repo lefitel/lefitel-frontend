@@ -39,12 +39,31 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
         if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
         setSaving(true);
         try {
-            await createRevision({ description, date, id_evento: eventoId }, sesion.token);
+            const status = await createRevision({ description, date, id_evento: eventoId }, sesion.token);
+            if (status !== 200) {
+                /**
+                 * Anything but 200 leaves the sheet open with the text still in it.
+                 *
+                 * The old version awaited the call, ignored what came back and
+                 * announced success. `createRevision` swallows its own rejection
+                 * and hands back a number, so the `catch` below could never run
+                 * either: a refusal, a server error and a dead connection all
+                 * read as "Revisión agregada", the sheet closed, and the
+                 * inspection somebody had just walked out to a pole to write was
+                 * gone with nothing on screen to say so.
+                 */
+                toast.error(
+                    status === 403
+                        ? "No tienes permiso para registrar revisiones"
+                        : "No se pudo agregar la revisión. Vuelve a intentarlo.",
+                );
+                return;
+            }
             toast.success("Revisión agregada");
             handleClose();
             onSuccess();
         } catch {
-            toast.error("No se pudo agregar la revisión");
+            toast.error("No se pudo agregar la revisión. Vuelve a intentarlo.");
         } finally {
             setSaving(false);
         }

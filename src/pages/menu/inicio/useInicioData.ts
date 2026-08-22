@@ -14,6 +14,18 @@ export interface CriticalAlert {
 
 export interface InicioData {
   loading: boolean;
+  /**
+   * The last load failed and there is nothing to draw.
+   *
+   * Distinct from `loading` and from empty data, because those three states used
+   * to look identical on screen. `kpis` stays null on failure and every card
+   * reads `kpis?.x ?? 0`, so a three-second outage rendered "0 postes · 0
+   * pendientes", "No hay incidencias pendientes en este período" and an empty
+   * map — the failure drawn exactly like a system in perfect health, behind a
+   * toast that disappears after four seconds. Whoever reads this must show a way
+   * back instead of a zero.
+   */
+  error: boolean;
   load: () => void;
   period: Period;
   setPeriod: (p: Period) => void;
@@ -49,6 +61,7 @@ export function useInicioData(): InicioData {
   const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
   const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [period, setPeriod] = useState<Period>("custom");
   const [customRange, setCustomRange] = useState<CustomRange>(() => {
     const n = new Date();
@@ -66,7 +79,11 @@ export function useInicioData(): InicioData {
       const data = await getDashboard(sesion.token);
       setListEventos(data.eventos);
       setListPostes(data.postes);
+      setError(false);
     } catch {
+      // Both: the toast for whoever is looking right now, the flag for whoever
+      // arrives four seconds later and would otherwise read zeros as an answer.
+      setError(true);
       toast.error("Error al cargar los datos del dashboard");
     } finally {
       setLoading(false);
@@ -94,32 +111,51 @@ export function useInicioData(): InicioData {
     const hasRevisionInPrev = (e: DashboardEvento) =>
       (e.revisions ?? []).some((r) => inPrev(new Date(r.date)));
 
+    /**
+     * The poles that still exist, and the only ones any of these counts may name.
+     *
+     * Archiving a pole is a soft delete with no cascade to its incidents, and
+     * Sequelize puts the paranoid condition in the ON clause of a LEFT JOIN — so
+     * those incidents arrive with `poste: null` and a live `id_poste` pointing at
+     * a row `listPostes` does not contain. Every count below used to build its
+     * set straight from `id_poste`, while `postesTotal` counts `listPostes`. One
+     * archived pole carrying three open incidents was enough to render
+     * "100% con incidencias" and "−1 sin incidencias".
+     *
+     * The incidents themselves stay in `pendGlobal` and `eventosTotal`: they are
+     * real work that is really open, and dropping them would trade a wrong
+     * percentage for a wrong backlog. What they may not do is be counted as
+     * poles.
+     */
+    const livePosteIds = new Set(listPostes.map((p) => p.id));
+    const livePostes = (list: DashboardEvento[]) =>
+      new Set(list.filter((e) => livePosteIds.has(e.id_poste)).map((e) => e.id_poste));
+
     const postesTotal = listPostes.length;
     const postesCurr = listPostes.filter((p) => inCurr(new Date(p.date))).length;
-    const postesConPendientes = new Set(listEventos.filter((e) => !e.state).map((e) => e.id_poste));
-    const postesConIncidencias = postesConPendientes.size;
-    const postesConEventos = new Set(listEventos.filter((e) => e.id_poste != null).map((e) => e.id_poste)).size;
+    const postesConIncidencias = livePostes(listEventos.filter((e) => !e.state)).size;
+    const postesConEventos = livePostes(listEventos).size;
     const eventosTotal = listEventos.length;
     const eventosResueltosTotal = listEventos.filter((e) => e.state).length;
     const pendGlobal = listEventos.filter((e) => !e.state).length;
 
     const reviewedList = listEventos.filter(hasRevisionInCurr);
-    const postesRevisadosCurr = new Set(reviewedList.map((e) => e.id_poste)).size;
-    const postesRevisadosPrev = new Set(listEventos.filter(hasRevisionInPrev).map((e) => e.id_poste)).size;
+    const revisadosIds = livePostes(reviewedList);
+    const postesRevisadosCurr = revisadosIds.size;
+    const postesRevisadosPrev = livePostes(listEventos.filter(hasRevisionInPrev)).size;
     const pendientesRevisadosCurr = reviewedList.filter((e) => !e.state);
-    const postesPendientesRevisadosCurr = new Set(pendientesRevisadosCurr.map((e) => e.id_poste)).size;
+    const postesPendientesRevisadosCurr = livePostes(pendientesRevisadosCurr).size;
 
-    const postesSolucionadosIdsCurr = new Set(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inCurr(d); }).map((e) => e.id_poste));
+    const postesSolucionadosIdsCurr = livePostes(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inCurr(d); }));
     const postesSolucionadosCurr = postesSolucionadosIdsCurr.size;
-    const postesSolucionadosPrev = new Set(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inPrev(d); }).map((e) => e.id_poste)).size;
+    const postesSolucionadosPrev = livePostes(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inPrev(d); })).size;
 
     const creadosIds = new Set(listPostes.filter((p) => inCurr(new Date(p.date))).map((p) => p.id));
-    const revisadosIds = new Set(reviewedList.map((e) => e.id_poste));
     const postesActivosCurr = new Set([...creadosIds, ...revisadosIds, ...postesSolucionadosIdsCurr]).size;
     const postesActivosPrev = new Set([
       ...listPostes.filter((p) => inPrev(new Date(p.date))).map((p) => p.id),
-      ...listEventos.filter(hasRevisionInPrev).map((e) => e.id_poste),
-      ...listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inPrev(d); }).map((e) => e.id_poste),
+      ...livePostes(listEventos.filter(hasRevisionInPrev)),
+      ...livePostes(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inPrev(d); })),
     ]).size;
 
     return {
@@ -342,7 +378,7 @@ export function useInicioData(): InicioData {
   }, [listPostes, listEventos, mapTab, bounds, period]);
 
   return {
-    loading, load, period, setPeriod, customRange, setCustomRange,
+    loading, error, load, period, setPeriod, customRange, setCustomRange,
     currentDateRange: { start: bounds.start, end: bounds.end },
     mapTab, setMapTab,
     kpis, chartData, xAxisLabel, showTrend,

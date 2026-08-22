@@ -79,7 +79,15 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
           {(() => {
             const postesTotal = kpis?.postesTotal ?? 0;
             const postesConInc = kpis?.postesConIncidencias ?? 0;
-            const pctConIncidencias = postesTotal > 0 ? Math.round((postesConInc / postesTotal) * 100) : 0;
+            // Clamped like the other three bars in this file. `useInicioData`
+            // now guarantees the numerator is a subset of the denominator, so
+            // this cannot fire today — but it was the one bar without a ceiling
+            // and the one that rendered "100% con incidencias" on a system with
+            // 1.686 healthy poles, so it keeps a floor and a ceiling of its own.
+            const pctConIncidencias = postesTotal > 0
+              ? Math.min(Math.round((postesConInc / postesTotal) * 100), 100)
+              : 0;
+            const sinIncidencias = Math.max(postesTotal - postesConInc, 0);
             const eventosTotal = kpis?.eventosTotal ?? 0;
             const eventosResueltos = kpis?.eventosResueltosTotal ?? 0;
             const pctResueltosGlobal = eventosTotal > 0 ? Math.round((eventosResueltos / eventosTotal) * 100) : 0;
@@ -107,13 +115,13 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                       </div>
                     )}
                     {loading ? <Skeleton className="h-2 w-full rounded-full" /> : (
-                      <div className="w-full bg-muted rounded-full h-1.5">
+                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
                         <AnimatedBar pct={pctConIncidencias} color="bg-primary" />
                       </div>
                     )}
                     {loading ? <Skeleton className="h-4 w-40" /> : (
                       <p className="text-xs text-muted-foreground">
-                        <AnimatedNumber value={postesConInc} /> con incidencias · <AnimatedNumber value={postesTotal - postesConInc} /> sin incidencias
+                        <AnimatedNumber value={postesConInc} /> con incidencias · <AnimatedNumber value={sinIncidencias} /> sin incidencias
                       </p>
                     )}
                   </CardContent>

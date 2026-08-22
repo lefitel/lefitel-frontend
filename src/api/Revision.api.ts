@@ -30,7 +30,18 @@ export const createRevision = (
     .then((response) => {
       return response.status;
     })
-    .catch(() => {
-      return 400;
+    .catch((error: unknown) => {
+      /**
+       * The status the server actually sent, or 0 if it never answered.
+       *
+       * This used to flatten everything to 400, which threw away the only thing
+       * the caller needed to tell a refusal from a breakage: a 403 means this
+       * account may not record inspections and no amount of retrying will help,
+       * while a 500 or a dead connection means try again. The dialog now says
+       * which of those happened, so 0 has to be distinguishable from a real
+       * status rather than dressed up as one.
+       */
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      return typeof status === "number" ? status : 0;
     });
 };
