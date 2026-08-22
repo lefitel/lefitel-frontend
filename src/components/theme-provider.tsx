@@ -41,6 +41,12 @@ function readStoredTheme(storageKey: string): Theme | null {
   }
 }
 
+/** Matches `--background` in index.css for each scheme. */
+const THEME_COLOR: Record<ResolvedTheme, string> = {
+  light: "#f1f5fa",
+  dark: "#080c15",
+};
+
 export function ThemeProvider({
   children,
   defaultTheme = "system",
@@ -74,6 +80,18 @@ export function ThemeProvider({
     root.classList.add(resolvedTheme)
     // Keeps native UI (scrollbars, date inputs, autofill) in the same theme.
     root.style.colorScheme = resolvedTheme
+
+    /**
+     * Installed on a phone, the app paints its own title and status bars from
+     * this tag. A manifest carries a single `theme_color` and a static <meta>
+     * can only follow the operating system — but the theme here is the user's
+     * own choice and defaults to light whatever the phone is set to, so either
+     * of those is wrong more often than right. This is the only place that
+     * knows the answer.
+     */
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute("content", THEME_COLOR[resolvedTheme])
   }, [resolvedTheme])
 
   const value = useMemo<ThemeProviderState>(

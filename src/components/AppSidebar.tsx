@@ -3,6 +3,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LogOut,
   ChevronsUpDown,
+  Smartphone,
+  Sparkles,
   UserCircle,
 } from "lucide-react";
 import { visibleMenuItems } from "./menuItems";
@@ -41,6 +43,10 @@ import {
 } from "./ui/avatar";
 import { SesionContext } from "../context/SesionContext";
 import logo from "../assets/images/logo.png";
+import { APP_VERSION } from "../data/changelog";
+import { useInstallPrompt } from "../hooks/useInstallPrompt";
+import { useUnseenRelease } from "../hooks/useSeenRelease";
+import { InstallSheet } from "./InstallSheet";
 
 
 export const AppSidebar = () => {
@@ -51,6 +57,9 @@ export const AppSidebar = () => {
   const visibleItems = visibleMenuItems(rol);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
+  const { canInstall, installed, platform, install } = useInstallPrompt();
+  const unseenRelease = useUnseenRelease();
 
   const userName = `${sesion.usuario.name} ${sesion.usuario.lastname}`.trim();
   const initials = (sesion.usuario.name?.[0] ?? "") + (sesion.usuario.lastname?.[0] ?? "");
@@ -139,6 +148,35 @@ export const AppSidebar = () => {
                     Mi Perfil
                   </Link>
                 </DropdownMenuItem>
+                {/* Always here, and never dead. With a prompt in hand the
+                    click installs; without one it explains how, which is the
+                    common case — Safari has no prompt at all and Chrome holds
+                    its own back until it has seen some use. The entry only
+                    disappears once the app is installed, when there is nothing
+                    left to offer. */}
+                {!installed && (
+                  <DropdownMenuItem
+                    onClick={() => (canInstall ? void install() : setInstallHelpOpen(true))}
+                  >
+                    <Smartphone className="mr-2" />
+                    Instalar aplicación
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuItem asChild>
+                  <Link to="/app/novedades">
+                    <Sparkles className="mr-2" />
+                    Novedades
+                    {unseenRelease && (
+                      <>
+                        <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />
+                        <span className="sr-only">(sin leer)</span>
+                      </>
+                    )}
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                      {APP_VERSION}
+                    </span>
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setLogoutOpen(true)}>
                   <LogOut className="mr-2" />
@@ -149,6 +187,12 @@ export const AppSidebar = () => {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+
+      <InstallSheet
+        platform={platform}
+        open={installHelpOpen}
+        onOpenChange={setInstallHelpOpen}
+      />
 
       <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
         <AlertDialogContent>

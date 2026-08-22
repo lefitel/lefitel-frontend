@@ -1,7 +1,11 @@
 export interface CriticalityMeta {
   level: number;
   label: string;
-  /** Tailwind classes for foreground color */
+  /**
+   * Tailwind classes for foreground color. Each carries a lighter tone for
+   * dark mode: the 600/700 weights these use on a light background all but
+   * vanish against a dark one.
+   */
   textClass: string;
   /** Tailwind classes for background color */
   bgClass: string;
@@ -10,15 +14,15 @@ export interface CriticalityMeta {
 }
 
 export const CRITICALITY_LEVELS: CriticalityMeta[] = [
-  { level: 1, label: "Catastrófico",        textClass: "text-red-700",    bgClass: "bg-red-500/15",     borderClass: "border-red-500/40" },
-  { level: 2, label: "Ferretería suelta",   textClass: "text-orange-600", bgClass: "bg-orange-500/15",  borderClass: "border-orange-500/40" },
-  { level: 3, label: "Sujeto a árbol",      textClass: "text-amber-600",  bgClass: "bg-amber-500/15",   borderClass: "border-amber-500/40" },
-  { level: 4, label: "Daño estructural",    textClass: "text-yellow-700", bgClass: "bg-yellow-500/15",  borderClass: "border-yellow-500/40" },
-  { level: 5, label: "Vano bajo",           textClass: "text-lime-700",   bgClass: "bg-lime-500/15",    borderClass: "border-lime-500/40" },
-  { level: 6, label: "Fricción",            textClass: "text-emerald-700",bgClass: "bg-emerald-500/15", borderClass: "border-emerald-500/40" },
-  { level: 7, label: "Estresado",           textClass: "text-teal-700",   bgClass: "bg-teal-500/15",    borderClass: "border-teal-500/40" },
-  { level: 8, label: "Antivibradores",      textClass: "text-cyan-700",   bgClass: "bg-cyan-500/15",    borderClass: "border-cyan-500/40" },
-  { level: 9, label: "Mantenimiento",       textClass: "text-blue-700",   bgClass: "bg-blue-500/15",    borderClass: "border-blue-500/40" },
+  { level: 1, label: "Catastrófico",        textClass: "text-red-700 dark:text-red-400",    bgClass: "bg-red-500/15",     borderClass: "border-red-500/40" },
+  { level: 2, label: "Ferretería suelta",   textClass: "text-orange-600 dark:text-orange-400", bgClass: "bg-orange-500/15",  borderClass: "border-orange-500/40" },
+  { level: 3, label: "Sujeto a árbol",      textClass: "text-amber-600 dark:text-amber-400",  bgClass: "bg-amber-500/15",   borderClass: "border-amber-500/40" },
+  { level: 4, label: "Daño estructural",    textClass: "text-yellow-700 dark:text-yellow-400", bgClass: "bg-yellow-500/15",  borderClass: "border-yellow-500/40" },
+  { level: 5, label: "Vano bajo",           textClass: "text-lime-700 dark:text-lime-400",   bgClass: "bg-lime-500/15",    borderClass: "border-lime-500/40" },
+  { level: 6, label: "Fricción",            textClass: "text-emerald-700 dark:text-emerald-400",bgClass: "bg-emerald-500/15", borderClass: "border-emerald-500/40" },
+  { level: 7, label: "Estresado",           textClass: "text-teal-700 dark:text-teal-400",   bgClass: "bg-teal-500/15",    borderClass: "border-teal-500/40" },
+  { level: 8, label: "Antivibradores",      textClass: "text-cyan-700 dark:text-cyan-400",   bgClass: "bg-cyan-500/15",    borderClass: "border-cyan-500/40" },
+  { level: 9, label: "Mantenimiento",       textClass: "text-blue-700 dark:text-blue-400",   bgClass: "bg-blue-500/15",    borderClass: "border-blue-500/40" },
 ];
 
 export const UNCLASSIFIED_META: CriticalityMeta = {

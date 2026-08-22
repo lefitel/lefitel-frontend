@@ -81,4 +81,23 @@ describe("ThemeProvider", () => {
     expect(screen.getByTestId("resolved")).toHaveTextContent("dark");
     expect(document.documentElement).toHaveClass("dark");
   });
+
+  /**
+   * Installed on a phone, this tag is what colours the system bars around the
+   * app. It has to follow the theme the user chose here, not the one the phone
+   * is set to — those disagree by default, since the app starts light.
+   */
+  it("paints the browser UI to match the chosen theme", () => {
+    const meta = document.createElement("meta");
+    meta.setAttribute("name", "theme-color");
+    meta.setAttribute("content", "#ffffff");
+    document.head.appendChild(meta);
+
+    try {
+      renderProbe("dark");
+      expect(meta.getAttribute("content")).toBe("#080c15");
+    } finally {
+      meta.remove();
+    }
+  });
 });

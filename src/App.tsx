@@ -20,11 +20,13 @@ import SeguridadPage from "./pages/menu/SeguridadPage";
 import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
 import PerfilPage from "./pages/menu/PerfilPage";
+import NovedadesPage from "./pages/menu/NovedadesPage";
 import BitacoraPage from "./pages/menu/bitacora";
 import { TooltipProvider } from "./components/ui/tooltip";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import { Toaster } from "@/components/ui/sonner";
+import { UpdatePrompt } from "./components/UpdatePrompt";
 import { ThemeProvider as ShadcnThemeProvider } from "@/components/theme-provider";
 
 const PrivateRoutes = () => {
@@ -80,10 +82,11 @@ const App = () => {
                   <Route index element={<Navigate to="/app/home" replace />} />
 
                   {/* Belongs to no module: anyone with a session. Their own
-                      profile is theirs, and the home page is where every
-                      redirect lands. */}
-                  <Route path="home"   element={<InicioPage />} />
-                  <Route path="perfil" element={<PerfilPage />} />
+                      profile is theirs, the home page is where every redirect
+                      lands, and the release notes are the same for everyone. */}
+                  <Route path="home"      element={<InicioPage />} />
+                  <Route path="perfil"    element={<PerfilPage />} />
+                  <Route path="novedades" element={<NovedadesPage />} />
 
                   <Route element={<ModuleRoute modulo="postes" />}>
                     <Route path="postes"        element={<PostePage />} />
@@ -135,6 +138,7 @@ const App = () => {
             </Routes>
           </BrowserRouter>
           <Toaster position="top-right" richColors closeButton />
+          <UpdatePrompt />
         </TooltipProvider>
       </ShadcnThemeProvider>
     </SesionProvider>

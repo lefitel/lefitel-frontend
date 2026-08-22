@@ -10,6 +10,15 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/*
+ * A real pointer, asked of the input device rather than the window width: a
+ * narrow window on a laptop is still a mouse, and a tablet in landscape is
+ * still a finger, so a breakpoint answers the wrong question. Everything is
+ * built for the finger and this variant is what a mouse adds on top, so an
+ * input the query cannot classify still gets the version that always works.
+ */
+@custom-variant mouse (@media (hover: hover) and (pointer: fine));
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
