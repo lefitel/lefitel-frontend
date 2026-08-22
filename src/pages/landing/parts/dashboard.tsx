@@ -29,68 +29,69 @@ export function KpiPart() {
   const { ref, still } = usePart<HTMLDivElement>(KPI_SCRIPT);
 
   return (
-    <div
-      ref={ref}
-      className="grid grid-cols-2 gap-3 lg:grid-cols-[minmax(0,1.55fr)_repeat(4,minmax(0,1fr))]"
-    >
-      <motion.div
-        className="col-span-2 rounded-xl border border-[var(--scr-hair)] bg-[var(--scr-panel)] px-4 py-3 lg:col-span-1"
-        initial={still ? false : { opacity: 0, y: 14 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.55, ease: EXPO }}
-      >
-        <p className="text-[10px] tracking-wider text-[var(--scr-faint)] uppercase">
-          Postes en la red
-        </p>
-        <div className="mt-1.5 flex items-end justify-between gap-3">
-          <p className="text-[30px] leading-none font-bold text-[var(--scr-text)]">
-            <Counter to={NETWORK.total} still={still} duration={1.5} />
-          </p>
-          <svg viewBox="0 0 96 30" className="h-[30px] w-[96px] shrink-0">
-            <path
-              d="M0 26 L12 22 L24 24 L36 17 L48 19 L60 12 L72 14 L84 7 L96 4"
-              fill="none"
-              stroke="oklch(0.745 0.135 162)"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </div>
-        <p className="mt-2 text-[10px] text-[var(--scr-faint)]">
-          {NETWORK.cities} ciudades · 12 tramos activos
-        </p>
-      </motion.div>
-
-      {TOTALS.fortnight.map((kpi, i) => {
-        const rising = kpi.delta > 0;
-        const healthy = kpi.up === rising;
-        const tone = healthy ? "var(--scr-ok)" : "var(--scr-warn)";
-        return (
+    <div ref={ref}>
+      <Panel className="overflow-hidden">
+        <div className="grid grid-cols-2 gap-px bg-[var(--scr-hair)] lg:grid-cols-[minmax(0,1.55fr)_repeat(4,minmax(0,1fr))]">
           <motion.div
-            key={kpi.label}
-            className="rounded-xl border border-[var(--scr-hair)] bg-[var(--scr-panel)] px-3 py-3"
-            initial={still ? false : { opacity: 0, y: 14 }}
+            className="col-span-2 bg-[var(--scr-panel)] px-4 py-3.5 lg:col-span-1"
+            initial={still ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, ease: EXPO, delay: still ? 0 : 0.07 * (i + 1) }}
+            transition={{ duration: 0.5, ease: EXPO }}
           >
             <p className="text-[10px] tracking-wider text-[var(--scr-faint)] uppercase">
-              {kpi.label}
+              Postes en la red
             </p>
-            <p className="mt-1.5 text-[24px] leading-none font-bold text-[var(--scr-text)]">
-              <Counter to={kpi.value} still={still} duration={1.2} />
-            </p>
-            <p className="mt-2 flex items-center gap-1 text-[10px]" style={{ color: tone }}>
-              {rising ? (
-                <ArrowUpIcon className="h-2.5 w-2.5" />
-              ) : (
-                <ArrowDownIcon className="h-2.5 w-2.5" />
-              )}
-              {Math.abs(kpi.delta).toFixed(1).replace(".", ",")}%
+            <div className="mt-1.5 flex items-end justify-between gap-3">
+              <p className="text-[30px] leading-none font-bold text-[var(--scr-text)]">
+                <Counter to={NETWORK.total} still={still} duration={1.5} />
+              </p>
+              <svg viewBox="0 0 96 30" className="h-[30px] w-[96px] shrink-0">
+                <path
+                  d="M0 26 L12 22 L24 24 L36 17 L48 19 L60 12 L72 14 L84 7 L96 4"
+                  fill="none"
+                  stroke="oklch(0.745 0.135 162)"
+                  strokeWidth="1.8"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <p className="mt-2 text-[10px] text-[var(--scr-faint)]">
+              {NETWORK.cities} ciudades · 12 tramos activos
             </p>
           </motion.div>
-        );
-      })}
+
+          {TOTALS.fortnight.map((kpi, i) => {
+            const rising = kpi.delta > 0;
+            const healthy = kpi.up === rising;
+            const tone = healthy ? "var(--scr-ok)" : "var(--scr-warn)";
+            return (
+              <motion.div
+                key={kpi.label}
+                className="bg-[var(--scr-panel)] px-3.5 py-3.5"
+                initial={still ? false : { opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: EXPO, delay: still ? 0 : 0.08 * (i + 1) }}
+              >
+                <p className="text-[10px] tracking-wider text-[var(--scr-faint)] uppercase">
+                  {kpi.label}
+                </p>
+                <p className="mt-1.5 text-[24px] leading-none font-bold text-[var(--scr-text)]">
+                  <Counter to={kpi.value} still={still} duration={1.2} />
+                </p>
+                <p className="mt-2 flex items-center gap-1 text-[10px]" style={{ color: tone }}>
+                  {rising ? (
+                    <ArrowUpIcon className="h-2.5 w-2.5" />
+                  ) : (
+                    <ArrowDownIcon className="h-2.5 w-2.5" />
+                  )}
+                  {Math.abs(kpi.delta).toFixed(1).replace(".", ",")}%
+                </p>
+              </motion.div>
+            );
+          })}
+        </div>
+      </Panel>
     </div>
   );
 }
@@ -235,8 +236,8 @@ export function PeriodPart() {
 
   return (
     <div ref={ref} className="relative">
-      <Panel className="px-4 py-4">
-        <div className="flex items-center justify-between gap-3">
+      <Panel className="overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-4 py-3.5">
           <p className="text-[12px] font-semibold text-[var(--scr-text)]">Periodo</p>
           <div className="relative">
             <div
@@ -276,12 +277,9 @@ export function PeriodPart() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-px border-t border-[var(--scr-hair)] bg-[var(--scr-hair)]">
           {[totals[0], totals[2]].map((kpi) => (
-            <div
-              key={kpi.label}
-              className="rounded-lg border border-[var(--scr-hair)] bg-[var(--scr-bg)] px-3 py-2.5"
-            >
+            <div key={kpi.label} className="bg-[var(--scr-panel)] px-4 py-3">
               <p className="text-[10px] tracking-wider text-[var(--scr-faint)] uppercase">
                 {kpi.label}
               </p>

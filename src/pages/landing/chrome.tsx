@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { animate, motion } from "motion/react";
+import { animate, motion, useInView } from "motion/react";
 import { EXPO, QUART } from "./tokens";
+import { usePrefersReducedMotion } from "./useTimeline";
 
 /**
  * The small parts every piece of the showcase shares.
@@ -192,7 +193,56 @@ export function Toast({ show, title, detail }: { show: boolean; title: string; d
   );
 }
 
-/** The surface a piece sits on: the application's own panel, nothing more. */
+/**
+ * Lifts its contents into place the first time they scroll into view.
+ *
+ * Every caption and every piece arrives this way, the caption a moment ahead of
+ * its piece, so a beat reads as one thing appearing rather than as two that
+ * happened to be there already. Only opacity and vertical offset move: the
+ * pointer measures its targets against this same element, and a translate
+ * cancels out of that subtraction where a scale would not.
+ */
+export function Reveal({
+  delay = 0,
+  className = "",
+  children,
+}: {
+  delay?: number;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const onScreen = useInView(ref, { once: true, margin: "0px 0px -12% 0px" });
+  const still = usePrefersReducedMotion();
+  const shown = onScreen || still;
+
+  // `initial` stays constant. Swapping it after mount is not something motion
+  // acts on, so a piece that decided late that it should not animate stayed at
+  // the hidden values for good. Reduced motion is expressed as a zero-length
+  // transition instead, which lands on the same frame without the movement.
+  return (
+    <motion.div
+      ref={ref}
+      className={className}
+      initial={{ opacity: 0, y: 28 }}
+      animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y: 28 }}
+      transition={still ? { duration: 0 } : { duration: 0.7, ease: EXPO, delay }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
+ * The surface a piece sits on: one box per piece, always.
+ *
+ * A beat made of three cards standing loose on the page background reads as
+ * three unrelated things. Everything a piece is made of goes inside a single
+ * panel, and where it needs internal divisions they are hairlines, not more
+ * boxes. The trick throughout is a one-pixel grid gap over the hairline colour,
+ * which draws a clean rule between cells in any arrangement without any of them
+ * becoming a card of its own.
+ */
 export function Panel({
   className = "",
   children,

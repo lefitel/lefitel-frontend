@@ -119,9 +119,20 @@ export function useTimeline({
   return step;
 }
 
-/** Live answer to the viewer's system-wide "reduce motion" setting. */
+/**
+ * Whether the viewer has asked their system for less movement.
+ *
+ * Answered on the very first render, not after an effect. Read late, it returns
+ * false once and true immediately after, and anything that branches on it has
+ * already committed to the wrong shape: an entrance that starts at opacity zero
+ * and a `initial` prop that changes after mount, which motion does not act on.
+ * That combination left the whole section invisible for exactly the people who
+ * asked for less movement, and nothing on screen said so.
+ */
 export function usePrefersReducedMotion(): boolean {
-  const [still, setStill] = useState(false);
+  const [still, setStill] = useState(
+    () => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");

@@ -1,3 +1,4 @@
+import { Reveal } from "./chrome";
 import { screenVars } from "./tokens";
 import { CardPart, FilterPart, PlanPart } from "./parts/map";
 import { FormPart, SavedPart } from "./parts/event";
@@ -58,12 +59,17 @@ function Row({
       data-piece={id}
       className={`grid gap-5 lg:grid-cols-12 lg:gap-8 ${flip ? "lg:items-center" : ""}`}
     >
-      <div className={flip ? "lg:col-span-5 lg:col-start-8 lg:row-start-1" : "lg:col-span-4"}>
+      <Reveal
+        className={flip ? "lg:col-span-5 lg:col-start-8 lg:row-start-1" : "lg:col-span-4"}
+      >
         <Caption tag={tag} title={title} text={text} />
-      </div>
-      <div className={`min-w-0 ${flip ? "lg:col-span-6 lg:row-start-1" : "lg:col-span-8"}`}>
+      </Reveal>
+      <Reveal
+        delay={0.12}
+        className={`min-w-0 ${flip ? "lg:col-span-6 lg:row-start-1" : "lg:col-span-8"}`}
+      >
         {children}
-      </div>
+      </Reveal>
     </div>
   );
 }
@@ -84,8 +90,10 @@ function Half({
 }) {
   return (
     <div data-piece={id} className="min-w-0 space-y-5">
-      <Caption tag={tag} title={title} text={text} />
-      {children}
+      <Reveal>
+        <Caption tag={tag} title={title} text={text} />
+      </Reveal>
+      <Reveal delay={0.12}>{children}</Reveal>
     </div>
   );
 }
@@ -98,7 +106,7 @@ export function ScrollShowcase() {
       aria-label="El sistema por dentro"
     >
       <div className="mx-auto max-w-[1040px]">
-        <div className="max-w-2xl">
+        <Reveal className="max-w-2xl">
           <p className="mb-5 text-xs font-semibold tracking-[0.25em] text-orange-400 uppercase">
             La plataforma
           </p>
@@ -111,7 +119,7 @@ export function ScrollShowcase() {
             Once piezas del sistema, cada una haciendo su trabajo. Todas siguen al mismo poste: el
             P-0472 del tramo Norte, con la ferretería suelta en la cruceta.
           </p>
-        </div>
+        </Reveal>
 
         {/* measure rule: a quiet nod to the trade, and a break between text and screens */}
         <div

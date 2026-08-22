@@ -298,7 +298,15 @@ export function SavedPart() {
 
   return (
     <div ref={ref} className="relative">
-      <Panel className="overflow-hidden">
+      <Panel className="relative overflow-hidden">
+        <div className="pointer-events-none absolute top-2.5 right-2.5 z-30">
+          <Toast
+            show={notice}
+            title="Evento registrado"
+            detail={`${EVENT.id} · ${POLE.id} · prioritario`}
+          />
+        </div>
+
         <div
           className={`grid ${COLS} gap-3 border-b border-[var(--scr-hair)] px-4 py-2.5 text-[9.5px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase`}
         >
@@ -366,14 +374,6 @@ export function SavedPart() {
           </div>
         ))}
       </Panel>
-
-      <div className="pointer-events-none absolute -top-3 right-2 sm:-top-4 sm:right-4">
-        <Toast
-          show={notice}
-          title="Evento registrado"
-          detail={`${EVENT.id} · ${POLE.id} · prioritario`}
-        />
-      </div>
     </div>
   );
 }

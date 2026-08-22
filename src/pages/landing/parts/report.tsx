@@ -83,82 +83,91 @@ export function ColumnsPart() {
   const chosen = COLUMNS.filter((c) => step >= c.addedAt);
 
   return (
-    <div ref={ref} className="relative grid items-start gap-3 sm:grid-cols-[232px_minmax(0,1fr)]">
+    <div ref={ref} className="relative">
       <Panel className="overflow-hidden">
-        <div className="flex h-[30px] items-center gap-2 border-b border-[var(--scr-hair)] px-3">
-          <SearchIcon className="h-3 w-3 text-[var(--scr-faint)]" />
-          <span className="text-[11px] text-[var(--scr-faint)]">Buscar campo…</span>
-        </div>
-
-        <div
-          className="max-h-[214px] overflow-hidden px-2 py-2"
-          style={{
-            maskImage: "linear-gradient(to bottom, black 84%, transparent)",
-            WebkitMaskImage: "linear-gradient(to bottom, black 84%, transparent)",
-          }}
-        >
-          {CATALOG.map((group) => (
-            <div key={group.group} className="mb-1">
-              <p className="px-1.5 py-1 text-[9px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase">
-                {group.group}
-              </p>
-              {group.fields.map((field) => {
-                const added = COLUMNS.some(
-                  (c) =>
-                    step >= c.addedAt &&
-                    c.label === `${group.group} › ${field.label}`,
-                );
-                return (
-                  <div
-                    key={field.label}
-                    data-target={field.target}
-                    className="flex h-[22px] items-center gap-2 rounded px-1.5 text-[11px] transition-colors duration-300"
-                    style={{
-                      background: added ? "oklch(0.635 0.105 258 / 0.16)" : "transparent",
-                      color: added ? "var(--scr-text)" : "var(--scr-dim)",
-                    }}
-                  >
-                    {added ? (
-                      <CheckIcon className="h-3 w-3 text-[var(--scr-primary)]" strokeWidth={3} />
-                    ) : (
-                      <PlusIcon className="h-3 w-3 opacity-35" />
-                    )}
-                    {field.label}
-                  </div>
-                );
-              })}
+        {/* Two background utilities on one element is a coin toss over which one
+            Tailwind emits last, so the hairline grid gets an element of its own. */}
+        <div className="grid gap-px bg-[var(--scr-hair)] sm:grid-cols-[232px_minmax(0,1fr)]">
+          <div className="bg-[var(--scr-panel)]">
+            <div className="flex h-[30px] items-center gap-2 border-b border-[var(--scr-hair)] px-3">
+              <SearchIcon className="h-3 w-3 text-[var(--scr-faint)]" />
+              <span className="text-[11px] text-[var(--scr-faint)]">Buscar campo…</span>
             </div>
-          ))}
-          <div className="mt-1 flex h-[22px] items-center gap-2 rounded px-1.5 text-[11px] text-[var(--scr-faint)]">
-            <SigmaIcon className="h-3 w-3 opacity-50" />
-            Revisiones · total
-          </div>
-        </div>
-      </Panel>
 
-      <Panel className="px-3 py-3">
-        <p className="mb-2 text-[9px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase">
-          Columnas del reporte
-        </p>
-        <div className="flex min-h-[26px] flex-wrap items-start gap-1.5">
-          {chosen.length === 0 && (
-            <span className="text-[11px] text-[var(--scr-faint)]">
-              Elige campos en el catálogo
-            </span>
-          )}
-          {chosen.map((column, i) => (
-            <motion.div
-              key={column.label}
-              data-target={`gen-slot-${i}`}
-              className="flex items-center gap-1.5 rounded-md border border-[var(--scr-line)] bg-[var(--scr-raise)] py-1 pr-1.5 pl-2 text-[10.5px] whitespace-nowrap text-[var(--scr-text)]"
-              initial={still ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.2, delay: still ? 0 : 0.42 }}
+            {/* The list scrolls in the application; here it just ends in a fade,
+                which says "there are more fields" without a scrollbar nobody can use. */}
+            <div
+              className="max-h-[214px] overflow-hidden px-2 py-2"
+              style={{
+                maskImage: "linear-gradient(to bottom, black 84%, transparent)",
+                WebkitMaskImage: "linear-gradient(to bottom, black 84%, transparent)",
+              }}
             >
-              {column.label}
-              <XIcon className="h-2.5 w-2.5 text-[var(--scr-faint)]" />
-            </motion.div>
-          ))}
+              {CATALOG.map((group) => (
+                <div key={group.group} className="mb-1">
+                  <p className="px-1.5 py-1 text-[9px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase">
+                    {group.group}
+                  </p>
+                  {group.fields.map((field) => {
+                    const added = COLUMNS.some(
+                      (c) => step >= c.addedAt && c.label === `${group.group} › ${field.label}`,
+                    );
+                    return (
+                      <div
+                        key={field.label}
+                        data-target={field.target}
+                        className="flex h-[22px] items-center gap-2 rounded px-1.5 text-[11px] transition-colors duration-300"
+                        style={{
+                          background: added ? "oklch(0.635 0.105 258 / 0.16)" : "transparent",
+                          color: added ? "var(--scr-text)" : "var(--scr-dim)",
+                        }}
+                      >
+                        {added ? (
+                          <CheckIcon
+                            className="h-3 w-3 text-[var(--scr-primary)]"
+                            strokeWidth={3}
+                          />
+                        ) : (
+                          <PlusIcon className="h-3 w-3 opacity-35" />
+                        )}
+                        {field.label}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              <div className="mt-1 flex h-[22px] items-center gap-2 rounded px-1.5 text-[11px] text-[var(--scr-faint)]">
+                <SigmaIcon className="h-3 w-3 opacity-50" />
+                Revisiones · total
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[var(--scr-panel)] px-3.5 py-3.5">
+            <p className="mb-2.5 text-[9px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase">
+              Columnas del reporte
+            </p>
+            <div className="flex min-h-[26px] flex-wrap items-start gap-1.5">
+              {chosen.length === 0 && (
+                <span className="text-[11px] text-[var(--scr-faint)]">
+                  Elige campos en el catálogo
+                </span>
+              )}
+              {chosen.map((column, i) => (
+                <motion.div
+                  key={column.label}
+                  data-target={`gen-slot-${i}`}
+                  className="flex items-center gap-1.5 rounded-md border border-[var(--scr-line)] bg-[var(--scr-raise)] py-1 pr-1.5 pl-2 text-[10.5px] whitespace-nowrap text-[var(--scr-text)]"
+                  initial={still ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.2, delay: still ? 0 : 0.42 }}
+                >
+                  {column.label}
+                  <XIcon className="h-2.5 w-2.5 text-[var(--scr-faint)]" />
+                </motion.div>
+              ))}
+            </div>
+          </div>
         </div>
       </Panel>
 

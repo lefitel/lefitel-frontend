@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { stepAt, useTimeline } from "./useTimeline";
+import { stepAt, usePrefersReducedMotion, useTimeline } from "./useTimeline";
 
 describe("stepAt", () => {
   const beats = [0, 1000, 2500, 4000];
@@ -97,5 +97,39 @@ describe("useTimeline", () => {
     expect(result.current).toBe(2);
     act(() => { vi.advanceTimersByTime(10000); });
     expect(onEnd).not.toHaveBeenCalled();
+  });
+});
+
+describe("usePrefersReducedMotion", () => {
+  const setQuery = (matches: boolean) => {
+    window.matchMedia = vi.fn().mockImplementation((media: string) => ({
+      matches,
+      media,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })) as unknown as typeof window.matchMedia;
+  };
+
+  // Answered late, it says "no" for one render, and anything that branched on
+  // that answer has already committed to the wrong shape. That is not a
+  // theoretical worry: it left the whole showcase at opacity zero, invisible to
+  // exactly the people who asked for less movement.
+  it("answers on the first render, not after an effect", () => {
+    setQuery(true);
+    const seen: boolean[] = [];
+    renderHook(() => {
+      seen.push(usePrefersReducedMotion());
+    });
+    expect(seen[0]).toBe(true);
+  });
+
+  it("says no when the viewer has not asked for it", () => {
+    setQuery(false);
+    const { result } = renderHook(() => usePrefersReducedMotion());
+    expect(result.current).toBe(false);
   });
 });
