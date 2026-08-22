@@ -8,14 +8,19 @@ import { url } from "../api/url";
 import { SesionContext } from "./SesionContext";
 import { olvidarPermisos, setPermisos } from "../lib/permissions";
 
-/** Decodifica el campo `exp` del JWT (en ms). No verifica firma. */
-const getTokenExp = (token: string): number | null => {
+/** Lee el cuerpo del JWT sin verificar la firma. Solo para lo que ya es nuestro. */
+const readToken = (token: string): { exp?: number; id_rol?: number } | null => {
   try {
-    const payload = JSON.parse(atob(token.split(".")[1]));
-    return payload.exp * 1000;
+    return JSON.parse(atob(token.split(".")[1]));
   } catch {
     return null;
   }
+};
+
+/** Decodifica el campo `exp` del JWT (en ms). No verifica firma. */
+const getTokenExp = (token: string): number | null => {
+  const exp = readToken(token)?.exp;
+  return typeof exp === "number" ? exp * 1000 : null;
 };
 
 interface props {
@@ -26,6 +31,14 @@ export const SesionProvider = ({ children }: props) => {
   const [sesion, setSesion] = React.useState<SesionInterface>({ token: "", usuario: usuarioExample });
   const [loading, setLoading] = React.useState(true);
   const timers = useRef<{ warning: ReturnType<typeof setTimeout> | null; expiry: ReturnType<typeof setTimeout> | null }>({ warning: null, expiry: null });
+  /**
+   * The role the permissions on screen were fetched for.
+   *
+   * A ref because the interceptor is installed once and would otherwise close
+   * over the role from the render that installed it — and comparing against a
+   * stale role is the same as not comparing at all.
+   */
+  const roleRef = useRef<number | undefined>(undefined);
 
   const clearTimers = () => {
     if (timers.current.warning) clearTimeout(timers.current.warning);
@@ -64,6 +77,23 @@ export const SesionProvider = ({ children }: props) => {
   useEffect(() => {
     if (sesion.token) scheduleExpiry(sesion.token);
   }, [sesion.token, scheduleExpiry]);
+
+  /**
+   * The role the permissions on screen were fetched for.
+   *
+   * In an effect rather than during render — writing a ref while rendering is
+   * not allowed — and after the commit is soon enough: the interceptor only
+   * refreshes when it has a role to compare against, so the one window this
+   * leaves is the instant after a login, where the permissions are fresh
+   * already.
+   *
+   * `setSesion` is handed to the login screen through the context, so there is
+   * no single call site to hook; the state itself is what every writer passes
+   * through.
+   */
+  useEffect(() => {
+    roleRef.current = sesion.permisos ? sesion.usuario.id_rol : undefined;
+  }, [sesion.permisos, sesion.usuario.id_rol]);
 
   // Verificar token almacenado al iniciar (evita flicker al recargar)
   useEffect(() => {
@@ -113,6 +143,46 @@ export const SesionProvider = ({ children }: props) => {
         if (newToken && isOurApi(response.config?.url)) {
           localStorage.setItem("token", newToken);
           setSesion((prev) => (prev.token ? { ...prev, token: newToken } : prev));
+
+          /**
+           * A role that changed mid-session used to stay invisible until the
+           * page was reloaded.
+           *
+           * The server reads the role from the database on every request and
+           * puts the fresh one into the token it hands back — that part was
+           * already right — and the client adopted the new token while keeping
+           * the permissions it was given at login. So somebody promoted kept
+           * seeing the smaller application, and somebody demoted kept seeing
+           * buttons whose only outcome was 403. The server was refusing
+           * correctly the whole time; the screen was the part that lied.
+           *
+           * Only when the role actually changed, so the ordinary case — a token
+           * renewed on every single response — costs nothing.
+           */
+          const fresh = readToken(newToken)?.id_rol;
+          const known = roleRef.current;
+          if (typeof fresh === "number" && known !== undefined && fresh !== known) {
+            roleRef.current = fresh;
+            comprobarToken(newToken)
+              .then((res) => {
+                if (res.status === 200 && res.usuario) {
+                  setSesion((prev) =>
+                    prev.token
+                      ? {
+                          ...prev,
+                          usuario: res.usuario as UsuarioInterface,
+                          permisos: res.permisos,
+                        }
+                      : prev,
+                  );
+                  toast.info("Sus permisos cambiaron. La pantalla se actualizó.");
+                }
+              })
+              .catch(() => {
+                // Left as it was: a failed refresh must not end a working
+                // session, and the server is the one enforcing the change.
+              });
+          }
         }
         return response;
       },

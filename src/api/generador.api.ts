@@ -125,6 +125,24 @@ export interface SavedReport {
   createdAt?: string;
   updatedAt?: string;
   usuario?: { id: number; name?: string; lastname?: string } | null;
+  /**
+   * How many pieces of the stored configuration the server left out because
+   * this account may not use them.
+   *
+   * The server prunes on the way out — a shared report used to publish the
+   * paths of the fields the catalog hides, filter values included — so the
+   * client can no longer tell what is missing by comparing against the
+   * catalog. This is the count it needs to say so out loud.
+   */
+  omitted?: number;
+}
+
+/** One page of saved reports, plus how many there are in all. */
+export interface SavedReportPage {
+  rows: SavedReport[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface SaveReportPayload {
@@ -145,8 +163,16 @@ export const getCatalogo = (token: string): Promise<Catalog> =>
 export const runReporte = (config: ReportConfig, token: string): Promise<ReportResult> =>
   axios.post(urlApi + urlGenerador + "consulta", config, auth(token)).then((r) => r.data);
 
-export const getReportesGuardados = (token: string): Promise<SavedReport[]> =>
-  axios.get(urlApi + urlGenerador + "reportes", auth(token)).then((r) => r.data);
+export const getReportesGuardados = (
+  token: string,
+  page: { limit?: number; offset?: number } = {},
+): Promise<SavedReportPage> =>
+  axios
+    .get(urlApi + urlGenerador + "reportes", {
+      ...auth(token),
+      params: { limit: page.limit, offset: page.offset },
+    })
+    .then((r) => r.data);
 
 export const crearReporte = (payload: SaveReportPayload, token: string): Promise<SavedReport> =>
   axios.post(urlApi + urlGenerador + "reportes", payload, auth(token)).then((r) => r.data);

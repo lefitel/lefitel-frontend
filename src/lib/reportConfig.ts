@@ -14,11 +14,32 @@ import type {
   SortSpec,
 } from "../api/generador.api";
 
-/** Mirrors the server-side caps so the UI can warn before a request is rejected. */
+/**
+ * The server's caps, so the UI can warn before a request is refused.
+ *
+ * These are a *fallback*. The server publishes the same numbers in
+ * `catalog.limits` precisely so they are not written twice, and they were
+ * written twice anyway: whoever changes one of them there has no reason to
+ * suspect a copy lives here, and then the local warning either never fires or
+ * fires over a report the server would have accepted. Every helper below takes
+ * the published limits and falls back to these, which is what the screen does —
+ * these apply only before a catalog has arrived, and in tests.
+ */
 export const MAX_COLUMNS = 60;
 export const MAX_CONDITIONS = 100;
 export const MAX_SORTS = 10;
 export const DEFAULT_LIMIT = 100;
+
+/** The subset of the published limits this module needs. */
+export interface Limits {
+  maxColumns?: number;
+  maxConditions?: number;
+  maxSorts?: number;
+}
+
+export const maxColumns = (limits?: Limits) => limits?.maxColumns ?? MAX_COLUMNS;
+export const maxConditions = (limits?: Limits) => limits?.maxConditions ?? MAX_CONDITIONS;
+export const maxSorts = (limits?: Limits) => limits?.maxSorts ?? MAX_SORTS;
 
 export const emptyConfig = (root: string): ReportConfig => ({
   root,
@@ -69,8 +90,8 @@ export const operatorNeedsTwoValues = (operator: Operator): boolean => operator 
 // ─── Columns ─────────────────────────────────────────────────────────────────
 
 /** True when the report already carries as many columns as it may. */
-export const columnLimitReached = (config: ReportConfig): boolean =>
-  config.columns.length >= MAX_COLUMNS;
+export const columnLimitReached = (config: ReportConfig, limits?: Limits): boolean =>
+  config.columns.length >= maxColumns(limits);
 
 /**
  * Every condition in the tree, not just the ones at the top.
@@ -93,11 +114,16 @@ export const countConditions = (node: unknown): number => {
 };
 
 /** True when the report already carries as many filters as it may. */
-export const filterLimitReached = (config: ReportConfig): boolean =>
-  (config.filters ? countConditions(config.filters) : 0) >= MAX_CONDITIONS;
+export const filterLimitReached = (config: ReportConfig, limits?: Limits): boolean =>
+  (config.filters ? countConditions(config.filters) : 0) >= maxConditions(limits);
 
-export function addColumn(config: ReportConfig, path: string, agg?: AggFn): ReportConfig {
-  if (columnLimitReached(config)) return config;
+export function addColumn(
+  config: ReportConfig,
+  path: string,
+  agg?: AggFn,
+  limits?: Limits,
+): ReportConfig {
+  if (columnLimitReached(config, limits)) return config;
   // The same field can legitimately appear twice with different aggregates
   // (min and max of the same value), but not twice identically.
   const duplicate = config.columns.some((c) => c.path === path && c.agg === agg);
@@ -244,12 +270,17 @@ export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig
  * summarised: the parameter existed here from the start and no caller ever
  * passed it, so the button produced a 400 every single time.
  */
-export function toggleSort(config: ReportConfig, path: string, agg?: AggFn): ReportConfig {
+export function toggleSort(
+  config: ReportConfig,
+  path: string,
+  agg?: AggFn,
+  limits?: Limits,
+): ReportConfig {
   const current = config.sort ?? [];
   const same = (s: SortSpec) => s.path === path && s.agg === agg;
   const existing = current.find(same);
   if (!existing) {
-    if (current.length >= MAX_SORTS) return config;
+    if (current.length >= maxSorts(limits)) return config;
     return { ...config, sort: [...current, { path, dir: "asc", ...(agg ? { agg } : {}) }] };
   }
   // asc → desc → off, which is what a header click cycle is expected to do.
@@ -263,8 +294,8 @@ export function toggleSort(config: ReportConfig, path: string, agg?: AggFn): Rep
 }
 
 /** True when the report already carries as many sort criteria as it may. */
-export const sortLimitReached = (config: ReportConfig): boolean =>
-  (config.sort ?? []).length >= MAX_SORTS;
+export const sortLimitReached = (config: ReportConfig, limits?: Limits): boolean =>
+  (config.sort ?? []).length >= maxSorts(limits);
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
@@ -274,9 +305,13 @@ export const isFilterGroup = (node: unknown): node is FilterGroup =>
 export const isExists = (node: unknown): boolean =>
   typeof node === "object" && node !== null && typeof (node as { exists?: string }).exists === "string";
 
-export function addFilter(config: ReportConfig, field: CatalogField): ReportConfig {
+export function addFilter(
+  config: ReportConfig,
+  field: CatalogField,
+  limits?: Limits,
+): ReportConfig {
   const filters = config.filters ?? { op: "and", conditions: [] };
-  if (filterLimitReached(config)) return config;
+  if (filterLimitReached(config, limits)) return config;
   const condition: FilterCondition = {
     path: field.path,
     operator: defaultOperator(field.kind),
@@ -445,7 +480,11 @@ function canonical(value: unknown): string {
  * exists so the user sees the problem while building instead of after asking
  * for the report.
  */
-export function validateConfig(config: ReportConfig, root: CatalogRoot | undefined): string[] {
+export function validateConfig(
+  config: ReportConfig,
+  root: CatalogRoot | undefined,
+  limits?: Limits,
+): string[] {
   const problems: string[] = [];
 
   if (!root) {
@@ -455,8 +494,8 @@ export function validateConfig(config: ReportConfig, root: CatalogRoot | undefin
   if (config.columns.length === 0) {
     problems.push("El reporte necesita al menos una columna.");
   }
-  if (config.columns.length > MAX_COLUMNS) {
-    problems.push(`El reporte tiene demasiadas columnas (máximo ${MAX_COLUMNS}).`);
+  if (config.columns.length > maxColumns(limits)) {
+    problems.push(`El reporte tiene demasiadas columnas (máximo ${maxColumns(limits)}).`);
   }
 
   // A saved configuration can reference a field that no longer exists, or that
@@ -621,7 +660,10 @@ export function describeConfig(config: ReportConfig, root: CatalogRoot | undefin
     parts[0] = `agrupado por ${names}`;
   }
   parts.push(`${config.columns.length} columna${config.columns.length === 1 ? "" : "s"}`);
-  const filterCount = config.filters?.conditions.length ?? 0;
+  // Counted through the tree, like the cap is: a nested group or an existence
+  // filter carries its own conditions, and describing five clauses as "1 filtro"
+  // disagrees with the number the user is told they may not exceed.
+  const filterCount = config.filters ? countConditions(config.filters) : 0;
   if (filterCount > 0) parts.push(`${filterCount} filtro${filterCount === 1 ? "" : "s"}`);
   return parts.join(" · ");
 }

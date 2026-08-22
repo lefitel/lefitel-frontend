@@ -441,3 +441,53 @@ describe("SavedReports", () => {
     expect(onDelete).toHaveBeenCalledWith(mine);
   });
 });
+
+describe("PreviewTable when the data moved under it", () => {
+  const columns = [{ key: "c0", label: "Descripción", kind: "string" as const }];
+
+  it("never states a range that cannot be true", () => {
+    // Between two pages somebody else can archive events. On offset 300 of a
+    // report that has shrunk to 250 rows the footer read "Mostrando 301–250 de
+    // 250" on page 4 of 3: three impossible statements side by side, and no
+    // hint of why.
+    const onPage = vi.fn();
+    render(
+      <PreviewTable
+        result={{ columns, rows: [], total: 250, limit: 100, offset: 300 }}
+        onPage={onPage}
+      />,
+    );
+
+    expect(screen.queryByText(/301/)).not.toBeInTheDocument();
+    expect(screen.getByText(/ya no existe/)).toBeInTheDocument();
+    expect(screen.getByText("3 / 3")).toBeInTheDocument();
+  });
+
+  it("offers the way back to a page that exists", async () => {
+    const onPage = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <PreviewTable
+        result={{ columns, rows: [], total: 250, limit: 100, offset: 300 }}
+        onPage={onPage}
+      />,
+    );
+
+    await user.click(screen.getByRole("button", { name: /última página/ }));
+
+    // Three pages of a hundred: the last one starts at 200.
+    expect(onPage).toHaveBeenCalledWith(200);
+  });
+
+  it("still reads normally on a page that is fine", () => {
+    render(
+      <PreviewTable
+        result={{ columns, rows: [{ c0: "Poste" }], total: 250, limit: 100, offset: 100 }}
+        onPage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Mostrando 101–101 de 250")).toBeInTheDocument();
+    expect(screen.queryByText(/ya no existe/)).not.toBeInTheDocument();
+  });
+});

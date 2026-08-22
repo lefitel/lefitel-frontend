@@ -15,7 +15,7 @@ import {
 } from "../../../api/generador.api";
 import {
   addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
-  emptyConfig, filterLimitReached, MAX_COLUMNS, MAX_CONDITIONS, MAX_SORTS, moveColumn,
+  emptyConfig, filterLimitReached, maxColumns, maxConditions, maxSorts, moveColumn,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, setColumnAgg,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
 } from "../../../lib/reportConfig";
@@ -68,6 +68,11 @@ const GeneradorPage = () => {
   /** The configuration that produced `result`, so we can tell when it is stale. */
   const [resultConfig, setResultConfig] = useState<ReportConfig | null>(null);
   const [saved, setSaved] = useState<SavedReport[]>([]);
+  const [savedTotal, setSavedTotal] = useState(0);
+  // Read by `loadSaved` to know where the next page starts, so the loader stays
+  // identity-stable and does not re-run on every append.
+  const savedRef = useRef<SavedReport[]>(saved);
+  savedRef.current = saved;
   const [current, setCurrent] = useState<SavedReport | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [running, setRunning] = useState(false);
@@ -106,7 +111,23 @@ const GeneradorPage = () => {
     () => catalog?.roots.find((r) => r.key === config.root),
     [catalog, config.root],
   );
-  const problems = useMemo(() => validateConfig(config, root), [config, root]);
+  /**
+   * The caps, taken from the catalog the server publishes.
+   *
+   * They were written out again in `reportConfig.ts` as constants, which is the
+   * duplication `catalog.limits` exists to avoid: whoever changes a cap on the
+   * server has no reason to suspect a copy lives in the client, and then the
+   * local warning either never fires or fires over a report the server would
+   * have accepted. The constants remain as the fallback for before the catalog
+   * arrives.
+   */
+  const limits = catalog?.limits;
+  // Read by the identity-stable callbacks below, for the same reason
+  // `configRef` exists: a value closed over at first render is the value from
+  // before the catalog arrived, which is no value at all.
+  const limitsRef = useRef(limits);
+  limitsRef.current = limits;
+  const problems = useMemo(() => validateConfig(config, root, limits), [config, root, limits]);
   const chosen = useMemo(() => new Set(config.columns.map((c) => c.path)), [config.columns]);
   const description = useMemo(() => describeConfig(config, root), [config, root]);
 
@@ -140,12 +161,30 @@ const GeneradorPage = () => {
 
   useEffect(() => { loadCatalog(); }, [loadCatalog]);
 
-  const refreshSaved = useCallback(() => {
-    getReportesGuardados(tokenRef.current)
-      .then(setSaved)
+  /**
+   * Loads the first page of saved reports, or appends the next one.
+   *
+   * The endpoint used to return every report the account can see in one
+   * response, each with its whole configuration inside. It is paginated now, so
+   * the list says how many it is not showing instead of quietly being all there
+   * is.
+   */
+  const loadSaved = useCallback((append = false) => {
+    const offset = append ? savedRef.current.length : 0;
+    return getReportesGuardados(tokenRef.current, { offset })
+      .then((page) => {
+        // Guarded rather than trusted: a response that is not the shape this
+        // expects used to leave `reports` undefined and the whole page blank,
+        // which is a worse answer than an empty list beside an error.
+        const rows = Array.isArray(page?.rows) ? page.rows : [];
+        setSaved((current) => (append ? [...current, ...rows] : rows));
+        setSavedTotal(Number.isFinite(page?.total) ? page.total : rows.length);
+      })
       .catch((error) =>
         toast.error(mensajeDeError(error, "No se pudieron cargar los reportes guardados")));
   }, []);
+
+  const refreshSaved = useCallback(() => loadSaved(false), [loadSaved]);
 
   useEffect(() => { refreshSaved(); }, [refreshSaved]);
 
@@ -247,12 +286,12 @@ const GeneradorPage = () => {
   const handleToggleSort = useCallback((path: string, agg?: AggFn) => {
     const current = configRef.current;
     const already = (current.sort ?? []).some((s) => s.path === path && s.agg === agg);
-    if (!already && sortLimitReached(current)) {
+    if (!already && sortLimitReached(current, limitsRef.current)) {
       return toast.warning(
-        `Ya hay ${MAX_SORTS} criterios de orden. Quite alguno para añadir otro.`,
+        `Ya hay ${maxSorts(limitsRef.current)} criterios de orden. Quite alguno para añadir otro.`,
       );
     }
-    setConfig(toggleSort(current, path, agg));
+    setConfig(toggleSort(current, path, agg, limitsRef.current));
   }, []);
 
   const handleUpdateFilter = useCallback((index: number, patch: Partial<FilterCondition>) => {
@@ -352,7 +391,13 @@ const GeneradorPage = () => {
     // eventos", the warning blamed the reader's profile, and saving wrote the
     // widened version back over the original.
     const cleaned = { ...pruneToCatalog(report.config, target), offset: 0 };
-    const dropped = elementCount(report.config) - elementCount(cleaned);
+    // Two prunes, one number. The server drops what this account may not see
+    // before the configuration ever arrives — it used to publish those paths,
+    // filter values included — and this one drops what the catalog no longer
+    // has at all. Counting only the local one made the warning disappear for
+    // exactly the case it was written for.
+    const dropped =
+      (report.omitted ?? 0) + elementCount(report.config) - elementCount(cleaned);
 
     retireInFlight();
     setConfig(cleaned);
@@ -578,24 +623,24 @@ const GeneradorPage = () => {
                     // picking a field never added before answered "ya está en
                     // el reporte", which is not true and does not tell anyone
                     // to remove a column.
-                    if (columnLimitReached(config)) {
+                    if (columnLimitReached(config, limits)) {
                       return toast.warning(
-                        `El reporte ya tiene el máximo de ${MAX_COLUMNS} columnas. Quite alguna para añadir otra.`,
+                        `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
                       );
                     }
-                    const next = addColumn(config, field.path);
+                    const next = addColumn(config, field.path, undefined, limits);
                     if (next === config) {
                       return toast.warning(`"${field.label}" ya está en el reporte.`);
                     }
                     setConfig(next);
                   }}
                   onPickAggregate={(path, label) => {
-                    if (columnLimitReached(config)) {
+                    if (columnLimitReached(config, limits)) {
                       return toast.warning(
-                        `El reporte ya tiene el máximo de ${MAX_COLUMNS} columnas. Quite alguna para añadir otra.`,
+                        `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
                       );
                     }
-                    const next = addColumn(config, path, "count" as AggFn);
+                    const next = addColumn(config, path, "count" as AggFn, limits);
                     if (next === config) {
                       return toast.warning(`"${label ?? path}" ya está en el reporte.`);
                     }
@@ -627,12 +672,12 @@ const GeneradorPage = () => {
                   chosen={new Set()}
                   label="Añadir filtro"
                   onPick={(field) => {
-                    if (filterLimitReached(config)) {
+                    if (filterLimitReached(config, limits)) {
                       return toast.warning(
-                        `El reporte ya tiene el máximo de ${MAX_CONDITIONS} filtros.`,
+                        `El reporte ya tiene el máximo de ${maxConditions(limits)} filtros.`,
                       );
                     }
-                    setConfig(addFilter(config, field));
+                    setConfig(addFilter(config, field, limits));
                   }}
                 />
               </div>
@@ -655,6 +700,8 @@ const GeneradorPage = () => {
             <CardContent className="pt-4">
               <SavedReports
                 reports={saved}
+                total={savedTotal}
+                onLoadMore={() => loadSaved(true)}
                 currentId={current?.id ?? null}
                 currentUserId={currentUserId}
                 onOpen={handleOpen}

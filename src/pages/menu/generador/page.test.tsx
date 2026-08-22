@@ -130,6 +130,15 @@ const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp)
   await user.click(screen.getByRole("option", { name }));
 };
 
+/**
+ * One page of saved reports, as the endpoint answers now.
+ *
+ * The listing used to return a bare array of every report the account can see.
+ * It is paginated, so the total travels with the page and the sidebar can say
+ * how many it is not showing.
+ */
+const savedPage = (rows: unknown[]) => ({ rows, total: rows.length, limit: 100, offset: 0 });
+
 beforeEach(() => {
   vi.clearAllMocks();
   toasts.length = 0;
@@ -137,7 +146,7 @@ beforeEach(() => {
   olvidarPermisos();
   grantGenerador();
   api.getCatalogo.mockResolvedValue(catalog);
-  api.getReportesGuardados.mockResolvedValue([]);
+  api.getReportesGuardados.mockResolvedValue(savedPage([]));
   api.runReporte.mockImplementation((config: ReportConfig) => Promise.resolve(resultFor(config)));
   // The server names the file; the page only saves what it is handed.
   api.exportarReporte.mockImplementation((_config: ReportConfig, options: { format: string }) =>
@@ -290,7 +299,7 @@ describe("saving", () => {
       visibility: "shared", favorite: false,
       config: { root: "evento", columns: [{ path: "description" }] },
     };
-    api.getReportesGuardados.mockResolvedValue([theirs]);
+    api.getReportesGuardados.mockResolvedValue(savedPage([theirs]));
     api.crearReporte.mockResolvedValue({ ...theirs, id: 6, id_usuario: 7 });
 
     const user = userEvent.setup();
@@ -308,14 +317,14 @@ describe("saving", () => {
   });
 
   it("says what it dropped when a saved report names unavailable fields", async () => {
-    api.getReportesGuardados.mockResolvedValue([{
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
       id: 8, name: "Con campos ajenos", description: null, id_usuario: 7,
       visibility: "private", favorite: false,
       config: {
         root: "evento",
         columns: [{ path: "description" }, { path: "usuario.name" }, { path: "usuario.phone" }],
       },
-    }]);
+    }]));
 
     const user = userEvent.setup();
     renderPage();
@@ -337,7 +346,7 @@ describe("saving", () => {
     // warning blamed the reader's profile, and pressing Actualizar wrote the
     // widened version back over the original, for its author and for everyone
     // it was shared with.
-    api.getReportesGuardados.mockResolvedValue([{
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
       id: 9, name: "Con filtro avanzado", description: null, id_usuario: 7,
       visibility: "private", favorite: false,
       config: {
@@ -351,7 +360,7 @@ describe("saving", () => {
           ],
         },
       },
-    }]);
+    }]));
 
     const user = userEvent.setup();
     renderPage();
@@ -361,6 +370,62 @@ describe("saving", () => {
     expect(toasts[toasts.length - 1]?.text).toMatch(/cargado/);
     expect(toasts[toasts.length - 1]?.text).not.toMatch(/sin \d+ elemento/);
     expect(screen.getByText(/Filtro avanzado/)).toBeInTheDocument();
+  });
+
+  it("counts what the server left out, not only what it prunes itself", async () => {
+    // The server prunes on the way out now — a shared report used to publish
+    // the paths of fields the catalog hides, filter values included. So the
+    // configuration that arrives is already clean and the local comparison
+    // finds nothing to drop: counting only that made the warning vanish for
+    // exactly the case it exists for, and the report opened quietly narrower
+    // than its author saved it.
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
+      id: 11, name: "Podado por el servidor", description: null, id_usuario: 4,
+      visibility: "shared", favorite: false, omitted: 3,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await user.click(await screen.findByText("Podado por el servidor"));
+
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin 3 elementos/);
+  });
+});
+
+describe("the list of saved reports", () => {
+  it("says how many it is not showing, and loads the rest when asked", async () => {
+    // The endpoint returned every report the account can see in one response,
+    // each carrying its whole configuration. It is paginated now, and a page
+    // that does not say it is a page reads as everything there is.
+    const page = (id: number, name: string) => ({
+      id, name, description: null, id_usuario: 7, visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    });
+    api.getReportesGuardados.mockResolvedValueOnce({
+      rows: [page(1, "Primero")], total: 2, limit: 1, offset: 0,
+    });
+    api.getReportesGuardados.mockResolvedValueOnce({
+      rows: [page(2, "Segundo")], total: 2, limit: 1, offset: 1,
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    expect(await screen.findByText(/Mostrando 1 de 2/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Cargar más" }));
+
+    expect(await screen.findByText("Segundo")).toBeInTheDocument();
+    expect(screen.getByText("Primero")).toBeInTheDocument();
+    expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
+    // The second page is asked for by offset, not fetched from the start again.
+    expect(api.getReportesGuardados).toHaveBeenLastCalledWith(
+      expect.anything(),
+      expect.objectContaining({ offset: 1 }),
+    );
   });
 });
 
@@ -488,11 +553,11 @@ describe("a request the user has moved on from", () => {
     // export buttons went live, and pressing Excel produced a file titled B
     // containing A. The header of the file argues at length that it must never
     // describe itself wrongly; the title did exactly that.
-    api.getReportesGuardados.mockResolvedValue([{
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
       id: 11, name: "Otro reporte", description: null, id_usuario: 7,
       visibility: "private", favorite: false,
       config: { root: "evento", columns: [{ path: "state" }] },
-    }]);
+    }]));
 
     let land: () => void = () => {};
     api.runReporte.mockImplementationOnce(
@@ -570,11 +635,11 @@ describe("what the matrix says this role may do", () => {
 
   it("does not offer to duplicate or archive without their permissions", async () => {
     grantGenerador({ crear: false, archivar: false });
-    api.getReportesGuardados.mockResolvedValue([{
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
       id: 12, name: "De alguien", description: null, id_usuario: 7,
       visibility: "private", favorite: false,
       config: { root: "evento", columns: [{ path: "description" }] },
-    }]);
+    }]));
 
     renderPage();
     await ready();
@@ -588,11 +653,11 @@ describe("what the matrix says this role may do", () => {
     // The other direction matters just as much: fail-closed that hides the
     // screen from the people who may use it is the same defect wearing a
     // different coat.
-    api.getReportesGuardados.mockResolvedValue([{
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
       id: 13, name: "Mío", description: null, id_usuario: 7,
       visibility: "private", favorite: false,
       config: { root: "evento", columns: [{ path: "description" }] },
-    }]);
+    }]));
 
     renderPage();
     await ready();

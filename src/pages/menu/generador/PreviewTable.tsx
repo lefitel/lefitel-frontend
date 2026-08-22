@@ -17,8 +17,24 @@ const PreviewTable = ({ result, onPage, loading }: Props) => {
   const { columns, rows, total, limit, offset } = result;
   const page = Math.floor(offset / Math.max(1, limit)) + 1;
   const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
-  const from = total === 0 ? 0 : offset + 1;
+
+  /**
+   * The footer states three facts — the range, the page number, and how many
+   * pages there are — computed from a total that was true when the page was
+   * asked for. Between two pages somebody else can archive events, and then the
+   * three contradict each other: on offset 300 of a report that has shrunk to
+   * 250 rows it read "Mostrando 301–250 de 250" on page 4 of 3, which is three
+   * impossible statements side by side and no hint of why.
+   *
+   * So the range is clamped so it can never invert, and the case is named
+   * instead of rendered: a page with no rows and an offset past the end means
+   * the report changed underneath, and the reader is told that and offered the
+   * way back.
+   */
+  const stale = rows.length === 0 && offset > 0;
+  const from = total === 0 || rows.length === 0 ? 0 : Math.min(offset + 1, total);
   const to = Math.min(offset + rows.length, total);
+  const lastPageOffset = Math.max(0, (pages - 1) * Math.max(1, limit));
 
   return (
     <div className="space-y-3">
@@ -83,9 +99,26 @@ const PreviewTable = ({ result, onPage, loading }: Props) => {
         </Table>
       </div>
 
+      {stale && (
+        <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Esta página ya no existe: el reporte cambió mientras la miraba.{" "}
+          <button
+            type="button"
+            className="font-medium underline"
+            onClick={() => onPage(lastPageOffset)}
+          >
+            Ir a la última página
+          </button>
+        </p>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span>
-          {total === 0 ? "Sin resultados" : `Mostrando ${from}–${to} de ${total}`}
+          {total === 0
+            ? "Sin resultados"
+            : stale
+              ? `${total} en total`
+              : `Mostrando ${from}–${to} de ${total}`}
         </span>
         <div className="flex items-center gap-2">
           <Button
@@ -96,7 +129,7 @@ const PreviewTable = ({ result, onPage, loading }: Props) => {
             <ChevronLeftIcon className="h-4 w-4" />
             Anterior
           </Button>
-          <span className="tabular-nums">{page} / {pages}</span>
+          <span className="tabular-nums">{Math.min(page, pages)} / {pages}</span>
           <Button
             variant="outline" size="sm"
             disabled={offset + limit >= total || loading}

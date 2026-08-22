@@ -4,6 +4,9 @@ import {
   MAX_COLUMNS,
   MAX_SORTS,
   addColumn,
+  columnLimitReached,
+  filterLimitReached,
+  maxColumns,
   addFilter,
   changeRoot,
   defaultOperator,
@@ -657,5 +660,73 @@ describe("validation — the order", () => {
     };
 
     expect(validateConfig(config, conPrefijo).join(" ")).toMatch(/total de otra entidad/);
+  });
+});
+
+describe("the caps the server publishes", () => {
+  it("uses the published number and not the local copy", () => {
+    // `catalog.limits` exists so the caps are not written twice, and they were
+    // written twice anyway. The consequence is not theoretical: a client cap
+    // higher than the server's means the warning never fires and the refusal
+    // arrives from the far side; lower means the screen blocks a report the
+    // server would have accepted.
+    const wide = {
+      root: "evento",
+      columns: Array.from({ length: 5 }, (_, i) => ({ path: `c${i}` })),
+    };
+
+    expect(columnLimitReached(wide)).toBe(false);
+    expect(columnLimitReached(wide, { maxColumns: 5 })).toBe(true);
+    expect(maxColumns({ maxColumns: 5 })).toBe(5);
+    // And with nothing published — before the catalog arrives — the local
+    // fallback still answers.
+    expect(maxColumns(undefined)).toBe(MAX_COLUMNS);
+
+    const many = {
+      root: "evento",
+      columns: [{ path: "id" }],
+      sort: [{ path: "id", dir: "asc" as const }, { path: "date", dir: "asc" as const }],
+    };
+    expect(sortLimitReached(many, { maxSorts: 2 })).toBe(true);
+    expect(sortLimitReached(many)).toBe(false);
+
+    const filtered = {
+      root: "evento",
+      columns: [{ path: "id" }],
+      filters: {
+        op: "and" as const,
+        conditions: [{ path: "id", operator: "eq" as const, value: 1 }],
+      },
+    };
+    expect(filterLimitReached(filtered, { maxConditions: 1 })).toBe(true);
+    expect(filterLimitReached(filtered)).toBe(false);
+  });
+
+  it("describes a nested filter by how many conditions it really holds", () => {
+    // The label said "1 filtro" for a sentence with three clauses, while the
+    // cap it is warning about counts all three. Two numbers for one thing.
+    const config = {
+      root: "evento",
+      columns: [{ path: "id" }],
+      filters: {
+        op: "and" as const,
+        conditions: [
+          { path: "id", operator: "eq" as const, value: 1 },
+          {
+            exists: "revisiones",
+            where: {
+              op: "and" as const,
+              conditions: [{ path: "date", operator: "gte" as const, value: "2026-01-01" }],
+            },
+          },
+        ],
+      },
+    };
+    const root = {
+      key: "evento", label: "Evento", rowMeaning: "Una fila por evento",
+      fields: [], aggregateOnly: [],
+    };
+
+    expect(describeConfig(config, root)).toContain("3 filtros");
   });
 });

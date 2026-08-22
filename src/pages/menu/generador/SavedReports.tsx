@@ -11,6 +11,13 @@ import { cn } from "../../../lib/utils";
 
 interface Props {
   reports: SavedReport[];
+  /**
+   * How many saved reports exist in all, which is not always how many are
+   * listed: the endpoint returns one page. Shown so a capped list never reads
+   * as the whole of it.
+   */
+  total?: number;
+  onLoadMore?: () => void;
   currentId: number | null;
   currentUserId: number | undefined;
   onOpen: (report: SavedReport) => void;
@@ -29,8 +36,10 @@ interface Props {
 }
 
 const SavedReports = ({
-  reports, currentId, currentUserId, onOpen, onToggleFavorite, onDuplicate, onDelete, loading,
+  reports, total, onLoadMore, currentId, currentUserId, onOpen, onToggleFavorite, onDuplicate,
+  onDelete, loading,
 }: Props) => {
+  const missing = Math.max(0, (total ?? reports.length) - reports.length);
   if (reports.length === 0) {
     return (
       <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
@@ -135,6 +144,19 @@ const SavedReports = ({
           </li>
         );
       })}
+
+      {missing > 0 && (
+        <li className="flex items-center justify-between gap-2 px-3 py-2 text-xs text-muted-foreground">
+          <span>
+            Mostrando {reports.length} de {total}.
+          </span>
+          {onLoadMore && (
+            <Button variant="ghost" size="sm" className="h-7" onClick={onLoadMore} disabled={loading}>
+              Cargar más
+            </Button>
+          )}
+        </li>
+      )}
     </ul>
   );
 };
