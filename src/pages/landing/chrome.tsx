@@ -1,143 +1,25 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { animate, motion } from "motion/react";
-import {
-  BarChart3Icon,
-  Building2Icon,
-  LayoutDashboardIcon,
-  RadioTowerIcon,
-  ScrollTextIcon,
-  ShieldCheckIcon,
-  Table2Icon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import { EXPO, QUART, STAGE_H, STAGE_W, screenVars } from "./tokens";
+import { EXPO, QUART } from "./tokens";
 
 /**
- * The shell every scene is drawn inside, and the small pieces they all share.
+ * The small parts every piece of the showcase shares.
  *
- * Two ideas hold this file together. The first: scenes are composed at one
- * fixed size and scaled to whatever room the page gives them. Laying out four
- * dense product screens responsively would mean designing each of them four
- * times; scaling means designing each once, at coordinates that can be
- * hard-coded, and that is what makes a scripted cursor possible at all — it has
- * to know where things are.
- *
- * The second: the window is the brand, the screen inside it is the product. The
- * frame borrows the landing page orange. Everything within uses the
- * application's own slate and its own semantic colours, the same red-to-blue
- * criticality scale the technicians read in the field. Painting the product
- * orange to match the poster would be a lie about what the tool looks like.
+ * There is no window frame here any more. The section used to be one browser
+ * chrome with four screens cycling inside it, which meant a whole 940-pixel
+ * screen had to be shrunk to phone width, where none of it could be read. The
+ * pieces now stand on their own at their real size, labelled with where they
+ * live in the application, so a phone gets a legible card instead of an
+ * illegible screenshot.
  */
-// ── Stage ────────────────────────────────────────────────────────────────────
-
-/**
- * Holds a 940×580 composition and shrinks it to the width available.
- *
- * The wrapper carries the aspect ratio so the page reserves the right height
- * before the observer has measured anything. Without it the section jumps once
- * on load, which is the one moment a landing page cannot afford to look cheap.
- */
-export function Stage({ children }: { children: React.ReactNode }) {
-  const wrap = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useLayoutEffect(() => {
-    const el = wrap.current;
-    if (!el) return;
-    const measure = () => setScale(Math.min(1, el.clientWidth / STAGE_W));
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-
-  return (
-    <div ref={wrap} className="relative w-full" style={{ aspectRatio: `${STAGE_W} / ${STAGE_H}` }}>
-      <div
-        className="absolute top-0 left-0 origin-top-left"
-        style={{ width: STAGE_W, height: STAGE_H, transform: `scale(${scale})` }}
-      >
-        {children}
-      </div>
-    </div>
-  );
-}
-
-// ── Window frame ─────────────────────────────────────────────────────────────
-
-const RAIL = [
-  { id: "home", icon: LayoutDashboardIcon },
-  { id: "postes", icon: RadioTowerIcon },
-  { id: "ciudades", icon: Building2Icon },
-  { id: "eventos", icon: TriangleAlertIcon },
-  { id: "reportes", icon: BarChart3Icon },
-  { id: "generador", icon: Table2Icon },
-  { id: "bitacora", icon: ScrollTextIcon },
-  { id: "seguridad", icon: ShieldCheckIcon },
-] as const;
-
-export type RailId = (typeof RAIL)[number]["id"];
-
-export function AppFrame({
-  route,
-  active,
-  children,
-}: {
-  route: string;
-  active: RailId;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={screenVars}
-      className="h-full w-full overflow-hidden rounded-[14px] border border-white/10 bg-[var(--scr-bg)] shadow-[0_40px_90px_-30px_oklch(0_0_0/0.85)]"
-    >
-      <div className="flex h-9 items-center gap-3 border-b border-[var(--scr-hair)] bg-[var(--scr-panel)] px-3.5">
-        <div className="flex gap-[6px]">
-          <span className="h-[9px] w-[9px] rounded-full bg-[oklch(0.62_0.16_25)]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[oklch(0.76_0.14_85)]" />
-          <span className="h-[9px] w-[9px] rounded-full bg-[oklch(0.72_0.13_150)]" />
-        </div>
-        <div className="mx-auto flex h-[22px] min-w-[280px] items-center justify-center gap-2 rounded-md bg-[var(--scr-bg)] px-3 text-[11px] text-[var(--scr-faint)]">
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--scr-ok)]" />
-          <span className="tracking-tight tabular-nums">{route}</span>
-        </div>
-        <div className="w-[42px]" />
-      </div>
-
-      <div className="flex h-[calc(100%-36px)]">
-        <div className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-r border-[var(--scr-hair)] bg-[var(--scr-panel)] py-3">
-          <div className="mb-2 grid h-7 w-7 place-items-center rounded-lg bg-orange-500/15 text-[10px] font-bold text-orange-400">
-            O
-          </div>
-          {RAIL.map(({ id, icon: Icon }) => {
-            const on = id === active;
-            return (
-              <div
-                key={id}
-                className={`grid h-8 w-8 place-items-center rounded-lg transition-colors duration-300 ${
-                  on ? "bg-[var(--scr-raise)] text-[var(--scr-text)]" : "text-[var(--scr-faint)]"
-                }`}
-              >
-                <Icon className="h-[15px] w-[15px]" strokeWidth={on ? 2.1 : 1.7} />
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="relative min-w-0 flex-1 overflow-hidden">{children}</div>
-      </div>
-    </div>
-  );
-}
-
-// ── Cursor ───────────────────────────────────────────────────────────────────
 
 /**
  * The scripted pointer.
  *
- * It is what turns four still screens into four demonstrations: a viewer reads
- * "someone is using this" from a moving arrow long before they read any label.
+ * It appears only in the pieces where something is being operated: a filter
+ * switched, a form filled, a column picked. In the pieces that merely draw
+ * their data it was noise, so it stays away.
+ *
  * `press` is a counter rather than a flag so that clicking the same spot twice
  * replays the ring; a boolean would sit at true and show nothing the second
  * time.
@@ -159,8 +41,8 @@ export function Cursor({
       initial={false}
       animate={{ x, y, opacity: hidden ? 0 : 1 }}
       transition={{
-        x: { duration: 0.55, ease: EXPO },
-        y: { duration: 0.55, ease: EXPO },
+        x: { duration: 0.5, ease: EXPO },
+        y: { duration: 0.5, ease: EXPO },
         opacity: { duration: 0.25 },
       }}
     >
@@ -194,24 +76,20 @@ export function Cursor({
   );
 }
 
-// ── Small parts ──────────────────────────────────────────────────────────────
-
 /**
  * A number that rolls to its new value.
  *
- * Writes straight to the DOM node instead of through state: the dashboard scene
- * shows five of these at once, and re-rendering the screen sixty times a second
- * to move five digits is how a landing page starts dropping frames.
+ * Writes straight to the DOM node instead of through state: the totals piece
+ * shows five of these at once, and re-rendering to move five digits sixty times
+ * a second is how a landing page starts dropping frames.
  */
 export function Counter({
   to,
   duration = 1.1,
-  decimals = 0,
   still = false,
 }: {
   to: number;
   duration?: number;
-  decimals?: number;
   still?: boolean;
 }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -220,8 +98,7 @@ export function Counter({
   useEffect(() => {
     const node = ref.current;
     if (!node) return;
-    const text = (v: number) =>
-      v.toLocaleString("es-BO", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    const text = (v: number) => Math.round(v).toLocaleString("es-BO");
 
     if (still) {
       node.textContent = text(to);
@@ -237,7 +114,7 @@ export function Counter({
     });
     from.current = to;
     return () => controls.stop();
-  }, [to, still, duration, decimals]);
+  }, [to, still, duration]);
 
   return <span ref={ref} className="tabular-nums" />;
 }
@@ -287,14 +164,14 @@ export function Typewriter({
   );
 }
 
-/** The application success notice, in the corner it really appears in. */
+/** The application success notice. */
 export function Toast({ show, title, detail }: { show: boolean; title: string; detail: string }) {
   return (
     <motion.div
-      className="absolute top-3 right-3 z-40 flex w-[248px] items-start gap-2.5 rounded-lg border border-[var(--scr-ok)]/35 bg-[var(--scr-panel)] px-3 py-2.5 shadow-[0_16px_40px_-16px_oklch(0_0_0/0.9)]"
+      className="flex w-[250px] max-w-full items-start gap-2.5 rounded-lg border border-[var(--scr-ok)]/35 bg-[var(--scr-panel)] px-3 py-2.5 shadow-[0_16px_40px_-16px_oklch(0_0_0/0.9)]"
       initial={false}
       animate={show ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: 24, scale: 0.97 }}
-      transition={{ duration: show ? 0.42 : 0.28, ease: EXPO }}
+      transition={{ duration: 0.42, ease: EXPO }}
     >
       <span className="mt-[3px] grid h-4 w-4 shrink-0 place-items-center rounded-full bg-[var(--scr-ok)]">
         <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
@@ -315,62 +192,19 @@ export function Toast({ show, title, detail }: { show: boolean; title: string; d
   );
 }
 
-/** Page heading inside a screen: title, subtitle, and whatever sits at the end. */
-export function ScreenHead({
-  title,
-  sub,
-  right,
-}: {
-  title: string;
-  sub: string;
-  right?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-4 px-6 pt-5 pb-4">
-      <div>
-        <h3 className="text-[17px] leading-tight font-bold tracking-tight text-[var(--scr-text)]">{title}</h3>
-        <p className="mt-1 text-[11.5px] text-[var(--scr-faint)]">{sub}</p>
-      </div>
-      {right}
-    </div>
-  );
-}
-
-/** The segmented control the application uses for mutually exclusive views. */
-export function Segmented({
-  options,
-  value,
+/** The surface a piece sits on: the application's own panel, nothing more. */
+export function Panel({
   className = "",
+  children,
 }: {
-  options: readonly string[];
-  value: string;
   className?: string;
+  children: React.ReactNode;
 }) {
   return (
     <div
-      className={`relative flex items-center gap-0.5 rounded-lg border border-[var(--scr-hair)] bg-[var(--scr-panel)] p-0.5 ${className}`}
+      className={`rounded-xl border border-[var(--scr-hair)] bg-[var(--scr-panel)] ${className}`}
     >
-      {options.map((option) => {
-        const on = option === value;
-        return (
-          <div key={option} className="relative px-3 py-1">
-            {on && (
-              <motion.span
-                layoutId="segmented-active"
-                className="absolute inset-0 rounded-md bg-[var(--scr-raise)]"
-                transition={{ duration: 0.32, ease: EXPO }}
-              />
-            )}
-            <span
-              className={`relative text-[11px] font-medium transition-colors duration-200 ${
-                on ? "text-[var(--scr-text)]" : "text-[var(--scr-faint)]"
-              }`}
-            >
-              {option}
-            </span>
-          </div>
-        );
-      })}
+      {children}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * What happens, and when, in each of the four scenes.
+ * What happens, and when, inside each piece of the showcase.
  *
  * Timing and choreography live on the same line on purpose. They started out
  * apart — a list of milliseconds in one place, a list of cursor targets in
@@ -8,13 +8,13 @@
  * pointer clicks a button one moment before it exists. Here a step cannot drift
  * from its own timing because it is its own timing.
  *
- * `at` is measured from the moment the scene becomes visible. `duration` is the
- * whole scene including the pause at the end, and it is also how long the tab
- * holds before the showcase moves on.
+ * `at` is measured from the moment the piece first scrolls into view. Pieces
+ * play once and then hold; nothing loops, because eleven things looping on one
+ * page is a fairground, not a product.
  */
 
 export interface Step {
-  /** Milliseconds from the start of the scene. The first step must be 0. */
+  /** Milliseconds from the moment the piece enters the viewport. */
   at: number;
   /** `data-target` of the element the pointer travels to, if any. */
   target?: string;
@@ -28,94 +28,131 @@ export interface Script {
   /**
    * The step to hold when the viewer has asked for less movement.
    *
-   * Not always the last one. Freezing the event scene at its end leaves a
-   * register with one new row in it and no sign of the form that produced it,
-   * which is the least informative frame in the whole sequence. A still
-   * viewer should get the picture the motion was there to build, so each
-   * scene names the frame that carries its argument.
+   * Not always the last one: freezing the event form at its end leaves an empty
+   * saved state with no sign of the form that produced it. A still viewer
+   * should get the picture the motion was there to build, so a piece may name
+   * the frame that carries its argument.
    */
   stillStep?: number;
 }
 
-/** Poles land on the plan, one is opened, the view narrows to pending work. */
-export const MAP_SCRIPT: Script = {
-  duration: 10200,
-  stillStep: 2, // the opened pole, with every pin still on the plan
+/** A piece with nothing scripted: it simply animates in and stays. */
+const ONE_SHOT: Script = { duration: 1600, steps: [{ at: 0 }] };
+
+// ── 1 · the plan ─────────────────────────────────────────────────────────────
+export const PLAN_SCRIPT = ONE_SHOT;
+
+// ── 2 · the pole card ────────────────────────────────────────────────────────
+export const CARD_SCRIPT: Script = {
+  duration: 1800,
+  steps: [{ at: 0 }, { at: 450 }],
+};
+
+// ── 3 · narrowing the view to pending work ───────────────────────────────────
+export const FILTER_SCRIPT: Script = {
+  duration: 3200,
+  stillStep: 2,
   steps: [
     { at: 0 },
-    { at: 1700, target: "map-pin" },
-    { at: 3000, target: "map-pin", click: true },
-    { at: 6000, target: "tab-pendientes" },
-    { at: 6900, target: "tab-pendientes", click: true },
-    { at: 7300, target: "tab-pendientes" },
+    { at: 700, target: "view-pendientes" },
+    { at: 1200, target: "view-pendientes", click: true },
+    { at: 1800, target: "view-pendientes" },
   ],
 };
 
-/** A defect found in the street becomes a record with a photo and a severity. */
-export const EVENT_SCRIPT: Script = {
-  duration: 12400,
-  stillStep: 10, // the form filled in, a moment before it is saved
+// ── 4 · filing what was found in the street ──────────────────────────────────
+export const FORM_SCRIPT: Script = {
+  duration: 9600,
+  stillStep: 9,
   steps: [
     { at: 0 },
-    { at: 900, target: "ev-poste" },
-    { at: 1500, target: "ev-poste", click: true },
-    { at: 2400, target: "ev-poste" },
-    { at: 3000, target: "ev-option", click: true },
-    { at: 3600, target: "ev-switch" },
-    { at: 4050, target: "ev-switch", click: true },
-    { at: 4500, target: "ev-desc" },
-    { at: 6700, target: "ev-image" },
-    { at: 8000, target: "ev-chip" },
-    { at: 8400, target: "ev-chip", click: true },
-    { at: 8900, target: "ev-save" },
-    { at: 9400, target: "ev-save", click: true },
-    { at: 10200, target: "ev-save" },
+    { at: 700, target: "ev-poste" },
+    { at: 1200, target: "ev-poste", click: true },
+    { at: 2000, target: "ev-poste" },
+    { at: 2500, target: "ev-option", click: true },
+    { at: 3100, target: "ev-switch" },
+    { at: 3500, target: "ev-switch", click: true },
+    { at: 3950, target: "ev-desc" },
+    { at: 6100, target: "ev-image" },
+    { at: 7400, target: "ev-chip" },
+    { at: 7800, target: "ev-chip", click: true },
+    { at: 8300, target: "ev-save" },
   ],
 };
 
-/** Totals and series draw in, then the period changes and everything redraws. */
-export const DASH_SCRIPT: Script = {
-  duration: 9400,
-  stillStep: 5, // the month view, with a day called out
+// ── 5 · the notice and the new row ───────────────────────────────────────────
+export const SAVED_SCRIPT: Script = {
+  duration: 4400,
+  stillStep: 2,
+  // The notice goes away on its own, the way it does in the application. Held
+  // on screen it would sit over the table header for as long as the page is
+  // open, which is not what the reader is being shown.
+  steps: [{ at: 0 }, { at: 400 }, { at: 3200 }],
+};
+
+// ── 6 · the totals ───────────────────────────────────────────────────────────
+export const KPI_SCRIPT: Script = { duration: 2200, steps: [{ at: 0 }] };
+
+// ── 7 · activity over time ───────────────────────────────────────────────────
+export const CHART_SCRIPT: Script = {
+  duration: 3400,
+  steps: [{ at: 0 }, { at: 1500 }],
+};
+
+// ── 8 · changing the period ──────────────────────────────────────────────────
+export const PERIOD_SCRIPT: Script = {
+  duration: 4200,
+  stillStep: 3,
   steps: [
     { at: 0 },
-    { at: 1600 },
-    { at: 3400, target: "dash-period" },
-    { at: 4000, target: "dash-period", click: true },
-    { at: 4600, target: "dash-month", click: true },
-    { at: 6400, target: "dash-bar" },
-    { at: 8000, target: "dash-bar" },
+    { at: 600, target: "period-trigger" },
+    { at: 1000, target: "period-trigger", click: true },
+    { at: 1700, target: "period-month", click: true },
+    { at: 2600, target: "period-month" },
   ],
 };
 
-/** Four columns are chosen, a condition is written, the result leaves as a file. */
-export const REPORT_SCRIPT: Script = {
-  duration: 11600,
+// ── 9 · what is still open ───────────────────────────────────────────────────
+export const CRITICALS_SCRIPT = ONE_SHOT;
+
+// ── 10 · choosing the columns of a report ────────────────────────────────────
+export const COLUMNS_SCRIPT: Script = {
+  duration: 5200,
   steps: [
     { at: 0 },
-    { at: 700, target: "gen-f-nombre" },
-    { at: 1150, target: "gen-f-nombre", click: true },
-    { at: 1750, target: "gen-f-tramo" },
-    { at: 2150, target: "gen-f-tramo", click: true },
-    { at: 2750, target: "gen-f-fecha" },
-    { at: 3150, target: "gen-f-fecha", click: true },
-    { at: 3750, target: "gen-f-criticidad" },
-    { at: 4150, target: "gen-f-criticidad", click: true },
-    { at: 4750, target: "gen-addfilter" },
-    { at: 5200, target: "gen-addfilter", click: true },
-    { at: 6400, target: "gen-addfilter" },
-    { at: 8000, target: "gen-export" },
-    { at: 8500, target: "gen-export", click: true },
-    { at: 9100, target: "gen-excel", click: true },
-    { at: 9900, target: "gen-excel" },
+    { at: 500, target: "gen-f-nombre" },
+    { at: 900, target: "gen-f-nombre", click: true },
+    { at: 1400, target: "gen-f-tramo" },
+    { at: 1800, target: "gen-f-tramo", click: true },
+    { at: 2300, target: "gen-f-fecha" },
+    { at: 2700, target: "gen-f-fecha", click: true },
+    { at: 3200, target: "gen-f-criticidad" },
+    { at: 3600, target: "gen-f-criticidad", click: true },
+    { at: 4200, target: "gen-f-criticidad" },
   ],
 };
 
-/** Where the pointer is at a given step, and how many clicks it has landed. */
+// ── 11 · the condition, the answer, the file ─────────────────────────────────
+export const EXPORT_SCRIPT: Script = {
+  duration: 6400,
+  steps: [
+    { at: 0 },
+    { at: 500, target: "gen-addfilter" },
+    { at: 900, target: "gen-addfilter", click: true },
+    { at: 1800, target: "gen-addfilter" },
+    { at: 3200, target: "gen-export" },
+    { at: 3600, target: "gen-export", click: true },
+    { at: 4300, target: "gen-excel", click: true },
+    { at: 5200, target: "gen-excel" },
+  ],
+};
+
+/** Where the pointer is at a given step. */
 export function beatOf(script: Script, step: number): Step {
   return script.steps[Math.min(step, script.steps.length - 1)] ?? { at: 0 };
 }
 
+/** How many clicks the script has landed by this step, so the ring replays. */
 export function pressCount(script: Script, step: number): number {
   let n = 0;
   for (let i = 0; i <= step && i < script.steps.length; i++) {
@@ -123,3 +160,6 @@ export function pressCount(script: Script, step: number): number {
   }
   return n;
 }
+
+/** Beat table for the clock. */
+export const beatsOf = (script: Script) => script.steps.map((s) => s.at);

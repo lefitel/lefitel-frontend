@@ -3,14 +3,15 @@ import { useLayoutEffect, useState } from "react";
 /**
  * Where a thing is, asked of the layout rather than of a table of numbers.
  *
- * A scene names what the pointer is going for — `data-target="ev-save"` — and
+ * A piece names what the pointer is going for — `data-target="ev-save"` — and
  * this measures it. Hard-coded coordinates were the obvious alternative and the
- * wrong one: nudge one padding value and the arrow starts clicking three pixels
- * beside the button it is meant to be pressing, silently, in the one part of
- * the page whose whole job is to look deliberate.
+ * wrong one: nudge one padding value, or let a column reflow at some width
+ * nobody tested, and the arrow starts clicking three pixels beside the button
+ * it is meant to be pressing, silently, in the one part of the page whose whole
+ * job is to look deliberate.
  *
- * Readings are divided by the stage scale, so a scene always thinks in its own
- * 940-wide coordinates no matter how small the frame has been drawn.
+ * Readings are divided by any transform scale on the piece, so a measurement
+ * means the same thing whether or not the piece has been scaled.
  */
 export interface TargetBox {
   x: number;

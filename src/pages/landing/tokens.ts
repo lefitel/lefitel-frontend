@@ -1,9 +1,5 @@
 import type { CSSProperties } from "react";
 
-/** Size every scene is composed at, before the stage scales it to fit. */
-export const STAGE_W = 940;
-export const STAGE_H = 580;
-
 /** Exponential deceleration. Things arrive and settle; nothing bounces. */
 export const EXPO = [0.16, 1, 0.3, 1] as const;
 export const QUART = [0.25, 1, 0.5, 1] as const;
@@ -11,10 +7,11 @@ export const QUART = [0.25, 1, 0.5, 1] as const;
 /**
  * The application palette, dark, with every neutral tinted toward its blue.
  *
- * Deliberately not the landing page orange. The window frame is the brand; the
- * screen inside it is the product, and the product is slate with a red-to-blue
- * criticality scale. Repainting it to match the poster would misrepresent what
- * a client is being shown.
+ * Deliberately not the landing page orange. The page around the pieces is the
+ * brand; the pieces themselves are the product, and the product is slate with a
+ * red-to-blue criticality scale, the same one the technicians read in the
+ * field. Repainting it to match the poster would misrepresent what a client is
+ * being shown.
  */
 export const screenVars = {
   "--scr-bg": "oklch(0.168 0.012 258)",
