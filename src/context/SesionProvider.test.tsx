@@ -9,13 +9,13 @@
 // part that lied.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, waitFor } from "@testing-library/react";
+import { render, waitFor, fireEvent } from "@testing-library/react";
 import axios from "axios";
 import { useContext, useEffect } from "react";
 import { SesionProvider } from "./SesionProvider";
 import { SesionContext } from "./SesionContext";
 import { can, olvidarPermisos, sinPermisos, type Permisos } from "../lib/permissions";
-import { url } from "../api/url";
+import { url, urlApi } from "../api/url";
 
 const comprobarToken = vi.fn();
 vi.mock("../api/Login.api", () => ({
@@ -46,6 +46,12 @@ const Establecer = ({ id_rol, permisos }: { id_rol: number; permisos: Permisos }
     });
   }, [id_rol, permisos, setSesion]);
   return null;
+};
+
+/** A button wired to the context's `logout`, the way the real sidebar calls it. */
+const Salir = () => {
+  const { logout } = useContext(SesionContext);
+  return <button onClick={() => logout()}>salir</button>;
 };
 
 let onResponse: ((response: unknown) => unknown) | null = null;
@@ -131,5 +137,53 @@ describe("a role that changes mid-session", () => {
 
     expect(comprobarToken).not.toHaveBeenCalled();
     expect(can(1, "generador", "crear")).toBe(false);
+  });
+});
+
+describe("logout", () => {
+  // Before this branch, dropping the token from localStorage ended the only
+  // credential the browser held. Now the browser also holds an httpOnly
+  // session cookie nothing in this file can see or clear directly — only the
+  // server can revoke it and tell the browser to drop it. Without a call to
+  // the server, "logging out" on a shared computer left that cookie alive,
+  // sliding, for up to a week.
+  it("tells the server the session is over", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+
+    expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
+  });
+
+  it("clears the local session right away, without waiting on the server call", async () => {
+    // The scenario this exists for: a shared laptop in the field, someone
+    // clicks "log out", and either the network or the session itself is
+    // already gone. They must not be left looking authenticated on a screen
+    // that already sent them back to the login form.
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    localStorage.setItem("token", "un-token");
+
+    fireEvent.click(getByText("salir"));
+
+    // Checked synchronously, with no `await`: the local cleanup must not sit
+    // behind the network call at all, so a version that `await`s the server
+    // before clearing has nothing to show here yet.
+    expect(localStorage.getItem("token")).toBeNull();
   });
 });

@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
 import { comprobarToken } from "../api/Login.api";
-import { url } from "../api/url";
+import { url, urlApi } from "../api/url";
 import { SesionContext } from "./SesionContext";
 import { olvidarPermisos, setPermisos } from "../lib/permissions";
 
@@ -46,6 +46,16 @@ export const SesionProvider = ({ children }: props) => {
   };
 
   const logout = useCallback(() => {
+    // Revokes the session row and clears the cookie server-side. Before this
+    // app sent credentials, dropping the token below was the whole session;
+    // now the browser also holds an httpOnly cookie nothing on this page can
+    // reach, so without this call "logging out" left it alive and sliding
+    // for up to a week on a shared computer anyone could pick up next.
+    //
+    // Fired and forgotten: the local cleanup below must happen whether this
+    // succeeds or not, so nobody ends up stuck looking authenticated on a
+    // screen that already sent them back to the login form.
+    axios.post(`${urlApi}auth/logout`).catch(() => undefined);
     clearTimers();
     localStorage.removeItem("token");
     olvidarPermisos();
