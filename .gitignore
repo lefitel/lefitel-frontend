@@ -25,3 +25,6 @@ dist-ssr
 *.sln
 *.sw?
 
+
+# Test coverage output
+coverage

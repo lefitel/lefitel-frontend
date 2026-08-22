@@ -765,7 +765,8 @@ const EventoPage = () => {
                     <AlertDialogHeader>
                         <AlertDialogTitle>¿Des-resolver evento?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Se eliminará la solución registrada y el evento volverá a estado pendiente.
+                            Se eliminará la solución registrada y su fotografía, que no se podrá
+                            recuperar. El evento volverá a estado pendiente.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

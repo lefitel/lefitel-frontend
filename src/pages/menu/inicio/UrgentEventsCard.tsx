@@ -9,6 +9,7 @@ import { daysOpen } from "./helpers";
 import { useNavigate } from "react-router-dom";
 import { InfoIcon } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import { getCriticalityMeta } from "../../../lib/criticality";
 
 type Tab = "urgentes" | "criticos";
 
@@ -18,33 +19,29 @@ interface UrgentEventsCardProps {
   loading: boolean;
 }
 
-const CRITICALITY_COLORS: Record<number, string> = {
-  1: "bg-red-500/15 text-red-600",
-  2: "bg-red-400/15 text-red-500",
-  3: "bg-orange-600/15 text-orange-600",
-  4: "bg-orange-500/15 text-orange-500",
-  5: "bg-amber-500/15 text-amber-600",
-  6: "bg-amber-400/15 text-amber-500",
-  7: "bg-yellow-500/15 text-yellow-600",
-  8: "bg-yellow-400/15 text-yellow-500",
-  9: "bg-yellow-300/15 text-yellow-500",
-};
-
 const CriticalObsCell = ({ evento }: { evento: DashboardEvento }) => {
   const obs = (evento.eventoObs ?? [])
     .filter((eo) => eo.ob?.criticality != null)
     .map((eo) => eo.ob!)
-    .sort((a, b) => (a.criticality ?? 9) - (b.criticality ?? 9));
+    // `Infinity`, not 9: the filter above already dropped the unclassified, and
+    // saying "no level" sorts like "Mantenimiento" would be a claim about them.
+    .sort((a, b) => (a.criticality ?? Infinity) - (b.criticality ?? Infinity));
   return (
     <span className="flex flex-wrap gap-x-2 gap-y-0.5">
-      {obs.map((ob) => (
-        <span key={ob.id} className="flex items-center gap-1">
-          <span className="truncate">{ob.name}</span>
-          <span className={`shrink-0 text-[10px] font-semibold rounded px-1 py-px leading-none ${CRITICALITY_COLORS[ob.criticality ?? 9] ?? "bg-muted text-muted-foreground"}`}>
-            {ob.criticality}
+      {obs.map((ob) => {
+        const meta = getCriticalityMeta(ob.criticality);
+        return (
+          <span key={ob.id} className="flex items-center gap-1">
+            <span className="truncate">{ob.name}</span>
+            <span
+              className={`shrink-0 text-[10px] font-semibold rounded px-1 py-px leading-none ${meta.bgClass} ${meta.textClass}`}
+              title={`Nivel ${meta.level} — ${meta.label}`}
+            >
+              {ob.criticality}
+            </span>
           </span>
-        </span>
-      ))}
+        );
+      })}
     </span>
   );
 };

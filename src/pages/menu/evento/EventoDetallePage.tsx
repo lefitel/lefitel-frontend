@@ -467,7 +467,8 @@ export default function EventoDetallePage() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Reabrir evento?</AlertDialogTitle>
             <AlertDialogDescription>
-              El evento volverá a estado pendiente.
+              Se eliminará la solución registrada y su fotografía, que no se podrá
+              recuperar. El evento volverá a estado pendiente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
