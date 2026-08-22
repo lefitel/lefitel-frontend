@@ -28,3 +28,4 @@ dist-ssr
 
 # Test coverage output
 coverage
+*.tsbuildinfo
