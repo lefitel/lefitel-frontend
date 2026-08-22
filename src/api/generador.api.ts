@@ -105,7 +105,15 @@ export interface ReportConfig {
 }
 
 export interface ReportResult {
-  columns: { key: string; label: string; kind: FieldKind; semantic?: FieldSemantic }[];
+  columns: {
+    key: string;
+    label: string;
+    kind: FieldKind;
+    semantic?: FieldSemantic;
+    /** Where this column came from, so the table can sort by its own headers. */
+    path: string;
+    agg?: AggFn;
+  }[];
   rows: Record<string, unknown>[];
   total: number;
   limit: number;
@@ -162,6 +170,24 @@ export const getCatalogo = (token: string): Promise<Catalog> =>
 
 export const runReporte = (config: ReportConfig, token: string): Promise<ReportResult> =>
   axios.post(urlApi + urlGenerador + "consulta", config, auth(token)).then((r) => r.data);
+
+/**
+ * How many rows the report would return, without reading any of them.
+ *
+ * Asked while somebody is still typing a filter value, which is why it is a
+ * different endpoint with a budget four times larger: knowing a filter leaves
+ * 118 rows and not 40.000 changes the decision *before* it is taken, and asking
+ * the full query at that rate would spend the limit that keeps one person from
+ * holding the database for everyone.
+ */
+export const contarReporte = (
+  config: ReportConfig,
+  token: string,
+  signal?: AbortSignal,
+): Promise<{ total: number }> =>
+  axios
+    .post(urlApi + urlGenerador + "conteo", config, { ...auth(token), signal })
+    .then((r) => r.data);
 
 export const getReportesGuardados = (
   token: string,

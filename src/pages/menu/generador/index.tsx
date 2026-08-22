@@ -8,9 +8,11 @@ import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import {
-  actualizarReporte, crearReporte, duplicarReporte, eliminarReporte, exportarReporte,
-  getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync, runReporte,
-  type AggFn, type Catalog, type CatalogField, type ExportFormat, type FilterCondition,
+  actualizarReporte, contarReporte, crearReporte, duplicarReporte, eliminarReporte,
+  exportarReporte, getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync,
+  runReporte,
+  type AggFn, type Catalog, type CatalogField, type CatalogRoot, type ExportFormat,
+  type FilterCondition,
   type ReportConfig, type ReportResult, type SavedReport,
 } from "../../../api/generador.api";
 import {
@@ -22,6 +24,10 @@ import {
 import axios from "axios";
 import { saveAs } from "file-saver";
 
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import { Button } from "../../../components/ui/button";
 import {
   Card, CardContent, CardDescription, CardHeader, CardTitle,
@@ -67,6 +73,23 @@ const GeneradorPage = () => {
   const [result, setResult] = useState<ReportResult | null>(null);
   /** The configuration that produced `result`, so we can tell when it is stale. */
   const [resultConfig, setResultConfig] = useState<ReportConfig | null>(null);
+  /** Row count for the configuration as it stands, from the counting endpoint. */
+  const [estimate, setEstimate] = useState<number | null>(null);
+  /** True while a refresh is armed but has not gone out: the banner defers to it. */
+  const [autoPending, setAutoPending] = useState(false);
+  /** A level-of-detail change waiting to be confirmed, and what it would cost. */
+  const [pendingRoot, setPendingRoot] = useState<
+    { root: CatalogRoot; cleaned: ReportConfig; lost: number } | null
+  >(null);
+  /**
+   * Whether the table follows the configuration on its own.
+   *
+   * On by default and switchable, because the two ways of working are real: for
+   * a report being explored, refreshing itself is the whole point, and for one
+   * that takes eight seconds over a year of events it is a tax. The switch is
+   * next to the button it replaces.
+   */
+  const [auto, setAuto] = useState(true);
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [savedTotal, setSavedTotal] = useState(0);
   // Read by `loadSaved` to know where the next page starts, so the loader stays
@@ -93,6 +116,10 @@ const GeneradorPage = () => {
 
   /** Discards responses from a request the user has already superseded. */
   const runSeq = useRef(0);
+  /** The armed refresh, so an explicit click can cancel it. */
+  const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** The last configuration the automatic refresh has dealt with. */
+  const autoDone = useRef<string | null>(null);
 
   /**
    * The current configuration, readable from a handler that never changes.
@@ -127,6 +154,21 @@ const GeneradorPage = () => {
   // before the catalog arrived, which is no value at all.
   const limitsRef = useRef(limits);
   limitsRef.current = limits;
+
+  /**
+   * A string that changes exactly when the *rows* would change.
+   *
+   * `sameQuery` compares two configurations and is what the staleness banner
+   * uses; this is the same idea as a dependency, so the count effect re-runs on
+   * a new filter and not on a renamed header.
+   */
+  const signature = useMemo(() => {
+    const { offset: _offset, limit: _limit, ...rest } = config;
+    return JSON.stringify({
+      ...rest,
+      columns: rest.columns.map((c) => ({ path: c.path, agg: c.agg })),
+    });
+  }, [config]);
   const problems = useMemo(() => validateConfig(config, root, limits), [config, root, limits]);
   const chosen = useMemo(() => new Set(config.columns.map((c) => c.path)), [config.columns]);
   const description = useMemo(() => describeConfig(config, root), [config, root]);
@@ -227,6 +269,18 @@ const GeneradorPage = () => {
     }
   }, []);
 
+  /**
+   * Adopts a new level of detail, once there is nothing to lose or the loss has
+   * been accepted.
+   */
+  const applyRoot = (cleaned: ReportConfig) => {
+    retireInFlight();
+    setConfig(cleaned);
+    setResult(null);
+    setResultConfig(null);
+    setPendingRoot(null);
+  };
+
   const handleGenerate = () => {
     if (problems.length > 0) return toast.warning(problems[0]);
     const target = { ...config, offset: 0 };
@@ -234,9 +288,102 @@ const GeneradorPage = () => {
     void run(target);
   };
 
+  /**
+   * The table follows the configuration, instead of waiting to be told.
+   *
+   * Every change used to leave the table describing a report nobody was asking
+   * for any more, with a banner saying so and a button to press: exploring
+   * twenty variants was forty actions, half of them the same button. Now the
+   * query goes out on its own once the edits stop.
+   *
+   * Three things keep this from being a mistake. It waits **700 ms of silence**,
+   * so a filter value being typed is one query and not one per keystroke. It
+   * runs only when the configuration is *valid*, so an incomplete filter is
+   * shown as a problem rather than sent. And it only fires when the table no
+   * longer matches — `sameQuery` ignores the page, so paging never re-triggers
+   * it.
+   *
+   * The limit is thirty runs a minute per person. Somebody editing steadily
+   * commits maybe a dozen changes in that minute, and if the limit is reached
+   * anyway the refusal keeps the table it had (`keepOnError`) and the banner
+   * comes back with its button — which is what the button is still there for.
+   */
+  useEffect(() => {
+    if (!auto || result === null || problems.length > 0) return;
+    // Once per configuration, keyed by what would change the rows. Keying it on
+    // "is the table stale" instead re-armed the timer on every render while it
+    // stayed stale — including after a page — so a click on Siguiente was
+    // answered and then overwritten by page 1 of the edited report.
+    if (autoDone.current === signature) return;
+    if (resultConfig !== null && sameQuery(configRef.current, resultConfig)) {
+      autoDone.current = signature;
+      return;
+    }
+
+    setAutoPending(true);
+    autoTimer.current = setTimeout(() => {
+      autoDone.current = signature;
+      autoTimer.current = null;
+      setAutoPending(false);
+      void run({ ...configRef.current, offset: 0 }, true);
+    }, 700);
+
+    return () => {
+      if (autoTimer.current !== null) {
+        clearTimeout(autoTimer.current);
+        autoTimer.current = null;
+      }
+      setAutoPending(false);
+    };
+  }, [auto, result, problems.length, signature, resultConfig, run]);
+
+  /**
+   * How many rows the current configuration would return, while it is still
+   * being written.
+   *
+   * This is the answer that changes a decision *before* it is taken — a filter
+   * that leaves 118 rows and one that leaves 40.000 are different filters — and
+   * it is asked far too often to ask for the rows as well. Its own endpoint
+   * reads none: one aggregate over the filtered set, on a budget four times
+   * larger.
+   *
+   * Aborted on every change, so only the last question is ever outstanding.
+   */
+  useEffect(() => {
+    if (problems.length > 0) {
+      setEstimate(null);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      contarReporte({ ...configRef.current, offset: 0 }, tokenRef.current, controller.signal)
+        .then(({ total }) => setEstimate(total))
+        // Silent on purpose: this is a hint beside a button, and a toast for a
+        // number nobody asked for out loud would be noise. The real query says
+        // what went wrong when it is asked.
+        .catch(() => undefined);
+    }, 350);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [signature, problems.length]);
+
   /** Paging must run the configuration that produced the current page. */
   const handlePage = (offset: number) => {
     if (!resultConfig) return;
+    // An explicit click beats a refresh that has not gone out yet. Without
+    // this, editing and then paging within the same second gave you the page
+    // you asked for and replaced it a moment later with page 1 of a different
+    // report. Cancelling here also stops it re-arming, so the configuration
+    // stays un-run — and the banner below says so, which is the honest state:
+    // you chose to keep reading this table.
+    if (autoTimer.current !== null) {
+      clearTimeout(autoTimer.current);
+      autoTimer.current = null;
+      autoDone.current = signature;
+      setAutoPending(false);
+    }
     void run({ ...resultConfig, offset }, true);
   };
 
@@ -572,6 +719,32 @@ const GeneradorPage = () => {
       <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
         {/* ── Configuration ─────────────────────────────────────────────── */}
         <div className="space-y-4">
+          {/*
+            First, not last. It used to sit under the filter list, which can be
+            a hundred rows tall, so the most frequent task in the page — running
+            a report that already exists — was the one furthest from the top.
+          */}
+          <Card className="border-muted/60 shadow-sm">
+            <CardHeader className="border-b border-border/40 pb-3">
+              <CardTitle className="text-base">Reportes guardados</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <SavedReports
+                reports={saved}
+                total={savedTotal}
+                onLoadMore={() => loadSaved(true)}
+                currentId={current?.id ?? null}
+                currentUserId={currentUserId}
+                onOpen={handleOpen}
+                // Opening and running are `ver`, which this page already
+                // required to load at all. The three that write are not.
+                onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
+                onDuplicate={mayCreate ? handleDuplicate : undefined}
+                onDelete={mayArchive ? handleDelete : undefined}
+              />
+            </CardContent>
+          </Card>
+
           <Card className="border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <CardTitle className="text-base">Nivel de detalle</CardTitle>
@@ -589,15 +762,17 @@ const GeneradorPage = () => {
                   // the double call is not a development-only courtesy.
                   const cleaned = changeRoot(config, next);
                   const lost = elementCount(config) - elementCount(cleaned);
+                  // Asked, not announced. This is the most destructive control
+                  // on the page dressed as a preference: it throws away columns
+                  // and filters, and it used to say so afterwards in a message
+                  // that disappears on its own. Somebody who wanted to look at
+                  // the other level of detail for a second lost twenty minutes
+                  // of work and was told about it by a toast.
                   if (lost > 0) {
-                    toast.warning(
-                      `Se descartaron ${lost} elemento${lost === 1 ? "" : "s"} que no existen en este nivel de detalle.`,
-                    );
+                    setPendingRoot({ root: next, cleaned, lost });
+                    return;
                   }
-                  retireInFlight();
-                  setConfig(cleaned);
-                  setResult(null);
-                  setResultConfig(null);
+                  applyRoot(cleaned);
                 }}
               >
                 <SelectTrigger aria-label="Nivel de detalle"><SelectValue /></SelectTrigger>
@@ -693,26 +868,6 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-muted/60 shadow-sm">
-            <CardHeader className="border-b border-border/40 pb-3">
-              <CardTitle className="text-base">Reportes guardados</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-4">
-              <SavedReports
-                reports={saved}
-                total={savedTotal}
-                onLoadMore={() => loadSaved(true)}
-                currentId={current?.id ?? null}
-                currentUserId={currentUserId}
-                onOpen={handleOpen}
-                // Opening and running are `ver`, which this page already
-                // required to load at all. The three that write are not.
-                onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
-                onDuplicate={mayCreate ? handleDuplicate : undefined}
-                onDelete={mayArchive ? handleDelete : undefined}
-              />
-            </CardContent>
-          </Card>
         </div>
 
         {/* ── Results ───────────────────────────────────────────────────── */}
@@ -836,6 +991,25 @@ const GeneradorPage = () => {
                       </button>
                     </div>
                   )}
+                  {/* How big the answer is, before asking for it. */}
+                  {estimate !== null && problems.length === 0 && (
+                    <span className="self-center text-xs tabular-nums text-muted-foreground">
+                      {estimate.toLocaleString("es-BO")} fila{estimate === 1 ? "" : "s"}
+                    </span>
+                  )}
+
+                  <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
+                    <Switch
+                      id="rep-auto"
+                      checked={auto}
+                      onCheckedChange={setAuto}
+                      aria-label="Actualizar la tabla automáticamente"
+                    />
+                    <Label htmlFor="rep-auto" className="cursor-pointer text-xs font-normal">
+                      Auto
+                    </Label>
+                  </div>
+
                   <Button size="sm" onClick={handleGenerate} disabled={running}>
                     {running
                       ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
@@ -859,27 +1033,76 @@ const GeneradorPage = () => {
                 </div>
               )}
 
-              {stale && (
+              {/*
+                Only when nothing is coming. With the table following the
+                configuration this appeared for the seven hundred milliseconds
+                before the query went out — a warning that solves itself, which
+                is how people learn to ignore warnings. `autoPending` is the
+                difference between "about to catch up" and "not going to": the
+                switch is off, the configuration cannot be run, or a page click
+                cancelled the refresh.
+              */}
+              {stale && !autoPending && (
                 <div
                   role="status"
                   className="mb-4 flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
                 >
                   <AlertTriangleIcon className="h-4 w-4 shrink-0" />
-                  Cambió la configuración: la tabla muestra el resultado anterior. Pulse Generar para actualizarla.
+                  {problems.length > 0
+                    ? "La tabla muestra el resultado anterior: la configuración de arriba todavía no se puede consultar."
+                    : "Cambió la configuración: la tabla muestra el resultado anterior. Pulse Actualizar."}
                 </div>
               )}
 
               {result ? (
-                <PreviewTable result={result} loading={running} onPage={handlePage} />
+                <PreviewTable
+                  result={result}
+                  loading={running}
+                  onPage={handlePage}
+                  sort={config.sort}
+                  onToggleSort={handleToggleSort}
+                />
               ) : (
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  Arme el reporte a la izquierda y pulse <strong>Generar</strong> para verlo aquí.
+                  Elija las columnas a la izquierda y pulse <strong>Generar</strong> para verlo aquí.
                 </p>
               )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/*
+        The confirmation the level of detail always needed. It names the number
+        of pieces at stake and what a row will mean afterwards, because "¿está
+        seguro?" on its own asks somebody to guess what they are agreeing to.
+      */}
+      <AlertDialog
+        open={pendingRoot !== null}
+        onOpenChange={(open) => { if (!open) setPendingRoot(null); }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Cambiar a «{pendingRoot?.root.rowMeaning.toLowerCase()}»?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se descartarán {pendingRoot?.lost}{" "}
+              {pendingRoot?.lost === 1 ? "elemento" : "elementos"} del reporte
+              —columnas, filtros u orden— porque no existen en este nivel de detalle.
+              Lo demás se conserva.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Dejarlo como está</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (pendingRoot) applyRoot(pendingRoot.cleaned); }}
+            >
+              Cambiar y descartar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

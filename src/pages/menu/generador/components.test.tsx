@@ -313,9 +313,9 @@ describe("FilterBuilder — the list operator", () => {
 describe("PreviewTable", () => {
   const result: ReportResult = {
     columns: [
-      { key: "c0", label: "Descripción", kind: "string" },
-      { key: "c1", label: "Resuelto", kind: "boolean" },
-      { key: "c2", label: "Días", kind: "number" },
+      { key: "c0", label: "Descripción", kind: "string", path: "description" },
+      { key: "c1", label: "Resuelto", kind: "boolean", path: "state" },
+      { key: "c2", label: "Días", kind: "number", path: "diasAbierto" },
     ],
     rows: [
       { c0: "Poste inclinado", c1: false, c2: 12 },
@@ -443,7 +443,7 @@ describe("SavedReports", () => {
 });
 
 describe("PreviewTable when the data moved under it", () => {
-  const columns = [{ key: "c0", label: "Descripción", kind: "string" as const }];
+  const columns = [{ key: "c0", label: "Descripción", kind: "string" as const, path: "description" }];
 
   it("never states a range that cannot be true", () => {
     // Between two pages somebody else can archive events. On offset 300 of a

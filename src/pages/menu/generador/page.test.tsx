@@ -11,6 +11,7 @@ import { usuarioExample } from "../../../data/example";
 const api = {
   getCatalogo: vi.fn(),
   runReporte: vi.fn(),
+  contarReporte: vi.fn(),
   getReportesGuardados: vi.fn(),
   crearReporte: vi.fn(),
   actualizarReporte: vi.fn(),
@@ -25,6 +26,7 @@ vi.mock("../../../api/generador.api", async () => {
     ...actual,
     getCatalogo: (...a: unknown[]) => api.getCatalogo(...a),
     runReporte: (...a: unknown[]) => api.runReporte(...a),
+    contarReporte: (...a: unknown[]) => api.contarReporte(...a),
     getReportesGuardados: (...a: unknown[]) => api.getReportesGuardados(...a),
     crearReporte: (...a: unknown[]) => api.crearReporte(...a),
     actualizarReporte: (...a: unknown[]) => api.actualizarReporte(...a),
@@ -96,7 +98,11 @@ const catalog: Catalog = {
 };
 
 const resultFor = (config: ReportConfig, over: Partial<ReportResult> = {}): ReportResult => ({
-  columns: config.columns.map((c, i) => ({ key: `c${i}`, label: c.path, kind: "string" as const })),
+  // The server sends the path and the summary with each column now, so the
+  // table can sort by its own headers; the fake answers the same shape.
+  columns: config.columns.map((c, i) => ({
+    key: `c${i}`, label: c.label ?? c.path, kind: "string" as const, path: c.path, agg: c.agg,
+  })),
   rows: [{ c0: "fila" }],
   total: 1,
   limit: config.limit ?? 100,
@@ -148,6 +154,7 @@ beforeEach(() => {
   api.getCatalogo.mockResolvedValue(catalog);
   api.getReportesGuardados.mockResolvedValue(savedPage([]));
   api.runReporte.mockImplementation((config: ReportConfig) => Promise.resolve(resultFor(config)));
+  api.contarReporte.mockResolvedValue({ total: 1 });
   // The server names the file; the page only saves what it is handed.
   api.exportarReporte.mockImplementation((_config: ReportConfig, options: { format: string }) =>
     Promise.resolve({
@@ -222,16 +229,62 @@ describe("running a report", () => {
     });
   });
 
-  it("warns that the table no longer matches the configuration", async () => {
+  it("catches the table up by itself instead of asking to be told", async () => {
+    // Every change used to leave the table describing a report nobody was
+    // asking for, with a banner saying so and a button to press: twenty
+    // variants were forty actions, half of them the same button.
     const user = userEvent.setup();
     renderPage();
     await ready();
     await addColumn(user, /Descripción/);
     await user.click(screen.getByRole("button", { name: /generar/i }));
-    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
 
     await addColumn(user, /Resuelto/);
+
+    await waitFor(
+      () => expect(api.runReporte).toHaveBeenCalledTimes(2),
+      { timeout: 3000 },
+    );
+    const second = api.runReporte.mock.calls[1][0] as ReportConfig;
+    expect(second.columns).toHaveLength(2);
+    // And no warning is left over: a banner that solves itself is how people
+    // learn to ignore banners.
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("says the table is behind when nothing is going to fix it", async () => {
+    // With the switch off the table stays where it is, and then the warning is
+    // the only thing telling the reader the header above no longer describes
+    // the rows below.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
+    await addColumn(user, /Resuelto/);
+
     expect(await screen.findByRole("status")).toHaveTextContent(/Cambió la configuración/);
+    expect(api.runReporte).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks how many rows there are without asking for the rows", async () => {
+    // The answer that changes a decision before it is taken. It is asked while
+    // a filter value is still being typed, so it has its own endpoint that
+    // reads no rows and its own budget — four times the other one.
+    api.contarReporte.mockResolvedValue({ total: 118 });
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    expect(await screen.findByText(/118 filas/)).toBeInTheDocument();
+    // Nothing was generated: the count is not a query for the table.
+    expect(api.runReporte).not.toHaveBeenCalled();
   });
 
   it("clears the table when a run fails, rather than showing stale rows", async () => {
@@ -247,6 +300,25 @@ describe("running a report", () => {
 
     await waitFor(() => expect(screen.queryByRole("table")).not.toBeInTheDocument());
     expect(toasts[toasts.length - 1]?.kind).toBe("error");
+  });
+
+  it("sorts by clicking the column, which is where every table sorts", async () => {
+    // It used to be a button in the left panel, several hundred pixels from the
+    // column it ordered, while the table itself responded to nothing.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(screen.queryByRole("table")).toBeInTheDocument());
+
+    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    const sorted = api.runReporte.mock.calls[1][0] as ReportConfig;
+    expect(sorted.sort).toEqual([{ path: "description", dir: "asc" }]);
+    // And the header says so, so the arrow and the query cannot disagree.
+    expect(await screen.findByRole("button", { name: /Ordenando la tabla por .*ascendente/ })).toBeInTheDocument();
   });
 
   it("pages the query that produced the page, not the edited one", async () => {
@@ -666,5 +738,62 @@ describe("what the matrix says this role may do", () => {
     expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /duplicar/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /eliminar/i })).toBeInTheDocument();
+  });
+});
+
+describe("changing the level of detail", () => {
+  it("asks before discarding, and keeps everything when refused", async () => {
+    // The most destructive control on the page, dressed as a preference: it
+    // throws away columns and filters, and it used to say so *afterwards* in a
+    // message that disappears on its own. Somebody who wanted to look at the
+    // other level of detail for a second lost their work and was told by a
+    // toast.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+
+    await user.click(screen.getByLabelText("Nivel de detalle"));
+    await user.click(await screen.findByRole("option", { name: /una fila por poste/i }));
+
+    // Nothing has changed yet: it asks first, and it says what it would cost.
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(/Se descartarán 2 elementos/);
+    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(2);
+
+    await user.click(screen.getByRole("button", { name: /dejarlo como está/i }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(2);
+  });
+
+  it("changes and drops when accepted", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    await user.click(screen.getByLabelText("Nivel de detalle"));
+    await user.click(await screen.findByRole("option", { name: /una fila por poste/i }));
+    await user.click(await screen.findByRole("button", { name: /cambiar y descartar/i }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    // `description` does not exist under the pole root, so it is gone — and the
+    // level of detail did change.
+    expect(screen.queryAllByLabelText(/Nombre de la columna/)).toHaveLength(0);
+  });
+
+  it("does not ask when there is nothing to lose", async () => {
+    // An empty report has nothing to discard, and a confirmation for a change
+    // that costs nothing is the kind people learn to click through.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByLabelText("Nivel de detalle"));
+    await user.click(await screen.findByRole("option", { name: /una fila por poste/i }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
   });
 });

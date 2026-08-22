@@ -1,5 +1,8 @@
-import { ChevronLeftIcon, ChevronRightIcon, ImageIcon } from "lucide-react";
-import type { ReportResult } from "../../../api/generador.api";
+import {
+  ArrowDownNarrowWideIcon, ArrowUpNarrowWideIcon, ArrowUpDownIcon,
+  ChevronLeftIcon, ChevronRightIcon, ImageIcon,
+} from "lucide-react";
+import type { AggFn, ReportResult, SortSpec } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -10,10 +13,26 @@ import { imageUrl } from "../../../lib/imageUrl";
 interface Props {
   result: ReportResult;
   onPage: (offset: number) => void;
+  /**
+   * The order the configuration asks for, so a header can show it.
+   *
+   * Comes from the configuration and not from the result: the arrow has to
+   * describe what will be asked next, which is what the person just clicked.
+   */
+  sort?: SortSpec[];
+  /**
+   * Sorting from the header, which is where every table on earth sorts.
+   *
+   * It used to be a button in the column list of the left panel, several
+   * hundred pixels away from the column it ordered, while the table itself
+   * responded to nothing. Undefined leaves the headers as plain text — the
+   * export builders render this component too.
+   */
+  onToggleSort?: (path: string, agg?: AggFn) => void;
   loading?: boolean;
 }
 
-const PreviewTable = ({ result, onPage, loading }: Props) => {
+const PreviewTable = ({ result, onPage, sort, onToggleSort, loading }: Props) => {
   const { columns, rows, total, limit, offset } = result;
   const page = Math.floor(offset / Math.max(1, limit)) + 1;
   const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
@@ -36,20 +55,56 @@ const PreviewTable = ({ result, onPage, loading }: Props) => {
   const to = Math.min(offset + rows.length, total);
   const lastPageOffset = Math.max(0, (pages - 1) * Math.max(1, limit));
 
+  // Keyed by column, not by field: the minimum and the maximum of the same date
+  // are two columns, and keyed by path alone one arrow would light both.
+  const dirFor = new Map(
+    (sort ?? []).map((s) => [`${s.path}|${s.agg ?? ""}`, s.dir] as const),
+  );
+
   return (
     <div className="space-y-3">
       <div className="overflow-x-auto rounded-lg border">
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>
-              {columns.map((c) => (
-                <TableHead
-                  key={c.key}
-                  className={c.kind === "number" ? "text-right whitespace-nowrap" : "whitespace-nowrap"}
-                >
-                  {c.label}
-                </TableHead>
-              ))}
+              {columns.map((c) => {
+                const dir = dirFor.get(`${c.path}|${c.agg ?? ""}`);
+                const align = c.kind === "number" ? "text-right" : "text-left";
+                return (
+                  <TableHead
+                    key={c.key}
+                    aria-sort={dir === "asc" ? "ascending" : dir === "desc" ? "descending" : "none"}
+                    className={`whitespace-nowrap ${align}`}
+                  >
+                    {onToggleSort ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleSort(c.path, c.agg)}
+                        disabled={loading}
+                        // "la tabla" on purpose: the column list on the left has
+                        // its own sort button with the same field name, and two
+                        // controls reading identically is ambiguous to anyone
+                        // listening rather than looking.
+                        aria-label={
+                          dir === "asc" ? `Ordenando la tabla por ${c.label}, ascendente`
+                          : dir === "desc" ? `Ordenando la tabla por ${c.label}, descendente`
+                          : `Ordenar la tabla por ${c.label}`
+                        }
+                        className={`inline-flex items-center gap-1 hover:text-foreground disabled:opacity-60 ${
+                          c.kind === "number" ? "flex-row-reverse" : ""
+                        } ${dir ? "text-foreground" : ""}`}
+                      >
+                        <span>{c.label}</span>
+                        {dir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
+                          : dir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
+                          : <ArrowUpDownIcon className="h-3.5 w-3.5 opacity-40" />}
+                      </button>
+                    ) : (
+                      c.label
+                    )}
+                  </TableHead>
+                );
+              })}
             </TableRow>
           </TableHeader>
           <TableBody>
