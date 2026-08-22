@@ -19,6 +19,7 @@ import {
   PhoneIcon,
   MailIcon,
 } from "lucide-react";
+import { SystemShowcase } from "./landing/SystemShowcase";
 import logo from "../assets/images/logo.png";
 import tigoLogo from "../assets/images/logo_tigo.png";
 import vivaLogo from "../assets/images/logo_viva.png";
@@ -306,6 +307,9 @@ const LandingPage = () => {
           ))}
         </div>
       </section>
+
+      {/* ── SYSTEM SHOWCASE ──────────────────────────────────────── */}
+      <SystemShowcase />
 
       {/* ── SERVICES ─────────────────────────────────────────────── */}
       <section className="max-w-6xl mx-auto px-6 py-28">

@@ -173,6 +173,14 @@
   animation: shimmer-sweep 3.5s linear infinite;
 }
 
+/* Progress under the landing showcase tabs. A CSS animation rather than a
+   React one so that pausing on hover costs nothing: sixty renders a second to
+   move a two-pixel stripe is not a trade worth making. */
+@keyframes showcase-fill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
 /* Legacy pulsing markers (OperationsMap, CiudadDetallePage) */
 @keyframes circle-marker-pulse {
   0%, 100% { transform: scale(1); }
