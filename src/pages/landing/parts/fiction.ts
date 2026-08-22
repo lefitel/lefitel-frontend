@@ -8,62 +8,107 @@
  * pieces disagree about how many critical poles there are. So no piece invents
  * its own numbers: they all read from here.
  *
- * None of it is real. The tool is; the poles are not. The page is public, so no
- * defect is ever attributed to a named operator.
+ * The values are invented; their *shape* is not, and the difference matters. An
+ * earlier version of this file had poles called `P-0472` on a "Tramo Norte · Km
+ * 12,4", 11,5 metres tall and owned by an "Operadora regional". Every one of
+ * those was wrong about the system it claims to show: poles are named `P472`
+ * with no padding, a tramo is the stretch between two towns, there is no height
+ * field at all, and the owner is the electricity company whose poles the fibre
+ * is strung on, not the telecom. A mockup that gets the shape wrong teaches a
+ * client to expect something the product does not do.
+ *
+ * What stays invented, deliberately: the pole numbers, the defects and the
+ * dates. The page is public, so no real asset is ever shown with a fault
+ * against it, and no operator is named beside one.
  */
 
 export const NETWORK = {
-  total: 1661,
+  total: 1541,
   crit: 10,
   warn: 138,
-  ok: 1386,
+  ok: 1266,
   idle: 127,
-  cities: 99,
+  cities: 86,
+  tramos: 111,
   /** Poles still waiting for a crew: critical plus pending. */
   get open() {
     return this.crit + this.warn;
   },
 };
 
-/** The pole the whole section follows. */
+/**
+ * The nine-step criticality scale, which is real: it is the one in
+ * `lib/criticality.ts` that the technicians read in the field. Colours are the
+ * same hues, lifted for a dark surface.
+ */
+export const LEVELS = [
+  { level: 1, label: "Catastrófico", color: "oklch(0.655 0.205 25)" },
+  { level: 2, label: "Ferretería suelta", color: "oklch(0.755 0.155 62)" },
+  { level: 3, label: "Sujeto a árbol", color: "oklch(0.80 0.15 85)" },
+  { level: 4, label: "Daño estructural", color: "oklch(0.83 0.15 95)" },
+  { level: 5, label: "Vano bajo", color: "oklch(0.78 0.16 118)" },
+  { level: 6, label: "Fricción", color: "oklch(0.745 0.135 162)" },
+  { level: 7, label: "Estresado", color: "oklch(0.74 0.12 185)" },
+  { level: 8, label: "Antivibradores", color: "oklch(0.72 0.11 205)" },
+  { level: 9, label: "Mantenimiento", color: "oklch(0.66 0.11 258)" },
+] as const;
+
+const tone = (level: number) => LEVELS[level - 1]?.color ?? "oklch(0.66 0.11 258)";
+
+/**
+ * Observations, which are a different thing from criticality levels and were
+ * being confused with them. An event carries an observation — "Mufla suelta" —
+ * and the observation carries the level that colours it. These names are the
+ * catalogue's own, generic trade vocabulary belonging to nobody.
+ */
+export const OBS = {
+  caido: { label: "Poste caído", level: 1, color: tone(1) },
+  suelto: { label: "Poste suelto en piso", level: 1, color: tone(1) },
+  fibraPiso: { label: "Fibra en el piso", level: 1, color: tone(1) },
+  fibraCasa: { label: "Fibra apoyada en vivienda", level: 1, color: tone(1) },
+  ferreteria: { label: "Ferretería fuera de poste", level: 2, color: tone(2) },
+  mufla: { label: "Mufla suelta", level: 2, color: tone(2) },
+  arbol: { label: "Reserva sujeta a un árbol", level: 3, color: tone(3) },
+  ladeado: { label: "Poste ladeado", level: 4, color: tone(4) },
+  vano: { label: "Vano bajo", level: 5, color: tone(5) },
+  friccion: { label: "Fibra haciendo fricción en poste", level: 6, color: tone(6) },
+  estresado: { label: "FO estresado por cable", level: 7, color: tone(7) },
+  antivibrador: { label: "Sin anti vibrador o dañado", level: 8, color: tone(8) },
+  limpieza: { label: "Limpieza de postes", level: 9, color: tone(9) },
+} as const;
+
+/** The level a criticality chip shows, by number. */
+export const CATASTROFICO = LEVELS[0];
+
+/**
+ * The pole the whole section follows. Named and described the way the system
+ * really names and describes one, with an invented number.
+ */
 export const POLE = {
-  id: "P-0472",
-  tramo: "Tramo Norte · Km 12,4",
-  owner: "Operadora regional",
-  material: "Hormigón armado",
-  height: "11,5 m",
+  id: "P472",
+  tramo: "Coroico › Coripata",
+  owner: "Cooperativa eléctrica",
+  material: "Concreto",
+  installed: "12 mar 2019",
   lastCheck: "14 ago 2026",
   openEvents: 2,
 };
 
 /** The defect filed against it, and the record that comes out. */
 export const EVENT = {
-  id: "EV-2292",
-  obs: "Ferretería suelta",
-  description: "Ferretería suelta en cruceta superior, riesgo de caída sobre la vía.",
-  photo: "P0472-cruceta.jpg",
+  row: 1,
+  obs: OBS.ferreteria,
+  description: "Ferretería fuera de poste en cruceta superior, riesgo de caída sobre la vía.",
+  photo: "P472-cruceta.jpg",
   date: "21 ago",
 };
 
-/** The observation vocabulary, with the colours the application gives it. */
-export const OBS = {
-  catastrofico: { label: "Catastrófico", color: "oklch(0.655 0.205 25)" },
-  ferreteria: { label: "Ferretería suelta", color: "oklch(0.755 0.155 62)" },
-  arbol: { label: "Sujeto a árbol", color: "oklch(0.80 0.15 85)" },
-  estructural: { label: "Daño estructural", color: "oklch(0.80 0.15 85)" },
-  vano: { label: "Vano bajo", color: "oklch(0.78 0.16 118)" },
-  friccion: { label: "Fricción", color: "oklch(0.745 0.135 162)" },
-  estresado: { label: "Estresado", color: "oklch(0.72 0.11 195)" },
-  antivibradores: { label: "Antivibradores", color: "oklch(0.72 0.10 225)" },
-  mantenimiento: { label: "Mantenimiento", color: "oklch(0.66 0.11 258)" },
-} as const;
-
 /** The register, newest last: the saved piece puts EVENT on top of it. */
 export const REGISTER = [
-  { id: "EV-2291", pole: "P-0384", obs: OBS.arbol, state: "Revisado", date: "19 ago" },
-  { id: "EV-2290", pole: "P-0227", obs: OBS.estresado, state: "Solucionado", date: "19 ago" },
-  { id: "EV-2289", pole: "P-0611", obs: OBS.catastrofico, state: "Pendiente", date: "18 ago" },
-  { id: "EV-2288", pole: "P-0118", obs: OBS.antivibradores, state: "Solucionado", date: "18 ago" },
+  { row: 2, pole: "P384", obs: OBS.arbol, state: "Revisado", date: "19 ago" },
+  { row: 3, pole: "P227", obs: OBS.estresado, state: "Solucionado", date: "19 ago" },
+  { row: 4, pole: "P611", obs: OBS.caido, state: "Pendiente", date: "18 ago" },
+  { row: 5, pole: "P118", obs: OBS.antivibrador, state: "Solucionado", date: "18 ago" },
 ];
 
 /** Totals for the fortnight, and for the month the period switch moves to. */
@@ -101,16 +146,20 @@ export const SERIES = {
   },
 } as const;
 
-/** The ten unresolved criticals: counted on the plan, listed here, exported last. */
+/**
+ * The ten unresolved criticals: counted on the plan, listed on the dashboard,
+ * exported last. Tramos are pairs of real Bolivian towns because that is what a
+ * tramo is; the pole numbers and the faults on them are made up.
+ */
 export const CRITICALS = [
-  { id: "EV-2289", pole: "P-0611", tramo: "Tramo Sur", days: 3, date: "18 ago 2026" },
-  { id: "EV-2277", pole: "P-0289", tramo: "Tramo Sur", days: 4, date: "17 ago 2026" },
-  { id: "EV-2271", pole: "P-0154", tramo: "Tramo Centro", days: 5, date: "16 ago 2026" },
-  { id: "EV-2268", pole: "P-0733", tramo: "Tramo Este", days: 6, date: "15 ago 2026" },
-  { id: "EV-2266", pole: "P-0402", tramo: "Tramo Norte", days: 6, date: "15 ago 2026" },
-  { id: "EV-2259", pole: "P-0918", tramo: "Tramo Este", days: 8, date: "13 ago 2026" },
-  { id: "EV-2254", pole: "P-0067", tramo: "Tramo Centro", days: 9, date: "12 ago 2026" },
-  { id: "EV-2248", pole: "P-0525", tramo: "Tramo Sur", days: 10, date: "11 ago 2026" },
-  { id: "EV-2241", pole: "P-0881", tramo: "Tramo Norte", days: 11, date: "10 ago 2026" },
-  { id: "EV-2236", pole: "P-0243", tramo: "Tramo Centro", days: 12, date: "9 ago 2026" },
+  { row: 1, pole: "P611", tramo: "Coroico › Coripata", obs: OBS.caido, days: 3, date: "18 ago 2026" },
+  { row: 2, pole: "P289", tramo: "Viacha › Desaguadero", obs: OBS.fibraPiso, days: 4, date: "17 ago 2026" },
+  { row: 3, pole: "P154", tramo: "Irupana › Chulumani", obs: OBS.suelto, days: 5, date: "16 ago 2026" },
+  { row: 4, pole: "P733", tramo: "Caracollo › Morochata", obs: OBS.fibraCasa, days: 6, date: "15 ago 2026" },
+  { row: 5, pole: "P402", tramo: "Inquisivi › Cajuata", obs: OBS.caido, days: 6, date: "15 ago 2026" },
+  { row: 6, pole: "P918", tramo: "Coroico › Coripata", obs: OBS.fibraPiso, days: 8, date: "13 ago 2026" },
+  { row: 7, pole: "P67", tramo: "Viacha › Desaguadero", obs: OBS.suelto, days: 9, date: "12 ago 2026" },
+  { row: 8, pole: "P525", tramo: "Irupana › Chulumani", obs: OBS.caido, days: 10, date: "11 ago 2026" },
+  { row: 9, pole: "P881", tramo: "Caracollo › Morochata", obs: OBS.fibraCasa, days: 11, date: "10 ago 2026" },
+  { row: 10, pole: "P243", tramo: "Inquisivi › Cajuata", obs: OBS.fibraPiso, days: 12, date: "9 ago 2026" },
 ];

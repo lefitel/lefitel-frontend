@@ -12,7 +12,7 @@ import {
   pressCount,
 } from "../scripts";
 import { usePart } from "../usePart";
-import { CRITICALS, NETWORK, OBS, SERIES, TOTALS } from "./fiction";
+import { CATASTROFICO, CRITICALS, NETWORK, SERIES, TOTALS } from "./fiction";
 
 /**
  * The four pieces that come from the dashboard.
@@ -57,7 +57,7 @@ export function KpiPart() {
               </svg>
             </div>
             <p className="mt-2 text-[10px] text-[var(--scr-faint)]">
-              {NETWORK.cities} ciudades · 12 tramos activos
+              {NETWORK.cities} ciudades · {NETWORK.tramos} tramos
             </p>
           </motion.div>
 
@@ -315,8 +315,8 @@ export function CriticalsPart() {
           <span
             className="rounded-md px-2 py-0.5 text-[10px] font-semibold"
             style={{
-              color: OBS.catastrofico.color,
-              background: `color-mix(in oklch, ${OBS.catastrofico.color} 14%, transparent)`,
+              color: CATASTROFICO.color,
+              background: `color-mix(in oklch, ${CATASTROFICO.color} 14%, transparent)`,
             }}
           >
             {NETWORK.crit} abiertos
@@ -326,7 +326,7 @@ export function CriticalsPart() {
         <div className="mt-2">
           {shown.map((c, i) => (
             <motion.div
-              key={c.id}
+              key={c.pole}
               className="flex items-center gap-2.5 border-b border-[var(--scr-hair)] py-[7px] text-[10.5px] last:border-b-0"
               initial={still ? false : { opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
@@ -334,13 +334,11 @@ export function CriticalsPart() {
             >
               <span
                 className="h-[7px] w-[7px] shrink-0 rounded-full"
-                style={{ background: OBS.catastrofico.color }}
+                style={{ background: CATASTROFICO.color }}
               />
-              <span className="w-[54px] shrink-0 font-medium text-[var(--scr-text)]">{c.id}</span>
-              <span className="w-[52px] shrink-0 text-[var(--scr-dim)]">{c.pole}</span>
-              <span className="hidden flex-1 truncate text-[var(--scr-faint)] sm:block">
-                {c.tramo}
-              </span>
+              <span className="w-[46px] shrink-0 font-medium text-[var(--scr-text)]">{c.pole}</span>
+              <span className="hidden w-[150px] shrink-0 truncate text-[var(--scr-dim)] sm:block">{c.obs.label}</span>
+              <span className="flex-1 truncate text-[var(--scr-faint)]">{c.tramo}</span>
               <span className="ml-auto shrink-0 text-[var(--scr-faint)]">{c.days} días</span>
             </motion.div>
           ))}

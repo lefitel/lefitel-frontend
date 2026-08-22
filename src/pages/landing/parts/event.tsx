@@ -17,8 +17,8 @@ import { EVENT, OBS, POLE, REGISTER } from "./fiction";
  * client actually buys.
  */
 
-const OPTIONS = ["P-0118", "P-0227", "P-0384", POLE.id, "P-0473", "P-0611"];
-const FILTERED = [POLE.id, "P-0473"];
+const OPTIONS = ["P118", "P227", "P384", POLE.id, "P473", "P611"];
+const FILTERED = [POLE.id, "P473"];
 
 const CHIPS = [OBS.ferreteria, OBS.vano, OBS.friccion];
 
@@ -80,7 +80,7 @@ export function FormPart() {
                   </span>
                 ) : open ? (
                   <Typewriter
-                    text="P-04"
+                    text="P47"
                     active={open}
                     still={still}
                     cps={11}
@@ -289,7 +289,7 @@ function PoleThumb() {
 
 // ── 5 · the notice, and the row that was not there before ────────────────────
 
-const COLS = "grid-cols-[76px_64px_1fr] sm:grid-cols-[86px_72px_1fr_104px_62px]";
+const COLS = "grid-cols-[30px_64px_1fr] sm:grid-cols-[34px_72px_1fr_104px_62px]";
 
 export function SavedPart() {
   const { ref, step, still } = usePart<HTMLDivElement>(SAVED_SCRIPT);
@@ -303,14 +303,14 @@ export function SavedPart() {
           <Toast
             show={notice}
             title="Evento registrado"
-            detail={`${EVENT.id} · ${POLE.id} · prioritario`}
+            detail={`${POLE.id} · ${EVENT.obs.label}`}
           />
         </div>
 
         <div
           className={`grid ${COLS} gap-3 border-b border-[var(--scr-hair)] px-4 py-2.5 text-[9.5px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase`}
         >
-          <span>Evento</span>
+          <span>#</span>
           <span>Poste</span>
           <span>Observación</span>
           <span className="hidden sm:block">Estado</span>
@@ -342,14 +342,14 @@ export function SavedPart() {
             backgroundColor: { duration: 1.8, delay: 0.6 },
           }}
         >
-          <span className="font-medium text-[var(--scr-text)]">{EVENT.id}</span>
+          <span className="text-[var(--scr-faint)]">{EVENT.row}</span>
           <span className="text-[var(--scr-dim)]">{POLE.id}</span>
           <span className="flex items-center gap-1.5 truncate text-[var(--scr-dim)]">
             <span
               className="h-[6px] w-[6px] shrink-0 rounded-full"
-              style={{ background: OBS.ferreteria.color }}
+              style={{ background: EVENT.obs.color }}
             />
-            {OBS.ferreteria.label}
+            {EVENT.obs.label}
           </span>
           <span className="hidden text-[var(--scr-warn)] sm:block">Pendiente</span>
           <span className="hidden text-[var(--scr-faint)] sm:block">{EVENT.date}</span>
@@ -357,10 +357,10 @@ export function SavedPart() {
 
         {REGISTER.map((row) => (
           <div
-            key={row.id}
+            key={row.row}
             className={`grid h-[36px] ${COLS} items-center gap-3 border-b border-[var(--scr-hair)] px-4 text-[11px] last:border-b-0`}
           >
-            <span className="font-medium text-[var(--scr-text)]">{row.id}</span>
+            <span className="text-[var(--scr-faint)]">{row.row}</span>
             <span className="text-[var(--scr-dim)]">{row.pole}</span>
             <span className="flex items-center gap-1.5 truncate text-[var(--scr-dim)]">
               <span

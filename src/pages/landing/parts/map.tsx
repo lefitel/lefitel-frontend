@@ -5,7 +5,7 @@ import { EXPO } from "../tokens";
 import { useTargetBox } from "../targets";
 import { CARD_SCRIPT, FILTER_SCRIPT, PLAN_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
-import { NETWORK, OBS, POLE } from "./fiction";
+import { EVENT, NETWORK, POLE } from "./fiction";
 
 /**
  * The three pieces that come from the operations map: the network on a plan,
@@ -256,7 +256,7 @@ export function PlanPart() {
 
         <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-md border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.9)] px-2 py-1 text-[9.5px] text-[var(--scr-faint)]">
           <LayersIcon className="h-2.5 w-2.5" />
-          Santa Cruz · {NETWORK.cities} ciudades
+          Bolivia · {NETWORK.cities} ciudades
         </div>
       </Panel>
     </div>
@@ -278,7 +278,7 @@ const CROP_PINS: { x: number; y: number; s: PinState }[] = [
 const FICHA = [
   ["Propietario", POLE.owner],
   ["Material", POLE.material],
-  ["Altura", POLE.height],
+  ["Fecha de instalación", POLE.installed],
   ["Última revisión", POLE.lastCheck],
 ];
 
@@ -310,22 +310,22 @@ export function CardPart() {
           animate={open ? { opacity: 1, y: 0, scale: 1 } : { opacity: 0, y: 14, scale: 0.96 }}
           transition={{ duration: 0.45, ease: EXPO }}
         >
-          <div className="flex items-start justify-between gap-2 px-3.5 pt-3">
-            <div>
+          <div className="px-3.5 pt-3">
+            <div className="flex items-baseline gap-2">
               <p className="text-[13.5px] leading-none font-bold text-[var(--scr-text)]">
                 {POLE.id}
               </p>
-              <p className="mt-1.5 text-[10.5px] text-[var(--scr-faint)]">{POLE.tramo}</p>
+              <p className="truncate text-[10.5px] text-[var(--scr-faint)]">{POLE.tramo}</p>
             </div>
             <span
-              className="rounded-md px-2 py-1 text-[9.5px] font-semibold whitespace-nowrap"
+              className="mt-2 inline-block rounded-md px-2 py-1 text-[9.5px] font-semibold whitespace-nowrap"
               style={{
-                color: OBS.ferreteria.color,
-                background: `color-mix(in oklch, ${OBS.ferreteria.color} 14%, transparent)`,
-                border: `1px solid color-mix(in oklch, ${OBS.ferreteria.color} 30%, transparent)`,
+                color: EVENT.obs.color,
+                background: `color-mix(in oklch, ${EVENT.obs.color} 14%, transparent)`,
+                border: `1px solid color-mix(in oklch, ${EVENT.obs.color} 30%, transparent)`,
               }}
             >
-              {OBS.ferreteria.label}
+              {EVENT.obs.label}
             </span>
           </div>
 
@@ -356,12 +356,12 @@ export function CardPart() {
 // ── 3 · narrowing the view ───────────────────────────────────────────────────
 
 /**
- * The network as a field of dots, one per twenty-five poles.
+ * The network as a field of dots, one dot per twenty-odd poles.
  *
- * The proportions are the real ones: of sixty-six dots, one is critical and
- * five are pending, which is the same nine per cent that 148 is of 1.661. When
- * the filter lands and fifty-five of them fade, the size of the remaining job
- * is the thing the reader takes away, and it is not exaggerated.
+ * The proportions are kept honest: of sixty-six dots, one is critical and five
+ * are pending, which is the same nine and a half per cent that 148 is of 1.541.
+ * When the filter lands and sixty of them fade, the size of the remaining job
+ * is what the reader takes away, and it is not exaggerated in our favour.
  */
 const FIELD: PinState[] = [
   ...Array<PinState>(1).fill("crit"),

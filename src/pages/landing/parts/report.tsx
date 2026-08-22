@@ -14,7 +14,7 @@ import { EXPO } from "../tokens";
 import { useTargetBox } from "../targets";
 import { COLUMNS_SCRIPT, EXPORT_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
-import { CRITICALS, NETWORK, OBS } from "./fiction";
+import { CATASTROFICO, CRITICALS, NETWORK } from "./fiction";
 
 /**
  * The two pieces that come from the report generator.
@@ -29,10 +29,10 @@ import { CRITICALS, NETWORK, OBS } from "./fiction";
 // ── 10 · choosing the columns ────────────────────────────────────────────────
 
 const COLUMNS = [
-  { label: "Poste › Nombre", addedAt: 2 },
+  { label: "Poste › Nº de poste", addedAt: 2 },
   { label: "Poste › Tramo", addedAt: 4 },
-  { label: "Evento › Fecha", addedAt: 6 },
-  { label: "Evento › Criticidad", addedAt: 8 },
+  { label: "Evento › Fecha del evento", addedAt: 6 },
+  { label: "Evento › Criticidad del evento", addedAt: 8 },
 ];
 
 /** Which step adds which column, and where it lands. */
@@ -47,26 +47,26 @@ const CATALOG = [
   {
     group: "Evento",
     fields: [
-      { label: "Código", target: undefined },
-      { label: "Fecha", target: "gen-f-fecha" },
-      { label: "Criticidad", target: "gen-f-criticidad" },
+      { label: "ID del evento", target: undefined },
+      { label: "Fecha del evento", target: "gen-f-fecha" },
+      { label: "Criticidad del evento", target: "gen-f-criticidad" },
       { label: "Prioritario", target: undefined },
     ],
   },
   {
     group: "Poste",
     fields: [
-      { label: "Nombre", target: "gen-f-nombre" },
+      { label: "Nº de poste", target: "gen-f-nombre" },
       { label: "Tramo", target: "gen-f-tramo" },
       { label: "Material", target: undefined },
-      { label: "Altura", target: undefined },
+      { label: "Fecha de instalación", target: undefined },
     ],
   },
   {
     group: "Ciudad",
     fields: [
       { label: "Nombre", target: undefined },
-      { label: "Departamento", target: undefined },
+      { label: "Latitud", target: undefined },
     ],
   },
 ];
@@ -226,7 +226,7 @@ export function ExportPart() {
             transition={{ duration: 0.38, ease: EXPO }}
           >
             <span className="rounded-md border border-[var(--scr-line)] bg-[var(--scr-bg)] px-2 py-1 text-[10.5px] whitespace-nowrap text-[var(--scr-text)]">
-              Evento › Criticidad
+              Evento › Criticidad del evento
             </span>
             <span className="text-[10.5px] whitespace-nowrap text-[var(--scr-faint)]">
               es igual a
@@ -234,12 +234,12 @@ export function ExportPart() {
             <span
               className="rounded-md border px-2 py-1 text-[10.5px] font-medium whitespace-nowrap"
               style={{
-                borderColor: OBS.catastrofico.color,
-                color: OBS.catastrofico.color,
-                background: `color-mix(in oklch, ${OBS.catastrofico.color} 12%, transparent)`,
+                borderColor: CATASTROFICO.color,
+                color: CATASTROFICO.color,
+                background: `color-mix(in oklch, ${CATASTROFICO.color} 12%, transparent)`,
               }}
             >
-              {OBS.catastrofico.label}
+              {CATASTROFICO.label}
             </span>
           </motion.div>
 
@@ -287,7 +287,7 @@ export function ExportPart() {
         <div
           className={`grid ${ROW} gap-2 border-b border-[var(--scr-hair)] px-3 py-2 text-[9px] font-semibold tracking-wider text-[var(--scr-faint)] uppercase`}
         >
-          <span>Nombre</span>
+          <span>Nº de poste</span>
           <span className="hidden sm:block">Tramo</span>
           <span>Fecha</span>
           <span>Criticidad</span>
@@ -302,7 +302,7 @@ export function ExportPart() {
           {results &&
             CRITICALS.map((row, i) => (
               <motion.div
-                key={row.id}
+                key={row.pole}
                 className={`grid h-[22px] ${ROW} items-center gap-2 px-3 text-[10.5px]`}
                 initial={still ? false : { opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -313,13 +313,13 @@ export function ExportPart() {
                 <span className="text-[var(--scr-faint)] tabular-nums">{row.date}</span>
                 <span
                   className="flex items-center gap-1.5 truncate"
-                  style={{ color: OBS.catastrofico.color }}
+                  style={{ color: CATASTROFICO.color }}
                 >
                   <span
                     className="h-[6px] w-[6px] shrink-0 rounded-full"
-                    style={{ background: OBS.catastrofico.color }}
+                    style={{ background: CATASTROFICO.color }}
                   />
-                  {OBS.catastrofico.label}
+                  {CATASTROFICO.label}
                 </span>
               </motion.div>
             ))}

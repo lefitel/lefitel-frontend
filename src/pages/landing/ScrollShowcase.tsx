@@ -16,8 +16,8 @@ import { ColumnsPart, ExportPart } from "./parts/report";
  * a card that is 300 pixels wide is 300 pixels wide on a phone too.
  *
  * What the pieces must not lose is the thread. Broken into eleven specimens
- * they would read as a parts catalogue, so they all follow one pole — P-0472,
- * loose hardware on the upper crossarm — from the plan it sits on to the
+ * they would read as a parts catalogue, so they all follow one pole — P472,
+ * hardware off the crossarm — from the plan it sits on to the
  * spreadsheet it ends up in. The captions name it out loud.
  *
  * Captions sit to the left of their piece rather than above it. Stacked, every
@@ -117,7 +117,7 @@ export function ScrollShowcase() {
           </h2>
           <p className="mt-6 text-[0.95rem] leading-relaxed text-white/45">
             Once piezas del sistema, cada una haciendo su trabajo. Todas siguen al mismo poste: el
-            P-0472 del tramo Norte, con la ferretería suelta en la cruceta.
+            P472 del tramo Coroico › Coripata, con la ferretería fuera de la cruceta.
           </p>
         </Reveal>
 
@@ -139,7 +139,7 @@ export function ScrollShowcase() {
             id="plan"
             tag="Mapa · /app/ciudades"
             title="Cada poste, en su sitio."
-            text="Mil seiscientos sesenta y un postes inspeccionados, sobre el plano. El color dice el estado de cada uno: crítico, pendiente, resuelto o sin novedad."
+            text="Mil quinientos cuarenta y un postes inspeccionados en ochenta y seis ciudades, sobre el plano. El color dice el estado de cada uno."
           >
             <PlanPart />
           </Row>
@@ -149,7 +149,7 @@ export function ScrollShowcase() {
               id="card"
               tag="Poste · /app/postes"
               title="Un clic, y ahí está todo."
-              text="El P-0472, tramo Norte: material, altura, propietario y última revisión."
+              text="El P472, en el tramo Coroico › Coripata: material, propietario, cuándo se instaló y cuándo se revisó por última vez."
             >
               <CardPart />
             </Half>
@@ -157,7 +157,7 @@ export function ScrollShowcase() {
               id="filter"
               tag="Mapa · filtro de vista"
               title="Solo lo que falta."
-              text="De los mil seiscientos, ciento cuarenta y ocho esperan cuadrilla. El resto se aparta."
+              text="De los mil quinientos, ciento cuarenta y ocho esperan cuadrilla. El resto se aparta."
             >
               <FilterPart />
             </Half>
@@ -177,7 +177,7 @@ export function ScrollShowcase() {
             id="saved"
             tag="Eventos · registro"
             title="Y ya está dentro."
-            text="El parte EV-2292 entra en el registro con su estado y su fecha. A partir de aquí no depende de que nadie se acuerde."
+            text="El parte entra en el registro con su observación, su estado y su fecha. A partir de aquí no depende de que nadie se acuerde."
           >
             <div className="pt-5">
               <SavedPart />
@@ -215,7 +215,7 @@ export function ScrollShowcase() {
               id="criticals"
               tag="Inicio · críticos"
               title="Lo que no puede esperar."
-              text="Diez eventos catastróficos abiertos, por antigüedad. El P-0611 lleva tres días."
+              text="Diez eventos de criticidad 1 abiertos, por antigüedad. El P611 lleva tres días."
             >
               <CriticalsPart />
             </Half>
