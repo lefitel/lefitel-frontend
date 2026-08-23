@@ -75,7 +75,11 @@ const LoginPage = () => {
     try {
       const responde = await loginUsuario({ ...login, user });
       if (responde.status !== 500) {
-        window.localStorage.setItem("token", responde.usuario?.token ?? "");
+        // No `localStorage.setItem` here any more: the credential is the
+        // cookie the login response already set, which this page cannot see
+        // and does not need to — the next reload asks the server, it does
+        // not read anything back out of the browser's storage.
+        //
         // `responde.usuario` is cast below, and a cast accepts any shape: it
         // would happily let `autenticado` come through as `undefined` from a
         // response that never had that field to begin with. Setting it

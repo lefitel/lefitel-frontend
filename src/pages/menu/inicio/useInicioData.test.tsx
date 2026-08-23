@@ -26,7 +26,10 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("../../../api/dashboard.api", () => ({ getDashboard }));
 vi.mock("sonner", () => ({ toast: { error: toastError, success: vi.fn() } }));
 
-const sesion = { usuario: { id: 7, id_rol: 1 }, token: "t" } as unknown as SesionInterface;
+// `autenticado: true` is set explicitly even though a cast follows: without
+// it here, this fixture would silently carry `autenticado: undefined` and no
+// compiler error would ever say so (task 5's brief flagged this exact file).
+const sesion = { usuario: { id: 7, id_rol: 1 }, token: "t", autenticado: true } as unknown as SesionInterface;
 
 const wrapper = ({ children }: PropsWithChildren) => (
   <SesionContext.Provider value={{ sesion } as unknown as contextProps}>

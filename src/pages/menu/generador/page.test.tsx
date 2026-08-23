@@ -110,8 +110,11 @@ const resultFor = (config: ReportConfig, over: Partial<ReportResult> = {}): Repo
   ...over,
 });
 
+// `autenticado: true` is set explicitly: without it this fixture would
+// silently carry `autenticado: undefined` past the `as never` cast below,
+// and no compiler error would ever say so (task 5's brief flagged this file).
 const sesion = {
-  sesion: { token: "t0", usuario: { ...usuarioExample, id: 7 } },
+  sesion: { token: "t0", usuario: { ...usuarioExample, id: 7 }, autenticado: true },
   setSesion: vi.fn(),
   loading: false,
   logout: vi.fn(),

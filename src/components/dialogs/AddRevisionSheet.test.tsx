@@ -24,7 +24,10 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("../../api/Revision.api", () => ({ createRevision }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
-const sesion = { usuario: { id: 7 }, token: "t" } as unknown as SesionInterface;
+// `autenticado: true` is set explicitly even though a cast follows: without
+// it here, this fixture would silently carry `autenticado: undefined` and no
+// compiler error would ever say so (task 5's brief flagged this exact file).
+const sesion = { usuario: { id: 7 }, token: "t", autenticado: true } as unknown as SesionInterface;
 
 function renderSheet() {
   const onSuccess = vi.fn();

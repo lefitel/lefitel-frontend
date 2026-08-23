@@ -92,7 +92,10 @@ export const SesionProvider = ({ children }: props) => {
       axios.post(LOGOUT_URL).catch(() => undefined);
     }
     clearTimers();
-    localStorage.removeItem("token");
+    // No `localStorage.removeItem` here any more — there is nothing left in
+    // it to remove. `setSesion` below is what actually ends the session on
+    // screen; it did that already, this call just used to also clear a key
+    // that shared the job.
     olvidarPermisos();
     setSesion({ token: "", usuario: usuarioExample, autenticado: false });
   }, []);
@@ -140,25 +143,42 @@ export const SesionProvider = ({ children }: props) => {
     roleRef.current = sesion.permisos ? sesion.usuario.id_rol : undefined;
   }, [sesion.permisos, sesion.usuario.id_rol]);
 
-  // Verificar token almacenado al iniciar (evita flicker al recargar)
+  // Preguntar al servidor si hay sesión, al arrancar (evita flicker al
+  // recargar).
+  //
+  // Sin guardián de `localStorage`: la credencial es la cookie, y esta línea
+  // no puede leerla — la única forma de saber si hay sesión es preguntar,
+  // siempre, aunque no haya nada guardado en el navegador. Un guardián que
+  // solo pregunta cuando `localStorage` tiene algo dejó de tener sentido en
+  // cuanto el token dejó de ser la credencial: el día que el login deje de
+  // devolver un JWT en el cuerpo, esa clave nunca se escribiría y todo el
+  // mundo perdería la sesión al recargar, con la cookie todavía válida.
+  //
+  // `loading` cubre la llamada entera — se apaga en el `finally`, después de
+  // que la respuesta llegó — para que las puertas de la Tarea 4 no decidan
+  // nada con `autenticado` todavía en su valor inicial.
+  //
+  // Un 401 no es un error: es la respuesta a "¿tengo sesión?" cuando no la
+  // hay. El estado inicial ya es anónimo, así que la rama que no es 200 no
+  // tiene nada que hacer — ni un toast, ni nada que sugiera que algo se
+  // rompió la primera vez que alguien abre el ERP en el día.
+  //
+  // El interceptor de más abajo también ve esta petición y, ante su 401,
+  // llama a `logout()` como a cualquier otra — deliberadamente no está
+  // excluido igual que `LOGOUT_URL`. Ver el comentario junto a esa exclusión
+  // para el porqué.
   useEffect(() => {
-    const stored = localStorage.getItem("token");
-    if (!stored) { setLoading(false); return; }
-
     comprobarToken()
       .then((res) => {
         if (res.status === 200 && res.usuario) {
           setSesion({
-            token: stored,
-            usuario: res.usuario as UsuarioInterface,
+            token: "",
+            usuario: res.usuario,
             permisos: res.permisos,
             autenticado: true,
           });
-        } else {
-          localStorage.removeItem("token");
         }
       })
-      .catch(() => localStorage.removeItem("token"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -187,7 +207,9 @@ export const SesionProvider = ({ children }: props) => {
       (response) => {
         const newToken = response.headers["x-new-token"];
         if (newToken && isOurApi(response.config?.url)) {
-          localStorage.setItem("token", newToken);
+          // No `localStorage.setItem` here any more — nothing reads that key
+          // back. The in-memory session below is what the sliding-expiry
+          // timers (task 7) actually use.
           setSesion((prev) => (prev.token ? { ...prev, token: newToken } : prev));
 
           /**
@@ -248,6 +270,19 @@ export const SesionProvider = ({ children }: props) => {
         // its own. This is the barrier that holds even if something else
         // calls `logout()` from elsewhere in the future; `hasSessionRef`
         // above only makes the ordinary, non-looping case cheaper.
+        //
+        // `comprobarToken()`'s own request (`GET /auth/me`, asked at startup
+        // and again below on a role change) is deliberately NOT excluded the
+        // way `LOGOUT_URL` is. A 401 on it can only ever lead to `logout()`,
+        // whose own request goes to `LOGOUT_URL` — already excluded — so the
+        // chain stops one level down regardless of whether this one is
+        // excluded too. Excluding it would only skip the harmless, no-network
+        // cleanup `logout()` runs on an ordinary anonymous boot (`hasSessionRef`
+        // is still `false` then, so the cheap guard in `logout()` already
+        // keeps it off the network); and the same call is also made mid-session
+        // by the role-change refresh below, where a 401 genuinely means the
+        // session just died — an event `logout()` is the correct answer to,
+        // not one to hide from.
         if (error.response?.status === 401 && error.config?.url !== LOGOUT_URL) {
           logout();
         }

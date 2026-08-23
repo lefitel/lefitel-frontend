@@ -38,33 +38,45 @@ export const loginUsuario = (
 };
 
 /**
- * Who this token belongs to, and what they may do.
+ * Who is logged in right now, according to the server.
  *
- * The answer comes from the database rather than from the token's own payload:
- * a token lasts a week, and somebody moved to another role in the meantime would
+ * Calls `GET /api/auth/me` rather than the old `GET /api/login`: the answer
+ * comes from the database and not from a token's own payload, because a token
+ * lasts a week and somebody moved to another role in the meantime would
  * otherwise keep the old one — and the old buttons with it — until it expired.
  *
  * No longer takes a token: the session cookie already authenticates this
- * request. Kept in the simplest shape that compiles rather than redesigned —
- * this whole bootstrap flow (and its two callers in `SesionProvider.tsx`) is
- * replaced wholesale in task 6.
+ * request, and the cookie is invisible to this code, which is the whole
+ * reason both callers in `SesionProvider.tsx` ask instead of checking
+ * anything client-side first.
+ *
+ * A non-200 answer (401 with no session, or a real network/server failure)
+ * folds into the same shape here — `usuario: null` — rather than throwing:
+ * neither caller treats "no session" as an error, so there is nothing for a
+ * `.catch()` at the call site to do that this one has not already done.
+ * `status` still tells the two apart for whoever wants to (nothing does today).
+ *
+ * `expires_at` rides along unused by both of today's callers — task 7's
+ * expiry timers read it off this same call, and this is the only place that
+ * shape is built.
  */
 export const comprobarToken = (): Promise<{
   status: number;
   usuario: UsuarioInterface | null;
   permisos?: Permisos;
+  expires_at: string | null;
 }> => {
   return axios
-    .get(urlApi + "login")
-    .then((response) => {
-      return {
-        status: response.status,
-        usuario: response.data,
-        permisos: response.data?.permisos as Permisos | undefined,
-      };
-    })
-    .catch(() => ({
-      status: 500,
+    .get(`${urlApi}auth/me`)
+    .then((response) => ({
+      status: response.status,
+      usuario: response.data.usuario as UsuarioInterface,
+      permisos: response.data.permisos as Permisos | undefined,
+      expires_at: (response.data.expires_at as string | null) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
       usuario: null,
+      expires_at: null,
     }));
 };

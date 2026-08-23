@@ -102,4 +102,33 @@ describe("logging in", () => {
     // move the boolean at all, in either direction.
     expect(sesiones).toHaveLength(0);
   });
+
+  it("does not persist a token to localStorage — the cookie is the credential now", async () => {
+    // Nothing else in this file touches `localStorage`, so nothing clears it
+    // between tests; start from a known-empty state rather than assume it.
+    localStorage.clear();
+    loginUsuario.mockResolvedValue({
+      status: 200,
+      message: null,
+      usuario: {
+        token: "un-token",
+        usuario: { ...usuarioExample, user: "ada" },
+        autenticado: false,
+      },
+    });
+
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.type(screen.getByLabelText("Usuario"), "ada");
+    await user.type(screen.getByLabelText("Contraseña"), "secreto");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    await waitFor(() => expect(loginUsuario).toHaveBeenCalledTimes(1));
+    // The server's answer carries a JWT in `usuario.token` for as long as the
+    // old `POST /api/login` door still issues one, but nothing on this page
+    // should still be copying it into storage the cookie already makes
+    // redundant.
+    expect(localStorage.getItem("token")).toBeNull();
+  });
 });
