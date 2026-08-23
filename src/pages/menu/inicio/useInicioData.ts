@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
 import { getDashboard, DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
 import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
@@ -43,7 +42,6 @@ export interface InicioData {
   topPostes: { name: string; count: number }[];
   mapMarkers: MapMarker[];
   criticalAlerts: CriticalAlert;
-  token: string;
   dataPoste: PosteInterface;
   setDataPoste: (p: PosteInterface) => void;
   openEditPoste: boolean;
@@ -56,8 +54,6 @@ const getSolDate = (e: DashboardEvento): Date | null => {
 };
 
 export function useInicioData(): InicioData {
-  const { sesion } = useContext(SesionContext);
-
   const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
   const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +72,7 @@ export function useInicioData(): InicioData {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getDashboard(sesion.token);
+      const data = await getDashboard();
       setListEventos(data.eventos);
       setListPostes(data.postes);
       setError(false);
@@ -88,7 +84,7 @@ export function useInicioData(): InicioData {
     } finally {
       setLoading(false);
     }
-  }, [sesion.token]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -383,7 +379,6 @@ export function useInicioData(): InicioData {
     mapTab, setMapTab,
     kpis, chartData, xAxisLabel, showTrend,
     urgentEvents, criticalObsEvents, topPostes, mapMarkers, criticalAlerts,
-    token: sesion.token,
     dataPoste, setDataPoste, openEditPoste, setOpenEditPoste,
   };
 }

@@ -164,13 +164,11 @@ export interface SaveReportPayload {
 
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
-const auth = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
+export const getCatalogo = (): Promise<Catalog> =>
+  axios.get(urlApi + urlGenerador + "catalogo").then((r) => r.data);
 
-export const getCatalogo = (token: string): Promise<Catalog> =>
-  axios.get(urlApi + urlGenerador + "catalogo", auth(token)).then((r) => r.data);
-
-export const runReporte = (config: ReportConfig, token: string): Promise<ReportResult> =>
-  axios.post(urlApi + urlGenerador + "consulta", config, auth(token)).then((r) => r.data);
+export const runReporte = (config: ReportConfig): Promise<ReportResult> =>
+  axios.post(urlApi + urlGenerador + "consulta", config).then((r) => r.data);
 
 /**
  * How many rows the report would return, without reading any of them.
@@ -183,39 +181,35 @@ export const runReporte = (config: ReportConfig, token: string): Promise<ReportR
  */
 export const contarReporte = (
   config: ReportConfig,
-  token: string,
   signal?: AbortSignal,
 ): Promise<{ total: number }> =>
   axios
-    .post(urlApi + urlGenerador + "conteo", config, { ...auth(token), signal })
+    .post(urlApi + urlGenerador + "conteo", config, { signal })
     .then((r) => r.data);
 
 export const getReportesGuardados = (
-  token: string,
   page: { limit?: number; offset?: number } = {},
 ): Promise<SavedReportPage> =>
   axios
     .get(urlApi + urlGenerador + "reportes", {
-      ...auth(token),
       params: { limit: page.limit, offset: page.offset },
     })
     .then((r) => r.data);
 
-export const crearReporte = (payload: SaveReportPayload, token: string): Promise<SavedReport> =>
-  axios.post(urlApi + urlGenerador + "reportes", payload, auth(token)).then((r) => r.data);
+export const crearReporte = (payload: SaveReportPayload): Promise<SavedReport> =>
+  axios.post(urlApi + urlGenerador + "reportes", payload).then((r) => r.data);
 
 export const actualizarReporte = (
   id: number,
   payload: Partial<SaveReportPayload>,
-  token: string,
 ): Promise<SavedReport> =>
-  axios.put(urlApi + urlGenerador + `reportes/${id}`, payload, auth(token)).then((r) => r.data);
+  axios.put(urlApi + urlGenerador + `reportes/${id}`, payload).then((r) => r.data);
 
-export const eliminarReporte = (id: number, token: string): Promise<{ message: string }> =>
-  axios.delete(urlApi + urlGenerador + `reportes/${id}`, auth(token)).then((r) => r.data);
+export const eliminarReporte = (id: number): Promise<{ message: string }> =>
+  axios.delete(urlApi + urlGenerador + `reportes/${id}`).then((r) => r.data);
 
-export const duplicarReporte = (id: number, token: string): Promise<SavedReport> =>
-  axios.post(urlApi + urlGenerador + `reportes/${id}/duplicar`, {}, auth(token)).then((r) => r.data);
+export const duplicarReporte = (id: number): Promise<SavedReport> =>
+  axios.post(urlApi + urlGenerador + `reportes/${id}/duplicar`, {}).then((r) => r.data);
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
@@ -272,14 +266,12 @@ export function filenameFromDisposition(header: unknown, format: ExportFormat): 
 export const exportarReporte = async (
   config: ReportConfig,
   options: ExportOptions,
-  token: string,
   extras: { signal?: AbortSignal; onProgress?: (received: number, total?: number) => void } = {},
 ): Promise<ExportedFile> => {
   const response = await axios.post(
     urlApi + urlGenerador + "exportar",
     { config, ...options },
     {
-      ...auth(token),
       responseType: "blob",
       signal: extras.signal,
       onDownloadProgress: (event) => {

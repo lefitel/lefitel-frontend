@@ -49,7 +49,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     useEffect(() => {
         if (!open) return;
         setLoadingData(true);
-        Promise.all([exportPostes(sesion.token), getObs(sesion.token), getTipoObs(sesion.token)])
+        Promise.all([exportPostes(), getObs(), getTipoObs()])
             .then(([postes, obs, tipos]) => {
                 setListPoste(postes);
                 setListObs(obs);
@@ -57,7 +57,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
             })
             .catch(() => toast.error("Error al cargar los datos"))
             .finally(() => setLoadingData(false));
-    }, [open, sesion.token]);
+    }, [open]);
 
     const selectedPoste = listPoste.find((p) => p.id === selectedPosteId);
 
@@ -97,7 +97,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
 
         setSaving(true);
         try {
-            const uploadResult = await uploadImage(imageFile!, sesion.token);
+            const uploadResult = await uploadImage(imageFile!);
             if (uploadResult === "500") {
                 toast.error("No se pudo subir la imagen");
                 return;
@@ -114,8 +114,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                     id_usuario: sesion.usuario.id ?? 0,
                     obs_ids: selectedObs,
                     revision: { description: revDesc, date: revDate },
-                },
-                sesion.token
+                }
             );
 
             if (eventoResult.status !== 200 && eventoResult.status !== 201) {

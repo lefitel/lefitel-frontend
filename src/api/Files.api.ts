@@ -21,21 +21,19 @@ export interface OrphanFileInfo extends FileInfo {
   usedBy: FileUsage | null;
 }
 
-export const getOrphanFiles = (token: string): Promise<OrphanFileInfo[]> =>
+export const getOrphanFiles = (): Promise<OrphanFileInfo[]> =>
   axios
-    .get(urlApi + urlFiles + "orphans", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlFiles + "orphans")
     .then((r) => r.data);
 
-export const deleteFile = (name: string, token: string): Promise<void> =>
+export const deleteFile = (name: string): Promise<void> =>
   axios
-    .delete(urlApi + urlFiles + encodeURIComponent(name), {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .delete(urlApi + urlFiles + encodeURIComponent(name))
     .then((r) => r.data);
 
-export const deleteOrphanFiles = (token: string): Promise<{ deleted: number }> =>
+export const deleteOrphanFiles = (): Promise<{ deleted: number }> =>
   axios
-    .delete(urlApi + urlFiles + "orphans", { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlFiles + "orphans")
     .then((r) => r.data);
 
 export interface EntityImageStat {
@@ -59,17 +57,17 @@ export interface BrokenRef {
   image: string;
 }
 
-export const getEntityImageStats = (token: string): Promise<EntityImageStats> =>
+export const getEntityImageStats = (): Promise<EntityImageStats> =>
   axios
-    .get(urlApi + urlFiles + "entity-stats", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlFiles + "entity-stats")
     .then((r) => r.data);
 
-export const getBrokenImageRefs = (token: string): Promise<BrokenRef[]> =>
+export const getBrokenImageRefs = (): Promise<BrokenRef[]> =>
   axios
-    .get(urlApi + urlFiles + "broken-refs", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlFiles + "broken-refs")
     .then((r) => r.data);
 
-export const clearBrokenImageRefs = (token: string): Promise<{ cleared: number }> =>
+export const clearBrokenImageRefs = (): Promise<{ cleared: number }> =>
   axios
-    .delete(urlApi + urlFiles + "broken-refs", { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlFiles + "broken-refs")
     .then((r) => r.data);

@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
 import { createUsuario, editUsuario, searchUsuario_user } from "../../../api/Usuario.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { getRol } from "../../../api/Rol.api";
@@ -27,7 +26,6 @@ interface Props {
 
 const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
     const isEditing = !!usuario;
-    const { sesion } = useContext(SesionContext);
 
     const [name, setName] = useState("");
     const [lastname, setLastname] = useState("");
@@ -51,10 +49,10 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
 
     const loadRoles = useCallback(async () => {
         setLoadingRoles(true);
-        const data = await getRol(sesion.token);
+        const data = await getRol();
         setRoles(data ?? []);
         setLoadingRoles(false);
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => {
         if (!open) { setErrors({}); return; }
@@ -96,7 +94,7 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
 
         if (!isEditing) {
             try {
-                await searchUsuario_user(user.trim(), sesion.token);
+                await searchUsuario_user(user.trim());
                 toast.warning("Ese nombre de usuario ya está en uso");
                 setSaving(false);
                 return;
@@ -105,7 +103,7 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
 
         let imagePath = usuario?.image ?? "";
         if (imageFile) {
-            const result = await uploadImage(imageFile, sesion.token);
+            const result = await uploadImage(imageFile);
             if (result === "500") {
                 toast.error("Error al subir la imagen");
                 setSaving(false);
@@ -124,7 +122,7 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                 id_rol: idRol,
                 image: imagePath,
             };
-            const result = await editUsuario(payload, sesion.token);
+            const result = await editUsuario(payload);
             if (Number(result) === 200) {
                 toast.success("Usuario actualizado");
                 setOpen(false);
@@ -143,7 +141,7 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                 id_rol: idRol,
                 image: imagePath,
             };
-            const result = await createUsuario(payload, sesion.token);
+            const result = await createUsuario(payload);
             if (Number(result) === 200 || Number(result) === 201) {
                 toast.success("Usuario creado");
                 setOpen(false);

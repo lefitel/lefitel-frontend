@@ -55,7 +55,7 @@ const PerfilPage = () => {
   useEffect(() => {
     if (!user.id) return;
     setLoadingProfile(true);
-    searchUsuario(user.id, sesion.token)
+    searchUsuario(user.id)
       .then((data: UsuarioInterface) => {
         setFormData({
           name: data.name || "",
@@ -87,9 +87,9 @@ const PerfilPage = () => {
         phone: formData.phone,
         birthday: formData.birthday as unknown as Date,
       };
-      const status = await editUsuario(payload, sesion.token);
+      const status = await editUsuario(payload);
       if (status === 200) {
-        setSesion({ token: sesion.token, usuario: payload });
+        setSesion((prev) => ({ ...prev, usuario: payload }));
         toast.success("Información general actualizada.");
       } else {
         toast.error("Error al actualizar la información.");
@@ -104,9 +104,9 @@ const PerfilPage = () => {
     setLoadingAccount(true);
     try {
       const payload: UsuarioInterface = { ...user, user: accountData.user };
-      const response = await editUserName(payload, sesion.token);
+      const response = await editUserName(payload);
       if (response.status === 200) {
-        setSesion({ token: sesion.token, usuario: payload });
+        setSesion((prev) => ({ ...prev, usuario: payload }));
         toast.success("Nombre de usuario modificado.");
       } else {
         toast.error(response.message || "Error al actualizar el usuario. Podría estar en uso.");
@@ -121,7 +121,7 @@ const PerfilPage = () => {
     setLoadingPass(true);
     try {
       const payload = { ...user, pass: accountData.pass, oldPass: accountData.oldPass };
-      const response = await editUserPass(payload, sesion.token);
+      const response = await editUserPass(payload);
       if (response.status === 200) {
         toast.success("Contraseña actualizada con éxito.");
         setAccountData({ ...accountData, oldPass: "", pass: "", confirmPass: "" });

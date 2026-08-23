@@ -117,13 +117,13 @@ export default function UsuarioDetallePage() {
     }
 
     try {
-      await searchUsuario_user(newUser.trim(), sesion.token);
+      await searchUsuario_user(newUser.trim());
       toast.warning("Ese nombre de usuario ya está en uso");
       setSavingUser(false);
       return;
     } catch { /* no existe, se puede continuar */ }
 
-    const res = await editUserName({ ...d.usuario, user: newUser }, sesion.token);
+    const res = await editUserName({ ...d.usuario, user: newUser });
     if (res.status === 200) {
       toast.success("Nombre de usuario actualizado");
       setOpenUsername(false);
@@ -143,8 +143,7 @@ export default function UsuarioDetallePage() {
     if (!d.usuario?.id) return;
     setSavingPass(true);
     const res = await editUserPass(
-      { ...d.usuario, pass: newPass, oldPass: isAdmin ? undefined : oldPass },
-      sesion.token
+      { ...d.usuario, pass: newPass, oldPass: isAdmin ? undefined : oldPass }
     );
     if (res.status === 200) {
       toast.success("Contraseña actualizada");

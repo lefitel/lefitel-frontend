@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
 import { searchUsuario } from "../../../api/Usuario.api";
 import { getEvento_usuario } from "../../../api/Evento.api";
 import { getBitacora } from "../../../api/Bitacora.api";
@@ -15,7 +14,6 @@ export interface UsuarioDetalleData {
 }
 
 export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
-  const { sesion } = useContext(SesionContext);
   const [usuario, setUsuario] = useState<UsuarioInterface | null>(null);
   const [eventos, setEventos] = useState<EventoInterface[]>([]);
   const [bitacora, setBitacora] = useState<BitacoraInterface[]>([]);
@@ -25,9 +23,9 @@ export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
     setLoading(true);
     try {
       const [u, e, b] = await Promise.all([
-        searchUsuario(id, sesion.token),
-        getEvento_usuario(id, sesion.token),
-        getBitacora(id, sesion.token, 50),
+        searchUsuario(id),
+        getEvento_usuario(id),
+        getBitacora(id, 50),
       ]);
       setUsuario(u);
       setEventos([...e].sort((a, b) => {
@@ -40,7 +38,7 @@ export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id, sesion.token]);
+  }, [id]);
 
   useEffect(() => { load(); }, [load]);
 

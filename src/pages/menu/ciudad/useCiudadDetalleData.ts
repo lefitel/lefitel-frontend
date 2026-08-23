@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
 import { searchCiudad } from "../../../api/Ciudad.api";
 import { getPosteByCiudad } from "../../../api/Poste.api";
 import { CiudadInterface, PosteInterface } from "../../../interfaces/interfaces";
@@ -21,7 +20,6 @@ export interface CiudadDetalleData {
 }
 
 export function useCiudadDetalleData(id: number): CiudadDetalleData {
-  const { sesion } = useContext(SesionContext);
   const [ciudad, setCiudad] = useState<CiudadInterface | null>(null);
   const [postes, setPostes] = useState<PosteInterface[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,8 +28,8 @@ export function useCiudadDetalleData(id: number): CiudadDetalleData {
     setLoading(true);
     try {
       const [c, p] = await Promise.all([
-        searchCiudad(id, sesion.token),
-        getPosteByCiudad(id, sesion.token),
+        searchCiudad(id),
+        getPosteByCiudad(id),
       ]);
       setCiudad(c);
       setPostes(p);
@@ -40,7 +38,7 @@ export function useCiudadDetalleData(id: number): CiudadDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id, sesion.token]);
+  }, [id]);
 
   useEffect(() => { load(); }, [load]);
 

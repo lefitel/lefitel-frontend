@@ -3,35 +3,26 @@ import { urlApi, urlReporte } from "./url";
 import { EventoInterface, ReporteInterface } from "../interfaces/interfaces";
 
 export const getReporteGeneral = (
-  filtro: ReporteInterface,
-  token: string
+  filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "general", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "general", filtro)
     .then((r) => r.data);
 };
 
 export const getReporteTramo = (
-  filtro: ReporteInterface,
-  token: string
+  filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "tramo", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "tramo", filtro)
     .then((r) => r.data);
 };
 
 export const getReporteRecorrido = (
-  filtro: ReporteInterface,
-  token: string
+  filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "recorrido", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "recorrido", filtro)
     .then((r) => r.data);
 };
 
@@ -69,34 +60,25 @@ export interface TiempoTramoRow {
 }
 
 export const getEstadoRed = (
-  filtro: { fechaInicial?: Date; fechaFinal?: Date },
-  token: string
+  filtro: { fechaInicial?: Date; fechaFinal?: Date }
 ): Promise<EstadoRedRow[]> => {
   return axios
-    .put(urlApi + urlReporte + "estado-red", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "estado-red", filtro)
     .then((r) => r.data);
 };
 
 export const getObsFrecuencia = (
-  filtro: { fechaInicial: Date; fechaFinal: Date },
-  token: string
+  filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<ObsFrecuenciaRow[]> => {
   return axios
-    .put(urlApi + urlReporte + "obs-frecuencia", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "obs-frecuencia", filtro)
     .then((r) => r.data);
 };
 
 export const getTiemposResumen = (
-  filtro: { fechaInicial: Date; fechaFinal: Date },
-  token: string
+  filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<TiempoTramoRow[]> => {
   return axios
-    .put(urlApi + urlReporte + "tiempos-resumen", filtro, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlReporte + "tiempos-resumen", filtro)
     .then((r) => r.data);
 };

@@ -37,7 +37,7 @@ export interface DashboardData {
   postes: DashboardPoste[];
 }
 
-export const getDashboard = (token: string): Promise<DashboardData> =>
+export const getDashboard = (): Promise<DashboardData> =>
   axios
-    .get(urlApi + "dashboard/", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + "dashboard/")
     .then((r) => r.data);

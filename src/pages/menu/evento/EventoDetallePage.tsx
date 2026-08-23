@@ -73,7 +73,7 @@ export default function EventoDetallePage() {
     const b = poste.ciudadB;
     if (!a?.lat || !a?.lng || !b?.lat || !b?.lng || !poste.lat || !poste.lng) return;
 
-    getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB, sesion.token)
+    getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB)
       .then((postes) => {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
@@ -102,7 +102,7 @@ export default function EventoDetallePage() {
       })
       .catch(() => toast.warning("No se pudo calcular la ruta del tramo."));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [poste?.id, sesion.token]);
+  }, [poste?.id]);
 
   const boundsCoords: [number, number][] = [
     ...(poste?.ciudadA?.lat && poste.ciudadA.lng ? [[poste.ciudadA.lat, poste.ciudadA.lng] as [number, number]] : []),
@@ -479,7 +479,7 @@ export default function EventoDetallePage() {
               onClick={async () => {
                 if (!d.evento?.id) return;
                 setReabriendo(true);
-                const status = await reabrirEvento(d.evento.id as number, sesion.token);
+                const status = await reabrirEvento(d.evento.id as number);
                 setReabriendo(false);
                 if (status === 200) {
                   toast.success("Evento reabierto");

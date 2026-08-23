@@ -8,19 +8,19 @@ export interface ObsStats {
   critical: number;
 }
 
-export const getObs = (token: string, archived = false): Promise<ObsInterface[]> => {
+export const getObs = (archived = false): Promise<ObsInterface[]> => {
   const url = urlApi + urlObs + (archived ? "?archived=true" : "");
   return axios
-    .get(url, { headers: { Authorization: `Bearer ${token}` } })
+    .get(url)
     .then((r) => r.data);
 };
 
-export const getObsStats = (token: string): Promise<ObsStats> =>
+export const getObsStats = (): Promise<ObsStats> =>
   axios
-    .get(urlApi + urlObs + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlObs + "stats")
     .then((r) => r.data);
 
-export const createObs = (data: ObsInterface, token: string): Promise<number> => {
+export const createObs = (data: ObsInterface): Promise<number> => {
   type ObsWithoutId = Omit<ObsInterface, "id">;
   const newData: ObsWithoutId = {
     name: data.name,
@@ -29,28 +29,28 @@ export const createObs = (data: ObsInterface, token: string): Promise<number> =>
     criticality: data.criticality ?? null,
   };
   return axios
-    .post(urlApi + urlObs, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlObs, newData)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const editObs = (data: ObsInterface, token: string): Promise<number> => {
+export const editObs = (data: ObsInterface): Promise<number> => {
   return axios
-    .put(urlApi + urlObs + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .put(urlApi + urlObs + data.id, data)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const deleteObs = (id: number, token: string): Promise<number> => {
+export const deleteObs = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlObs + id, { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlObs + id)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const desarchivarObs = (id: number, token: string): Promise<number> => {
+export const desarchivarObs = (id: number): Promise<number> => {
   return axios
-    .patch(urlApi + urlObs + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .patch(urlApi + urlObs + id + "/desarchivar", {})
     .then((response) => response.status)
     .catch(() => 400);
 };

@@ -16,22 +16,17 @@ export interface MatrizPermisos {
   permisos: Record<number, Permisos>;
 }
 
-export const getMatrizPermisos = (token: string): Promise<MatrizPermisos> =>
+export const getMatrizPermisos = (): Promise<MatrizPermisos> =>
   axios
-    .get(urlApi + "permisos", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + "permisos")
     .then((r) => r.data as MatrizPermisos);
 
 export const savePermisos = (
   id_rol: number,
   permisos: Partial<Record<Modulo, Partial<Record<Accion, boolean>>>>,
-  token: string,
 ): Promise<{ status: number; message?: string }> =>
   axios
-    .put(
-      urlApi + "permisos/" + id_rol,
-      { permisos },
-      { headers: { Authorization: `Bearer ${token}` } },
-    )
+    .put(urlApi + "permisos/" + id_rol, { permisos })
     .then((r) => ({ status: r.status }))
     .catch((e) => ({
       status: e.response?.status ?? 500,

@@ -81,7 +81,7 @@ export default function CiudadesPage() {
     if (!unarchiveTarget) return;
     setUnarchiving(true);
     try {
-      const result = await desarchivarCiudad(unarchiveTarget.id as number, sesion.token);
+      const result = await desarchivarCiudad(unarchiveTarget.id as number);
       if (result === 200) {
         toast.success("Ciudad desarchivada");
         setUnarchiveTarget(null);
@@ -99,7 +99,7 @@ export default function CiudadesPage() {
     if (!deleteCiudadTarget) return;
     setDeleting(true);
     try {
-      const result = await deleteCiudad(deleteCiudadTarget.id as number, sesion.token);
+      const result = await deleteCiudad(deleteCiudadTarget.id as number);
       if (result === 200) {
         toast.success("Ciudad archivada");
         setDeleteCiudadTarget(null);
@@ -114,19 +114,19 @@ export default function CiudadesPage() {
 
   const load = useCallback(() => {
     setLoading(true);
-    getCiudad(sesion.token)
+    getCiudad()
       .then((data) => setCiudades(data))
       .catch(() => { toast.error("Error al cargar las ciudades"); setCiudades(null); })
       .finally(() => setLoading(false));
-  }, [sesion.token]);
+  }, []);
 
   const loadArchived = useCallback(() => {
     setLoadingArchived(true);
-    getCiudad(sesion.token, true)
+    getCiudad(true)
       .then((data) => setArchivedCiudades(data))
       .catch(() => { toast.error("Error al cargar ciudades archivadas"); setArchivedCiudades(null); })
       .finally(() => setLoadingArchived(false));
-  }, [sesion.token]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 

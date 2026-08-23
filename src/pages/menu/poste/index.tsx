@@ -250,19 +250,19 @@ const PostePage = () => {
         const sortBy = sort.map(s => s.id);
         const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
         setLoading(true);
-        getPoste(sesion.token, { page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
+        getPoste({ page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar postes"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        exportPostes(sesion.token, true)
+        exportPostes(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar postes archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -272,13 +272,13 @@ const PostePage = () => {
 
     useEffect(() => {
         if (!canEdit) return;
-        Promise.all([getMaterial(sesion.token), getPropietario(sesion.token)])
+        Promise.all([getMaterial(), getPropietario()])
             .then(([mats, props]) => {
                 setMaterialList(mats ?? []);
                 setPropietarioList(props ?? []);
             })
             .catch(() => { /* silent: dropdowns just won't populate */ });
-    }, [sesion.token, canEdit]);
+    }, [canEdit]);
 
     const handleMaterialChange = useCallback(async (poste: PosteInterface, newMaterialId: number) => {
         if (!poste.id || poste.id_material === newMaterialId) return;
@@ -291,7 +291,7 @@ const PostePage = () => {
         ));
 
         const payload: PosteInterface = { ...poste, id_material: newMaterialId };
-        const res = await editPoste(payload, sesion.token);
+        const res = await editPoste(payload);
         setSavingMaterialIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
 
         if (Number(res.status) === 200 || Number(res.status) === 201) {
@@ -302,7 +302,7 @@ const PostePage = () => {
                 p.id === poste.id ? { ...p, id_material: poste.id_material, material: poste.material } : p
             ));
         }
-    }, [sesion.token, materialList]);
+    }, [materialList]);
 
     const handlePropietarioChange = useCallback(async (poste: PosteInterface, newPropId: number) => {
         if (!poste.id || poste.id_propietario === newPropId) return;
@@ -315,7 +315,7 @@ const PostePage = () => {
         ));
 
         const payload: PosteInterface = { ...poste, id_propietario: newPropId };
-        const res = await editPoste(payload, sesion.token);
+        const res = await editPoste(payload);
         setSavingPropietarioIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
 
         if (Number(res.status) === 200 || Number(res.status) === 201) {
@@ -326,25 +326,25 @@ const PostePage = () => {
                 p.id === poste.id ? { ...p, id_propietario: poste.id_propietario, propietario: poste.propietario } : p
             ));
         }
-    }, [sesion.token, propietarioList]);
+    }, [propietarioList]);
 
     const handleOpenEdit = useCallback(async (id: number) => {
         try {
-            const p = await searchPoste(id, sesion.token);
+            const p = await searchPoste(id);
             setSelectedPoste(p);
             setOpenEdit(true);
         } catch {
             toast.error("No se pudo cargar el poste");
         }
-    }, [sesion.token]);
+    }, []);
 
     const handleDelete = useCallback(async () => {
         if (!confirmDelete?.id) return;
         setDeleting(true);
         try {
-            const eventos = await getEvento_poste(confirmDelete.id as number, sesion.token);
+            const eventos = await getEvento_poste(confirmDelete.id as number);
             if (eventos.length > 0) { toast.error("No se puede archivar: tiene eventos asociados"); return; }
-            const res = await deletePoste(confirmDelete.id as number, sesion.token);
+            const res = await deletePoste(confirmDelete.id as number);
             if (Number(res) !== 200) { toast.error("No se pudo archivar"); return; }
             toast.success("Poste archivado");
             setConfirmDelete(null);
@@ -354,13 +354,13 @@ const PostePage = () => {
         } finally {
             setDeleting(false);
         }
-    }, [confirmDelete, sesion.token, load]);
+    }, [confirmDelete, load]);
 
     const handleUnarchive = async () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarPoste(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarPoste(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Poste desarchivado");
                 setUnarchiveTarget(null);
@@ -693,15 +693,15 @@ const PostePage = () => {
                                 <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportExcel)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportExcel)}>
                                     <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
                                     Excel (.xlsx)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportCsv)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportCsv)}>
                                     <FileTextIcon className="h-4 w-4 text-blue-500" />
                                     CSV
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes(sesion.token).then(exportPdf)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportPdf)}>
                                     <FileIcon className="h-4 w-4 text-red-500" />
                                     PDF
                                 </DropdownMenuItem>

@@ -1,6 +1,5 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SesionContext } from "../../../context/SesionContext";
 import { getTiemposResumen, TiempoTramoRow } from "../../../api/reporte.api";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -15,7 +14,6 @@ const diasColor = (d: number) =>
   d <= 1 ? "text-green-600" : d <= 7 ? "text-amber-600" : "text-red-600";
 
 const ReportTiemposSec = () => {
-  const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
@@ -30,7 +28,7 @@ const ReportTiemposSec = () => {
     const fin    = new Date(fechaFin);    fin.setHours(23, 59, 59, 0);
     setLoading(true);
     try {
-      const data = await getTiemposResumen({ fechaInicial: inicio, fechaFinal: fin }, sesion.token);
+      const data = await getTiemposResumen({ fechaInicial: inicio, fechaFinal: fin });
       setTramos(data);
       setGenerated(true);
       if (data.length === 0) toast.warning("No hay eventos resueltos en el período");

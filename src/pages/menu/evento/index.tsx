@@ -257,19 +257,19 @@ const EventoPage = () => {
         const sortBy = sort.map(s => s.id);
         const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
         setLoading(true);
-        getEvento(sesion.token, { page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
+        getEvento({ page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar eventos"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        exportEventos(sesion.token, true)
+        exportEventos(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar eventos archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -287,7 +287,7 @@ const EventoPage = () => {
         ));
 
         const payload: EventoInterface = { ...evento, priority: newPriority };
-        const res = await editEvento(payload, sesion.token);
+        const res = await editEvento(payload);
         setSavingPriorityIds((prev) => { const next = new Set(prev); next.delete(evento.id as number); return next; });
 
         if (Number(res.status) === 200 || Number(res.status) === 201) {
@@ -298,12 +298,12 @@ const EventoPage = () => {
                 e.id === evento.id ? { ...e, priority: evento.priority } : e
             ));
         }
-    }, [sesion.token]);
+    }, []);
 
     const handleDelete = async () => {
         if (!deleteId) return;
         setDeleting(true);
-        const status = await deleteEvento(deleteId, sesion.token);
+        const status = await deleteEvento(deleteId);
         setDeleting(false);
         setDeleteId(null);
         if (status === 200) {
@@ -318,7 +318,7 @@ const EventoPage = () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarEvento(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarEvento(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Evento desarchivado");
                 setUnarchiveTarget(null);
@@ -684,15 +684,15 @@ const EventoPage = () => {
                                 <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportExcel)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportExcel)}>
                                     <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
                                     Excel (.xlsx)
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportCsv)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportCsv)}>
                                     <FileTextIcon className="h-4 w-4 text-blue-500" />
                                     CSV
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos(sesion.token).then(exportPdf)}>
+                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportPdf)}>
                                     <FileIcon className="h-4 w-4 text-red-500" />
                                     PDF
                                 </DropdownMenuItem>
@@ -777,7 +777,7 @@ const EventoPage = () => {
                             onClick={async () => {
                                 if (!reabrirId) return;
                                 setReabriendo(true);
-                                const status = await reabrirEvento(reabrirId, sesion.token);
+                                const status = await reabrirEvento(reabrirId);
                                 setReabriendo(false);
                                 if (status === 200) {
                                     toast.success("Evento reabierto");

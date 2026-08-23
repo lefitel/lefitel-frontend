@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../../context/SesionContext";
 import { searchPoste } from "../../../../api/Poste.api";
 import { getEvento_poste, reabrirEvento as reabrirEventoApi } from "../../../../api/Evento.api";
 import { EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
@@ -39,7 +38,6 @@ export interface PosteDetalleData {
 }
 
 export function usePosteDetalleData(id: number): PosteDetalleData {
-  const { sesion } = useContext(SesionContext);
   const [poste, setPoste] = useState<PosteInterface | null>(null);
   const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
   const [eventos, setEventos] = useState<EventoInterface[]>([]);
@@ -55,8 +53,8 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
     setLoading(true);
     try {
       const [p, e] = await Promise.all([
-        searchPoste(id, sesion.token),
-        getEvento_poste(id, sesion.token),
+        searchPoste(id),
+        getEvento_poste(id),
       ]);
       setPoste(p);
       setDataPoste(p);
@@ -66,7 +64,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id, sesion.token]);
+  }, [id]);
 
   useEffect(() => {
     setPoste(null);
@@ -75,7 +73,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
   }, [load]);
 
   const reabrirEvento = async (evento: EventoInterface) => {
-    const status = await reabrirEventoApi(evento.id as number, sesion.token);
+    const status = await reabrirEventoApi(evento.id as number);
     if (status === 200) {
       toast.success("Evento reabierto");
       await load();

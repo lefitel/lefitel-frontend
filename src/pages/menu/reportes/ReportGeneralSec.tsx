@@ -1,9 +1,8 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { ColumnDef } from "@tanstack/react-table";
 
-import { SesionContext } from "../../../context/SesionContext";
 import { getReporteGeneral } from "../../../api/reporte.api";
 import { getCiudad } from "../../../api/Ciudad.api";
 import { CiudadInterface, EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
@@ -47,14 +46,13 @@ const getRowBg = (row: EventoInterface): string => {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ReportGeneralSec = () => {
-  const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal, setTramoFinal] = useState<number | null>(null);
   const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
-  const neighbors = useTramoNeighbors(sesion.token);
+  const neighbors = useTramoNeighbors();
   const [estado, setEstado] = useState<"todos" | "pendiente" | "solucionado">("todos");
   const [prioridad, setPrioridad] = useState<"todos" | "si" | "no">("todos");
   const [criticidad, setCriticidad] = useState<"todos" | "criticas" | "altas" | "medias" | "bajas" | "sin">("todos");
@@ -65,8 +63,8 @@ const ReportGeneralSec = () => {
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
-    getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
-  }, [sesion.token]);
+    getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+  }, []);
 
   useEffect(() => {
     if (tramoInicial && tramoFinal && neighbors.size > 0) {
@@ -85,7 +83,7 @@ const ReportGeneralSec = () => {
 
     setLoading(true);
     try {
-      let data = await getReporteGeneral(filtro, sesion.token);
+      let data = await getReporteGeneral(filtro);
 
       if (tramoInicial && tramoFinal)
         data = data.filter((e) =>

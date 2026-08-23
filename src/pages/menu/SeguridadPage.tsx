@@ -314,19 +314,19 @@ const SeguridadPage = () => {
 
     const load = useCallback(() => {
         setLoading(true);
-        getUsuario(sesion.token)
+        getUsuario()
             .then((data) => setList(data ?? []))
             .catch(() => { toast.error("Error al cargar usuarios"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getUsuario(sesion.token, true)
+        getUsuario(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar usuarios archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -337,7 +337,7 @@ const SeguridadPage = () => {
     const handleDelete = async () => {
         if (!deleteTarget?.id) return;
         setDeleting(true);
-        const result = await deleteUsuario(deleteTarget.id as number, sesion.token);
+        const result = await deleteUsuario(deleteTarget.id as number);
         if (Number(result) === 200) {
             toast.success("Usuario archivado");
             setDeleteTarget(null);
@@ -352,7 +352,7 @@ const SeguridadPage = () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarUsuario(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarUsuario(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Usuario desarchivado");
                 setUnarchiveTarget(null);

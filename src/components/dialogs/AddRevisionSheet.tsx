@@ -1,6 +1,5 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../context/SesionContext";
 import { createRevision } from "../../api/Revision.api";
 import { DatePicker } from "../ui/date-picker";
 import { Loader2Icon } from "lucide-react";
@@ -19,7 +18,6 @@ interface Props {
 }
 
 export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }: Props) {
-    const { sesion } = useContext(SesionContext);
     const [description, setDescription] = useState("");
     const [date, setDate] = useState<Date>(new Date());
     const [saving, setSaving] = useState(false);
@@ -39,7 +37,7 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
         if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
         setSaving(true);
         try {
-            const status = await createRevision({ description, date, id_evento: eventoId }, sesion.token);
+            const status = await createRevision({ description, date, id_evento: eventoId });
             if (status !== 200) {
                 /**
                  * Anything but 200 leaves the sheet open with the text still in it.

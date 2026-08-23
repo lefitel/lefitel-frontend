@@ -95,7 +95,6 @@ const InicioPage = () => {
           mapMarkers={d.mapMarkers}
           mapTab={d.mapTab}
           setMapTab={d.setMapTab}
-          token={d.token}
           load={d.load}
           setOpenEditPoste={d.setOpenEditPoste}
           setDataPoste={d.setDataPoste}

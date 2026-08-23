@@ -50,29 +50,29 @@ const TipoObsSec = ({ innerTab }: Props) => {
 
     const loadStats = useCallback(() => {
         setStatsLoading(true);
-        getTipoObsStats(sesion.token)
+        getTipoObsStats()
             .then(setStats)
             .catch(() => setStats(null))
             .finally(() => setStatsLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
-        getTipoObs(sesion.token)
+        getTipoObs()
             .then((data) => setList(data ?? []))
             .catch(() => { toast.error("Error al cargar tipos de observación"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getTipoObs(sesion.token, true)
+        getTipoObs(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar tipos archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -84,7 +84,7 @@ const TipoObsSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarTipoObs(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarTipoObs(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Tipo de observación desarchivado");
                 setUnarchiveTarget(null);
@@ -118,7 +118,7 @@ const TipoObsSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: TipoObsInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editTipoObs(payload, sesion.token) : createTipoObs(payload, sesion.token));
+        const result = await (selected?.id ? editTipoObs(payload) : createTipoObs(payload));
         if (Number(result) === 200 || Number(result) === 201) {
             toast.success(selected?.id ? "Tipo de observación actualizado" : "Tipo de observación creado");
             handleClose();
@@ -133,7 +133,7 @@ const TipoObsSec = ({ innerTab }: Props) => {
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteTipoObs(selected.id as number, sesion.token);
+        const result = await deleteTipoObs(selected.id as number);
         if (Number(result) === 200) {
             toast.success("Tipo de observación archivado");
             setDeleteOpen(false);

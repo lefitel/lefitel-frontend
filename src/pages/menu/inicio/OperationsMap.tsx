@@ -22,14 +22,13 @@ interface OperationsMapProps {
   mapMarkers: MapMarker[];
   mapTab: MapTab;
   setMapTab: (t: MapTab) => void;
-  token: string;
   load: () => void;
   setOpenEditPoste: (v: boolean) => void;
   setDataPoste: (p: PosteInterface) => void;
 }
 
 export function OperationsMap({
-  mapMarkers, mapTab, setMapTab, token, load,
+  mapMarkers, mapTab, setMapTab, load,
   setOpenEditPoste, setDataPoste,
 }: OperationsMapProps) {
   const navigate = useNavigate();
@@ -170,7 +169,7 @@ export function OperationsMap({
                             <button
                               style={{ flex: 1, padding: "7px 0", borderRadius: 6, background: "var(--primary)", color: "#fff", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                               onClick={async () => {
-                                if (m.item.id) { setOpenEditPoste(true); setDataPoste(await searchPoste(m.item.id, token)); }
+                                if (m.item.id) { setOpenEditPoste(true); setDataPoste(await searchPoste(m.item.id)); }
                               }}
                             >
                               Editar

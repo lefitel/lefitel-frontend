@@ -495,7 +495,6 @@ describe("the list of saved reports", () => {
     expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
     // The second page is asked for by offset, not fetched from the start again.
     expect(api.getReportesGuardados).toHaveBeenLastCalledWith(
-      expect.anything(),
       expect.objectContaining({ offset: 1 }),
     );
   });

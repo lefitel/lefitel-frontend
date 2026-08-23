@@ -8,44 +8,44 @@ export interface AdssStats {
   empty: number;
 }
 
-export const getAdss = (token: string, archived = false): Promise<AdssInterface[]> => {
+export const getAdss = (archived = false): Promise<AdssInterface[]> => {
   const url = urlApi + urlAdss + (archived ? "?archived=true" : "");
   return axios
-    .get(url, { headers: { Authorization: `Bearer ${token}` } })
+    .get(url)
     .then((r) => r.data)
     .catch(() => []);
 };
 
-export const getAdssStats = (token: string): Promise<AdssStats> =>
+export const getAdssStats = (): Promise<AdssStats> =>
   axios
-    .get(urlApi + urlAdss + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlAdss + "stats")
     .then((r) => r.data);
 
-export const createAdss = (data: AdssInterface, token: string): Promise<number> => {
+export const createAdss = (data: AdssInterface): Promise<number> => {
   const newData: AdssInterface = { name: data.name, description: data.description };
   return axios
-    .post(urlApi + urlAdss, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlAdss, newData)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const editAdss = (data: AdssInterface, token: string): Promise<number> => {
+export const editAdss = (data: AdssInterface): Promise<number> => {
   return axios
-    .put(urlApi + urlAdss + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .put(urlApi + urlAdss + data.id, data)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const deleteAdss = (id: number, token: string): Promise<number> => {
+export const deleteAdss = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlAdss + id, { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlAdss + id)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const desarchivarAdss = (id: number, token: string): Promise<number> => {
+export const desarchivarAdss = (id: number): Promise<number> => {
   return axios
-    .patch(urlApi + urlAdss + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .patch(urlApi + urlAdss + id + "/desarchivar", {})
     .then((response) => response.status)
     .catch(() => 400);
 };

@@ -3,19 +3,15 @@ import { urlRevision, urlApi } from "./url";
 import { RevisionInterface } from "../interfaces/interfaces";
 
 export const getRevision = (
-  id_evento: number,
-  token: string
+  id_evento: number
 ): Promise<RevisionInterface[]> => {
   return axios
-    .get(urlApi + urlRevision + id_evento, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .get(urlApi + urlRevision + id_evento)
     .then((r) => r.data);
 };
 
 export const createRevision = (
-  data: RevisionInterface,
-  token: string
+  data: RevisionInterface
 ): Promise<number> => {
   const newData: RevisionInterface = {
     description: data.description,
@@ -24,9 +20,7 @@ export const createRevision = (
   };
 
   return axios
-    .post(urlApi + urlRevision, newData, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .post(urlApi + urlRevision, newData)
     .then((response) => {
       return response.status;
     })

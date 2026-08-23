@@ -117,7 +117,7 @@ const ReportRecorridoSec = () => {
     const [tramoInicial, setTramoInicial] = useState<number | null>(null);
     const [tramoFinal, setTramoFinal] = useState<number | null>(null);
     const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
-    const neighbors = useTramoNeighbors(sesion.token);
+    const neighbors = useTramoNeighbors();
     const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
     const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -131,8 +131,8 @@ const ReportRecorridoSec = () => {
     const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
 
     useEffect(() => {
-        getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
-    }, [sesion.token]);
+        getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+    }, []);
 
     useEffect(() => {
         if (tramoInicial && tramoFinal && neighbors.size > 0) {
@@ -154,8 +154,8 @@ const ReportRecorridoSec = () => {
         setLoading(true);
         try {
             const [data, postesTramo] = await Promise.all([
-                getReporteRecorrido(filtro, sesion.token),
-                getPosteByTramo(tramoInicial, tramoFinal, sesion.token),
+                getReporteRecorrido(filtro),
+                getPosteByTramo(tramoInicial, tramoFinal),
             ]);
 
             const a = listCiudad.find((c) => c.id === tramoInicial)!;

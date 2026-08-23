@@ -1,6 +1,5 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SesionContext } from "../../../context/SesionContext";
 import { getEstadoRed, EstadoRedRow } from "../../../api/reporte.api";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -19,7 +18,6 @@ const saludColor = (pct: number) => {
 };
 
 const ReportEstadoRedSec = () => {
-  const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
@@ -40,7 +38,7 @@ const ReportEstadoRedSec = () => {
         filtro.fechaInicial = inicio;
         filtro.fechaFinal   = fin;
       }
-      const data = await getEstadoRed(filtro, sesion.token);
+      const data = await getEstadoRed(filtro);
       setTramos(data);
       setGenerated(true);
       if (data.length === 0) toast.warning("No hay tramos registrados");

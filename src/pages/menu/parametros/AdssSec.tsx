@@ -50,29 +50,29 @@ const AdssSec = ({ innerTab }: Props) => {
 
     const loadStats = useCallback(() => {
         setStatsLoading(true);
-        getAdssStats(sesion.token)
+        getAdssStats()
             .then(setStats)
             .catch(() => setStats(null))
             .finally(() => setStatsLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
-        getAdss(sesion.token)
+        getAdss()
             .then((data) => setList(data ?? []))
             .catch(() => { toast.error("Error al cargar ADSS"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getAdss(sesion.token, true)
+        getAdss(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar ADSS archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -84,7 +84,7 @@ const AdssSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarAdss(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarAdss(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("ADSS desarchivado");
                 setUnarchiveTarget(null);
@@ -118,7 +118,7 @@ const AdssSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: AdssInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editAdss(payload, sesion.token) : createAdss(payload, sesion.token));
+        const result = await (selected?.id ? editAdss(payload) : createAdss(payload));
         if (Number(result) === 200) {
             toast.success(selected?.id ? "ADSS actualizado" : "ADSS creado");
             handleClose();
@@ -133,7 +133,7 @@ const AdssSec = ({ innerTab }: Props) => {
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteAdss(selected.id as number, sesion.token);
+        const result = await deleteAdss(selected.id as number);
         if (Number(result) === 200) {
             toast.success("ADSS archivado");
             setDeleteOpen(false);

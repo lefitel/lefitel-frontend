@@ -75,12 +75,12 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
 
     if (isEditing && eventoId) {
       Promise.all([
-        searchEvento(eventoId, sesion.token),
-        getRevision(eventoId, sesion.token),
-        getSolucion_evento(eventoId, sesion.token).catch(() => null),
-        getEventoObs(eventoId, sesion.token),
-        getObs(sesion.token),
-        getTipoObs(sesion.token),
+        searchEvento(eventoId),
+        getRevision(eventoId),
+        getSolucion_evento(eventoId).catch(() => null),
+        getEventoObs(eventoId),
+        getObs(),
+        getTipoObs(),
       ])
         .then(([ev, revs, sol, evObs, obs, tipos]) => {
           setEvento(ev);
@@ -95,7 +95,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
         .catch(() => toast.error("Error al cargar el evento"))
         .finally(() => setLoading(false));
     } else {
-      Promise.all([getObs(sesion.token), getTipoObs(sesion.token)])
+      Promise.all([getObs(), getTipoObs()])
         .then(([obs, tipos]) => {
           setListObs(obs);
           setListTipoObs(tipos);
@@ -141,18 +141,17 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
         if (!evento?.id) return;
         let imagePath = evento.image;
         if (imageFile) {
-          const r = await uploadImage(imageFile, sesion.token);
+          const r = await uploadImage(imageFile);
           if (r === "500") { toast.error("No se pudo subir la imagen"); return; }
           imagePath = r;
         }
         const result = await editEvento(
-          { ...evento, description, priority, image: imagePath, id_usuario: evento.id_usuario ?? sesion.usuario.id ?? 0, obs_ids: selectedObs },
-          sesion.token
+          { ...evento, description, priority, image: imagePath, id_usuario: evento.id_usuario ?? sesion.usuario.id ?? 0, obs_ids: selectedObs }
         );
         if (result.status !== 200) { toast.error("No se pudo guardar el evento"); return; }
         toast.success("Evento actualizado");
       } else {
-        const uploadResult = await uploadImage(imageFile!, sesion.token);
+        const uploadResult = await uploadImage(imageFile!);
         if (uploadResult === "500") { toast.error("No se pudo subir la imagen"); return; }
         const result = await createEvento(
           {
@@ -165,8 +164,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
             id_usuario: sesion.usuario.id ?? 0,
             obs_ids: selectedObs,
             revision: { description: revDesc, date: revDate },
-          },
-          sesion.token
+          }
         );
         if (result.status !== 200 && result.status !== 201) { toast.error("No se pudo crear el evento"); return; }
         toast.success("Evento creado");

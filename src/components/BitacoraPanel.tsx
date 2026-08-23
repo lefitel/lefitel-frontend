@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { SesionContext } from "../context/SesionContext";
 import { getAllBitacora } from "../api/Bitacora.api";
 import { BitacoraInterface } from "../interfaces/interfaces";
 import { ACTION_LABELS } from "../constants/bitacora";
@@ -187,7 +186,6 @@ interface Props {
 }
 
 export default function BitacoraPanel({ entity, entityId }: Props) {
-  const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
   const [entries, setEntries] = useState<BitacoraInterface[]>([]);
   const [loading, setLoading] = useState(false);
@@ -195,11 +193,11 @@ export default function BitacoraPanel({ entity, entityId }: Props) {
   useEffect(() => {
     if (!entityId) return;
     setLoading(true);
-    getAllBitacora({ entity, entity_id: entityId }, sesion.token)
+    getAllBitacora({ entity, entity_id: entityId })
       .then((r) => setEntries(r.data))
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [entity, entityId, sesion.token]);
+  }, [entity, entityId]);
 
   if (loading) {
     return (

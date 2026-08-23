@@ -20,11 +20,10 @@ export interface GetEventoParams {
   filters?: { column: string; value: string }[];
 }
 
-export const getEvento = (token: string, params: GetEventoParams = {}): Promise<EventoPaginatedResponse> => {
+export const getEvento = (params: GetEventoParams = {}): Promise<EventoPaginatedResponse> => {
   const { archived, filters, ...rest } = params;
   return axios
     .get(urlApi + urlEvento, {
-      headers: { Authorization: `Bearer ${token}` },
       params: {
         ...(archived ? { archived: true } : {}),
         ...(filters?.length ? {
@@ -37,32 +36,26 @@ export const getEvento = (token: string, params: GetEventoParams = {}): Promise<
     .then((r) => r.data);
 };
 
-export const exportEventos = (token: string, archived = false): Promise<EventoInterface[]> =>
+export const exportEventos = (archived = false): Promise<EventoInterface[]> =>
   axios
     .get(urlApi + urlEvento, {
-      headers: { Authorization: `Bearer ${token}` },
       params: { export: true, ...(archived ? { archived: true } : {}) },
     })
     .then((r) => r.data);
 
-export const getEvento_usuario = (id_usuario: number, token: string): Promise<EventoInterface[]> =>
+export const getEvento_usuario = (id_usuario: number): Promise<EventoInterface[]> =>
   axios
-    .get(urlApi + urlEvento + "usuario/" + id_usuario, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .get(urlApi + urlEvento + "usuario/" + id_usuario)
     .then((r) => r.data);
 
-export const getEvento_poste = (id_poste: number, token: string): Promise<EventoInterface[]> => {
+export const getEvento_poste = (id_poste: number): Promise<EventoInterface[]> => {
   return axios
-    .get(urlApi + urlEvento + urlPoste + id_poste, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .get(urlApi + urlEvento + urlPoste + id_poste)
     .then((r) => r.data);
 };
 
 export const createEvento = (
-  data: EventoInterface,
-  token: string
+  data: EventoInterface
 ): Promise<{ status: number; data: EventoInterface }> => {
   type EventoWithoutId = Omit<EventoInterface, "id">;
   const newData: EventoWithoutId = {
@@ -77,53 +70,51 @@ export const createEvento = (
     ...(data.revision ? { revision: data.revision } : {}),
   };
   return axios
-    .post(urlApi + urlEvento, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlEvento, newData)
     .then((response) => ({ status: response.status, data: response.data }))
     .catch(() => ({ status: 400, data: eventoExample }));
 };
 
-export const searchEvento = (dataId: number, token: string): Promise<EventoInterface> => {
+export const searchEvento = (dataId: number): Promise<EventoInterface> => {
   return axios
-    .get(urlApi + urlEvento + dataId, { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlEvento + dataId)
     .then((response) => response.data as EventoInterface);
 };
 
 export const editEvento = (
-  data: EventoInterface,
-  token: string
+  data: EventoInterface
 ): Promise<{ status: number; data: EventoInterface }> => {
   return axios
-    .put(urlApi + urlEvento + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .put(urlApi + urlEvento + data.id, data)
     .then((response) => ({ status: response.status, data: response.data }))
     .catch(() => ({ status: 400, data: eventoExample }));
 };
 
-export const reabrirEvento = (id: number, token: string): Promise<number> =>
+export const reabrirEvento = (id: number): Promise<number> =>
   axios
-    .post(urlApi + urlEvento + id + "/reabrir", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlEvento + id + "/reabrir", {})
     .then((r) => r.status)
     .catch(() => 400);
 
 export const resolverEvento = (
   id: number,
-  data: { description: string; date: Date; image: string },
-  token: string
+  data: { description: string; date: Date; image: string }
 ): Promise<number> =>
   axios
-    .post(urlApi + urlEvento + id + "/resolver", data, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlEvento + id + "/resolver", data)
     .then((r) => r.status)
     .catch(() => 400);
 
-export const deleteEvento = (id: number, token: string): Promise<number> => {
+export const deleteEvento = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlEvento + id, { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlEvento + id)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const desarchivarEvento = (id: number, token: string): Promise<number> => {
+export const desarchivarEvento = (id: number): Promise<number> => {
   return axios
-    .patch(urlApi + urlEvento + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .patch(urlApi + urlEvento + id + "/desarchivar", {})
     .then((response) => response.status)
     .catch(() => 400);
 };

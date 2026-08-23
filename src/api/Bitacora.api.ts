@@ -4,13 +4,11 @@ import { BitacoraInterface } from "../interfaces/interfaces";
 
 export const getBitacora = (
   id_usuario: number,
-  token: string,
   limit = 50
 ): Promise<BitacoraInterface[]> =>
   axios
     .get(urlApi + urlBitacora + id_usuario, {
       params: { limit },
-      headers: { Authorization: `Bearer ${token}` },
     })
     .then((r) => r.data);
 
@@ -29,12 +27,10 @@ export interface BitacoraFilters {
 }
 
 export const getAllBitacora = (
-  filters: BitacoraFilters,
-  token: string
+  filters: BitacoraFilters
 ): Promise<{ data: BitacoraInterface[]; total: number }> =>
   axios
     .get(urlApi + urlBitacora, {
       params: filters,
-      headers: { Authorization: `Bearer ${token}` },
     })
     .then((r) => r.data);

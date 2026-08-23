@@ -85,11 +85,11 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
 
     if (isEditing && poste?.id) {
       Promise.all([
-        getAdss(sesion.token),
-        getCiudad(sesion.token),
-        getMaterial(sesion.token),
-        getPropietario(sesion.token),
-        getAdssPoste(poste.id as number, sesion.token),
+        getAdss(),
+        getCiudad(),
+        getMaterial(),
+        getPropietario(),
+        getAdssPoste(poste.id as number),
       ])
         .then(([adss, ciudades, materiales, propietarios, adssP]) => {
           setLists(adss, ciudades, materiales, propietarios);
@@ -101,10 +101,10 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       setData({ ...posteExample });
       setAdssSelected([]);
       Promise.all([
-        getAdss(sesion.token),
-        getCiudad(sesion.token),
-        getMaterial(sesion.token),
-        getPropietario(sesion.token),
+        getAdss(),
+        getCiudad(),
+        getMaterial(),
+        getPropietario(),
       ])
         .then(([adss, ciudades, materiales, propietarios]) => {
           setLists(adss, ciudades, materiales, propietarios);
@@ -113,7 +113,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
         .finally(() => setLoadingData(false));
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, poste?.id, sesion.token]);
+  }, [open, poste?.id]);
 
   useEffect(() => {
     if (!open || !isEditing || !listCiudad.length || !poste?.id_ciudadA || !poste?.id_ciudadB) return;
@@ -124,7 +124,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     setTramoPostes([]);
     setRoutePath([]);
 
-    getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB, sesion.token)
+    getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB)
       .then((postes) => {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
@@ -180,18 +180,18 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       let payload = { ...data, adss_ids: adssSelected };
 
       if (imageFile) {
-        const imageUrl = await uploadImage(imageFile, sesion.token);
+        const imageUrl = await uploadImage(imageFile);
         if (!imageUrl || imageUrl === "500") { toast.error("No se pudo subir la imagen"); return; }
         payload = { ...payload, image: imageUrl };
       }
 
       if (isEditing) {
-        const res = await editPoste(payload, sesion.token);
+        const res = await editPoste(payload);
         if (Number(res.status) !== 200) { toast.error("No se pudo guardar"); return; }
         toast.success("Poste actualizado");
       } else {
         payload = { ...payload, id_usuario: sesion.usuario.id ?? 0 };
-        const res = await createPoste(payload, sesion.token);
+        const res = await createPoste(payload);
         if (Number(res.status) !== 200) { toast.error("No se pudo crear el poste"); return; }
         toast.success("Poste creado correctamente");
       }

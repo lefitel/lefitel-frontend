@@ -1,7 +1,6 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ColumnDef, SortingState } from "@tanstack/react-table";
-import { SesionContext } from "../../../context/SesionContext";
 import { getAllBitacora, BitacoraFilters } from "../../../api/Bitacora.api";
 import { getUsuario } from "../../../api/Usuario.api";
 import { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
@@ -177,7 +176,6 @@ const DROPDOWN_TRIGGER_CLS =
   "flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 const BitacoraPage = () => {
-  const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
 
   const [usuarios,  setUsuarios]  = useState<UsuarioInterface[]>([]);
@@ -194,8 +192,8 @@ const BitacoraPage = () => {
   const [loading,  setLoading]  = useState(false);
 
   useEffect(() => {
-    getUsuario(sesion.token).then(setUsuarios).catch(() => {});
-  }, [sesion.token]);
+    getUsuario().then(setUsuarios).catch(() => {});
+  }, []);
 
   const usuarioOptions = useMemo(() => [
     { value: "all", label: "Todos" },
@@ -229,7 +227,7 @@ const BitacoraPage = () => {
     if (actionRef.current   !== "all") params.action      = actionRef.current;
     if (userIdRef.current   !== "all") params.id_usuario  = Number(userIdRef.current);
     try {
-      const r = await getAllBitacora(params, sesion.token);
+      const r = await getAllBitacora(params);
       setRows(r.data);
       setTotal(r.total);
     } catch {
@@ -238,7 +236,7 @@ const BitacoraPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [sesion.token]);
+  }, []);
 
   const filtersKey = useMemo(
     () => [from?.toDateString(), to?.toDateString(), entity, severity, action, userId].join("|"),

@@ -95,7 +95,7 @@ const FilesPage = () => {
 
   const load = () => {
     setLoading(true);
-    getOrphanFiles(sesion.token)
+    getOrphanFiles()
       .then(setFiles)
       .catch(() => toast.error("No se pudo cargar el directorio de archivos"))
       .finally(() => setLoading(false));
@@ -104,11 +104,11 @@ const FilesPage = () => {
   const loadStats = () => {
     setStatsLoading(true);
     setBrokenLoading(true);
-    getEntityImageStats(sesion.token)
+    getEntityImageStats()
       .then(setEntityStats)
       .catch(() => toast.error("No se pudo cargar estadísticas de entidades"))
       .finally(() => setStatsLoading(false));
-    getBrokenImageRefs(sesion.token)
+    getBrokenImageRefs()
       .then(setBrokenRefs)
       .catch(() => toast.error("No se pudo cargar referencias rotas"))
       .finally(() => setBrokenLoading(false));
@@ -117,7 +117,7 @@ const FilesPage = () => {
   const handleClearBroken = async () => {
     setClearingBroken(true);
     try {
-      const { cleared } = await clearBrokenImageRefs(sesion.token);
+      const { cleared } = await clearBrokenImageRefs();
       toast.success(`${cleared} referencia${cleared !== 1 ? "s" : ""} limpiada${cleared !== 1 ? "s" : ""}`);
       setClearBrokenDialogOpen(false);
       loadStats();
@@ -136,7 +136,7 @@ const FilesPage = () => {
 
   const handleDeleteFile = async (name: string) => {
     setDeletingName(name);
-    await deleteFile(name, sesion.token);
+    await deleteFile(name);
     setFiles((prev) => prev.filter((f) => f.name !== name));
     setDeletingName(null);
     setFileToDelete(null);
@@ -144,7 +144,7 @@ const FilesPage = () => {
 
   const handleDeleteOrphans = async () => {
     setDeletingOrphans(true);
-    await deleteOrphanFiles(sesion.token);
+    await deleteOrphanFiles();
     setDeletingOrphans(false);
     setOrphansDialogOpen(false);
     load();

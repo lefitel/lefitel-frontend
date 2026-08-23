@@ -1,10 +1,9 @@
-import { useContext, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { MapContainer, useMapEvent } from "react-leaflet";
 import { SonarMarker } from "../../map/SonarMarker";
 import ThemedTileLayer from "../../map/ThemedTileLayer";
 import MapSearch from "../../map/MapSearch";
-import { SesionContext } from "../../../context/SesionContext";
 import { createCiudad, editCiudad } from "../../../api/Ciudad.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { url } from "../../../api/url";
@@ -31,7 +30,6 @@ function LocationPicker({ onPick }: { onPick: (lat: number, lng: number) => void
 
 export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props) {
   const isEditing = !!ciudad;
-  const { sesion } = useContext(SesionContext);
   const [name, setName] = useState("");
   const [lat, setLat] = useState(0);
   const [lng, setLng] = useState(0);
@@ -70,13 +68,13 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
     try {
       let imagePath = ciudad?.image ?? "";
       if (imageFile) {
-        const r = await uploadImage(imageFile, sesion.token);
+        const r = await uploadImage(imageFile);
         if (r === "500") { toast.error("Error al subir la imagen"); return; }
         imagePath = r;
       }
 
       if (isEditing) {
-        const result = await editCiudad({ ...ciudad!, name, lat, lng, image: imagePath }, sesion.token);
+        const result = await editCiudad({ ...ciudad!, name, lat, lng, image: imagePath });
         if (result === 200) {
           toast.success("Ciudad actualizada");
           handleClose();
@@ -85,7 +83,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
           toast.error("No se pudo guardar los cambios");
         }
       } else {
-        const result = await createCiudad({ name, image: imagePath, lat, lng }, sesion.token);
+        const result = await createCiudad({ name, image: imagePath, lat, lng });
         if (Number(result) === 200) {
           toast.success("Ciudad creada");
           handleClose();

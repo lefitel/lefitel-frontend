@@ -1,6 +1,5 @@
-import { useContext, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../context/SesionContext";
 import { resolverEvento } from "../../api/Evento.api";
 import { uploadImage } from "../../api/Upload.api";
 import { EventoInterface } from "../../interfaces/interfaces";
@@ -22,7 +21,6 @@ interface Props {
 }
 
 export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }: Props) {
-  const { sesion } = useContext(SesionContext);
   const [description, setDescription] = useState("");
   const [date, setDate] = useState<Date>(new Date());
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -46,7 +44,7 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
     try {
       let imagePath = "";
       if (imageFile) {
-        const uploadResult = await uploadImage(imageFile, sesion.token);
+        const uploadResult = await uploadImage(imageFile);
         if (uploadResult === "500") {
           toast.error("No se pudo subir la imagen");
           setSaving(false);
@@ -57,8 +55,7 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
 
       const status = await resolverEvento(
         evento.id as number,
-        { description, date, image: imagePath },
-        sesion.token
+        { description, date, image: imagePath }
       );
       if (status === 200) {
         toast.success("Evento resuelto");

@@ -50,29 +50,29 @@ const MaterialSec = ({ innerTab }: Props) => {
 
     const loadStats = useCallback(() => {
         setStatsLoading(true);
-        getMaterialStats(sesion.token)
+        getMaterialStats()
             .then(setStats)
             .catch(() => setStats(null))
             .finally(() => setStatsLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
-        getMaterial(sesion.token)
+        getMaterial()
             .then((data) => setList(data ?? []))
             .catch(() => { toast.error("Error al cargar materiales"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getMaterial(sesion.token, true)
+        getMaterial(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar materiales archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -84,7 +84,7 @@ const MaterialSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarMaterial(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarMaterial(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Material desarchivado");
                 setUnarchiveTarget(null);
@@ -118,7 +118,7 @@ const MaterialSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: MaterialInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editMaterial(payload, sesion.token) : createMaterial(payload, sesion.token));
+        const result = await (selected?.id ? editMaterial(payload) : createMaterial(payload));
         if (Number(result) === 200 || Number(result) === 201) {
             toast.success(selected?.id ? "Material actualizado" : "Material creado");
             handleClose();
@@ -133,7 +133,7 @@ const MaterialSec = ({ innerTab }: Props) => {
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteMaterial(selected.id as number, sesion.token);
+        const result = await deleteMaterial(selected.id as number);
         if (Number(result) === 200) {
             toast.success("Material archivado");
             setDeleteOpen(false);

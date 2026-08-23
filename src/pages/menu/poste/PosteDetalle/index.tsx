@@ -43,7 +43,7 @@ export default function PosteDetallePage() {
     const b = d.poste.ciudadB;
     if (!a?.lat || !a?.lng || !b?.lat || !b?.lng || !d.poste.lat || !d.poste.lng) return;
 
-    getPosteByTramo(d.poste.id_ciudadA, d.poste.id_ciudadB, sesion.token)
+    getPosteByTramo(d.poste.id_ciudadA, d.poste.id_ciudadB)
       .then((postes) => {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
@@ -74,7 +74,7 @@ export default function PosteDetallePage() {
       })
       .catch(() => toast.warning("No se pudo calcular la ruta del tramo."));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.poste?.id, sesion.token]);
+  }, [d.poste?.id]);
 
   const hasCoords = (d.poste?.lat ?? 0) !== 0 && (d.poste?.lng ?? 0) !== 0;
   const boundsCoords: [number, number][] = [
@@ -85,10 +85,10 @@ export default function PosteDetallePage() {
   ];
 
   const handleEditarOtroPoste = useCallback(async (posteId: number) => {
-    const p = await searchPoste(posteId, sesion.token);
+    const p = await searchPoste(posteId);
     d.setDataPoste(p);
     d.setOpenEditPoste(true);
-  }, [sesion.token, d]);
+  }, [d]);
 
   const eventoActions = useMemo<EventoActionHandlers>(() => ({
     onVerDetalle: (id) => navigate(`/app/eventos/${id}`),

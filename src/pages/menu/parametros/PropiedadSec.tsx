@@ -49,29 +49,29 @@ const PropietarioSec = ({ innerTab }: Props) => {
 
     const loadStats = useCallback(() => {
         setStatsLoading(true);
-        getPropietarioStats(sesion.token)
+        getPropietarioStats()
             .then(setStats)
             .catch(() => setStats(null))
             .finally(() => setStatsLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { loadStats(); }, [loadStats]);
 
     const load = useCallback(() => {
         setLoading(true);
-        getPropietario(sesion.token)
+        getPropietario()
             .then((data) => setList(data ?? []))
             .catch(() => { toast.error("Error al cargar propietarios"); setList(null); })
             .finally(() => setLoading(false));
-    }, [sesion.token]);
+    }, []);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
-        getPropietario(sesion.token, true)
+        getPropietario(true)
             .then((data) => setArchivedList(data ?? []))
             .catch(() => { toast.error("Error al cargar propietarios archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
-    }, [sesion.token]);
+    }, []);
 
     useEffect(() => { load(); }, [load]);
 
@@ -83,7 +83,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarPropietario(unarchiveTarget.id as number, sesion.token);
+            const result = await desarchivarPropietario(unarchiveTarget.id as number);
             if (result === 200) {
                 toast.success("Propietario desarchivado");
                 setUnarchiveTarget(null);
@@ -115,7 +115,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
         if (!name.trim()) return toast.warning("El nombre es requerido");
         setSaving(true);
         const payload: PropietarioInterface = { ...selected, name };
-        const result = await (selected?.id ? editPropietario(payload, sesion.token) : createPropietario(payload, sesion.token));
+        const result = await (selected?.id ? editPropietario(payload) : createPropietario(payload));
         if (Number(result) === 200 || Number(result) === 201) {
             toast.success(selected?.id ? "Propietario actualizado" : "Propietario creado");
             handleClose();
@@ -130,7 +130,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deletePropietario(selected.id as number, sesion.token);
+        const result = await deletePropietario(selected.id as number);
         if (Number(result) === 200) {
             toast.success("Propietario archivado");
             setDeleteOpen(false);

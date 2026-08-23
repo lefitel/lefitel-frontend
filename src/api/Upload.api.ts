@@ -4,7 +4,7 @@ import { urlApi, urlUpload } from "./url";
 
 const MAX_MB = 4;
 
-export const uploadImage = async (data: File, token: string): Promise<string> => {
+export const uploadImage = async (data: File): Promise<string> => {
   try {
     let file = data;
     if (data.size > MAX_MB * 1024 * 1024) {
@@ -16,9 +16,7 @@ export const uploadImage = async (data: File, token: string): Promise<string> =>
     }
     const formData = new FormData();
     formData.append("file", file);
-    const response = await axios.post(urlApi + urlUpload, formData, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const response = await axios.post(urlApi + urlUpload, formData);
     return response.data.path;
   } catch {
     return "500";

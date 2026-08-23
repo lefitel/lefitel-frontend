@@ -40,7 +40,7 @@ export default function PermisosPanel() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await getMatrizPermisos(sesion.token);
+      const data = await getMatrizPermisos();
       setMatriz(data);
       setPending({});
       setRolActivo((actual) => actual ?? data.roles[0]?.id ?? null);
@@ -49,7 +49,7 @@ export default function PermisosPanel() {
     } finally {
       setLoading(false);
     }
-  }, [sesion.token]);
+  }, []);
 
   useEffect(() => {
     void load();
@@ -91,7 +91,7 @@ export default function PermisosPanel() {
       (payload[modulo] ??= {})[accion] = value;
     }
 
-    const result = await savePermisos(rolActivo, payload, sesion.token);
+    const result = await savePermisos(rolActivo, payload);
     setSaving(false);
 
     if (result.status === 200) {

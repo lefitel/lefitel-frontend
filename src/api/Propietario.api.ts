@@ -8,44 +8,44 @@ export interface PropietarioStats {
   mostPendientes: { name: string; count: number } | null;
 }
 
-export const getPropietario = (token: string, archived = false): Promise<PropietarioInterface[]> => {
+export const getPropietario = (archived = false): Promise<PropietarioInterface[]> => {
   const url = urlApi + urlPropietario + (archived ? "?archived=true" : "");
   return axios
-    .get(url, { headers: { Authorization: `Bearer ${token}` } })
+    .get(url)
     .then((r) => r.data);
 };
 
-export const getPropietarioStats = (token: string): Promise<PropietarioStats> =>
+export const getPropietarioStats = (): Promise<PropietarioStats> =>
   axios
-    .get(urlApi + urlPropietario + "stats", { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlPropietario + "stats")
     .then((r) => r.data);
 
-export const createPropietario = (data: PropietarioInterface, token: string): Promise<number> => {
+export const createPropietario = (data: PropietarioInterface): Promise<number> => {
   type PropietarioWithoutId = Omit<PropietarioInterface, "id">;
   const newData: PropietarioWithoutId = { name: data.name };
   return axios
-    .post(urlApi + urlPropietario, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlPropietario, newData)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const editPropietario = (data: PropietarioInterface, token: string): Promise<number> => {
+export const editPropietario = (data: PropietarioInterface): Promise<number> => {
   return axios
-    .put(urlApi + urlPropietario + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .put(urlApi + urlPropietario + data.id, data)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const deletePropietario = (id: number, token: string): Promise<number> => {
+export const deletePropietario = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlPropietario + id, { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlPropietario + id)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const desarchivarPropietario = (id: number, token: string): Promise<number> => {
+export const desarchivarPropietario = (id: number): Promise<number> => {
   return axios
-    .patch(urlApi + urlPropietario + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .patch(urlApi + urlPropietario + id + "/desarchivar", {})
     .then((response) => response.status)
     .catch(() => 400);
 };

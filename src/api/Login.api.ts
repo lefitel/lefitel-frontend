@@ -38,14 +38,19 @@ export const loginUsuario = (
  * The answer comes from the database rather than from the token's own payload:
  * a token lasts a week, and somebody moved to another role in the meantime would
  * otherwise keep the old one — and the old buttons with it — until it expired.
+ *
+ * No longer takes a token: the session cookie already authenticates this
+ * request. Kept in the simplest shape that compiles rather than redesigned —
+ * this whole bootstrap flow (and its two callers in `SesionProvider.tsx`) is
+ * replaced wholesale in task 6.
  */
-export const comprobarToken = (
-  token: string
-): Promise<{ status: number; usuario: UsuarioInterface | null; permisos?: Permisos }> => {
+export const comprobarToken = (): Promise<{
+  status: number;
+  usuario: UsuarioInterface | null;
+  permisos?: Permisos;
+}> => {
   return axios
-    .get(urlApi + "login", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .get(urlApi + "login")
     .then((response) => {
       return {
         status: response.status,

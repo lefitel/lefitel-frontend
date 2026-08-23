@@ -49,7 +49,6 @@ import SavedReports from "./SavedReports";
 
 const GeneradorPage = () => {
   const { sesion } = useContext(SesionContext);
-  const token = sesion.token;
   const currentUserId = sesion.usuario.id ?? undefined;
 
   /**
@@ -106,14 +105,6 @@ const GeneradorPage = () => {
   const [saveDescription, setSaveDescription] = useState("");
   const [saveShared, setSaveShared] = useState(false);
   const [saveOpen, setSaveOpen] = useState(false);
-
-  /**
-   * The token is re-issued on every authenticated response, so anything that
-   * depends on it re-runs constantly. Keep it in a ref: the catalog is fetched
-   * once, and later fetches read the current value without re-triggering.
-   */
-  const tokenRef = useRef(token);
-  tokenRef.current = token;
 
   /** Discards responses from a request the user has already superseded. */
   const runSeq = useRef(0);
@@ -187,7 +178,7 @@ const GeneradorPage = () => {
   const loadCatalog = useCallback(() => {
     setLoadingCatalog(true);
     setCatalogError(false);
-    getCatalogo(tokenRef.current)
+    getCatalogo()
       .then((data) => {
         setCatalog(data);
         const first = data.roots[0];
@@ -214,7 +205,7 @@ const GeneradorPage = () => {
    */
   const loadSaved = useCallback((append = false) => {
     const offset = append ? savedRef.current.length : 0;
-    return getReportesGuardados(tokenRef.current, { offset })
+    return getReportesGuardados({ offset })
       .then((page) => {
         // Guarded rather than trusted: a response that is not the shape this
         // expects used to leave `reports` undefined and the whole page blank,
@@ -250,7 +241,7 @@ const GeneradorPage = () => {
     const seq = ++runSeq.current;
     setRunning(true);
     try {
-      const data = await runReporte(target, tokenRef.current);
+      const data = await runReporte(target);
       if (seq !== runSeq.current) return;   // a newer request already went out
       setResult(data);
       setResultConfig(target);
@@ -380,7 +371,7 @@ const GeneradorPage = () => {
     setEstimate(null);
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      contarReporte({ ...configRef.current, offset: 0 }, tokenRef.current, controller.signal)
+      contarReporte({ ...configRef.current, offset: 0 }, controller.signal)
         .then(({ total }) => setEstimate(total))
         // Silent on purpose: this is a hint beside a button, and a toast for a
         // number nobody asked for out loud would be noise. The real query says
@@ -534,8 +525,8 @@ const GeneradorPage = () => {
       // Updating only ever touches your own report; someone else's is copied,
       // and so is your own when this role may create but not edit.
       const report = current && isMine && mayEdit
-        ? await actualizarReporte(current.id, payload, tokenRef.current)
-        : await crearReporte(payload, tokenRef.current);
+        ? await actualizarReporte(current.id, payload)
+        : await crearReporte(payload);
       setCurrent(report);
       setSaveName(report.name);
       setSaveOpen(false);
@@ -604,7 +595,7 @@ const GeneradorPage = () => {
 
   const handleToggleFavorite = async (report: SavedReport) => {
     try {
-      await actualizarReporte(report.id, { favorite: !report.favorite }, tokenRef.current);
+      await actualizarReporte(report.id, { favorite: !report.favorite });
       refreshSaved();
     } catch (error) {
       toast.error(mensajeDeError(error, "No se pudo cambiar el favorito"));
@@ -613,7 +604,7 @@ const GeneradorPage = () => {
 
   const handleDuplicate = async (report: SavedReport) => {
     try {
-      await duplicarReporte(report.id, tokenRef.current);
+      await duplicarReporte(report.id);
       refreshSaved();
       toast.success("Copia creada");
     } catch (error) {
@@ -623,7 +614,7 @@ const GeneradorPage = () => {
 
   const handleDelete = async (report: SavedReport) => {
     try {
-      await eliminarReporte(report.id, tokenRef.current);
+      await eliminarReporte(report.id);
       if (current?.id === report.id) resetForm();
       refreshSaved();
       toast.success("Reporte archivado");
@@ -684,7 +675,6 @@ const GeneradorPage = () => {
           subtitle: exportSubtitle,
           photos: format === "excel" && hasPhotoColumns && withPhotos,
         },
-        tokenRef.current,
         { signal: controller.signal, onProgress: (received) => setExportBytes(received) },
       );
       saveAs(blob, filename);

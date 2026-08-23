@@ -145,7 +145,7 @@ export const SesionProvider = ({ children }: props) => {
     const stored = localStorage.getItem("token");
     if (!stored) { setLoading(false); return; }
 
-    comprobarToken(stored)
+    comprobarToken()
       .then((res) => {
         if (res.status === 200 && res.usuario) {
           setSesion({
@@ -208,7 +208,7 @@ export const SesionProvider = ({ children }: props) => {
           const known = roleRef.current;
           if (typeof fresh === "number" && known !== undefined && fresh !== known) {
             roleRef.current = fresh;
-            comprobarToken(newToken)
+            comprobarToken()
               .then((res) => {
                 if (res.status === 200 && res.usuario) {
                   setSesion((prev) =>

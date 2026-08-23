@@ -1,5 +1,4 @@
-import { useContext, useMemo, useState } from "react";
-import { SesionContext } from "../../../context/SesionContext";
+import { useMemo, useState } from "react";
 import { getObsFrecuencia, ObsFrecuenciaRow } from "../../../api/reporte.api";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -16,7 +15,6 @@ import { toast } from "sonner";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
 
 const ReportObsFrecuenciaSec = () => {
-  const { sesion } = useContext(SesionContext);
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
   const [rows, setRows]               = useState<ObsFrecuenciaRow[]>([]);
@@ -32,7 +30,7 @@ const ReportObsFrecuenciaSec = () => {
     setLoading(true);
     setTipoFiltro("all");
     try {
-      const data = await getObsFrecuencia({ fechaInicial: inicio, fechaFinal: fin }, sesion.token);
+      const data = await getObsFrecuencia({ fechaInicial: inicio, fechaFinal: fin });
       setRows(data);
       setGenerated(true);
       if (data.length === 0) toast.warning("Sin observaciones registradas en el período");

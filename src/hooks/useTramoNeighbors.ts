@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getTramos } from "../api/Poste.api";
 
-export const useTramoNeighbors = (token: string) => {
+export const useTramoNeighbors = () => {
     const [neighbors, setNeighbors] = useState<Map<number, Set<number>>>(new Map());
 
     useEffect(() => {
-        getTramos(token)
+        getTramos()
             .then((pairs) => {
                 const map = new Map<number, Set<number>>();
                 pairs.forEach(({ id_ciudadA, id_ciudadB }) => {
@@ -18,7 +18,7 @@ export const useTramoNeighbors = (token: string) => {
                 setNeighbors(map);
             })
             .catch(() => toast.error("Error al cargar los tramos"));
-    }, [token]);
+    }, []);
 
     return neighbors;
 };

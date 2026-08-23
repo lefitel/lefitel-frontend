@@ -1,6 +1,5 @@
-import { useCallback, useContext, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SesionContext } from "../../../context/SesionContext";
 import { searchEvento } from "../../../api/Evento.api";
 import { getRevision } from "../../../api/Revision.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
@@ -8,8 +7,6 @@ import { getEventoObs } from "../../../api/EventoObs.api";
 import { EventoInterface, EventoObsInterface, RevisionInterface, SolucionInterface } from "../../../interfaces/interfaces";
 
 export function useEventoDetalleData(id: number) {
-    const { sesion } = useContext(SesionContext);
-
     const [loading, setLoading]   = useState(true);
     const [evento, setEvento]     = useState<EventoInterface | null>(null);
     const [revisions, setRevisions] = useState<RevisionInterface[]>([]);
@@ -20,10 +17,10 @@ export function useEventoDetalleData(id: number) {
         if (!id) return;
         setLoading(true);
         Promise.all([
-            searchEvento(id, sesion.token),
-            getRevision(id, sesion.token),
-            getSolucion_evento(id, sesion.token).catch(() => null),
-            getEventoObs(id, sesion.token),
+            searchEvento(id),
+            getRevision(id),
+            getSolucion_evento(id).catch(() => null),
+            getEventoObs(id),
         ])
             .then(([ev, revs, sol, obs]) => {
                 setEvento(ev);
@@ -33,7 +30,7 @@ export function useEventoDetalleData(id: number) {
             })
             .catch(() => toast.error("Error al cargar el evento"))
             .finally(() => setLoading(false));
-    }, [id, sesion.token]);
+    }, [id]);
 
     useEffect(() => { load(); }, [load]);
 

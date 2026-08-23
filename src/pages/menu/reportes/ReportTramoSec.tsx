@@ -1,8 +1,7 @@
-import { useContext, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ColumnDef, Row } from "@tanstack/react-table";
 
-import { SesionContext } from "../../../context/SesionContext";
 import { getReporteTramo } from "../../../api/reporte.api";
 import { getCiudad } from "../../../api/Ciudad.api";
 import {
@@ -41,13 +40,12 @@ import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ReportTramoSec = () => {
-  const { sesion } = useContext(SesionContext);
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal,   setTramoFinal]   = useState<number | null>(null);
   const [listCiudad,   setListCiudad]   = useState<CiudadInterface[]>([]);
-  const neighbors = useTramoNeighbors(sesion.token);
+  const neighbors = useTramoNeighbors();
   const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
   const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -61,8 +59,8 @@ const ReportTramoSec = () => {
   const [metadataLoaded,  setMetadataLoaded]  = useState(false);
 
   useEffect(() => {
-    getCiudad(sesion.token).then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
-  }, [sesion.token]);
+    getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+  }, []);
 
   useEffect(() => {
     if (tramoInicial && tramoFinal && neighbors.size > 0) {
@@ -83,10 +81,10 @@ const ReportTramoSec = () => {
     try {
       if (!metadataLoaded) {
         const [adss, material, propietario, obs] = await Promise.all([
-          getAdss(sesion.token),
-          getMaterial(sesion.token),
-          getPropietario(sesion.token),
-          getObs(sesion.token),
+          getAdss(),
+          getMaterial(),
+          getPropietario(),
+          getObs(),
         ]);
         setListAdss(adss);
         setListMaterial(material);
@@ -95,7 +93,7 @@ const ReportTramoSec = () => {
         setMetadataLoaded(true);
       }
 
-      let data = await getReporteTramo(filtro, sesion.token);
+      let data = await getReporteTramo(filtro);
 
       if (tramoInicial && tramoFinal) {
         data = data.filter((e) =>

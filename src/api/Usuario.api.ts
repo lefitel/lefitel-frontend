@@ -2,28 +2,27 @@ import axios from "axios";
 import { urlUsuario, urlApi } from "./url";
 import { UsuarioInterface } from "../interfaces/interfaces";
 
-export const getUsuario = (token: string, archived = false): Promise<UsuarioInterface[]> => {
+export const getUsuario = (archived = false): Promise<UsuarioInterface[]> => {
   return axios
     .get(urlApi + urlUsuario, {
-      headers: { Authorization: `Bearer ${token}` },
       params: archived ? { archived: true } : {},
     })
     .then((r) => r.data);
 };
 
-export const searchUsuario = (dataId: number, token: string): Promise<UsuarioInterface> => {
+export const searchUsuario = (dataId: number): Promise<UsuarioInterface> => {
   return axios
-    .get(urlApi + urlUsuario + dataId, { headers: { Authorization: `Bearer ${token}` } })
+    .get(urlApi + urlUsuario + dataId)
     .then((response) => response.data as UsuarioInterface);
 };
 
-export const searchUsuario_user = (user: string, token: string): Promise<UsuarioInterface> => {
+export const searchUsuario_user = (user: string): Promise<UsuarioInterface> => {
   return axios
-    .get(urlApi + urlUsuario + "user/" + user, { headers: { Authorization: `Bearer ${token}`, "Cache-Control": "no-cache" } })
+    .get(urlApi + urlUsuario + "user/" + user, { headers: { "Cache-Control": "no-cache" } })
     .then((response) => response.data as UsuarioInterface);
 };
 
-export const createUsuario = (data: UsuarioInterface, token: string): Promise<number> => {
+export const createUsuario = (data: UsuarioInterface): Promise<number> => {
   type UsuarioWithoutId = Omit<UsuarioInterface, "id">;
   const newData: UsuarioWithoutId = {
     name: data.name,
@@ -36,26 +35,23 @@ export const createUsuario = (data: UsuarioInterface, token: string): Promise<nu
     id_rol: data.id_rol,
   };
   return axios
-    .post(urlApi + urlUsuario, newData, { headers: { Authorization: `Bearer ${token}` } })
+    .post(urlApi + urlUsuario, newData)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const editUsuario = (data: UsuarioInterface, token: string): Promise<number> => {
+export const editUsuario = (data: UsuarioInterface): Promise<number> => {
   return axios
-    .put(urlApi + urlUsuario + data.id, data, { headers: { Authorization: `Bearer ${token}` } })
+    .put(urlApi + urlUsuario + data.id, data)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
 export const editUserName = (
-  data: UsuarioInterface,
-  token: string
+  data: UsuarioInterface
 ): Promise<{ status: number; message?: string }> => {
   return axios
-    .put(urlApi + urlUsuario + "username/" + data.id, data, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlUsuario + "username/" + data.id, data)
     .then((response) => ({ status: response.status }))
     .catch((e) => {
       const msg = e.response?.data?.message || "Error desconocido";
@@ -64,13 +60,10 @@ export const editUserName = (
 };
 
 export const editUserPass = (
-  data: UsuarioInterface & { oldPass?: string },
-  token: string
+  data: UsuarioInterface & { oldPass?: string }
 ): Promise<{ status: number; message?: string }> => {
   return axios
-    .put(urlApi + urlUsuario + "userpass/" + data.id, data, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    .put(urlApi + urlUsuario + "userpass/" + data.id, data)
     .then((response) => ({ status: response.status }))
     .catch((e) => {
       const msg = e.response?.data?.message || "Error desconocido";
@@ -78,16 +71,16 @@ export const editUserPass = (
     });
 };
 
-export const deleteUsuario = (id: number, token: string): Promise<number> => {
+export const deleteUsuario = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlUsuario + id, { headers: { Authorization: `Bearer ${token}` } })
+    .delete(urlApi + urlUsuario + id)
     .then((response) => response.status)
     .catch(() => 400);
 };
 
-export const desarchivarUsuario = (id: number, token: string): Promise<number> => {
+export const desarchivarUsuario = (id: number): Promise<number> => {
   return axios
-    .patch(urlApi + urlUsuario + id + "/desarchivar", {}, { headers: { Authorization: `Bearer ${token}` } })
+    .patch(urlApi + urlUsuario + id + "/desarchivar", {})
     .then((response) => response.status)
     .catch(() => 400);
 };
