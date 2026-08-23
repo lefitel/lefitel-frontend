@@ -133,6 +133,12 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  * still be open" rather than "is": a request that never got an answer might
  * have been carried out anyway.
  *
+ * "The credential is still in the browser" is the premise, and it is the one
+ * that expires — not the toast. A login in the same tab replaces the cookie,
+ * and then that same button revokes the session in front of the person instead
+ * of the one it named. `credentialGeneration` below is what makes the offer
+ * lapse together with its premise.
+ *
  * One id shared by the failure, every retry of it and the confirmation, so
  * that each of them replaces the last instead of stacking. Without it a
  * successful retry leaves two toasts on screen at once saying opposite things
@@ -142,12 +148,62 @@ const MAX_TIMEOUT_MS = 2_147_483_647;
  */
 const REVOKE_TOAST_ID = "logout-revoke";
 
-const revokeOnServer = (isRetry: boolean) => {
+/**
+ * How many credentials this page has held.
+ *
+ * `POST /auth/logout` names no session. It revokes whatever the session cookie
+ * points at when the request leaves, and this code cannot read that cookie —
+ * which is fine for the first attempt, made a moment after the session it is
+ * about, and is the whole problem for a retry offered by a toast that never
+ * expires. Logging in again in the same tab replaces the cookie, so "send the
+ * same request again" stops meaning the same request, with nothing on screen
+ * to show it: the button still says "Reintentar".
+ *
+ * Counting logins is what makes that difference visible from here. Every call
+ * below carries the number it was made for and refuses to act once the number
+ * has moved. Without it, pressing that button after logging back in revoked
+ * the session the person had *just opened*, replaced the warning with "Sesión
+ * cerrada en el servidor." — a confirmation of the opposite of what happened —
+ * and left the abandoned row it had offered to close still open, still valid
+ * for a week. That is worse than the swallowed failure this whole mechanism
+ * replaced: a silent failure leaves a session open, this one closed the good
+ * session and said it had closed the other.
+ *
+ * A module-level counter and not a ref, because `revokeOnServer` is a module
+ * function: the retry outlives the component tree that offered it.
+ */
+let credentialGeneration = 0;
+
+const revokeOnServer = (generation: number, isRetry: boolean) => {
+  /**
+   * Whether the browser has been handed a different credential since this call
+   * was made for its own. Called at each moment it matters rather than read
+   * once, because the thing it reports on changes *while* a toast that does
+   * not expire waits on screen for somebody to press it.
+   */
+  const superseded = () => generation !== credentialGeneration;
+
+  // The refusal that makes the wrong request impossible rather than unlikely.
+  // It is reached by the one gesture the wording invites — "Reintentá cuando
+  // vuelva la conexión", pressed after logging back in — and the request it
+  // stops would carry the new cookie and revoke the live session. The
+  // provider's effect drops this toast the moment a session exists, so in
+  // practice there is no button left to press; that is a React effect and
+  // this is the send path, and the send path is where the guarantee has to
+  // live. The toast goes too: it is about a session this browser can no
+  // longer close (see the `catch` below for what closed it instead).
+  if (superseded()) {
+    toast.dismiss(REVOKE_TOAST_ID);
+    return;
+  }
+
   // Only on a retry. Confirming the ordinary case would put a toast on screen
   // every single time anybody logs out, for news they already have — the login
-  // form is in front of them.
+  // form is in front of them. And nothing is confirmed once the credential has
+  // moved on: that answer is about a row the person is no longer looking at,
+  // so it would read as a claim about the session on screen.
   const done = () => {
-    if (isRetry) toast.success("Sesión cerrada en el servidor.", { id: REVOKE_TOAST_ID });
+    if (isRetry && !superseded()) toast.success("Sesión cerrada en el servidor.", { id: REVOKE_TOAST_ID });
   };
 
   axios
@@ -165,6 +221,18 @@ const revokeOnServer = (isRetry: boolean) => {
         done();
         return;
       }
+      // A failure somebody's next login already settled, so there is nothing
+      // to announce. `issueSession` on the server revokes whatever session the
+      // incoming cookie names before opening the next one (`rotateOut`, in
+      // `api/src/auth/issueSession.ts`), and the login request carries that
+      // cookie for the very reason this call is in its `catch` — the logout
+      // never got through, so nothing cleared it. So the row this failure is
+      // about is closed by the act of logging in again. Reachable whenever the
+      // request takes longer to give up than the person takes to log back in,
+      // which on a dead link is the ordinary case rather than a narrow one,
+      // and without this the alarm would go up *behind* a working session,
+      // never expiring, offering a button the guard above refuses.
+      if (superseded()) return;
       toast.error(
         "No se pudo cerrar tu sesión en el servidor: puede seguir abierta en este equipo. Reintentá cuando vuelva la conexión.",
         {
@@ -172,7 +240,7 @@ const revokeOnServer = (isRetry: boolean) => {
           // Until it is dismissed or acted on. A four-second toast about a
           // session left open on a shared computer is the same as no toast.
           duration: Infinity,
-          action: { label: "Reintentar", onClick: () => revokeOnServer(true) },
+          action: { label: "Reintentar", onClick: () => revokeOnServer(generation, true) },
         },
       );
     });
@@ -242,6 +310,26 @@ export const SesionProvider = ({ children }: props) => {
   const hasSessionRef = useRef(false);
   useEffect(() => {
     hasSessionRef.current = sesion.autenticado;
+    if (!sesion.autenticado) return;
+    // A session was just opened, which means the browser is holding this
+    // session's cookie and not whatever a pending logout failure was about.
+    // Two things follow, and both are about the one toast in this file that
+    // never goes away on its own.
+    //
+    // The count moves, so any retry still holding the old number refuses to
+    // send — see `credentialGeneration`. And the toast itself goes, because
+    // what it warns about has just been dealt with by the login: the login
+    // request carried the old cookie (the failed logout never cleared it) and
+    // `rotateOut` on the server revokes that row before opening this one. So
+    // the abandoned session it was offering to close is already closed, and a
+    // warning saying it "puede seguir abierta" would now be false — quite
+    // apart from its button, which would revoke this session instead.
+    //
+    // Dismissing unconditionally rather than only when such a toast exists:
+    // `toast.dismiss` on an id that is not on screen does nothing, and the
+    // alternative is a second piece of module state saying whether one is.
+    credentialGeneration += 1;
+    toast.dismiss(REVOKE_TOAST_ID);
   }, [sesion.autenticado]);
 
   const clearTimers = () => {
@@ -266,7 +354,11 @@ export const SesionProvider = ({ children }: props) => {
     // nobody ends up stuck looking authenticated on a screen that already
     // sent them back to the login form.
     if (hasSessionRef.current) {
-      revokeOnServer(false);
+      // Tagged with the credential it is about, read now rather than when the
+      // answer comes back: the retry this may end up offering has to be able
+      // to tell that the cookie underneath it changed. See
+      // `credentialGeneration`.
+      revokeOnServer(credentialGeneration, false);
     }
     // Now, not one commit from now: see the ref's own comment. A second
     // `logout()` before React re-renders keeps its request off the network,
@@ -369,14 +461,17 @@ export const SesionProvider = ({ children }: props) => {
    * The role the permissions on screen were fetched for.
    *
    * In an effect rather than during render — writing a ref while rendering is
-   * not allowed — and after the commit is soon enough: the interceptor only
-   * refreshes when it has a role to compare against, so the one window this
-   * leaves is the instant after a login, where the permissions are fresh
-   * already.
+   * not allowed — and this is the catch-all: `setSesion` is handed to the login
+   * screen through the context, so there is no single call site to hook, and
+   * the state itself is what every writer passes through.
    *
-   * `setSesion` is handed to the login screen through the context, so there is
-   * no single call site to hook; the state itself is what every writer passes
-   * through.
+   * A commit of lag, which is soon enough for every writer but one. The
+   * interceptor only refreshes when it has a role to compare against, so a
+   * login leaves nothing to get wrong — the permissions are fresh already. The
+   * exception is the refresh in the interceptor itself, which releases its own
+   * in-flight flag microtasks before this effect runs and so would leave the
+   * comparison satisfied by a stale role: it writes this ref itself, with the
+   * same expression, rather than waiting here. See the comment at that write.
    */
   useEffect(() => {
     roleRef.current = sesion.permisos ? sesion.usuario.id_rol : undefined;
@@ -473,16 +568,30 @@ export const SesionProvider = ({ children }: props) => {
                 // both, and `logout` writes this ref itself so it is already
                 // false here rather than one commit behind.
                 if (!hasSessionRef.current) return;
-                // `roleRef` is deliberately not written here. It means "the
-                // role the permissions on screen were fetched for", and the
-                // effect above computes exactly that from the state this
-                // `setSesion` is about to commit — including the case where
-                // the answer disagrees with the header, where the fetched role
-                // is the one that describes the screen. Writing it here as
-                // well was tried and removed: no test could tell the two
-                // apart, and an unpinned line in this file is how the last
-                // mechanism rotted. What must not come back is the write that
-                // used to sit *before* the request — see `roleRefreshRef`.
+                // The same value the effect above computes, written a commit
+                // early, and the commit of lag is the whole reason. `finally`
+                // releases `roleRefreshRef` in this promise's own microtask
+                // chain, while React commits `setSesion` a macrotask later: in
+                // between, the flag says "no refresh out" and `roleRef` still
+                // holds the *old* role. The header rides on every response, so
+                // any answer landing in that window matched the comparison
+                // again and started a second `/auth/me` — and a second "Sus
+                // permisos cambiaron", for one role change. It was called
+                // unobservable when this line was removed for want of a test;
+                // it is observable by whoever reads the same notice twice, and
+                // the test below now sees it.
+                //
+                // `res.usuario.id_rol` and not the header's role, deliberately:
+                // this ref means "the role the permissions on screen were
+                // fetched for", so when the answer disagrees with the header,
+                // the answer is the one that describes the screen. Same
+                // expression as the effect, off the state this `setSesion` is
+                // about to commit, so the two cannot disagree.
+                //
+                // What must not come back is the write that used to sit
+                // *before* the request: that one made a failed refresh satisfy
+                // the comparison for good. See `roleRefreshRef`.
+                roleRef.current = res.permisos ? res.usuario.id_rol : undefined;
                 setSesion((prev) => ({
                   ...prev,
                   usuario: res.usuario as UsuarioInterface,

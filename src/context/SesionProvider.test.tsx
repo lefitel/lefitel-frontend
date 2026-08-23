@@ -47,7 +47,7 @@ vi.mock("../api/Login.api", () => ({
   comprobarToken: (...args: unknown[]) => comprobarToken(...args),
 }));
 vi.mock("sonner", () => ({
-  toast: { info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() },
+  toast: { info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn(), dismiss: vi.fn() },
 }));
 
 /** The wire names, spelled out here rather than imported: they are contracts
@@ -412,6 +412,52 @@ describe("a role that changes mid-session", () => {
 
     expect(comprobarToken).toHaveBeenCalledTimes(1);
   });
+
+  it("avisa una sola vez, aunque otra respuesta llegue justo cuando el cerrojo se suelta", async () => {
+    // La ventana que quedaba entre las dos mitades del arreglo anterior. El
+    // `finally` que suelta el cerrojo corre en la cadena de microtareas de la
+    // propia promesa; el commit del `setSesion` que mueve el rol de referencia
+    // llega después. En ese hueco el cerrojo ya dice «no hay refresco en
+    // vuelo» y el rol de referencia sigue siendo el viejo, así que cualquier
+    // respuesta que aterrice ahí —y la cabecera va en todas— vuelve a cumplir
+    // la comparación y arranca un segundo `/auth/me` con su segundo «Sus
+    // permisos cambiaron». Un cambio de rol, dos avisos idénticos: se declaró
+    // como no observable y lo es para quien está delante de la pantalla.
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
+    comprobarToken.mockClear();
+
+    // El segundo refresco, si llega a salir, también contesta una sesión buena:
+    // así el segundo aviso sale de verdad en vez de quedarse en el camino.
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
+    let resolver!: (value: unknown) => void;
+    comprobarToken.mockReturnValueOnce(new Promise((resolve) => { resolver = resolve; }));
+
+    act(() => {
+      onResponse!(respuestaNuestra(1));
+    });
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolver(sesionViva(1, permisosCon("generador", "crear")));
+      // Las microtareas del `.then` y del `.finally`, sin salir de `act()`:
+      // dentro de `act()` React encola el trabajo y no lo aplica hasta el
+      // final, así que esto es exactamente la ventana del hallazgo — cerrojo
+      // ya soltado, commit todavía sin llegar. No hace falta acertar el número
+      // de ticks: de sobra basta.
+      for (let i = 0; i < 6; i += 1) await Promise.resolve();
+      onResponse!(respuestaNuestra(1));
+    });
+
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+    expect(toast.info).toHaveBeenCalledTimes(1);
+    expect(can(1, "generador", "crear")).toBe(true);
+  });
 });
 
 describe("el guardián de origen", () => {
@@ -728,6 +774,170 @@ describe("logout", () => {
     // four copies of the warning.
     expect(opcionesExito.id).toBe(opciones.id);
     expect(opciones.id).toBeTruthy();
+  });
+
+  it("un reintento pulsado después de volver a entrar no manda nada", async () => {
+    // El defecto que trajo el aviso permanente, y es peor que el silencio que
+    // vino a arreglar. `POST /auth/logout` no nombra ninguna sesión: revoca la
+    // que diga la cookie en el instante en que sale. El aviso no caduca —eso
+    // está bien— así que sigue en pantalla, con su botón, después de que
+    // alguien vuelva a entrar en la misma pestaña. Pulsarlo, que es justo lo
+    // que el texto pide, revocaba la sesión que se acababa de abrir, contestaba
+    // «Sesión cerrada en el servidor.» —la confirmación de lo contrario de lo
+    // que pasó— y dejaba la fila abandonada abierta, que era el riesgo del que
+    // el aviso avisaba. La secuencia completa está aquí: entrar, salir con el
+    // POST caído, volver a entrar, pulsar reintentar.
+    const post = vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Entrar id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    const [, opciones] = vi.mocked(toast.error).mock.calls[0] as [string, { action?: { onClick: () => void } }];
+    const reintentar = opciones.action!.onClick;
+
+    // Vuelve la conexión y alguien entra otra vez, en esta misma pestaña: el
+    // técnico siguiente, o el mismo. La cookie de ahora es la de esta sesión,
+    // no la de la que no se pudo cerrar.
+    post.mockClear();
+    post.mockResolvedValue({});
+    fireEvent.click(getByText("entrar"));
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+
+    await act(async () => {
+      reintentar();
+    });
+
+    // Ni una petición: no hay forma de mandar este reintento sobre una
+    // credencial que no es la que falló.
+    expect(post).not.toHaveBeenCalled();
+    // Y la sesión viva sigue viva, en la pantalla y en los permisos.
+    expect(latest?.sesion.autenticado).toBe(true);
+    expect(can(3, "generador", "ver")).toBe(true);
+    // Sobre todo: no se confirma nada. La confirmación era la mitad peor del
+    // fallo — dejaba a la persona tranquila con la fila abandonada abierta.
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("retira el aviso de logout fallido en cuanto hay otra sesión", async () => {
+    // La otra mitad, y la que hace que nadie llegue a pulsar el botón: un
+    // aviso que no caduca sigue en pantalla mientras la persona trabaja en su
+    // sesión nueva, ofreciendo algo que ya no puede hacer. Y no es solo que no
+    // pueda: la fila abandonada ya está cerrada, porque el propio login la
+    // revoca —`rotateOut` en `api/src/auth/issueSession.ts` cierra la sesión
+    // que nombra la cookie entrante, y esa cookie seguía puesta justamente
+    // porque el logout no llegó a pasar. Así que el aviso pasó a ser falso, no
+    // solo inútil.
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Entrar id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    const [, opciones] = vi.mocked(toast.error).mock.calls[0] as [string, { id?: string }];
+    // Limpio aquí porque el aviso se retira en cada login, tenga algo que
+    // retirar o no — lo que se mide es el login de abajo, no el de arriba.
+    vi.mocked(toast.dismiss).mockClear();
+
+    fireEvent.click(getByText("entrar"));
+
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    expect(toast.dismiss).toHaveBeenCalledWith(opciones.id);
+  });
+
+  it("un fallo que aterriza después de volver a entrar no dice nada", async () => {
+    // La misma cosa por la otra puerta, y la que el descarte del aviso no
+    // cubre: si la petición tarda más en rendirse que la persona en volver a
+    // entrar —en un enlace muerto eso es lo normal, no lo raro— el aviso sale
+    // *detrás* de una sesión que funciona. Diría «puede seguir abierta» de una
+    // fila que el login ya cerró, no caducaría nunca, y traería un botón que
+    // el guardián del envío tiene que rechazar. No hay nada que anunciar.
+    let rechazar!: (razon: unknown) => void;
+    vi.spyOn(axios, "post").mockReturnValue(new Promise((_, reject) => { rechazar = reject; }));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Entrar id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    fireEvent.click(getByText("entrar"));
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+
+    // Solo ahora se rinde la petición de cierre de la sesión anterior.
+    await act(async () => {
+      rechazar(new Error("network down"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
+  });
+
+  it("no confirma nada cuando el reintento vuelve después de que ya hay otra sesión", async () => {
+    // El reintento sí salió con la cookie correcta —se pulsó estando fuera— y
+    // sí cerró la fila abandonada, así que «Sesión cerrada en el servidor.» no
+    // es mentira. Pero llega detrás de una sesión nueva y en pantalla no hay
+    // nada que diga de cuál de las dos habla: sobre la única pantalla donde las
+    // alarmas tienen que creerse, un mensaje de cierre encima de una sesión que
+    // funciona se lee como que esa es la que se cerró. Una vez que la
+    // credencial cambió, este mecanismo se calla, en las dos ramas.
+    let resolverPost!: (value: unknown) => void;
+    vi.spyOn(axios, "post")
+      .mockRejectedValueOnce(new Error("network down"))
+      .mockReturnValue(new Promise((resolve) => { resolverPost = resolve; }));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Entrar id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    const [, opciones] = vi.mocked(toast.error).mock.calls[0] as [string, { action?: { onClick: () => void } }];
+
+    // Se pulsa el reintento estando fuera, así que sale de verdad. Y mientras
+    // viaja, alguien entra en esta misma pestaña.
+    act(() => {
+      opciones.action!.onClick();
+    });
+    fireEvent.click(getByText("entrar"));
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+
+    await act(async () => {
+      resolverPost({});
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("no avisa de nada cuando el 401 dice que ya no había sesión que cerrar", async () => {
