@@ -36,7 +36,7 @@ interface props {
 const LOGOUT_URL = `${urlApi}auth/logout`;
 
 export const SesionProvider = ({ children }: props) => {
-  const [sesion, setSesion] = React.useState<SesionInterface>({ token: "", usuario: usuarioExample });
+  const [sesion, setSesion] = React.useState<SesionInterface>({ token: "", usuario: usuarioExample, autenticado: false });
   const [loading, setLoading] = React.useState(true);
   const timers = useRef<{ warning: ReturnType<typeof setTimeout> | null; expiry: ReturnType<typeof setTimeout> | null }>({ warning: null, expiry: null });
   /**
@@ -94,7 +94,7 @@ export const SesionProvider = ({ children }: props) => {
     clearTimers();
     localStorage.removeItem("token");
     olvidarPermisos();
-    setSesion({ token: "", usuario: usuarioExample });
+    setSesion({ token: "", usuario: usuarioExample, autenticado: false });
   }, []);
 
   const scheduleExpiry = useCallback((token: string) => {
@@ -152,6 +152,7 @@ export const SesionProvider = ({ children }: props) => {
             token: stored,
             usuario: res.usuario as UsuarioInterface,
             permisos: res.permisos,
+            autenticado: true,
           });
         } else {
           localStorage.removeItem("token");

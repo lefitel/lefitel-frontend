@@ -1,0 +1,105 @@
+// What actually lets somebody in. `ValidarDatos` builds the session object
+// that goes into context after a successful login, and the boolean the
+// route gate reads (`sesion.autenticado`) has to end up `true` there — not
+// merely present as an unrelated field on the interface. This is the guard
+// against the exact regression the task brief called out: relying on the
+// `as SesionInterface` cast alone leaves that boolean `undefined`, and
+// nobody can ever get past `/login` again.
+
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
+import { useState } from "react";
+import LoginPage from "./LoginPage";
+import { SesionContext, type contextProps } from "../context/SesionContext";
+import { ThemeProvider } from "../components/theme-provider";
+import { usuarioExample } from "../data/example";
+import type { SesionInterface } from "../interfaces/interfaces";
+
+const loginUsuario = vi.fn();
+vi.mock("../api/Login.api", () => ({
+  loginUsuario: (...args: unknown[]) => loginUsuario(...args),
+}));
+vi.mock("sonner", () => ({
+  toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
+}));
+
+function Harness({ onSesion }: { onSesion: (s: SesionInterface) => void }) {
+  const [sesion, setSesionState] = useState<SesionInterface>({
+    usuario: usuarioExample,
+    token: "",
+    autenticado: false,
+  });
+
+  const setSesion: contextProps["setSesion"] = (next) => {
+    setSesionState((prev) => {
+      const resolved = typeof next === "function" ? (next as (p: SesionInterface) => SesionInterface)(prev) : next;
+      onSesion(resolved);
+      return resolved;
+    });
+  };
+
+  const value: contextProps = { sesion, setSesion, loading: false, logout: vi.fn() };
+
+  return (
+    <ThemeProvider>
+      <SesionContext.Provider value={value}>
+        <MemoryRouter>
+          <LoginPage />
+        </MemoryRouter>
+      </SesionContext.Provider>
+    </ThemeProvider>
+  );
+}
+
+describe("logging in", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("marks the session as authenticated once the server accepts the credentials", async () => {
+    loginUsuario.mockResolvedValue({
+      status: 200,
+      message: null,
+      usuario: {
+        token: "un-token",
+        usuario: { ...usuarioExample, user: "ada" },
+        // What the API wrapper actually hands back today: never true on its
+        // own. If this test only checked "did setSesion get called", it
+        // would pass whether or not LoginPage sets the boolean itself.
+        autenticado: false,
+      },
+    });
+
+    const user = userEvent.setup();
+    const sesiones: SesionInterface[] = [];
+    render(<Harness onSesion={(s) => sesiones.push(s)} />);
+
+    await user.type(screen.getByLabelText("Usuario"), "ada");
+    await user.type(screen.getByLabelText("Contraseña"), "secreto");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    await waitFor(() => expect(sesiones.length).toBeGreaterThan(0));
+    expect(sesiones[0].autenticado).toBe(true);
+  });
+
+  it("leaves the session unauthenticated when the server refuses", async () => {
+    loginUsuario.mockResolvedValue({
+      status: 500,
+      message: "Usuario o contraseña incorrectos",
+      usuario: null,
+    });
+
+    const user = userEvent.setup();
+    const sesiones: SesionInterface[] = [];
+    render(<Harness onSesion={(s) => sesiones.push(s)} />);
+
+    await user.type(screen.getByLabelText("Usuario"), "ada");
+    await user.type(screen.getByLabelText("Contraseña"), "incorrecta");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    await waitFor(() => expect(loginUsuario).toHaveBeenCalledTimes(1));
+    // No session was ever pushed into context — a refused login must not
+    // move the boolean at all, in either direction.
+    expect(sesiones).toHaveLength(0);
+  });
+});

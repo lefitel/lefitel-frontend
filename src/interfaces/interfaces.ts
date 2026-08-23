@@ -4,6 +4,14 @@ export interface SesionInterface {
   usuario: UsuarioInterface;
   token: string;
   /**
+   * Whether the server has confirmed there is a session. This is not "do we
+   * have user data" — `usuario` always holds *some* shape, even the empty
+   * placeholder before login — it is the server's word on it. With the
+   * session cookie, the browser cannot tell on its own; this is what the
+   * route gate in `App.tsx` reads instead of the old `token !== ""` check.
+   */
+  autenticado: boolean;
+  /**
    * What this session may do, as the server says. Optional because the shape is
    * also used for the empty session before anybody logs in; absent means the
    * same as all-denied.

@@ -76,7 +76,13 @@ const LoginPage = () => {
       const responde = await loginUsuario({ ...login, user });
       if (responde.status !== 500) {
         window.localStorage.setItem("token", responde.usuario?.token ?? "");
-        setSesion(responde.usuario as SesionInterface);
+        // `responde.usuario` is cast below, and a cast accepts any shape: it
+        // would happily let `autenticado` come through as `undefined` from a
+        // response that never had that field to begin with. Setting it
+        // explicitly here is what actually turns the login into a session —
+        // without it the gate in App.tsx never sees `true` and nobody can
+        // get past the login screen.
+        setSesion({ ...(responde.usuario as SesionInterface), autenticado: true });
         navigate(from, { replace: true });
         toast.success("Bienvenido");
       } else {

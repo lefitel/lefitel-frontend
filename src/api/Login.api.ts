@@ -20,6 +20,11 @@ export const loginUsuario = (
           token: response.data.usuario.token,
           usuario: response.data.usuario,
           permisos: response.data.permisos,
+          // Left false on purpose: this wrapper only shuttles what the server
+          // sent back, it does not decide session semantics. LoginPage.tsx is
+          // the single place that turns "the request succeeded" into
+          // "authenticated" — see the comment at its call site.
+          autenticado: false,
         },
       };
     })

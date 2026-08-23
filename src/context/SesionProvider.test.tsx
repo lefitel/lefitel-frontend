@@ -43,6 +43,7 @@ const Establecer = ({ id_rol, permisos }: { id_rol: number; permisos: Permisos }
       token: tokenFor(id_rol),
       usuario: { id: 7, id_rol } as never,
       permisos,
+      autenticado: true,
     });
   }, [id_rol, permisos, setSesion]);
   return null;

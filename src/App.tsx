@@ -29,19 +29,19 @@ import { Toaster } from "@/components/ui/sonner";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { ThemeProvider as ShadcnThemeProvider } from "@/components/theme-provider";
 
-const PrivateRoutes = () => {
+export const PrivateRoutes = () => {
   const { sesion, loading } = useContext(SesionContext);
   const location = useLocation();
 
   if (loading) return <LoadingPage />;
-  return sesion.token !== "" ? <Outlet /> : <Navigate to="/login" state={{ from: location }} replace />;
+  return sesion.autenticado ? <Outlet /> : <Navigate to="/login" state={{ from: location }} replace />;
 };
 
-const PublicRoutes = () => {
+export const PublicRoutes = () => {
   const { sesion, loading } = useContext(SesionContext);
 
   if (loading) return <LoadingPage />;
-  return sesion.token === "" ? <Outlet /> : <Navigate to="/app/home" replace />;
+  return sesion.autenticado ? <Navigate to="/app/home" replace /> : <Outlet />;
 };
 
 /**
