@@ -1,12 +1,16 @@
+// @vitest-environment-options { "url": "http://www.osefi.test/" }
+//
 // What the session provider owes the screen, and what it owes the server.
 //
 // Three mechanisms live in one file here, and each one of them has already
 // been wrong once in a way no test noticed:
 //
 //   - the countdown to expiry, which used to decode a JWT this app no longer
-//     holds, and whose whole difficulty is that the session *slides*: a
-//     deadline read once and never revised announces "five minutes left" to
-//     somebody with days left, and then logs them out mid-sentence;
+//     holds, then inferred a window from `GET /auth/me` and slid it locally by
+//     mirroring the server's rule. It now reads the deadline the server states
+//     on `x-osefi-session-expires`, on every authenticated response, errors
+//     included. Both earlier designs announced "five minutes left" to somebody
+//     with days left and then logged them out mid-sentence;
 //   - the role change, which used to be noticed by decoding a re-signed token
 //     out of `x-new-token` — a header the server stopped sending, so the
 //     mechanism was still in the code and had quietly stopped running. It now
@@ -17,7 +21,16 @@
 //
 // Both halves of the interceptor are captured below — the success handler and
 // the error handler. Capturing only the first is exactly how the loop above
-// got in: the error branch never ran in a single test in this file.
+// got in: the error branch never ran in a single test in this file. The error
+// half now carries a second job as well, since an error response slides the
+// session just as much as a successful one does.
+//
+// The page is served from `www.osefi.test` here, not from the API's own origin.
+// jsdom's default is `http://localhost:3000`, which is also what
+// `VITE_DEV_API_URL` says, so with the default every bare path resolved to our
+// own API by pure coincidence of the test environment and the origin guard
+// could not be told apart from no guard at all. Two different origins is also
+// what production looks like — www.osefi.net and api.osefi.net.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, waitFor, fireEvent, act } from "@testing-library/react";
@@ -33,14 +46,18 @@ const comprobarToken = vi.fn();
 vi.mock("../api/Login.api", () => ({
   comprobarToken: (...args: unknown[]) => comprobarToken(...args),
 }));
-vi.mock("sonner", () => ({ toast: { info: vi.fn(), warning: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({
+  toast: { info: vi.fn(), warning: vi.fn(), error: vi.fn(), success: vi.fn() },
+}));
 
-/** The wire name, spelled out here rather than imported: it is a contract with
- * the other repository, and a test that imported the same constant the code
- * uses would pass just as happily if both were renamed to nonsense. */
+/** The wire names, spelled out here rather than imported: they are contracts
+ * with the other repository, and a test that imported the same constant the
+ * code uses would pass just as happily if both were renamed to nonsense. */
 const ROLE_HEADER = "x-osefi-role";
+const SESSION_EXPIRES_HEADER = "x-osefi-session-expires";
 
 const MINUTO = 60 * 1000;
+const DIA = 24 * 60 * MINUTO;
 
 const permisosCon = (modulo: keyof Permisos, accion: "ver" | "crear"): Permisos => {
   const out = sinPermisos();
@@ -126,7 +143,7 @@ beforeEach(() => {
   // default: a test that does not care gets a plain "no session" answer
   // instead of either crashing on an unmocked `vi.fn()` return value or
   // silently overwriting a session a test set up through `<Establecer>`.
-  comprobarToken.mockResolvedValue({ status: 401, usuario: null, expires_at: null });
+  comprobarToken.mockResolvedValue({ status: 401, usuario: null });
   // The interceptor is registered once, on the global axios. Capturing it is
   // how this test reaches the code without a server to answer.
   responseUseSpy = vi.spyOn(axios.interceptors.response, "use").mockImplementation(((ok: never, fail: never) => {
@@ -140,31 +157,48 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** What the server would put in the header for a session dying in `ms`. */
+const venceEn = (ms: number) => new Date(Date.now() + ms).toISOString();
+
+const cabeceras = (id_rol?: number | string, vence?: string) => ({
+  ...(id_rol === undefined ? {} : { [ROLE_HEADER]: String(id_rol) }),
+  ...(vence === undefined ? {} : { [SESSION_EXPIRES_HEADER]: vence }),
+});
+
 /**
  * A response from our own API.
  *
- * `id_rol` left out means no role header at all — an ordinary response, which
- * is what most of them are once the countdown is the only thing reading them.
+ * Either header left out means the header did not arrive at all — which is an
+ * ordinary response in both cases, and for the deadline it is the case the
+ * absence contract is about: a proxy that strips what it does not recognise
+ * produces exactly this.
  */
-const respuestaNuestra = (id_rol?: number | string) => ({
-  headers: id_rol === undefined ? {} : { [ROLE_HEADER]: String(id_rol) },
+const respuestaNuestra = (id_rol?: number | string, vence?: string) => ({
+  headers: cabeceras(id_rol, vence),
   config: { url: `${url}/api/evento` },
 });
 
 /** A response from a host we do not control, carrying whatever it likes. */
-const respuestaAjena = (id_rol?: number | string) => ({
-  headers: id_rol === undefined ? {} : { [ROLE_HEADER]: String(id_rol) },
+const respuestaAjena = (id_rol?: number | string, vence?: string) => ({
+  headers: cabeceras(id_rol, vence),
   config: { url: "https://atacante.example/x.jpg" },
 });
 
-/** What the server would put in `expires_at` for a session dying in `ms`. */
-const venceEn = (ms: number) => new Date(Date.now() + ms).toISOString();
+/**
+ * What the error handler sees when our API answers with something other than
+ * a 2xx. The headers ride on these too: `authenticate` runs before any
+ * controller, so a 422 from a missing field carries the same slid deadline a
+ * successful read would have.
+ */
+const errorNuestro = (status: number, vence?: string) => ({
+  response: { status, headers: cabeceras(undefined, vence) },
+  config: { url: `${url}/api/evento` },
+});
 
-const sesionViva = (id_rol: number, permisos: Permisos, expires_at: string | null) => ({
+const sesionViva = (id_rol: number, permisos: Permisos) => ({
   status: 200,
   usuario: { id: 7, id_rol },
   permisos,
-  expires_at,
 });
 
 describe("a role that changes mid-session", () => {
@@ -177,13 +211,13 @@ describe("a role that changes mid-session", () => {
 
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
     expect(can(1, "generador", "crear")).toBe(false);
-    // Two calls, both of them the provider's own housekeeping: the startup
-    // question, and the deadline lookup a session that arrived through the
-    // login screen needs. Waited for rather than assumed, so the count below
-    // cannot pick up a straggler.
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    // One call, the provider's own startup question, and no second one: the
+    // deadline used to be fetched with an extra `/auth/me` right after a login
+    // and now rides on the header of every response, so a second call here
+    // would mean that request came back.
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
     comprobarToken.mockClear();
-    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear"), null));
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
 
     // The server says this request was answered for role 1: this person was
     // promoted while the page was open.
@@ -203,7 +237,7 @@ describe("a role that changes mid-session", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
     comprobarToken.mockClear();
 
     // The header rides on *every* response. Refreshing permissions each time
@@ -225,7 +259,7 @@ describe("a role that changes mid-session", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
     comprobarToken.mockClear();
 
     // The interceptor sees every request the application makes, including the
@@ -251,7 +285,7 @@ describe("a role that changes mid-session", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
     comprobarToken.mockClear();
 
     act(() => {
@@ -269,7 +303,7 @@ describe("a role that changes mid-session", () => {
     // <Establecer>, which is the login screen's path. A session restored from
     // `/auth/me` on a reload is the other one, and it is the one where the
     // guards inside this mechanism have been wrong before.
-    comprobarToken.mockResolvedValueOnce(sesionViva(3, permisosCon("generador", "ver"), null));
+    comprobarToken.mockResolvedValueOnce(sesionViva(3, permisosCon("generador", "ver")));
 
     render(
       <SesionProvider>
@@ -277,7 +311,7 @@ describe("a role that changes mid-session", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
-    comprobarToken.mockResolvedValueOnce(sesionViva(1, permisosCon("generador", "crear"), null));
+    comprobarToken.mockResolvedValueOnce(sesionViva(1, permisosCon("generador", "crear")));
 
     act(() => {
       onResponse!(respuestaNuestra(1));
@@ -300,7 +334,7 @@ describe("a role that changes mid-session", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
 
     let resolver!: (value: unknown) => void;
     comprobarToken.mockReturnValueOnce(new Promise((resolve) => { resolver = resolve; }));
@@ -312,11 +346,143 @@ describe("a role that changes mid-session", () => {
     expect(can(3, "generador", "ver")).toBe(false);
 
     await act(async () => {
-      resolver(sesionViva(1, permisosCon("generador", "crear"), null));
+      resolver(sesionViva(1, permisosCon("generador", "crear")));
     });
 
     expect(can(1, "generador", "crear")).toBe(false);
     expect(toast.info).not.toHaveBeenCalled();
+  });
+
+  it("tries again on the next response when the refresh failed", async () => {
+    // The audit's finding: the role the screen was drawn for used to be moved
+    // forward *before* asking, so one dropped request satisfied the comparison
+    // for good. A demoted technician then spent the rest of the shift looking
+    // at the buttons of the role they no longer had, every click answering 403,
+    // and nothing ever asked again. Wifi in the field drops; this has to
+    // survive one.
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
+    comprobarToken.mockClear();
+    comprobarToken.mockRejectedValueOnce(new Error("wifi caído"));
+
+    await act(async () => {
+      onResponse!(respuestaNuestra(1));
+    });
+
+    // The refresh failed, so the screen is honestly unchanged — the session
+    // must not end over it, and the old permissions are what was last fetched.
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+    expect(can(1, "generador", "crear")).toBe(false);
+    expect(can(3, "generador", "ver")).toBe(true);
+
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
+    await act(async () => {
+      onResponse!(respuestaNuestra(1));
+    });
+
+    await waitFor(() => expect(can(1, "generador", "crear")).toBe(true));
+    expect(comprobarToken).toHaveBeenCalledTimes(2);
+  });
+
+  it("asks once while a refresh is already on its way back", async () => {
+    // The other side of the fix above. The header rides on every response, so
+    // the three or four that land while one refresh is in flight would each
+    // start another — and the reason the old code did not was the very line
+    // that broke the retry. The flag replacing it has to hold this on its own.
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
+    comprobarToken.mockClear();
+    comprobarToken.mockReturnValue(new Promise(() => {}));
+
+    act(() => {
+      onResponse!(respuestaNuestra(1));
+      onResponse!(respuestaNuestra(1));
+      onResponse!(respuestaNuestra(1));
+    });
+
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("el guardián de origen", () => {
+  // El interceptor es global: ve la respuesta de cualquier host al que la
+  // aplicación pida algo, y las exportaciones de informes piden imágenes a
+  // rutas guardadas en la base de datos. Un host ajeno controla sus propias
+  // cabeceras, así que sin este guardián podría fabricar un cambio de rol y
+  // empujar el vencimiento de una sesión que no ha tocado.
+  it("juzga una URL relativa por el baseURL de la petición, no por el de la página", async () => {
+    // `axios` resuelve una URL relativa contra el `baseURL` de la petición, y
+    // este guardián tiene que resolverla igual. Resolverla siempre contra
+    // `window.location` era una trampa en dos direcciones: el día que alguien
+    // ponga un `baseURL` (hoy no hay ningún `axios.create` en el repo), todas
+    // las URLs pasan a ser rutas sueltas, todas resuelven al origen del
+    // frontend, y la detección de rol y la cuenta atrás se van en silencio —
+    // y una respuesta que `axios` mandó a otro host se colaría como nuestra.
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    comprobarToken.mockClear();
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
+
+    act(() => {
+      onResponse!({
+        headers: cabeceras(1),
+        config: { baseURL: "https://atacante.example/", url: "/api/evento" },
+      });
+    });
+
+    expect(comprobarToken).not.toHaveBeenCalled();
+    expect(can(1, "generador", "crear")).toBe(false);
+  });
+
+  it("acepta una URL relativa cuando el baseURL sí es el de nuestra API", async () => {
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    comprobarToken.mockClear();
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
+
+    act(() => {
+      onResponse!({
+        headers: cabeceras(1),
+        config: { baseURL: `${url}/`, url: "/api/evento" },
+      });
+    });
+
+    await waitFor(() => expect(can(1, "generador", "crear")).toBe(true));
+  });
+
+  it("descarta una petición sin URL en vez de dejarla pasar", async () => {
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    comprobarToken.mockClear();
+    comprobarToken.mockResolvedValue(sesionViva(1, permisosCon("generador", "crear")));
+
+    act(() => {
+      onResponse!({ headers: cabeceras(1), config: {} });
+    });
+
+    expect(comprobarToken).not.toHaveBeenCalled();
   });
 });
 
@@ -336,7 +502,7 @@ describe("el arranque de sesión", () => {
   });
 
   it("loading sigue en true hasta que la respuesta llega", async () => {
-    let resolver!: (value: { status: number; usuario: null; expires_at: null }) => void;
+    let resolver!: (value: { status: number; usuario: null }) => void;
     comprobarToken.mockReturnValue(new Promise((resolve) => { resolver = resolve; }));
 
     render(
@@ -351,12 +517,12 @@ describe("el arranque de sesión", () => {
     await Promise.resolve();
     expect(latest?.loading).toBe(true);
 
-    resolver({ status: 401, usuario: null, expires_at: null });
+    resolver({ status: 401, usuario: null });
     await waitFor(() => expect(latest?.loading).toBe(false));
   });
 
   it("un 200 reconstruye la sesión", async () => {
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), null));
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
 
     render(
       <SesionProvider>
@@ -370,7 +536,7 @@ describe("el arranque de sesión", () => {
   });
 
   it("un 401 deja el estado anónimo, sin toasts de error", async () => {
-    comprobarToken.mockResolvedValue({ status: 401, usuario: null, expires_at: null });
+    comprobarToken.mockResolvedValue({ status: 401, usuario: null });
 
     render(
       <SesionProvider>
@@ -382,6 +548,29 @@ describe("el arranque de sesión", () => {
     expect(latest?.sesion.autenticado).toBe(false);
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("no hace una segunda pregunta para averiguar el vencimiento", async () => {
+    // Había un efecto aparte que, en cuanto había sesión, pedía otra vez
+    // `/auth/me` solo para saber cuándo vencía. Sobra desde que el vencimiento
+    // viaja en la cabecera de cada respuesta autenticada, y no era gratis: su
+    // `.then` no comprobaba si la sesión seguía existiendo, así que al cerrar
+    // sesión antes de que volviera armaba el aviso y el cierre de una sesión
+    // muerta — medido, con «tu sesión vence en 5 minutos» delante del
+    // formulario de acceso.
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
+
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    // Una vuelta más de microtareas: si algún efecto encadenara una segunda
+    // pregunta al ver la sesión, ya habría salido.
+    await act(async () => { await Promise.resolve(); });
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -443,7 +632,7 @@ describe("logout", () => {
     // ya no se puede volver a escribir — pero este camino, el único donde
     // existía, sigue necesitando su prueba: es el que no pasa por
     // `<Establecer>`.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), null));
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
     const post = vi.spyOn(axios, "post").mockResolvedValue({});
 
     const { getByText } = render(
@@ -484,6 +673,108 @@ describe("logout", () => {
     // anything the old role could.
     expect(can(3, "generador", "ver")).toBe(false);
     expect(latest?.sesion.autenticado).toBe(false);
+
+    // And the failure is not swallowed — see the next test for what is said
+    // about it. Awaited here only so the rejection settles inside the test.
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+  });
+
+  it("says so when the server never got the logout, and offers to send it again", async () => {
+    // The local cleanup above has to happen either way, but for a while that
+    // was the whole story: the request was fired with `.catch(() => undefined)`
+    // and a failure left no trace anywhere. The session row stays open and the
+    // cookie — a persistent one, with an `expires`, so closing the browser does
+    // not drop it — keeps working for up to a week. On the shared field laptop
+    // that is the next person opening the ERP inside the previous person's
+    // account, with the screen having said "logged out" to both of them.
+    const post = vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledTimes(1));
+    const [mensaje, opciones] = vi.mocked(toast.error).mock.calls[0] as [string, { id?: string; duration?: number; action?: { label: string; onClick: () => void } }];
+    // The wording has to say what is actually true — the session may still be
+    // open on this machine — rather than "something went wrong", which tells
+    // somebody on a shared laptop nothing they can act on.
+    expect(mensaje).toContain("puede seguir abierta en este equipo");
+    // Not a four-second toast: this one waits to be read.
+    expect(opciones.duration).toBe(Infinity);
+    expect(opciones.action?.label).toBe("Reintentar");
+
+    // And the offer is real: pressing it sends the same request again, and
+    // says so when it lands.
+    post.mockResolvedValueOnce({});
+    await act(async () => {
+      opciones.action!.onClick();
+    });
+
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(post).toHaveBeenLastCalledWith(`${urlApi}auth/logout`);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+    const [exito, opcionesExito] = vi.mocked(toast.success).mock.calls[0] as [string, { id?: string }];
+    expect(exito).toBe("Sesión cerrada en el servidor.");
+    // The same toast, replaced — not a second one next to it. The warning
+    // never expires on its own, so without a shared id the screen would end
+    // up holding "may still be open" and "closed on the server" at the same
+    // time, and pressing the button four times with no signal would stack
+    // four copies of the warning.
+    expect(opcionesExito.id).toBe(opciones.id);
+    expect(opciones.id).toBeTruthy();
+  });
+
+  it("no avisa de nada cuando el 401 dice que ya no había sesión que cerrar", async () => {
+    // El camino más ordinario que hay: a alguien le vence la sesión con la
+    // pestaña abierta, el temporizador llama a `logout()`, y el servidor
+    // contesta 401 porque esa credencial ya no vale. No es un fallo al
+    // revocar, es que no quedaba nada que revocar — y decirle en un aviso que
+    // no caduca que su sesión «puede seguir abierta» sería una falsa alarma
+    // servida a todo el mundo, en la única pantalla donde las alarmas tienen
+    // que creerse.
+    vi.spyOn(axios, "post").mockRejectedValue({ response: { status: 401 } });
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("does not announce anything when the server did close the session", async () => {
+    // The other half: the ordinary logout must stay silent. A confirmation
+    // toast on every logout is noise for news the person already has — the
+    // login form is in front of them — and noise is how people learn to
+    // dismiss the toast that matters.
+    vi.spyOn(axios, "post").mockResolvedValue({});
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+    await act(async () => { await Promise.resolve(); });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 
   it("does not call the server when there is no session to close", async () => {
@@ -541,6 +832,33 @@ describe("logout", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("no llama al servidor dos veces cuando dos peticiones dan 401 a la vez", async () => {
+    // El caso más ordinario que hay: una pantalla que carga tres cosas a la
+    // vez y la sesión muere. Las dos respuestas vuelven 401 antes de que React
+    // vuelva a renderizar, así que el `hasSessionRef.current = false` que
+    // `logout()` escribe a mano — en vez de esperar al efecto que lo
+    // sincroniza con el estado — es lo único que impide un segundo POST. Se
+    // observa en el mismo tick, sin mirar nada interno.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    post.mockClear();
+
+    await act(async () => {
+      const a = onError!({ response: { status: 401 }, config: { url: `${url}/api/evento` } }).catch(() => undefined);
+      const b = onError!({ response: { status: 401 }, config: { url: `${url}/api/poste` } }).catch(() => undefined);
+      await Promise.all([a, b]);
+    });
+
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it("ends the session on a 401 from any other request", async () => {
     // The other half of the same handler, and the reason the exclusion above
     // has to be an exclusion and not a blanket "ignore 401s": a 401 anywhere
@@ -567,6 +885,60 @@ describe("logout", () => {
     expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
   });
 
+  it("dice por qué la pantalla cambió cuando la sesión se cerró desde fuera", async () => {
+    // Un administrador revoca la sesión del portátil que alguien dejó en el
+    // colectivo, o la ventana de inactividad se agota con la pestaña dormida y
+    // ningún temporizador llega a avisar. La persona estaba escribiendo un
+    // evento y de golpe está en el formulario de acceso. Hasta aquí no había
+    // ni una palabra: nada que distinguiera una revocación de la aplicación
+    // rompiéndose. Vencimiento y revocación no se pueden separar desde aquí
+    // —el servidor contesta 401 a los dos— así que el texto cubre los dos en
+    // vez de adivinar.
+    vi.spyOn(axios, "post").mockResolvedValue({});
+
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    await act(async () => {
+      await onError!({
+        response: { status: 401 },
+        config: { url: `${url}/api/evento` },
+      }).catch(() => undefined);
+    });
+
+    expect(toast.error).toHaveBeenCalledWith("Tu sesión se cerró. Volvé a iniciar sesión.");
+  });
+
+  it("no anuncia ninguna sesión cerrada en un arranque anónimo", async () => {
+    // La primera pregunta que hace la página es `/auth/me`, y sin cookie
+    // contesta 401. Ese 401 pasa por este mismo manejador, así que sin la
+    // guarda de sesión todo el que abre el ERP por la mañana leería que su
+    // sesión se cerró antes de haber tenido ninguna.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(latest?.loading).toBe(false));
+
+    await act(async () => {
+      await onError!({
+        response: { status: 401 },
+        config: { url: `${urlApi}auth/me` },
+      }).catch(() => undefined);
+    });
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("leaves the session alone on a 403", async () => {
     // A 403 is an ordinary answer to an ordinary request: somebody opened a
     // report that is not theirs. Logging them out for it throws away whatever
@@ -590,16 +962,19 @@ describe("logout", () => {
 
     expect(latest?.sesion.autenticado).toBe(true);
     expect(post).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });
 
-describe("la cuenta atrás, que se desliza con la sesión", () => {
+describe("la cuenta atrás, que sigue lo que dice el servidor", () => {
   // La sesión no vence a una hora fija: cada petición que el servidor
-  // contesta empuja el vencimiento otra ventana entera hacia delante. Una
-  // cuenta atrás leída una vez y nunca revisada avisa «te quedan cinco
-  // minutos» a alguien que tiene días, y después lo echa. Estos tests fijan
-  // que la cuenta atrás se mueve con lo que de verdad la mueve: las
-  // respuestas de nuestra API.
+  // contesta empuja el vencimiento otra ventana entera hacia delante. El
+  // servidor dice en qué instante muere, en la cabecera de cada respuesta
+  // autenticada, y esta cuenta atrás no hace más que apuntar ahí. Antes lo
+  // deducía —una ventana medida al cargar la página, empujada a mano en cada
+  // 2xx— y las dos mitades de esa deducción estaban mal: la ventana salía de
+  // la fila tal como estaba ANTES de que la propia petición la deslizara, y
+  // las respuestas de error no contaban aunque deslizaran igual.
   beforeEach(() => {
     // `shouldAdvanceTime` deja que el tiempo real siga corriendo por debajo,
     // así `waitFor` y las promesas siguen funcionando mientras `Date.now()` y
@@ -617,16 +992,25 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
     });
   };
 
-  it("avisa cinco minutos antes del vencimiento que dio el servidor, y cierra la sesión al llegar", async () => {
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
-    const post = vi.spyOn(axios, "post").mockResolvedValue({});
-
-    render(
+  /** Una sesión viva, en pantalla, sin ningún vencimiento aprendido todavía. */
+  const conSesion = async () => {
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
+    const utils = render(
       <SesionProvider>
         <Sonda />
       </SesionProvider>,
     );
     await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    return utils;
+  };
+
+  it("avisa cinco minutos antes del vencimiento que dijo el servidor, y cierra la sesión al llegar", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+    await conSesion();
+
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
 
     await avanzar(14 * MINUTO);
     expect(toast.warning).not.toHaveBeenCalled();
@@ -644,26 +1028,23 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
     expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
   });
 
-  it("no avisa a la hora vieja cuando la sesión se ha ido renovando", async () => {
+  it("mueve el aviso cuando el servidor manda un vencimiento nuevo", async () => {
     // El test que decide el diseño. Con una cuenta atrás congelada en el
-    // `expires_at` del arranque, el aviso salta en el minuto 15 aunque la
-    // persona haya seguido trabajando: en el servidor esa sesión vence en el
-    // minuto 30, no en el 20. Un aviso que salta cuando no toca enseña a la
-    // gente a ignorarlo.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
+    // primer vencimiento, el aviso salta en el minuto 15 aunque la persona
+    // haya seguido trabajando: en el servidor esa sesión vence en el minuto
+    // 30, no en el 20. Un aviso que salta cuando no toca enseña a la gente a
+    // ignorarlo.
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
 
     await avanzar(10 * MINUTO);
-    // Una petición cualquiera de la aplicación, contestada por el servidor:
-    // eso, y solo eso, es lo que empuja el vencimiento de la fila.
+    // Una petición cualquiera, contestada: el servidor deslizó la fila y lo
+    // dice en la cabecera de esa misma respuesta.
     act(() => {
-      onResponse!(respuestaNuestra());
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
     });
 
     await avanzar(6 * MINUTO); // minuto 16: la hora vieja del aviso ya pasó
@@ -676,65 +1057,61 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("una respuesta de otro host no renueva nada", async () => {
-    // El reverso del test anterior. Un host cualquiera contestando a una
-    // descarga de imagen no ha tocado nuestra sesión, así que no puede
-    // empujar su vencimiento — ni retrasar el aviso que protege el trabajo
-    // sin guardar.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
+  it("una respuesta con error también mueve el vencimiento", async () => {
+    // El hallazgo que cierra la cabecera. `authenticate` corre antes que
+    // cualquier controlador, así que un 422 por un campo que falta deslizó la
+    // sesión otra semana igual que una lectura buena. Contar solo los 2xx
+    // significaba echar a quien guardó un formulario, recibió el error de
+    // validación y siguió trabajando. La regla es «cualquier respuesta que
+    // llegó», no «cualquier respuesta 2xx» — y el 500 de aquí también sirve
+    // para separar las dos cosas: que renueve, sin cerrar la sesión.
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
-
-    await avanzar(10 * MINUTO);
     act(() => {
-      onResponse!(respuestaAjena());
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
     });
-
-    await avanzar(6 * MINUTO);
-    expect(toast.warning).toHaveBeenCalledTimes(1);
-  });
-
-  it("una respuesta con error tampoco renueva nada", async () => {
-    // El manejador de error no llama a la renovación, y es a propósito: un
-    // 401 es justo la respuesta que prueba que la sesión NO está viva. Se
-    // usa un 500 aquí para separar las dos cosas — que no renueve, sin que
-    // además cierre la sesión.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
-
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
 
     await avanzar(10 * MINUTO);
     await act(async () => {
-      await onError!({
-        response: { status: 500 },
-        config: { url: `${url}/api/evento` },
-      }).catch(() => undefined);
+      await onError!(errorNuestro(422, venceEn(20 * MINUTO))).catch(() => undefined);
     });
 
-    await avanzar(6 * MINUTO);
+    await avanzar(6 * MINUTO); // minuto 16: la hora vieja del aviso ya pasó
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
+
+    await avanzar(10 * MINUTO); // minuto 26: cinco antes del vencimiento nuevo
     expect(toast.warning).toHaveBeenCalledTimes(1);
     expect(latest?.sesion.autenticado).toBe(true);
   });
 
-  it("una sesión que acaba de entrar pregunta su vencimiento al servidor", async () => {
-    // `POST /api/login` contesta con el usuario y los permisos, y ningún
-    // vencimiento. Sin esta pregunta, la cuenta atrás existiría solo para
-    // quien recarga la página — y la forma normal de entrar al ERP es el
-    // formulario de acceso. Eso es exactamente cómo murió `x-new-token`: un
-    // mecanismo presente en el código que no llegaba a ejecutarse nunca.
-    comprobarToken
-      .mockResolvedValueOnce({ status: 401, usuario: null, expires_at: null })
-      .mockResolvedValueOnce(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
+  it("una respuesta de otro host no puede mover el vencimiento", async () => {
+    // El reverso de los dos anteriores. Un host cualquiera contestando a una
+    // descarga de imagen no ha tocado nuestra sesión, así que no puede
+    // empujar su vencimiento — ni retrasar el aviso que protege el trabajo
+    // sin guardar — por mucho que mande la cabecera.
+    await conSesion();
+
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
+
+    await avanzar(10 * MINUTO);
+    act(() => {
+      onResponse!(respuestaAjena(undefined, venceEn(20 * MINUTO)));
+    });
+
+    await avanzar(6 * MINUTO);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+  });
+
+  it("una sesión que acaba de entrar aprende su vencimiento de la primera respuesta", async () => {
+    // `POST /api/login` no pasa por `authenticate`, así que su respuesta no
+    // trae la cabecera: quien entra por el formulario empieza sin plazo
+    // ninguno y lo aprende de la primera petición que haga la pantalla —y la
+    // pantalla de inicio pide su tablero al montarse. Antes esto se resolvía
+    // con una segunda pregunta a `/auth/me`, que es la que ya no se hace.
+    comprobarToken.mockResolvedValue({ status: 401, usuario: null });
 
     render(
       <SesionProvider>
@@ -742,66 +1119,77 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
         <Sonda />
       </SesionProvider>,
     );
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
 
     await avanzar(16 * MINUTO);
     expect(toast.warning).toHaveBeenCalledTimes(1);
   });
 
-  it("no vuelve a preguntar cuando el arranque ya trajo el vencimiento", async () => {
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
+  it("una cabecera ausente no arma nada por sí sola", async () => {
+    // «Sin novedad» es lo único que puede significar una cabecera que no
+    // llegó. Quien todavía entra con el token antiguo no tiene fila de sesión
+    // detrás y el servidor no manda ningún vencimiento, así que no hay nada
+    // que contar y no se cuenta.
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
-    await avanzar(0);
-
-    expect(comprobarToken).toHaveBeenCalledTimes(1);
-  });
-
-  it("un vencimiento nulo no arma nada, y no se pregunta dos veces", async () => {
-    // Quien todavía entra con el token antiguo no tiene fila de sesión
-    // detrás, así que `/auth/me` contesta `expires_at: null`. «Preguntado, y
-    // no hay nada que contar» es una respuesta, no una respuesta que falta:
-    // sin distinguirlas, esto preguntaría otra vez en cada carga de página.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), null));
-
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra());
+    });
 
     await avanzar(60 * MINUTO);
     expect(toast.warning).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(latest?.sesion.autenticado).toBe(true);
-    expect(comprobarToken).toHaveBeenCalledTimes(1);
+  });
+
+  it("una cabecera ausente no cancela el plazo que ya había", async () => {
+    // La mitad del contrato que es fácil hacer mal, y la que echa a la gente
+    // por una configuración de red: un proxy que quita las cabeceras que no
+    // conoce produce exactamente la misma ausencia que un servidor que no
+    // manda ninguna. Si la ausencia se leyera como «ya venció», o como una
+    // razón para desarmar, ese proxy dejaría a todo el mundo sin aviso o en la
+    // calle. El plazo que ya se sabía sigue en pie, ni movido ni borrado.
+    await conSesion();
+
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
+
+    await avanzar(10 * MINUTO);
+    act(() => {
+      onResponse!(respuestaNuestra());
+    });
+
+    // Nada ha pasado en el minuto 10 — leer la ausencia como vencimiento se
+    // vería aquí, con la sesión cerrada de golpe.
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
+
+    await avanzar(6 * MINUTO); // minuto 16, con el aviso puesto en el 15
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+
+    await avanzar(5 * MINUTO); // minuto 21, con el vencimiento en el 20
+    expect(toast.error).toHaveBeenCalledWith("Tu sesión expiró. Por favor, volvé a iniciar sesión.");
   });
 
   it("un vencimiento ya pasado no echa a nadie por su cuenta", async () => {
     // Una sesión que el servidor ya considera muerta se cierra cuando el
     // servidor lo dice, con un 401. Armar un temporizador para un plazo
     // negativo lo dispararía de inmediato y echaría a alguien a quien el
-    // servidor no ha refusado todavía — por ejemplo, con el reloj del equipo
+    // servidor no ha rechazado todavía — por ejemplo, con el reloj del equipo
     // mal puesto.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(-1 * MINUTO)));
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(-1 * MINUTO)));
+    });
 
     await avanzar(10 * MINUTO);
-    // Neither timer: a negative delay handed to `setTimeout` fires on the
-    // next tick, so a missing "only if it is still in the future" guard shows
-    // up here as an instant warning, an instant logout, or both.
     expect(toast.warning).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(latest?.sesion.autenticado).toBe(true);
@@ -812,14 +1200,12 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
     // plazo de un `setTimeout` se comporta como cero: el temporizador salta en
     // el tick siguiente. Nadie debería quedarse fuera porque una fecha viniera
     // torcida.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), "mañana por la tarde"));
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, "mañana por la tarde"));
+      onResponse!(respuestaNuestra(undefined, "   "));
+    });
 
     await avanzar(10 * MINUTO);
     expect(toast.warning).not.toHaveBeenCalled();
@@ -829,18 +1215,15 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
 
   it("una sesión más corta que el aviso vence sin avisar, en vez de avisar de golpe", async () => {
     // Cinco minutos de aviso sobre una sesión que dura tres no son un aviso:
-    // el plazo sale negativo y `setTimeout` lo dispara en el tick siguiente,
-    // así que la alarma sonaría al cargar la página. Lo que sí tiene que
-    // seguir funcionando es el vencimiento en su hora.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(3 * MINUTO)));
+    // el plazo sale negativo y `setTimeout` lo dispararía en el tick
+    // siguiente, así que la alarma sonaría al cargar la página. Lo que sí
+    // tiene que seguir funcionando es el vencimiento en su hora.
     const post = vi.spyOn(axios, "post").mockResolvedValue({});
+    await conSesion();
 
-    render(
-      <SesionProvider>
-        <Sonda />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(3 * MINUTO)));
+    });
 
     await avanzar(1 * MINUTO);
     expect(toast.warning).not.toHaveBeenCalled();
@@ -853,13 +1236,78 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
     expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
   });
 
-  it("una sesión nueva, después de cerrar la anterior, vuelve a preguntar su vencimiento", async () => {
-    // Todo lo que se aprendió de la sesión anterior se olvida al cerrarla: la
-    // ventana, y también el hecho de haber preguntado. Si lo segundo se
-    // quedara puesto, quien vuelve a entrar sin recargar la página se queda
-    // sin cuenta atrás durante toda la sesión nueva — y en un equipo
-    // compartido, entrar y salir varias veces sin recargar es lo normal.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
+  it("un plazo de treinta días espera treinta días, no un tick", async () => {
+    // `setTimeout` guarda su plazo en un entero de 32 bits con signo: por
+    // encima de ~24,8 días desborda y el temporizador salta en el tick
+    // siguiente. Medido con treinta días: `autenticado: false`, un aviso y un
+    // error un segundo después de dibujar la página — todas las sesiones del
+    // ERP muertas al nacer. Y se llega ahí con una sola edición en el otro
+    // repositorio, subir `SESSION_IDLE_DAYS`, que es justamente el cambio que
+    // el comentario de este fichero vendía como seguro.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+    await conSesion();
+
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(30 * DIA)));
+    });
+
+    await avanzar(2 * MINUTO);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
+
+    // Hasta el minuto 6 antes del final, cruzando por el camino el techo de
+    // los 24,8 días donde el temporizador se rearma por tramos.
+    await avanzar(30 * DIA - 8 * MINUTO);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
+
+    await avanzar(2 * MINUTO);
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    expect(toast.error).not.toHaveBeenCalled();
+
+    await avanzar(5 * MINUTO);
+    expect(toast.error).toHaveBeenCalledWith("Tu sesión expiró. Por favor, volvé a iniciar sesión.");
+    expect(latest?.sesion.autenticado).toBe(false);
+    expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
+  });
+
+  it("cerrar sesión desarma la cuenta atrás", async () => {
+    // Sin esto, el aviso y el cierre por vencimiento siguen programados
+    // sobre una sesión que ya no existe: alguien que cerró sesión y dejó la
+    // pestaña abierta vería «tu sesión vence en 5 minutos» delante del
+    // formulario de acceso.
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
+    vi.spyOn(axios, "post").mockResolvedValue({});
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Sonda />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
+
+    fireEvent.click(getByText("salir"));
+
+    await avanzar(25 * MINUTO);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("una sesión nueva no hereda la cuenta atrás de la anterior", async () => {
+    // Dos respuestas llegan siempre después de que la sesión terminó: la del
+    // propio `logout()` —el servidor escribe la cabecera antes de que el
+    // controlador revoque la fila, así que ese vencimiento es viejo por
+    // construcción— y cualquier otra que estuviera en vuelo al pulsar salir.
+    // Sin la guarda de sesión esas arman el aviso y el cierre de una sesión
+    // que ya no existe, y quien vuelve a entrar sin recargar la página hereda
+    // la cuenta atrás de la muerta y se lo lleva por delante. Entrar y salir
+    // varias veces sin recargar es lo normal en un equipo compartido.
+    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver")));
     vi.spyOn(axios, "post").mockResolvedValue({});
 
     const { getByText } = render(
@@ -870,37 +1318,21 @@ describe("la cuenta atrás, que se desliza con la sesión", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
 
     fireEvent.click(getByText("salir"));
-    expect(latest?.sesion.autenticado).toBe(false);
-
+    // La respuesta que estaba en vuelo, con el vencimiento de la sesión
+    // muerta, aterrizando ahora.
+    act(() => {
+      onResponse!(respuestaNuestra(undefined, venceEn(20 * MINUTO)));
+    });
     fireEvent.click(getByText("entrar"));
-    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(2));
 
-    await avanzar(16 * MINUTO);
-    expect(toast.warning).toHaveBeenCalledTimes(1);
-  });
-
-  it("cerrar sesión desarma la cuenta atrás", async () => {
-    // Sin esto, el aviso y el cierre por vencimiento siguen programados
-    // sobre una sesión que ya no existe: alguien que cerró sesión y dejó la
-    // pestaña abierta vería «tu sesión vence en 5 minutos» delante del
-    // formulario de acceso.
-    comprobarToken.mockResolvedValue(sesionViva(3, permisosCon("generador", "ver"), venceEn(20 * MINUTO)));
-    vi.spyOn(axios, "post").mockResolvedValue({});
-
-    const { getByText } = render(
-      <SesionProvider>
-        <Sonda />
-        <Salir />
-      </SesionProvider>,
-    );
-    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
-
-    fireEvent.click(getByText("salir"));
-
-    await avanzar(25 * MINUTO);
+    await avanzar(21 * MINUTO);
     expect(toast.warning).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
+    expect(latest?.sesion.autenticado).toBe(true);
   });
 });

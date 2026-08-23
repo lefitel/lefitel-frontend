@@ -63,15 +63,22 @@ export const loginUsuario = (
  * `.catch()` at the call site to do that this one has not already done.
  * `status` still tells the two apart for whoever wants to (nothing does today).
  *
- * `expires_at` rides along unused by both of today's callers — task 7's
- * expiry timers read it off this same call, and this is the only place that
- * shape is built.
+ * The response body also carries `expires_at`, and it is deliberately not
+ * picked up here. The session's deadline arrives on the
+ * `x-osefi-session-expires` header of every authenticated response — see
+ * `SESSION_EXPIRES_HEADER` in `SesionProvider.tsx` — which is the only source
+ * that keeps up as the session slides, since the server pushes a new value on
+ * every answer instead of only on this one. Reading the body as well would put
+ * the same fact in two places, and the one read once is the one that goes
+ * stale: that is exactly the countdown that warned people five minutes before
+ * a deadline the server had already moved by days. Leaving the field out of
+ * this shape is what makes that unwriteable rather than merely discouraged —
+ * there is nothing here for a future caller to pick up by mistake.
  */
 export const comprobarToken = (): Promise<{
   status: number;
   usuario: UsuarioInterface | null;
   permisos?: Permisos;
-  expires_at: string | null;
 }> => {
   return axios
     .get(`${urlApi}auth/me`)
@@ -79,11 +86,9 @@ export const comprobarToken = (): Promise<{
       status: response.status,
       usuario: response.data.usuario as UsuarioInterface,
       permisos: response.data.permisos as Permisos | undefined,
-      expires_at: (response.data.expires_at as string | null) ?? null,
     }))
     .catch((e) => ({
       status: e.response?.status ?? 500,
       usuario: null,
-      expires_at: null,
     }));
 };

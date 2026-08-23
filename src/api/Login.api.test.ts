@@ -14,7 +14,12 @@
 // The response shape asserted below is not guessed: it is
 // `api/src/controllers/auth.controller.ts:180-184`'s `res.status(200).json({
 // usuario, permisos, expires_at })`, where `usuario` is the six fields the
-// same file's `attributes` list projects (`:173`).
+// same file's `attributes` list projects (`:173`). The `expires_at` of that
+// body is deliberately not mapped — the deadline is read off the
+// `x-osefi-session-expires` header of every authenticated response instead, so
+// that there is one source for it and not two. The tests below feed it in
+// anyway, because the server does: what they pin is that it comes back out
+// nowhere.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
@@ -61,7 +66,10 @@ describe("comprobarToken", () => {
     expect(res.usuario?.id_rol).toBe(3);
     expect(res.usuario).toEqual(usuarioDelServidor);
     expect(res.permisos).toEqual(permisosDelServidor);
-    expect(res.expires_at).toBe("2026-08-30T00:00:00.000Z");
+    // Sent by the server, dropped here on purpose. Asserted by absence rather
+    // than ignored, so putting the second source of the deadline back is a
+    // change that has to argue with a test.
+    expect(res).not.toHaveProperty("expires_at");
   });
 
   it("folds a 401 (no session) into an anonymous result, not an exception", async () => {
@@ -70,7 +78,7 @@ describe("comprobarToken", () => {
 
     const res = await comprobarToken();
 
-    expect(res).toEqual({ status: 401, usuario: null, expires_at: null });
+    expect(res).toEqual({ status: 401, usuario: null });
   });
 
   it("reports 500 — not 401 — for a failure that carries no status, so a dead network is not mistaken for 'no session'", async () => {
@@ -80,7 +88,6 @@ describe("comprobarToken", () => {
 
     expect(res.status).toBe(500);
     expect(res.usuario).toBeNull();
-    expect(res.expires_at).toBeNull();
   });
 });
 

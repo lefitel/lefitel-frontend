@@ -37,11 +37,146 @@ const LOGOUT_URL = `${urlApi}auth/logout`;
  *
  * A name and not a shared constant, deliberately: it is a wire format between
  * two repositories deployed separately, exactly like the path in `LOGOUT_URL`.
+ *
+ * **What this does not notice, declared rather than left to be discovered.**
+ * It compares role *ids*, so it sees a person moved to another role and
+ * nothing else. `PUT /api/permisos/:id_rol` changes what a role may do without
+ * changing anybody's id, so granting rol 2 the `generador` module leaves every
+ * rol 2 with the ERP already open on the old menu, and `ModuleRoute` in
+ * `App.tsx` bounces them back if they type the URL by hand — with nothing on
+ * screen saying to reload. Not a regression (the `x-new-token` mechanism
+ * decoded the same id and had the same blind spot) and not fixable from this
+ * repository: the server would have to hand back something that changes when
+ * the matrix does — a version or a hash of the role's row — for this
+ * comparison to have anything to compare. Written down here because the notice
+ * this file shows, "Sus permisos cambiaron. La pantalla se actualizó.", reads
+ * like the case is covered, and it is not. The dangerous half *is* covered
+ * elsewhere: `PermisosPanel.tsx` disables the checkboxes of one's own role and
+ * the server refuses it besides, so nobody can edit their way out of their own
+ * screen.
  */
 const ROLE_HEADER = "x-osefi-role";
 
+/**
+ * The header the server puts on every authenticated response, carrying the
+ * instant that session stops working — ISO 8601 in UTC, the exact output of
+ * `Date.prototype.toISOString()`.
+ *
+ * This is the only thing in this repository that knows when a session dies,
+ * and that is the fix rather than an accident. The countdown used to be built
+ * from the `expires_at` of `GET /auth/me`: a window measured once at page
+ * load, then pushed forward locally by mirroring the server's sliding rule on
+ * every 2xx. Two things were wrong with mirroring, and both were measured.
+ * The window came off the row as it stood *before* that request slid it, so
+ * somebody returning to the ERP with ten minutes left on the row learned a
+ * ten-minute window while the server had just granted them another seven days
+ * — and their browser then warned them and logged them out, taking whatever
+ * form was open with it. And only 2xx pushed the deadline, while the server
+ * slides a session on *any* authenticated request: a 422 from a missing field
+ * renewed the session for a week and the client did not count it.
+ *
+ * A header states the answer instead of inferring it, and it rides on the
+ * error responses too, because `authenticate` runs before any controller. The
+ * value is the *effective* deadline, with the absolute ceiling already
+ * applied, so there is no second rule to keep in step across two repositories.
+ *
+ * **Absent means "no news", never "expired", and this is the part that is easy
+ * to get wrong.** A proxy that strips headers it does not recognise produces
+ * exactly the same absence as a server that never sent one, so reading absence
+ * as expiry would throw people out over a network configuration. `POST /login`
+ * does not carry it either — it does not pass through `authenticate` — so the
+ * ordinary way into the ERP starts with no deadline at all and learns one from
+ * the first ordinary response. Nothing here is allowed to cancel a deadline on
+ * account of a header that did not arrive; only a value that did arrive may
+ * move it. See `SESSION_EXPIRES_HEADER` in `api/src/config/security.ts`.
+ */
+const SESSION_EXPIRES_HEADER = "x-osefi-session-expires";
+
 /** How long before the session dies the warning goes up. */
 const WARNING_LEAD_MS = 5 * 60 * 1000;
+
+/**
+ * The largest delay `setTimeout` can hold, and the reason `armTimers` below
+ * re-arms in stages instead of asking for the whole wait at once.
+ *
+ * The delay is stored as a signed 32-bit integer, so anything past this
+ * overflows and the timer fires on the *next tick* instead of in three weeks.
+ * Measured: a window of thirty days produced `autenticado: false`, a warning
+ * and an expiry toast one tick after the page rendered — every session in the
+ * ERP ended the instant it began. Reachable by one edit nowhere near this
+ * file: `SESSION_IDLE_DAYS` is 7 on the server and this comment used to
+ * promise that raising it was safe because "the next page load learns the new
+ * number by itself". It learned it and then choked on it. Anything above
+ * ~24.8 days crosses the line.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * Ends the session on the server, and says so when it cannot.
+ *
+ * The local cleanup in `logout()` happens whether this succeeds or not, and
+ * has to: somebody who pressed "log out" must not be left sitting in front of
+ * an application that still says they are logged in. But this call is the only
+ * thing that revokes the session row and clears the cookie, and the cookie is
+ * a persistent one — it carries an `expires`, so closing the browser does not
+ * drop it. So a failure here is not cosmetic: the session stays open and
+ * usable for up to a week, and on the shared field laptop the next person to
+ * open the ERP is inside the previous person's account. That failure used to
+ * be swallowed by a bare `.catch(() => undefined)`, which meant the one case
+ * where it matters was also the one case nobody could see.
+ *
+ * So the failure is announced, it does not expire on its own, and it comes
+ * with the only thing the person can actually do about it — send the request
+ * again. A retry is the right offer because the reachable causes are transient
+ * (no signal in the field, the API restarting): the credential is still in the
+ * browser, so a later attempt still authenticates. It says the session "may
+ * still be open" rather than "is": a request that never got an answer might
+ * have been carried out anyway.
+ *
+ * One id shared by the failure, every retry of it and the confirmation, so
+ * that each of them replaces the last instead of stacking. Without it a
+ * successful retry leaves two toasts on screen at once saying opposite things
+ * — "may still be open", which never expires, sitting next to "closed on the
+ * server" — and somebody pressing the button four times with no signal
+ * collects four copies of the same warning.
+ */
+const REVOKE_TOAST_ID = "logout-revoke";
+
+const revokeOnServer = (isRetry: boolean) => {
+  // Only on a retry. Confirming the ordinary case would put a toast on screen
+  // every single time anybody logs out, for news they already have — the login
+  // form is in front of them.
+  const done = () => {
+    if (isRetry) toast.success("Sesión cerrada en el servidor.", { id: REVOKE_TOAST_ID });
+  };
+
+  axios
+    .post(LOGOUT_URL)
+    .then(done)
+    .catch((error: { response?: { status?: number } }) => {
+      // A 401 is not a failure to revoke: it is the server saying this
+      // credential is not authenticated, so there is no session left to close.
+      // Reached on the most ordinary path there is — the expiry timer calls
+      // `logout()` on a session the server has already dropped — and without
+      // this branch everybody whose session ran out with the tab open would be
+      // told, in a toast that never expires, that their session might still be
+      // open. A false alarm on the one screen where alarms have to be believed.
+      if (error?.response?.status === 401) {
+        done();
+        return;
+      }
+      toast.error(
+        "No se pudo cerrar tu sesión en el servidor: puede seguir abierta en este equipo. Reintentá cuando vuelva la conexión.",
+        {
+          id: REVOKE_TOAST_ID,
+          // Until it is dismissed or acted on. A four-second toast about a
+          // session left open on a shared computer is the same as no toast.
+          duration: Infinity,
+          action: { label: "Reintentar", onClick: () => revokeOnServer(true) },
+        },
+      );
+    });
+};
 
 export const SesionProvider = ({ children }: props) => {
   const [sesion, setSesion] = React.useState<SesionInterface>({ usuario: usuarioExample, autenticado: false });
@@ -55,6 +190,22 @@ export const SesionProvider = ({ children }: props) => {
    * stale role is the same as not comparing at all.
    */
   const roleRef = useRef<number | undefined>(undefined);
+  /**
+   * Whether a permission refresh is already on its way back.
+   *
+   * The role header rides on every response, so without this the handful of
+   * responses that arrive while one refresh is in flight would each start
+   * another. It exists as its own flag rather than being implied by `roleRef`
+   * having been moved forward, which is how this used to be done and is what
+   * finding 6 of the audit was: `roleRef` was set to the new role *before*
+   * asking, so a single failed refresh — one dropped wifi, and in the field
+   * they drop — left the comparison permanently satisfied and the screen
+   * showing the old role's buttons for the rest of the session, every click
+   * returning 403. Separating "what the screen was drawn for" from "a request
+   * is out" means a failure leaves the first one alone, and the next response
+   * carrying the same header tries again.
+   */
+  const roleRefreshRef = useRef(false);
   /**
    * Whether there is currently a session for `logout` to end, kept in a ref
    * for the same reason `roleRef` is: `logout` is a stable callback with no
@@ -83,65 +234,15 @@ export const SesionProvider = ({ children }: props) => {
    *
    * The effect below keeps it in step with the state, and `logout` writes it
    * directly on the way out rather than waiting for that effect: this is also
-   * what tells work already in flight — the role refresh in the interceptor —
-   * that there is no longer a session to apply an answer to, and one commit
-   * of lag there is one commit in which a stale answer can put back
-   * permissions `logout` just forgot.
+   * what tells work already in flight — the role refresh in the interceptor,
+   * and any deadline still on its way back — that there is no longer a session
+   * to apply an answer to, and one commit of lag there is one commit in which
+   * a stale answer can put back permissions `logout` just forgot.
    */
   const hasSessionRef = useRef(false);
   useEffect(() => {
     hasSessionRef.current = sesion.autenticado;
   }, [sesion.autenticado]);
-
-  /**
-   * How long a session survives without being used, as the server measures
-   * it — learned from the server, not written down here.
-   *
-   * The session slides: every request the server answers pushes the row's
-   * expiry another window into the future. So a countdown started once, off
-   * the `expires_at` this page was handed when it loaded, is wrong for anyone
-   * who then keeps working. Their session was renewed and the countdown was
-   * not, so it would announce "five minutes left" on a session with days left
-   * and then log them out — taking whatever they had typed with it. That is
-   * not a warning that merely arrives early; it is a warning that is false,
-   * and people who learn to ignore this one lose their work the day it is
-   * true.
-   *
-   * The obvious fix is to ask the server again, and it is a trap: `GET
-   * /auth/me` is an authenticated request, so asking *is* using the session,
-   * and using it slides it. A page that polled for its own deadline would
-   * keep renewing the very thing it was watching — an unattended browser on a
-   * shared desk would never idle out, which is the entire point of an idle
-   * window. The probe cannot observe without changing what it observes.
-   *
-   * So this mirrors the server's rule instead of interrogating it: learn how
-   * long a window is from the one honest answer that costs nothing
-   * (`expires_at` minus the moment it arrived, on the `/auth/me` this page
-   * already makes), then push the deadline forward on every answered
-   * request — which is precisely what the server does with it. No extra
-   * traffic, and no copy of `SESSION_IDLE_DAYS` to keep in step across two
-   * repositories: change it server-side and the next page load learns the new
-   * number by itself.
-   *
-   * What is left of the error is the server's touch throttle — it only writes
-   * `last_used_at` every few minutes, so the real deadline sits a few minutes
-   * either side of this one — and it is bounded by that throttle rather than
-   * by how long the tab has been open. That is the difference that matters: a
-   * countdown a few minutes off is still telling the truth, and a countdown
-   * that ignores sliding is off by however many days the session has slid.
-   */
-  const sessionWindowRef = useRef<number | null>(null);
-  /**
-   * Whether the server has already been asked about this session's deadline.
-   *
-   * Kept apart from `sessionWindowRef` because "asked, and there is nothing to
-   * count down" is a real answer and not a missing one: a caller still on the
-   * old bearer token has no session row behind it, and `/auth/me` says so with
-   * `expires_at: null`. Without this flag the effect below would read that
-   * null window as "not asked yet" and ask a second time on every one of
-   * those page loads.
-   */
-  const expiryAskedRef = useRef(false);
 
   const clearTimers = () => {
     if (timers.current.warning) clearTimeout(timers.current.warning);
@@ -153,31 +254,25 @@ export const SesionProvider = ({ children }: props) => {
     // app sent credentials, dropping the token was the whole session; now the
     // browser also holds an httpOnly cookie nothing on this page can reach,
     // so without this call "logging out" left it alive and sliding for up to
-    // a week on a shared computer anyone could pick up next.
+    // a week on a shared computer anyone could pick up next. See
+    // `revokeOnServer` for what happens when that call does not get through.
     //
     // Skipped when there is no session to begin with: a request that can
     // only answer 401 (see the interceptor below for the request this one
     // has to be told apart from) is not merely wasted, it is the other half
     // of the loop this whole guard exists to break.
     //
-    // Fired and forgotten otherwise: the local cleanup below must happen
-    // whether this succeeds or not, so nobody ends up stuck looking
-    // authenticated on a screen that already sent them back to the login
-    // form.
+    // The local cleanup below runs either way and does not wait for it, so
+    // nobody ends up stuck looking authenticated on a screen that already
+    // sent them back to the login form.
     if (hasSessionRef.current) {
-      axios.post(LOGOUT_URL).catch(() => undefined);
+      revokeOnServer(false);
     }
     // Now, not one commit from now: see the ref's own comment. A second
     // `logout()` before React re-renders keeps its request off the network,
     // and anything already in flight can tell there is nothing left to apply.
     hasSessionRef.current = false;
     clearTimers();
-    // Forgotten along with the session, not merely disarmed: the next login
-    // in this same page is a different session with a different deadline, and
-    // leaving these behind would let it inherit the dead one's window — and
-    // would stop the effect below from ever asking for the real one.
-    sessionWindowRef.current = null;
-    expiryAskedRef.current = false;
     olvidarPermisos();
     setSesion({ usuario: usuarioExample, autenticado: false });
   }, []);
@@ -185,81 +280,89 @@ export const SesionProvider = ({ children }: props) => {
   /**
    * Puts the warning and the expiry on an absolute deadline (epoch ms).
    *
-   * The deadline is trusted to be in the future: `scheduleExpiry` below
-   * refuses anything else, and `renewDeadline` builds one out of a window
-   * that already passed through it. So the expiry is armed unconditionally,
-   * and there is exactly one place — not two shielding each other — where a
-   * bad deadline is caught.
+   * The deadline is trusted to be in the future: `learnDeadline` below refuses
+   * anything else, so the expiry is armed unconditionally and there is exactly
+   * one place — not two shielding each other — where a bad deadline is caught.
    *
    * The warning is conditional, and for a reason of its own: a session whose
    * entire remaining life is shorter than the five minutes of notice has no
    * notice to give. `setTimeout` with a negative delay fires on the next
    * tick, so without this the alarm would go off the instant the page loaded.
+   *
+   * Both are armed in stages when the wait is longer than a `setTimeout` can
+   * express — see `MAX_TIMEOUT_MS`. `arm` waits at most one stage, then asks
+   * the clock again and decides afresh, so a thirty-day window costs two
+   * timers instead of throwing everybody out on the next tick. Reading the
+   * clock each stage rather than counting down a remainder also means a laptop
+   * that was asleep for a week wakes up and fires immediately instead of
+   * waiting out a stage that already elapsed.
    */
   const armTimers = useCallback((deadline: number) => {
     clearTimers();
-    const msToExpiry = deadline - Date.now();
-    const msToWarning = msToExpiry - WARNING_LEAD_MS;
 
-    if (msToWarning > 0) {
-      timers.current.warning = setTimeout(() => {
+    const arm = (slot: "warning" | "expiry", at: number, fire: () => void) => {
+      const delay = at - Date.now();
+      timers.current[slot] =
+        delay > MAX_TIMEOUT_MS
+          ? setTimeout(() => arm(slot, at, fire), MAX_TIMEOUT_MS)
+          : setTimeout(fire, Math.max(delay, 0));
+    };
+
+    const warnAt = deadline - WARNING_LEAD_MS;
+    if (warnAt > Date.now()) {
+      arm("warning", warnAt, () => {
         toast.warning("Tu sesión vence en 5 minutos. Guardá tu trabajo.", { duration: 10000 });
-      }, msToWarning);
+      });
     }
-    timers.current.expiry = setTimeout(() => {
+    arm("expiry", deadline, () => {
       toast.error("Tu sesión expiró. Por favor, volvé a iniciar sesión.");
       logout();
-    }, msToExpiry);
+    });
   }, [logout]);
 
   /**
-   * Starts the countdown from what the server said, and remembers how long a
-   * window is so the slide below has something to move.
+   * Takes the deadline the server just stated and points the countdown at it.
    *
-   * Takes the `expires_at` of `GET /auth/me` — the session row's own expiry,
-   * read out of the database — where it used to decode `exp` from a JWT this
-   * page no longer holds and no longer wants.
+   * Called for every response from our own API that carried
+   * `SESSION_EXPIRES_HEADER`, which is every response the server answered with
+   * a session cookie — the errors included, because that is what makes this
+   * honest. Nothing is computed here: the header holds the instant, ceiling
+   * already applied, so there is no window to remember and no sliding rule to
+   * mirror.
+   *
+   * Three ways to be handed nothing usable, and all three mean the same thing:
+   * leave the countdown exactly as it is.
+   *
+   *   - No header. "No news" — see `SESSION_EXPIRES_HEADER` on why absence
+   *     must never be read as expiry.
+   *   - An unparseable date. A garbled value is not information; cancelling a
+   *     deadline over one would let a single mangled response silently remove
+   *     the warning that protects unsaved work.
+   *   - An instant already past. A session the server considers dead ends on
+   *     its next 401, not on a timer here, and `setTimeout` with a negative
+   *     delay fires on the next tick — which would throw out somebody the
+   *     server has not refused at all. A machine with its clock set a day
+   *     ahead is enough to produce that.
+   *
+   * And nothing is armed unless there is a session to arm it for. Two
+   * responses always arrive after the session is over: `logout()`'s own — the
+   * server writes this header before the controller revokes the row, so that
+   * one is stale by construction — and whatever else was in flight when the
+   * person logged out. Without this guard those would put a five-minute
+   * warning and an expiry on a session that no longer exists: measured, the
+   * warning landed in front of the login form, and a second login in the same
+   * tab inherited the dead session's countdown and was cut short by it.
+   * `logout()` writes `hasSessionRef` itself, so it is already false here
+   * rather than one commit behind — which is also why a 401 needs no exclusion
+   * of its own: whichever order the handler below runs in, either this guard
+   * refuses the deadline or `logout()`'s `clearTimers()` throws it away.
    */
-  const scheduleExpiry = useCallback((expiresAt: string | null) => {
-    expiryAskedRef.current = true;
-    if (!expiresAt) return;
-    const deadline = new Date(expiresAt).getTime();
-    // The one place a deadline is checked; `armTimers` above trusts what it
-    // is handed. An unparseable date, or one already in the past, means there
-    // is nothing to count down to: a session the server already considers
-    // dead ends on its next 401, not on a timer here, and `setTimeout` with a
-    // negative delay fires on the next tick — which would throw out somebody
-    // the server has not refused at all. A machine with its clock set a day
-    // ahead is enough to produce that.
-    //
-    // It also keeps a negative or `NaN` window out of the ref below, which
-    // `renewDeadline` would otherwise reuse on every later response.
+  const learnDeadline = useCallback((raw: unknown) => {
+    if (!hasSessionRef.current) return;
+    if (typeof raw !== "string" || raw.trim() === "") return;
+    const deadline = new Date(raw).getTime();
     if (Number.isNaN(deadline) || deadline <= Date.now()) return;
-    sessionWindowRef.current = deadline - Date.now();
     armTimers(deadline);
-  }, [armTimers]);
-
-  /**
-   * Pushes the deadline forward, because the server just did.
-   *
-   * Called for every answered request to our own API: an answer proves the
-   * request arrived, and every request that arrives slides the session. Not
-   * called from the error handler, and that is the point rather than an
-   * oversight — a 401 is the one response that proves the session is *not*
-   * alive, and re-arming a countdown off it would be the plainest lie
-   * available.
-   *
-   * On every single response and not throttled: a report export makes around
-   * two thousand of them, and two thousand timer swaps is a cost nobody can
-   * measure. A "only re-arm if the deadline moves by more than a minute"
-   * guard was written here first and taken back out — it changes no observable
-   * behaviour, so no test can hold it, and untestable cleverness in this file
-   * is how the last mechanism rotted.
-   */
-  const renewDeadline = useCallback(() => {
-    const windowMs = sessionWindowRef.current;
-    if (windowMs === null) return;
-    armTimers(Date.now() + windowMs);
   }, [armTimers]);
 
   /**
@@ -279,8 +382,8 @@ export const SesionProvider = ({ children }: props) => {
     roleRef.current = sesion.permisos ? sesion.usuario.id_rol : undefined;
   }, [sesion.permisos, sesion.usuario.id_rol]);
 
-  // Interceptor de axios: sigue el vencimiento deslizante, detecta el cambio
-  // de rol y hace auto-logout ante un 401.
+  // Interceptor de axios: sigue el vencimiento que dice el servidor, detecta
+  // el cambio de rol y hace auto-logout ante un 401.
   //
   // Declarado ANTES del efecto de arranque de más abajo, y no por casualidad
   // ni por prolijidad: `axios` congela la lista de interceptores de
@@ -302,15 +405,29 @@ export const SesionProvider = ({ children }: props) => {
      * the database. A crafted `image` value such as ".attacker.tld/x.jpg"
      * concatenated onto the API host produces a request to a host the attacker
      * owns, and that host controls its own response headers *and* its own
-     * CORS, so it can hand this page any `x-osefi-role` it likes. Unguarded,
-     * that buys it a false "your permissions changed" notice and a refetch on
-     * demand — and a deadline pushed past the server's, since a stranger
-     * answering a request never slid our session.
+     * CORS, so it can hand this page any `x-osefi-role` or any deadline it
+     * likes. Unguarded, that buys it a false "your permissions changed" notice
+     * and a refetch on demand — and a countdown pointed wherever it wants,
+     * since a stranger answering a request never touched our session row.
+     *
+     * A relative `url` is resolved the way axios itself resolved it: against
+     * `baseURL` when the request had one, and only against the page otherwise.
+     * Resolving unconditionally against `window.location` was a live trap —
+     * the day somebody sets a `baseURL` (there is no `axios.create` in this
+     * repository today, so nobody has), every request's `url` becomes the bare
+     * path, every path resolves to the *frontend's* origin, and this guard
+     * quietly stops matching: role detection and the countdown both go away
+     * with no test able to notice, since the tests build absolute URLs. Taking
+     * the base from the request keeps the guard honest either way. It cannot
+     * be turned against us, because `baseURL` is set by this application and
+     * `url` is the half that can come out of the database — and an absolute
+     * `url` ignores the base it is resolved against, so a stranger's host
+     * still resolves to a stranger's origin.
      */
-    const isOurApi = (requestUrl: string | undefined): boolean => {
-      if (!requestUrl) return false;
+    const isOurApi = (config: { url?: string; baseURL?: string } | undefined): boolean => {
+      if (!config?.url) return false;
       try {
-        return new URL(requestUrl, window.location.href).origin === new URL(url).origin;
+        return new URL(config.url, config.baseURL || window.location.href).origin === new URL(url).origin;
       } catch {
         return false;
       }
@@ -318,8 +435,8 @@ export const SesionProvider = ({ children }: props) => {
 
     const interceptor = axios.interceptors.response.use(
       (response) => {
-        if (isOurApi(response.config?.url)) {
-          renewDeadline();
+        if (isOurApi(response.config)) {
+          learnDeadline(response.headers?.[SESSION_EXPIRES_HEADER]);
 
           /**
            * A role that changed mid-session used to stay invisible until the
@@ -343,8 +460,8 @@ export const SesionProvider = ({ children }: props) => {
           // like a change away from every real role.
           const fresh = typeof raw === "string" && raw.trim() !== "" ? Number(raw) : NaN;
           const known = roleRef.current;
-          if (Number.isInteger(fresh) && known !== undefined && fresh !== known) {
-            roleRef.current = fresh;
+          if (Number.isInteger(fresh) && known !== undefined && fresh !== known && !roleRefreshRef.current) {
+            roleRefreshRef.current = true;
             comprobarToken()
               .then((res) => {
                 if (res.status !== 200 || !res.usuario) return;
@@ -356,6 +473,16 @@ export const SesionProvider = ({ children }: props) => {
                 // both, and `logout` writes this ref itself so it is already
                 // false here rather than one commit behind.
                 if (!hasSessionRef.current) return;
+                // `roleRef` is deliberately not written here. It means "the
+                // role the permissions on screen were fetched for", and the
+                // effect above computes exactly that from the state this
+                // `setSesion` is about to commit — including the case where
+                // the answer disagrees with the header, where the fetched role
+                // is the one that describes the screen. Writing it here as
+                // well was tried and removed: no test could tell the two
+                // apart, and an unpinned line in this file is how the last
+                // mechanism rotted. What must not come back is the write that
+                // used to sit *before* the request — see `roleRefreshRef`.
                 setSesion((prev) => ({
                   ...prev,
                   usuario: res.usuario as UsuarioInterface,
@@ -366,12 +493,30 @@ export const SesionProvider = ({ children }: props) => {
               .catch(() => {
                 // Left as it was: a failed refresh must not end a working
                 // session, and the server is the one enforcing the change.
+                // `roleRef` is deliberately untouched, so the next response
+                // still carrying the new role starts this again.
+              })
+              .finally(() => {
+                roleRefreshRef.current = false;
               });
           }
         }
         return response;
       },
       (error) => {
+        // An answer with an error is still an answer, and the session slid to
+        // produce it: `authenticate` runs before any controller, so a 422 from
+        // a missing field renewed the session for another window just as much
+        // as a successful read did. Learning only from the 2xx path meant
+        // somebody who saved a form, got a validation error back, and kept
+        // working was counted down to a deadline the server had already moved.
+        // A 401 needs no exception here — see `learnDeadline`, which refuses
+        // to arm anything once there is no session, whichever order these two
+        // statements run in.
+        if (isOurApi(error.config)) {
+          learnDeadline(error.response?.headers?.[SESSION_EXPIRES_HEADER]);
+        }
+
         // 401 means "not authenticated" and ends the session. 403 means
         // "authenticated but not allowed here", which is an ordinary answer to
         // an ordinary request: logging out on it threw users to the login
@@ -393,22 +538,40 @@ export const SesionProvider = ({ children }: props) => {
         // does see it: a 401 on it calls `logout()` like any other request's
         // would. That is safe rather than a problem, because `logout()`'s own
         // request goes to `LOGOUT_URL` — already excluded — so the chain stops
-        // one level down regardless. Its three callers land in three places
-        // and all three are fine: on an ordinary anonymous boot
-        // `hasSessionRef` is still `false` (derived from `autenticado`, which
-        // nothing has set to `true` yet), so `logout()`'s own cheap guard
-        // keeps that call off the network; the role-change refresh above and
-        // the deadline lookup after a login both run mid-session, where a 401
+        // one level down regardless. Its two callers land in two places and
+        // both are fine: on an ordinary anonymous boot `hasSessionRef` is
+        // still `false` (derived from `autenticado`, which nothing has set to
+        // `true` yet), so `logout()`'s own cheap guard keeps that call off the
+        // network; the role-change refresh above runs mid-session, where a 401
         // genuinely means the session just died — an event `logout()` is the
         // correct answer to, not one to hide from.
         if (error.response?.status === 401 && error.config?.url !== LOGOUT_URL) {
+          // Why the screen just changed. This branch is how a session ends
+          // when it was not this browser's decision: an administrator revoked
+          // the laptop somebody left on a bus, or the idle window ran out
+          // while the tab was asleep and no timer was there to announce it.
+          // Until this line it took somebody mid-sentence in an event form
+          // straight to the login screen with no message at all, and nothing
+          // on screen to distinguish it from the application breaking.
+          // Expiry and revocation cannot be told apart from here — the server
+          // answers 401 to both — so the wording covers both rather than
+          // guessing.
+          //
+          // Guarded by the session, and both halves of that guard matter: an
+          // anonymous page load answers its own startup question with a 401
+          // and must not be told a session ended, and the expiry timer above
+          // has already had its say before calling `logout()`, so a 401
+          // arriving behind it does not say it twice.
+          if (hasSessionRef.current) {
+            toast.error("Tu sesión se cerró. Volvé a iniciar sesión.");
+          }
           logout();
         }
         return Promise.reject(error);
       }
     );
     return () => axios.interceptors.response.eject(interceptor);
-  }, [logout, renewDeadline]);
+  }, [logout, learnDeadline]);
 
   // Preguntar al servidor si hay sesión, al arrancar (evita flicker al
   // recargar).
@@ -435,18 +598,20 @@ export const SesionProvider = ({ children }: props) => {
   // declarado antes, no por casualidad) — y ante un 401 aquí llama a
   // `logout()` como ante cualquier otro; no está excluido igual que
   // `LOGOUT_URL`. Es inofensivo: en un arranque anónimo `hasSessionRef`
-  // sigue en `false`, así que ese `logout()` no llega a tocar la red. Ver el
-  // comentario de la exclusión de `LOGOUT_URL`, arriba, para el resto del
-  // porqué.
+  // sigue en `false`, así que ese `logout()` no llega a tocar la red ni a
+  // anunciar nada. Ver el comentario de la exclusión de `LOGOUT_URL`, arriba,
+  // para el resto del porqué.
   //
-  // La misma respuesta trae el vencimiento, así que la cuenta atrás arranca
-  // aquí y no en una segunda petición: una sesión recuperada al recargar ya
-  // sabe cuándo vence antes de dibujarse.
+  // Esta pregunta NO arma la cuenta atrás, y no le hace falta: el vencimiento
+  // llega en la cabecera de cada respuesta autenticada, así que la primera
+  // petición que haga la pantalla ya recién montada lo trae. Este efecto
+  // decide si hay sesión y nada más — antes también leía un `expires_at` del
+  // cuerpo, que era el mismo dato por un segundo camino, y dos caminos para un
+  // dato se separan.
   useEffect(() => {
     comprobarToken()
       .then((res) => {
         if (res.status === 200 && res.usuario) {
-          scheduleExpiry(res.expires_at);
           setSesion({
             usuario: res.usuario,
             permisos: res.permisos,
@@ -455,43 +620,10 @@ export const SesionProvider = ({ children }: props) => {
         }
       })
       .finally(() => setLoading(false));
-    // Once, on mount, and deliberately not once per identity of
-    // `scheduleExpiry`. This asks whether there is a session at all; the day
-    // that callback's identity stops being stable, re-running this would ask
-    // again mid-session and overwrite a live session with whatever the server
-    // answered next. `[]` says "once" outright instead of leaning on a chain
-    // of `useCallback`s staying stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Once, on mount. This asks whether there is a session at all; re-running
+    // it mid-session would overwrite a live session with whatever the server
+    // answered next. `[]` says "once" outright.
   }, []);
-
-  /**
-   * Ask for the deadline of a session that arrived without one.
-   *
-   * The startup effect above gets `expires_at` in the same answer that
-   * restores the session, so a reloaded page needs nothing here. A fresh login
-   * does: `POST /api/login` answers with the user and the permissions and no
-   * expiry at all, so without this the countdown would exist only for people
-   * who reloaded the page — while the ordinary way into the ERP is the login
-   * form. That is exactly how `x-new-token` died: a mechanism still present in
-   * the code and never actually running.
-   *
-   * One request, once per session, and only when there is no answer on file
-   * yet. Declared after the startup effect so the two cannot race over who
-   * asks first, and so "the interceptor is registered before anything asks"
-   * stays the only ordering anyone has to hold in their head.
-   */
-  useEffect(() => {
-    if (!sesion.autenticado || expiryAskedRef.current) return;
-    comprobarToken()
-      .then((res) => {
-        // Only a 200 counts as an answer. A 401 here means the session died
-        // between the login and this question — the interceptor above has
-        // already ended it — and marking the question as asked would leave the
-        // next login in this same page with no countdown at all.
-        if (res.status === 200) scheduleExpiry(res.expires_at);
-      })
-      .catch(() => undefined);
-  }, [sesion.autenticado, scheduleExpiry]);
 
   // Mirrored during render, not in an effect.
   //

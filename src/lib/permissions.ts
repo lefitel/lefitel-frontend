@@ -15,11 +15,13 @@
  * question is asked; it no longer holds an opinion of its own.
  */
 
-export const ROLES = {
-  ADMIN: 1,
-  EDITOR: 2,
-  VIEWER: 3,
-} as const;
+// There was a `ROLES = { ADMIN: 1, EDITOR: 2, VIEWER: 3 }` here, exported and
+// imported by nobody. It was the last piece of the hardcoded matrix described
+// above: three role ids written down in the one file whose own header explains
+// that roles are database rows and can be created from the Seguridad screen.
+// Removed rather than left for a reader to trust — a name that promises the
+// roles are these three is worse than no name, and a fourth role has been
+// creatable for as long as that constant sat here saying otherwise.
 
 export const MODULOS = [
   "postes",

@@ -70,6 +70,28 @@ describe("the session cookie's half of the deal", () => {
 });
 
 describe("the CSRF header", () => {
+  it("is spelled the name the API is checking for", () => {
+    // Written out by hand, and that is the entire point. Every other assertion
+    // in this file builds its expectation out of `CLIENT_HEADER` itself, so it
+    // moves with the constant: renaming `CLIENT_HEADER` to anything at all left
+    // all 273 tests in this repository and all 758 in the API green — verified
+    // by doing it — while in production every write in the ERP came back 403,
+    // because the guard on the server looks for a literal and not for whatever
+    // this repository happens to call it today. A wire format shared by two
+    // separately deployed repositories has to be nailed down on both sides, and
+    // the API nailed down its half in `3f5cc68`.
+    //
+    // The two literals differ in case — `X-Osefi-Client` here,
+    // `x-osefi-client` there — and that is fine rather than overlooked: HTTP
+    // header names are case-insensitive, and Express lowercases every incoming
+    // name before anything reads it. The lowercase comparison below says so
+    // explicitly, so the day somebody "fixes" the casing on one side there is a
+    // line here stating that it was never the thing holding this together.
+    expect(CLIENT_HEADER).toBe("X-Osefi-Client");
+    expect(CLIENT_HEADER.toLowerCase()).toBe("x-osefi-client");
+    expect(CLIENT_HEADER_VALUE).toBe("web");
+  });
+
   it("rides on every method that writes", async () => {
     // The API refuses a cookie-authenticated write that does not carry this, so
     // without this loop's subject every button in the application answers 403

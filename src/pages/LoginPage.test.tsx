@@ -101,7 +101,7 @@ describe("logging in", () => {
     expect(sesiones).toHaveLength(0);
   });
 
-  it("does not persist a token to localStorage — the cookie is the credential now", async () => {
+  it("persists nothing at all to localStorage — the cookie is the credential now", async () => {
     // Nothing else in this file touches `localStorage`, so nothing clears it
     // between tests; start from a known-empty state rather than assume it.
     localStorage.clear();
@@ -127,6 +127,18 @@ describe("logging in", () => {
     // to hold one — so there is nothing on this page to copy into storage the
     // cookie already made redundant. This assertion is what notices anybody
     // putting it back.
-    expect(localStorage.getItem("token")).toBeNull();
+    //
+    // Counted, not looked up by name. This used to read
+    // `localStorage.getItem("token")` and so only refused one spelling:
+    // persisting the very same credential as `jwt`, `sesion` or `auth` passed
+    // it without complaint. That is the shape of assertion — check that
+    // something is absent or present, rather than that the state is correct —
+    // which has passed against broken code sixteen times in this project.
+    // Emptiness is the property that was actually meant, and the login screen
+    // is entitled to store nothing whatsoever: the theme and the sidebar width
+    // are written elsewhere and only when somebody changes them, so a key
+    // appearing here at all is a credential nobody asked for.
+    expect(Object.keys(localStorage)).toEqual([]);
+    expect(localStorage.length).toBe(0);
   });
 });
