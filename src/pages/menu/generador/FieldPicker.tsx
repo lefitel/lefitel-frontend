@@ -73,7 +73,14 @@ const FieldPicker = ({
             id: `a:${a.path}`,
             kind: "aggregate",
             group: a.group,
-            label: `Nº de ${a.label.toLowerCase()}`,
+            // "Contar", not "Nº de": the catalog already has calculated fields
+            // labelled "Nº de revisiones" and "Nº de observaciones" sitting in
+            // the very same group of the very same root, so two entries had the
+            // identical visible text and behaved differently — one can never be
+            // grouped, the other can only ever be a count. A verb reads as what
+            // this entry is: a summary you are adding, not a field that holds a
+            // number.
+            label: `Contar ${a.label.toLowerCase()}`,
             chosen: chosen.has(a.path),
             path: a.path,
             relationLabel: a.label,

@@ -114,7 +114,7 @@ describe("FieldPicker", () => {
     );
 
     await openPicker(user);
-    await user.click(screen.getByRole("option", { name: /nº de revisiones/i }));
+    await user.click(screen.getByRole("option", { name: /contar revisiones/i }));
     expect(onPickAggregate).toHaveBeenCalledWith("revisiones", "Revisiones");
   });
 });
@@ -361,7 +361,7 @@ describe("PreviewTable", () => {
 
   it("explains an empty result rather than showing a blank table", () => {
     wrap(<PreviewTable result={{ ...result, rows: [], total: 0, offset: 0 }} onPage={vi.fn()} />);
-    expect(screen.getByText(/ningún registro coincide/i)).toBeInTheDocument();
+    expect(screen.getByText(/no devolvió ningún registro/i)).toBeInTheDocument();
   });
 });
 
@@ -432,12 +432,12 @@ describe("SavedReports", () => {
         onOpen={vi.fn()} onToggleFavorite={vi.fn()} onDuplicate={vi.fn()} onDelete={onDelete}
       />,
     );
-    await user.click(screen.getByRole("button", { name: /eliminar Pendientes por tramo/i }));
+    await user.click(screen.getByRole("button", { name: /archivar Pendientes por tramo/i }));
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText(/¿Eliminar «Pendientes por tramo»\?/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/¿Archivar «Pendientes por tramo»\?/)).toBeInTheDocument();
     expect(onDelete).not.toHaveBeenCalled();
 
-    await user.click(within(dialog).getByRole("button", { name: "Eliminar" }));
+    await user.click(within(dialog).getByRole("button", { name: "Archivar" }));
     expect(onDelete).toHaveBeenCalledWith(mine);
   });
 });

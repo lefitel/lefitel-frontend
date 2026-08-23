@@ -144,7 +144,15 @@ const ColumnRow = memo(function ColumnRow({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            {isGrouped ? "Agrupando por esta columna" : "Agrupar por esta columna"}
+            {/*
+              One string for both, like the sort button in this same row. The
+              tooltip used to state a status ("Agrupando por esta columna")
+              while the accessible name offered the inverse action ("Dejar de
+              agrupar por X"): in the pressed state the two said opposite
+              things, and a sighted person and a screen-reader user could not
+              talk about the same control.
+            */}
+            {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
           </TooltipContent>
         </Tooltip>
       )}

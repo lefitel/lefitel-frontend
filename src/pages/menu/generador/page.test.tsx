@@ -76,7 +76,7 @@ const grantGenerador = (over: Partial<Record<"ver" | "crear" | "editar" | "archi
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
 const catalog: Catalog = {
-  limits: { maxColumns: 60, maxConditions: 100, maxSorts: 10, maxRows: 50000, maxDepth: 3 },
+  limits: { maxColumns: 60, maxConditions: 100, maxSorts: 10, maxRows: 50000, maxDepth: 3, maxFilterValue: 200 },
   roots: [
     {
       key: "evento", label: "Evento", rowMeaning: "Una fila por evento",
@@ -406,7 +406,7 @@ describe("saving", () => {
     // "que ya no están disponibles", not "que su perfil no puede consultar":
     // a field can also be gone from the catalog, and blaming permissions sends
     // people to ask for one that would not bring the column back.
-    expect(toasts[toasts.length - 1]?.text).toMatch(/sin 2 elementos que ya no están disponibles/);
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 2 elementos/);
     expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
   });
 
@@ -462,7 +462,7 @@ describe("saving", () => {
     await ready();
     await user.click(await screen.findByText("Podado por el servidor"));
 
-    expect(toasts[toasts.length - 1]?.text).toMatch(/sin 3 elementos/);
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 3 elementos/);
   });
 });
 
@@ -486,7 +486,7 @@ describe("the list of saved reports", () => {
     renderPage();
     await ready();
 
-    expect(await screen.findByText(/Mostrando 1 de 2/)).toBeInTheDocument();
+    expect(await screen.findByText(/Mostrando 1 reportes de 2/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cargar más" }));
 
@@ -718,7 +718,7 @@ describe("what the matrix says this role may do", () => {
     await screen.findByText("De alguien");
 
     expect(screen.queryByRole("button", { name: /duplicar/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /eliminar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /archivar/i })).not.toBeInTheDocument();
   });
 
   it("still offers everything to a role that holds it", async () => {
@@ -737,7 +737,7 @@ describe("what the matrix says this role may do", () => {
 
     expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /duplicar/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /eliminar/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /archivar/i })).toBeInTheDocument();
   });
 });
 
@@ -795,5 +795,81 @@ describe("changing the level of detail", () => {
     await user.click(await screen.findByRole("option", { name: /una fila por poste/i }));
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("what the screen tells you to press", () => {
+  // The reason this file gained a describe block about wording: the banner said
+  // "Pulse Actualizar", and the only control with that name is the save button.
+  // Following the instruction wrote a half-finished configuration over the
+  // stored report — for the author and for everyone it was shared with — and
+  // the table still did not refresh. It came from the sibling reports screen,
+  // which does rename its run button once it has generated.
+  it("names the button that actually runs the report", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    // Auto off, so the stale banner is the one thing on screen telling the
+    // reader what to do next.
+    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+
+    await addColumn(user, /Resuelto/);
+
+    const banner = await screen.findByRole("status");
+    expect(banner).toHaveTextContent(/Pulse Generar/);
+    // And it must not name the save button, whose only outcome is overwriting.
+    expect(banner).not.toHaveTextContent(/Pulse Actualizar/);
+  });
+
+  it("blames the filters only when there are filters", async () => {
+    // A revision report whose events are all archived comes back empty through
+    // the archived-parent guard, not through anything the reader typed — with
+    // the filter panel beside it saying "Sin filtros".
+    const user = userEvent.setup();
+    api.runReporte.mockResolvedValue({
+      columns: [{ key: "c0", label: "Descripción", kind: "string", path: "description" }],
+      rows: [], total: 0, limit: 100, offset: 0,
+    });
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    const said = toasts.map((t) => t.text).join(" | ");
+    expect(said).toMatch(/no devolvió ningún registro/);
+    expect(said).not.toMatch(/coincide con estos filtros/);
+  });
+});
+
+describe("when the saved list cannot be read", () => {
+  it("does not claim the user has never saved a report", async () => {
+    // The failure only fired a toast, which disappears, and then the panel went
+    // on stating "Todavía no hay reportes guardados" — a claim about somebody's
+    // data made out of a failed request. Forty saved reports, told to build
+    // their first.
+    api.getReportesGuardados.mockRejectedValue(new Error("500"));
+    renderPage();
+    await ready();
+
+    expect(await screen.findByText(/No se pudieron cargar sus reportes guardados/)).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no hay reportes guardados/)).not.toBeInTheDocument();
+  });
+
+  it("offers a way to try again, and clears the error when it works", async () => {
+    const user = userEvent.setup();
+    api.getReportesGuardados.mockRejectedValueOnce(new Error("500"));
+    renderPage();
+    await ready();
+    await screen.findByText(/No se pudieron cargar sus reportes guardados/);
+
+    api.getReportesGuardados.mockResolvedValue({ rows: [], total: 0, limit: 100, offset: 0 });
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText(/Todavía no hay reportes guardados/)).toBeInTheDocument();
   });
 });

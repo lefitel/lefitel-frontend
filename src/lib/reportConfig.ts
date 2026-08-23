@@ -28,6 +28,7 @@ import type {
 export const MAX_COLUMNS = 60;
 export const MAX_CONDITIONS = 100;
 export const MAX_SORTS = 10;
+export const MAX_FILTER_VALUE = 200;
 export const DEFAULT_LIMIT = 100;
 
 /** The subset of the published limits this module needs. */
@@ -35,11 +36,13 @@ export interface Limits {
   maxColumns?: number;
   maxConditions?: number;
   maxSorts?: number;
+  maxFilterValue?: number;
 }
 
 export const maxColumns = (limits?: Limits) => limits?.maxColumns ?? MAX_COLUMNS;
 export const maxConditions = (limits?: Limits) => limits?.maxConditions ?? MAX_CONDITIONS;
 export const maxSorts = (limits?: Limits) => limits?.maxSorts ?? MAX_SORTS;
+export const maxFilterValue = (limits?: Limits) => limits?.maxFilterValue ?? MAX_FILTER_VALUE;
 
 export const emptyConfig = (root: string): ReportConfig => ({
   root,
@@ -509,7 +512,15 @@ export function validateConfig(
     const reachable = known.has(column.path) ||
       root.aggregateOnly.some((a) => column.path.startsWith(`${a.path}.`));
     if (!reachable) {
-      problems.push(`La columna "${column.path}" no está disponible para su perfil.`);
+      // The user's own name for it when they gave one: the catalog has nothing
+      // to offer here — that is precisely why this problem fired — and quoting
+      // a dotted internal path is what the comment above says this message
+      // exists to avoid. And not "para su perfil": a field can equally have
+      // been retired from the catalog, and naming the wrong cause sends
+      // somebody to ask for a permission that would not help.
+      problems.push(
+        `La columna «${column.label ?? column.path}» ya no está disponible.`,
+      );
     }
   }
 
@@ -558,7 +569,10 @@ export function validateConfig(
       known.has(sort.path) ||
       root.aggregateOnly.some((a) => sort.path.startsWith(`${a.path}.`));
     if (!reachable) {
-      problems.push(`El orden usa "${sort.path}", que no está disponible para su perfil.`);
+      problems.push(
+        `El orden usa «${config.columns.find((c) => c.path === sort.path)?.label ?? sort.path}»,` +
+        ` que ya no está disponible.`,
+      );
       continue;
     }
     const label = findField(root, sort.path)?.label ?? sort.path;
@@ -576,7 +590,7 @@ export function validateConfig(
     }
   }
 
-  for (const [index, node] of (config.filters?.conditions ?? []).entries()) {
+  for (const node of config.filters?.conditions ?? []) {
     if (isFilterGroup(node) || isExists(node)) continue;
     const condition = node as FilterCondition;
     const field = findField(root, condition.path);
@@ -589,7 +603,9 @@ export function validateConfig(
       value === "" ||
       (Array.isArray(value) && (value.length === 0 || value.some((v) => v === "" || v == null)));
     if (empty) {
-      problems.push(`El filtro ${index + 1} sobre "${label}" no tiene valor.`);
+      // No ordinal: the filter rows carry no number on screen, so "El filtro 2"
+      // pointed at nothing. Matches the server's own wording for the same rule.
+      problems.push(`El filtro sobre «${label}» no tiene valor.`);
       continue;
     }
 
@@ -598,7 +614,21 @@ export function validateConfig(
     if (field?.kind === "number") {
       const candidates = Array.isArray(value) ? value : [value];
       const bad = candidates.some((v) => v !== null && v !== undefined && !Number.isFinite(Number(v)));
-      if (bad) problems.push(`El filtro ${index + 1} sobre "${label}" no es un número válido.`);
+      if (bad) problems.push(`El filtro sobre «${label}» no es un número válido.`);
+    }
+
+    // The server refuses a value over its published cap and the box had no
+    // limit at all, so this was the one rule the user met only *after* pressing
+    // Generar, quoting a number the screen had never mentioned. Every other cap
+    // is honoured before the request leaves.
+    const tooLong = (Array.isArray(value) ? value : [value]).some(
+      (v) => typeof v === "string" && v.length > maxFilterValue(limits),
+    );
+    if (tooLong) {
+      problems.push(
+        `El valor del filtro sobre «${label}» es demasiado largo ` +
+        `(máximo ${maxFilterValue(limits)} caracteres).`,
+      );
     }
   }
 

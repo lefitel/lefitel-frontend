@@ -30,9 +30,22 @@ interface Props {
    */
   onToggleSort?: (path: string, agg?: AggFn) => void;
   loading?: boolean;
+  /**
+   * Whether the configuration that produced this result carried any filter.
+   *
+   * Only used to choose the wording of the empty body. Blaming the filters when
+   * there are none sends the reader looking for a filter to loosen while the
+   * panel beside them says "Sin filtros": a revision report comes back empty
+   * because its events were archived, which requiredParentGuards does and no
+   * filter did.
+   */
+  hasFilters?: boolean;
 }
 
-const PreviewTable = ({ result, onPage, sort, onToggleSort, loading }: Props) => {
+/** Thousands separated the way the rest of the screen separates them. */
+const es = (n: number) => n.toLocaleString("es-BO");
+
+const PreviewTable = ({ result, onPage, sort, onToggleSort, loading, hasFilters }: Props) => {
   const { columns, rows, total, limit, offset } = result;
   const page = Math.floor(offset / Math.max(1, limit)) + 1;
   const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
@@ -111,7 +124,18 @@ const PreviewTable = ({ result, onPage, sort, onToggleSort, loading }: Props) =>
             {rows.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={columns.length || 1} className="py-10 text-center text-sm text-muted-foreground">
-                  Ningún registro coincide con estos filtros.
+                  {/*
+                    Three reasons for an empty body and they are not the same
+                    sentence. This cell used to say "no records match these
+                    filters" in all three — including directly above the banner
+                    saying the page fell off the end, and while the footer said
+                    "250 en total". Two of those three statements were false.
+                  */}
+                  {stale
+                    ? "Esta página quedó fuera del reporte."
+                    : hasFilters
+                      ? "Ningún registro coincide con estos filtros."
+                      : "El reporte no devolvió ningún registro."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -169,11 +193,18 @@ const PreviewTable = ({ result, onPage, sort, onToggleSort, loading }: Props) =>
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
         <span>
+          {/*
+            Same formatting as the row-count chip beside Generar. The two are
+            allowed to differ in *value* — the chip describes the configuration
+            being edited, this describes the result on screen — so they must not
+            also differ in shape, or a real disagreement reads as a rendering
+            bug instead of as staleness.
+          */}
           {total === 0
-            ? "Sin resultados"
+            ? "Sin filas"
             : stale
-              ? `${total} en total`
-              : `Mostrando ${from}–${to} de ${total}`}
+              ? `${es(total)} filas en total`
+              : `Mostrando ${es(from)}–${es(to)} de ${es(total)}`}
         </span>
         <div className="flex items-center gap-2">
           <Button

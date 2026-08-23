@@ -92,6 +92,7 @@ const GeneradorPage = () => {
   const [auto, setAuto] = useState(true);
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [savedTotal, setSavedTotal] = useState(0);
+  const [savedFailed, setSavedFailed] = useState(false);
   // Read by `loadSaved` to know where the next page starts, so the loader stays
   // identity-stable and does not re-run on every append.
   const savedRef = useRef<SavedReport[]>(saved);
@@ -196,7 +197,7 @@ const GeneradorPage = () => {
       })
       .catch((error) => {
         setCatalogError(true);
-        toast.error(mensajeDeError(error, "No se pudo cargar el catálogo de campos"));
+        toast.error(mensajeDeError(error, "No se pudieron cargar los campos disponibles"));
       })
       .finally(() => setLoadingCatalog(false));
   }, []);
@@ -221,9 +222,15 @@ const GeneradorPage = () => {
         const rows = Array.isArray(page?.rows) ? page.rows : [];
         setSaved((current) => (append ? [...current, ...rows] : rows));
         setSavedTotal(Number.isFinite(page?.total) ? page.total : rows.length);
+        setSavedFailed(false);
       })
-      .catch((error) =>
-        toast.error(mensajeDeError(error, "No se pudieron cargar los reportes guardados")));
+      .catch((error) => {
+        // Remembered, not only announced. The toast disappears and the panel
+        // used to go on saying "Todavía no hay reportes guardados" — a claim
+        // about the user's data made out of a failed request.
+        setSavedFailed(true);
+        toast.error(mensajeDeError(error, "No se pudieron cargar los reportes guardados"));
+      });
   }, []);
 
   const refreshSaved = useCallback(() => loadSaved(false), [loadSaved]);
@@ -247,7 +254,16 @@ const GeneradorPage = () => {
       if (seq !== runSeq.current) return;   // a newer request already went out
       setResult(data);
       setResultConfig(target);
-      if (data.total === 0) toast.warning("Ningún registro coincide con estos filtros");
+      // Blaming the filters is only honest when there are some. A revision
+      // report whose events are all archived comes back empty through
+      // requiredParentGuards, with the filter panel saying "Sin filtros".
+      if (data.total === 0) {
+        toast.warning(
+          (target.filters?.conditions?.length ?? 0) > 0
+            ? "Ningún registro coincide con estos filtros."
+            : "El reporte no devolvió ningún registro.",
+        );
+      }
     } catch (error) {
       if (seq !== runSeq.current) return;
       toast.error(mensajeDeError(error, "No se pudo generar el reporte"));
@@ -354,6 +370,14 @@ const GeneradorPage = () => {
       setEstimate(null);
       return;
     }
+    // Cleared before asking, not only when the configuration is invalid.
+    //
+    // Every failure here is swallowed below — the 120/min limiter, the fifteen
+    // second timeout, a dropped connection — and without this line the previous
+    // configuration's number stayed on screen looking exactly like a fresh
+    // answer. "40.532 filas" beside Generar, for a filter that leaves 118, is
+    // worse than no number at all.
+    setEstimate(null);
     const controller = new AbortController();
     const timer = setTimeout(() => {
       contarReporte({ ...configRef.current, offset: 0 }, tokenRef.current, controller.signal)
@@ -435,7 +459,8 @@ const GeneradorPage = () => {
     const already = (current.sort ?? []).some((s) => s.path === path && s.agg === agg);
     if (!already && sortLimitReached(current, limitsRef.current)) {
       return toast.warning(
-        `Ya hay ${maxSorts(limitsRef.current)} criterios de orden. Quite alguno para añadir otro.`,
+        `Ya hay ${maxSorts(limitsRef.current)} criterios de orden. Pulse otra vez la flecha` +
+        ` de una columna ya ordenada, hasta apagarla, para liberar uno.`,
       );
     }
     setConfig(toggleSort(current, path, agg, limitsRef.current));
@@ -559,8 +584,18 @@ const GeneradorPage = () => {
       // Not "que su perfil no puede consultar": a piece can also be missing
       // because the field was retired from the catalog, and naming the wrong
       // cause sends people to ask for a permission that would not help.
+      //
+      // "al menos" because the number is a floor, not a count: both prunes drop
+      // a nested filter group whole while counting it as one, so a single
+      // "Filtro avanzado" holding three conditions arrives here as 1. The
+      // server's own comment already described the message as saying "at least
+      // this much" — it did not, and stating a bare number over an undercount
+      // is how a report opens materially wider than its author built it.
+      const one = dropped === 1;
       toast.warning(
-        `«${report.name}» se abrió sin ${dropped} elemento${dropped === 1 ? "" : "s"} que ya no están disponibles.`,
+        `«${report.name}» se abrió sin al menos ${dropped} elemento${one ? "" : "s"}` +
+        ` —columnas, filtros, orden o agrupación— que ya no ${one ? "está" : "están"}` +
+        ` disponible${one ? "" : "s"}. Si lo guarda ahora, la pérdida será permanente.`,
       );
     } else {
       toast.info(`«${report.name}» cargado. Pulse Generar para verlo.`);
@@ -593,7 +628,7 @@ const GeneradorPage = () => {
       refreshSaved();
       toast.success("Reporte archivado");
     } catch (error) {
-      toast.error(mensajeDeError(error, "No se pudo eliminar el reporte"));
+      toast.error(mensajeDeError(error, "No se pudo archivar el reporte"));
     }
   };
 
@@ -741,6 +776,8 @@ const GeneradorPage = () => {
                 onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
                 onDuplicate={mayCreate ? handleDuplicate : undefined}
                 onDelete={mayArchive ? handleDelete : undefined}
+                failed={savedFailed}
+                onRetry={refreshSaved}
               />
             </CardContent>
           </Card>
@@ -979,7 +1016,7 @@ const GeneradorPage = () => {
                     <div className="flex items-center gap-2 rounded-md bg-muted px-2.5 py-1 text-xs text-muted-foreground">
                       <span>
                         {exportBytes > 0
-                          ? `Descargando ${(exportBytes / 1024 / 1024).toFixed(1)} MB…`
+                          ? `Descargando ${(exportBytes / 1024 / 1024).toLocaleString("es-BO", { minimumFractionDigits: 1, maximumFractionDigits: 1 })} MB…`
                           : "Generando en el servidor…"}
                       </span>
                       <button
@@ -1049,8 +1086,8 @@ const GeneradorPage = () => {
                 >
                   <AlertTriangleIcon className="h-4 w-4 shrink-0" />
                   {problems.length > 0
-                    ? "La tabla muestra el resultado anterior: la configuración de arriba todavía no se puede consultar."
-                    : "Cambió la configuración: la tabla muestra el resultado anterior. Pulse Actualizar."}
+                    ? "La tabla muestra el resultado anterior: la configuración de arriba todavía no se puede generar."
+                    : "Cambió la configuración: la tabla muestra el resultado anterior. Pulse Generar para actualizarla."}
                 </div>
               )}
 
@@ -1061,10 +1098,13 @@ const GeneradorPage = () => {
                   onPage={handlePage}
                   sort={config.sort}
                   onToggleSort={handleToggleSort}
+                  // From the configuration that produced the table, not the one
+                  // being edited: the wording has to describe the result shown.
+                  hasFilters={(resultConfig?.filters?.conditions?.length ?? 0) > 0}
                 />
               ) : (
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  Elija las columnas a la izquierda y pulse <strong>Generar</strong> para verlo aquí.
+                  Elija las columnas en el panel de configuración y pulse <strong>Generar</strong> para verlo aquí.
                 </p>
               )}
             </CardContent>
@@ -1084,13 +1124,23 @@ const GeneradorPage = () => {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              ¿Cambiar a «{pendingRoot?.root.rowMeaning.toLowerCase()}»?
+              ¿Cambiar a «{pendingRoot?.root.rowMeaning}»?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Se descartarán {pendingRoot?.lost}{" "}
+              {/*
+                "agrupación" belongs in the list because elementCount counts it:
+                grouping by tramo and then switching level said "4 elementos —
+                columnas, filtros u orden—" where one of the four was the
+                grouping. And the last sentence is a warning rather than a
+                reassurance now: a surviving column keeps its summary, so what
+                is conserved can be a configuration Generar refuses.
+              */}
+              Se descartará{pendingRoot?.lost === 1 ? "" : "n"} {pendingRoot?.lost}{" "}
               {pendingRoot?.lost === 1 ? "elemento" : "elementos"} del reporte
-              —columnas, filtros u orden— porque no existen en este nivel de detalle.
-              Lo demás se conserva.
+              —columnas, filtros, orden o agrupación— porque no{" "}
+              {pendingRoot?.lost === 1 ? "existe" : "existen"} en este nivel de detalle.
+              El resto se conserva, pero puede que haya que revisar los resúmenes
+              de las columnas que queden.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

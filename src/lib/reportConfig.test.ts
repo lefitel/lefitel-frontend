@@ -382,7 +382,28 @@ describe("unavailable fields", () => {
     // A saved report can name a field that was removed, or one this role
     // cannot see; the server would answer with an internal path name.
     const config = withColumns("usuario.name");
-    expect(validateConfig(config, evento).join(" ")).toMatch(/no está disponible para su perfil/);
+    expect(validateConfig(config, evento).join(" ")).toMatch(/ya no está disponible/);
+  });
+
+  it("says which column, using the name the author gave it", () => {
+    // The message existed so as not to show an internal path, and then showed
+    // one: "La columna \"ultimaRevision.usuario.phone\" no está disponible".
+    // The catalog has nothing to offer here — that is why the problem fired —
+    // so the author's own header is the only real name available.
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "usuario.phone", label: "Teléfono del técnico" }],
+    };
+    const said = validateConfig(config, evento).join(" ");
+    expect(said).toContain("«Teléfono del técnico»");
+    expect(said).not.toContain("usuario.phone");
+  });
+
+  it("does not blame the profile, because the field may simply be gone", () => {
+    // "no está disponible para su perfil" sends somebody to ask for a
+    // permission that would not help when the real cause is a retired field.
+    const config = withColumns("usuario.name");
+    expect(validateConfig(config, evento).join(" ")).not.toMatch(/su perfil/);
   });
 
   it("accepts a path reached through a to-many relation", () => {
@@ -728,5 +749,52 @@ describe("the caps the server publishes", () => {
     };
 
     expect(describeConfig(config, root)).toContain("3 filtros");
+  });
+});
+
+describe("a filter value the server would refuse", () => {
+  // The one rule the user used to meet only after pressing Generar: the value
+  // box had no limit, the server capped it at 200, and the refusal quoted a
+  // number the screen had never mentioned. Every other cap is honoured here.
+  it("says so before the request leaves", () => {
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }],
+      filters: {
+        op: "and",
+        conditions: [{ path: "description", operator: "like", value: "x".repeat(201) }],
+      },
+    };
+    const said = validateConfig(config, evento).join(" ");
+    expect(said).toMatch(/demasiado largo/);
+    expect(said).toContain("200");
+  });
+
+  it("accepts a value exactly at the cap", () => {
+    // The server refuses above 200, so 200 itself has to pass or the two sides
+    // disagree by one character.
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }],
+      filters: {
+        op: "and",
+        conditions: [{ path: "description", operator: "like", value: "x".repeat(200) }],
+      },
+    };
+    expect(validateConfig(config, evento)).toEqual([]);
+  });
+
+  it("honours the cap the catalog publishes, not a copy of it", () => {
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }],
+      filters: {
+        op: "and",
+        conditions: [{ path: "description", operator: "like", value: "x".repeat(60) }],
+      },
+    };
+    const said = validateConfig(config, evento, { maxFilterValue: 50 }).join(" ");
+    expect(said).toMatch(/demasiado largo/);
+    expect(said).toContain("50");
   });
 });

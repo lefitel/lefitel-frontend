@@ -56,6 +56,7 @@ export interface CatalogLimits {
   maxSorts: number;
   maxRows: number;
   maxDepth: number;
+  maxFilterValue: number;
 }
 
 export interface Catalog {
