@@ -122,11 +122,11 @@ describe("logging in", () => {
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => expect(loginUsuario).toHaveBeenCalledTimes(1));
-    // The old `POST /api/login` door still signs a JWT, but `Login.api.ts`
-    // now drops it on the way through and the session shape has no field left
-    // to hold one — so there is nothing on this page to copy into storage the
-    // cookie already made redundant. This assertion is what notices anybody
-    // putting it back.
+    // No login response carries a credential any more — the API stopped
+    // signing JWTs, `Login.api.ts` strips the field regardless, and the session
+    // shape has nowhere to hold one — so there is nothing on this page to copy
+    // into storage that the cookie has not already made redundant. This
+    // assertion is what notices anybody putting it back.
     //
     // Counted, not looked up by name. This used to read
     // `localStorage.getItem("token")` and so only refused one spelling:

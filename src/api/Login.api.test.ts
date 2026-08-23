@@ -92,18 +92,39 @@ describe("comprobarToken", () => {
 });
 
 describe("loginUsuario", () => {
-  it("drops the JWT the old login door still returns", async () => {
-    // `POST /api/login` still signs a seven-day JWT and sends it back nested
-    // inside `usuario`. Nothing in this application sends an `Authorization`
-    // header any more — the cookie that same response sets is the credential
-    // — so a token kept here would be a week-long credential sitting in
-    // memory with no reader at all.
+  it("asks POST /api/auth/login, not the old POST /api/login", async () => {
+    // The twin of the `comprobarToken` assertion at the top of this file, and
+    // it is about a URL for the same reason: the two addresses answer
+    // identically today, so nothing else in this repository — not a type, not
+    // another test, not the screen — can tell which one was asked for. The API
+    // kept the old one alive on the new handler so that a cached bundle can
+    // still log in; that only stops being a permanent fixture if this file
+    // stops calling it, and this is the line that says so.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { usuario: usuarioDelServidor, permisos: permisosDelServidor },
+    });
+
+    await loginUsuario({} as UsuarioInterface);
+
+    expect(post).toHaveBeenCalledTimes(1);
+    // Anchored at the end, so `.../login` cannot satisfy it.
+    expect(post.mock.calls[0][0]).toMatch(/auth\/login$/);
+    expect(post.mock.calls[0][0]).not.toMatch(/(^|\/)api\/login$/);
+  });
+
+  it("strips a token out of the body even though the server no longer sends one", async () => {
+    // The server stopped signing: there is no `jwt.sign` left in the API, so
+    // this response shape is synthetic. The assertion is still worth its line,
+    // because what it pins is the strip itself — the last thing between a
+    // credential appearing in a login body and it landing in React state,
+    // where every screen reads it and `localStorage` is one careless line away.
     //
-    // This needs an assertion because the compiler cannot see it. Putting
-    // `token` back on the session object would be an excess property and fail
-    // the typecheck; letting it ride *inside* `usuario` would not, because
-    // `response.data` is `any` and `UsuarioInterface` never mentions a token.
-    // That is the version of this mistake nothing else would notice.
+    // The compiler cannot see this. Putting `token` on the session object would
+    // be an excess property and fail the typecheck; letting it ride *inside*
+    // `usuario` would not, because `response.data` is `any` and
+    // `UsuarioInterface` never mentions a token. That is the version of the
+    // mistake nothing else would notice.
     vi.spyOn(axios, "post").mockResolvedValue({
       status: 200,
       data: {

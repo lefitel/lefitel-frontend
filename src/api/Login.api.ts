@@ -3,6 +3,24 @@ import { urlApi } from "./url";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import type { Permisos } from "../lib/permissions";
 
+/**
+ * Log in. Posts to `POST /api/auth/login`, not the old `POST /api/login`.
+ *
+ * The two addresses answer identically today — the server mounted the old one
+ * on the new handler rather than deleting it, so a browser running a cached
+ * copy of this file can still get in. This asks for the address the design
+ * keeps, which is what lets the other one be measured to zero and removed
+ * without a second change in this repository.
+ *
+ * A non-2xx answer folds into `status: 500` with the server's own sentence in
+ * `message`, whatever the real status was. That is deliberate and load-bearing
+ * for one case: a 503 means the API could not open a session — the database is
+ * down, not the password wrong — and `LoginPage.tsx` shows `message` on any
+ * non-200, so the person reads "inténtelo de nuevo en unos minutos" rather
+ * than being left to conclude they have forgotten their password. The
+ * flattening to 500 is why `UsuarioDetallePage.tsx` can compare against one
+ * number.
+ */
 export const loginUsuario = (
   data: UsuarioInterface
 ): Promise<{
@@ -11,15 +29,26 @@ export const loginUsuario = (
   usuario: SesionInterface | null;
 }> => {
   return axios
-    .post(urlApi + "login", data)
+    .post(urlApi + "auth/login", data)
     .then((response) => {
-      // The JWT the old `POST /api/login` door still signs rides inside
-      // `usuario`, and it is dropped here rather than carried along. Nothing
-      // in this application sends an `Authorization` header any more — the
-      // cookie this same response set is the credential — so keeping it would
-      // only park a week-long credential in memory with no reader, which is
-      // precisely what `x-new-token` had become on the server. The session
-      // shape no longer has a field for it either.
+      /**
+       * Nothing puts a `token` in this body any more, and it is still stripped
+       * here.
+       *
+       * That is belt on braces, not a description of the server: the old `POST
+       * /api/login` signed a seven-day JWT into `usuario` and this line is what
+       * kept it out of React state. The signing is gone — there is no
+       * `jwt.sign` left in the API — so on every real response this destructure
+       * removes nothing.
+       *
+       * It stays because it costs one line and it is the only thing standing
+       * between a future response field and the session object the whole
+       * application reads. The compiler cannot help here: `response.data` is
+       * `any`, and a credential riding *inside* `usuario` is not an excess
+       * property, so nothing but this would notice. The test beside it pins
+       * both halves — that the strip still works, and that the address asked
+       * for is the new one.
+       */
       const { token: _jwt, ...usuario } = response.data.usuario;
       return {
         status: response.status,

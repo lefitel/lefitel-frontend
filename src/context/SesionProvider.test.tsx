@@ -1316,7 +1316,7 @@ describe("la cuenta atrás, que sigue lo que dice el servidor", () => {
   });
 
   it("una sesión que acaba de entrar aprende su vencimiento de la primera respuesta", async () => {
-    // `POST /api/login` no pasa por `authenticate`, así que su respuesta no
+    // El login no pasa por `authenticate`, así que su respuesta no
     // trae la cabecera: quien entra por el formulario empieza sin plazo
     // ninguno y lo aprende de la primera petición que haga la pantalla —y la
     // pantalla de inicio pide su tablero al montarse. Antes esto se resolvía

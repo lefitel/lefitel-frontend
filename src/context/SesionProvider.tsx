@@ -689,9 +689,10 @@ export const SesionProvider = ({ children }: props) => {
   // no puede leerla — la única forma de saber si hay sesión es preguntar,
   // siempre, aunque no haya nada guardado en el navegador. Un guardián que
   // solo pregunta cuando `localStorage` tiene algo dejó de tener sentido en
-  // cuanto el token dejó de ser la credencial: el día que el login deje de
-  // devolver un JWT en el cuerpo, esa clave nunca se escribiría y todo el
-  // mundo perdería la sesión al recargar, con la cookie todavía válida.
+  // cuanto el token dejó de ser la credencial, y ya no es una hipótesis: el
+  // login dejó de devolver un JWT en el cuerpo, así que esa clave no se
+  // escribiría nunca y todo el mundo perdería la sesión al recargar, con la
+  // cookie todavía válida.
   //
   // `loading` cubre la llamada entera — se apaga en el `finally`, después de
   // que la respuesta llegó — para que las puertas de la Tarea 4 no decidan
