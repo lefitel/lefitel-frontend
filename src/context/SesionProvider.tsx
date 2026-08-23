@@ -52,8 +52,21 @@ export const SesionProvider = ({ children }: props) => {
    * for the same reason `roleRef` is: `logout` is a stable callback with no
    * dependencies (the response interceptor's registration effect depends on
    * its identity, and re-registering it on every login would be its own
-   * source of bugs), so it cannot close over `sesion.token` directly without
-   * reading it stale.
+   * source of bugs), so it cannot close over `sesion.autenticado` directly
+   * without reading it stale.
+   *
+   * Derived from `autenticado`, not from `sesion.token`. A session restored
+   * at startup from `GET /auth/me` has no JWT to hold any more — only the
+   * cookie, which this code cannot read — so it always sets `token: ""` (see
+   * the startup effect below). A ref built from `Boolean(sesion.token)`
+   * would then read `false` for the entire life of any session recovered by
+   * reloading the page, and `logout()` below would skip telling the server
+   * for as long as that session lasted: the screen would go to `/login`
+   * while the session row stayed open and the cookie stayed valid in the
+   * browser — reachable again on the next reload, and on a shared computer,
+   * by the next person who sits down. That is exactly the regression
+   * `846e3ae` already fixed once, reopened by restoring sessions without a
+   * token.
    *
    * This is the cheap of the two guards against calling the server with
    * nothing to revoke — most commonly, `logout` running again after its own
@@ -64,8 +77,8 @@ export const SesionProvider = ({ children }: props) => {
    */
   const hasSessionRef = useRef(false);
   useEffect(() => {
-    hasSessionRef.current = Boolean(sesion.token);
-  }, [sesion.token]);
+    hasSessionRef.current = sesion.autenticado;
+  }, [sesion.autenticado]);
 
   const clearTimers = () => {
     if (timers.current.warning) clearTimeout(timers.current.warning);
@@ -143,46 +156,19 @@ export const SesionProvider = ({ children }: props) => {
     roleRef.current = sesion.permisos ? sesion.usuario.id_rol : undefined;
   }, [sesion.permisos, sesion.usuario.id_rol]);
 
-  // Preguntar al servidor si hay sesión, al arrancar (evita flicker al
-  // recargar).
-  //
-  // Sin guardián de `localStorage`: la credencial es la cookie, y esta línea
-  // no puede leerla — la única forma de saber si hay sesión es preguntar,
-  // siempre, aunque no haya nada guardado en el navegador. Un guardián que
-  // solo pregunta cuando `localStorage` tiene algo dejó de tener sentido en
-  // cuanto el token dejó de ser la credencial: el día que el login deje de
-  // devolver un JWT en el cuerpo, esa clave nunca se escribiría y todo el
-  // mundo perdería la sesión al recargar, con la cookie todavía válida.
-  //
-  // `loading` cubre la llamada entera — se apaga en el `finally`, después de
-  // que la respuesta llegó — para que las puertas de la Tarea 4 no decidan
-  // nada con `autenticado` todavía en su valor inicial.
-  //
-  // Un 401 no es un error: es la respuesta a "¿tengo sesión?" cuando no la
-  // hay. El estado inicial ya es anónimo, así que la rama que no es 200 no
-  // tiene nada que hacer — ni un toast, ni nada que sugiera que algo se
-  // rompió la primera vez que alguien abre el ERP en el día.
-  //
-  // El interceptor de más abajo también ve esta petición y, ante su 401,
-  // llama a `logout()` como a cualquier otra — deliberadamente no está
-  // excluido igual que `LOGOUT_URL`. Ver el comentario junto a esa exclusión
-  // para el porqué.
-  useEffect(() => {
-    comprobarToken()
-      .then((res) => {
-        if (res.status === 200 && res.usuario) {
-          setSesion({
-            token: "",
-            usuario: res.usuario,
-            permisos: res.permisos,
-            autenticado: true,
-          });
-        }
-      })
-      .finally(() => setLoading(false));
-  }, []);
-
   // Interceptor de axios: renueva el token en cada respuesta (sliding) y auto-logout en 401
+  //
+  // Declarado ANTES del efecto de arranque de más abajo, y no por casualidad
+  // ni por prolijidad: `axios` congela la lista de interceptores de
+  // respuesta de forma síncrona, dentro de la propia llamada a `request()`
+  // (lo que `axios.get`/`.post` disparan por debajo) — lee lo que haya en
+  // `axios.interceptors.response` en ese instante, no lo que se registre
+  // después. Los efectos de un componente se montan en el orden en que
+  // están escritos, así que para cuando el efecto de arranque dispare su
+  // `axios.get`, este ya está puesto: la petición de arranque SÍ pasa por
+  // este interceptor. Ver el comentario de la exclusión de `LOGOUT_URL`, más
+  // abajo, para por qué eso no es un problema — y el del efecto de arranque
+  // para la otra mitad de la misma explicación.
   useEffect(() => {
     /**
      * Only our own API may hand us a session token.
@@ -210,7 +196,13 @@ export const SesionProvider = ({ children }: props) => {
           // No `localStorage.setItem` here any more — nothing reads that key
           // back. The in-memory session below is what the sliding-expiry
           // timers (task 7) actually use.
-          setSesion((prev) => (prev.token ? { ...prev, token: newToken } : prev));
+          //
+          // Guarded by `autenticado`, not `token`: a session restored at
+          // startup has `token: ""` (there is no JWT any more, only the
+          // cookie), so a guard reading `prev.token` would silently drop this
+          // update — and the role-change refresh a few lines down with it —
+          // for the entire life of any session recovered by reloading.
+          setSesion((prev) => (prev.autenticado ? { ...prev, token: newToken } : prev));
 
           /**
            * A role that changed mid-session used to stay invisible until the
@@ -234,8 +226,15 @@ export const SesionProvider = ({ children }: props) => {
             comprobarToken()
               .then((res) => {
                 if (res.status === 200 && res.usuario) {
+                  // Guarded by `autenticado`, not `token`, for the same
+                  // reason as the write above: a session recovered at
+                  // startup never has a token to check, and reading `prev
+                  // .token` here would let this branch run the toast below
+                  // while silently discarding the refreshed permissions it
+                  // is supposed to announce — the exact "your screen updated"
+                  // lie that this whole mechanism exists to prevent.
                   setSesion((prev) =>
-                    prev.token
+                    prev.autenticado
                       ? {
                           ...prev,
                           usuario: res.usuario as UsuarioInterface,
@@ -271,18 +270,20 @@ export const SesionProvider = ({ children }: props) => {
         // calls `logout()` from elsewhere in the future; `hasSessionRef`
         // above only makes the ordinary, non-looping case cheaper.
         //
-        // `comprobarToken()`'s own request (`GET /auth/me`, asked at startup
-        // and again below on a role change) is deliberately NOT excluded the
-        // way `LOGOUT_URL` is. A 401 on it can only ever lead to `logout()`,
-        // whose own request goes to `LOGOUT_URL` — already excluded — so the
-        // chain stops one level down regardless of whether this one is
-        // excluded too. Excluding it would only skip the harmless, no-network
-        // cleanup `logout()` runs on an ordinary anonymous boot (`hasSessionRef`
-        // is still `false` then, so the cheap guard in `logout()` already
-        // keeps it off the network); and the same call is also made mid-session
-        // by the role-change refresh below, where a 401 genuinely means the
-        // session just died — an event `logout()` is the correct answer to,
-        // not one to hide from.
+        // `comprobarToken()`'s own request (`GET /auth/me`, asked below on a
+        // role change, and by the startup effect declared right after this
+        // one — see its comment for why this interceptor is registered
+        // first) is deliberately NOT excluded the way `LOGOUT_URL` is, and
+        // this handler genuinely does see it: a 401 on it calls `logout()`
+        // like any other request's would. That is safe rather than a
+        // problem, because `logout()`'s own request goes to `LOGOUT_URL` —
+        // already excluded — so the chain stops one level down regardless.
+        // On an ordinary anonymous boot, `hasSessionRef` is still `false`
+        // (derived from `autenticado`, which nothing has set to `true` yet),
+        // so `logout()`'s own cheap guard keeps *that* call off the network;
+        // the same request is also made mid-session, by the role-change
+        // refresh above, where a 401 genuinely means the session just died —
+        // an event `logout()` is the correct answer to, not one to hide from.
         if (error.response?.status === 401 && error.config?.url !== LOGOUT_URL) {
           logout();
         }
@@ -291,6 +292,49 @@ export const SesionProvider = ({ children }: props) => {
     );
     return () => axios.interceptors.response.eject(interceptor);
   }, [logout]);
+
+  // Preguntar al servidor si hay sesión, al arrancar (evita flicker al
+  // recargar).
+  //
+  // Sin guardián de `localStorage`: la credencial es la cookie, y esta línea
+  // no puede leerla — la única forma de saber si hay sesión es preguntar,
+  // siempre, aunque no haya nada guardado en el navegador. Un guardián que
+  // solo pregunta cuando `localStorage` tiene algo dejó de tener sentido en
+  // cuanto el token dejó de ser la credencial: el día que el login deje de
+  // devolver un JWT en el cuerpo, esa clave nunca se escribiría y todo el
+  // mundo perdería la sesión al recargar, con la cookie todavía válida.
+  //
+  // `loading` cubre la llamada entera — se apaga en el `finally`, después de
+  // que la respuesta llegó — para que las puertas de la Tarea 4 no decidan
+  // nada con `autenticado` todavía en su valor inicial.
+  //
+  // Un 401 no es un error: es la respuesta a "¿tengo sesión?" cuando no la
+  // hay. El estado inicial ya es anónimo, así que la rama que no es 200 no
+  // tiene nada que hacer — ni un toast, ni nada que sugiera que algo se
+  // rompió la primera vez que alguien abre el ERP en el día.
+  //
+  // El interceptor de arriba SÍ ve esta petición — se registra en el efecto
+  // anterior, antes de que este dispare el `axios.get` (por eso está
+  // declarado antes, no por casualidad) — y ante un 401 aquí llama a
+  // `logout()` como ante cualquier otro; no está excluido igual que
+  // `LOGOUT_URL`. Es inofensivo: en un arranque anónimo `hasSessionRef`
+  // sigue en `false`, así que ese `logout()` no llega a tocar la red. Ver el
+  // comentario de la exclusión de `LOGOUT_URL`, arriba, para el resto del
+  // porqué.
+  useEffect(() => {
+    comprobarToken()
+      .then((res) => {
+        if (res.status === 200 && res.usuario) {
+          setSesion({
+            token: "",
+            usuario: res.usuario,
+            permisos: res.permisos,
+            autenticado: true,
+          });
+        }
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   // Mirrored during render, not in an effect.
   //

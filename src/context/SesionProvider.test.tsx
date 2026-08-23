@@ -62,6 +62,13 @@ let onResponse: ((response: unknown) => unknown) | null = null;
 // any test here — which is exactly how a self-triggered logout loop through
 // this same branch went unnoticed.
 let onError: ((error: unknown) => Promise<unknown>) | null = null;
+/**
+ * The spy that captures `onResponse`/`onError` above, kept by reference so a
+ * test can read `.mock.invocationCallOrder` off it — the call-order fix
+ * round's regression test compares it against `comprobarToken`'s to pin
+ * which of the two runs first.
+ */
+let responseUseSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 /** The last context value handed down, for tests that need to read `loading`
  * or `sesion` directly instead of only through `can()`. */
@@ -100,7 +107,7 @@ beforeEach(() => {
   comprobarToken.mockResolvedValue({ status: 401, usuario: null, expires_at: null });
   // The interceptor is registered once, on the global axios. Capturing it is
   // how this test reaches the code without a server to answer.
-  vi.spyOn(axios.interceptors.response, "use").mockImplementation(((ok: never, fail: never) => {
+  responseUseSpy = vi.spyOn(axios.interceptors.response, "use").mockImplementation(((ok: never, fail: never) => {
     onResponse = ok as unknown as (response: unknown) => unknown;
     onError = fail as unknown as (error: unknown) => Promise<unknown>;
     return 1;
@@ -185,6 +192,53 @@ describe("a role that changes mid-session", () => {
     expect(comprobarToken).not.toHaveBeenCalled();
     expect(can(1, "generador", "crear")).toBe(false);
   });
+
+  it("still refreshes permissions when the session came from startup, not from a fresh login", async () => {
+    // Ronda de correcciones, hallazgo 2 de la revisión. Every other test in
+    // this describe seeds the session through <Establecer>, which always
+    // sets a non-empty `token` — exactly the field a session restored from
+    // `/auth/me` at startup never has (it is always `""`). Both `setSesion`
+    // calls this mechanism makes were guarded by `prev.token`, so on a
+    // startup-restored session they were silent no-ops: the toast below
+    // fired, `roleRef` moved on, and the screen kept the demoted role's
+    // buttons — a lie the interceptor exists specifically to prevent.
+    //
+    // Caveat, found while breaking this on purpose one guard at a time:
+    // fixing either guard alone (not both) already makes this test pass,
+    // because the token-renewal guard runs first and, once it uses
+    // `autenticado`, leaves `prev.token` non-empty by the time the second
+    // guard's callback runs — so a version with the *second* guard still
+    // reading `prev.token` passes here too, coincidentally. Only reverting
+    // BOTH guards back to `prev.token` (the original bug) makes this fail.
+    // Kept both fixed anyway: relying on one guard's fix to accidentally
+    // paper over the other is not something a future reader could see by
+    // reading the code, and the two guards are not the same check.
+    comprobarToken.mockResolvedValueOnce({
+      status: 200,
+      usuario: { id: 7, id_rol: 3 },
+      permisos: permisosCon("generador", "ver"),
+      expires_at: null,
+    });
+
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+    expect(latest?.sesion.token).toBe(""); // the case the guard has to survive
+    comprobarToken.mockResolvedValueOnce({
+      status: 200,
+      usuario: { id: 7, id_rol: 1 },
+      permisos: permisosCon("generador", "crear"),
+      expires_at: null,
+    });
+
+    onResponse!(respuestaConToken(tokenFor(1)));
+
+    await waitFor(() => expect(can(1, "generador", "crear")).toBe(true));
+    expect(toast.info).toHaveBeenCalledWith("Sus permisos cambiaron. La pantalla se actualizó.");
+  });
 });
 
 describe("el arranque de sesión", () => {
@@ -266,6 +320,33 @@ describe("el arranque de sesión", () => {
   });
 });
 
+describe("el orden de los efectos: interceptor antes que el arranque", () => {
+  // Ronda de correcciones, hallazgo 3 de la revisión: `axios` congela la
+  // cadena de interceptores de respuesta de forma síncrona, dentro de la
+  // propia llamada a `request()` — lee lo que haya en
+  // `axios.interceptors.response` en ese instante, no lo que se registre
+  // después (verificado leyendo `axios/lib/core/Axios.js`, no adivinado).
+  // Los efectos de un componente se montan en el orden en que están
+  // escritos, así que la petición de arranque solo pasa realmente por el
+  // interceptor si el efecto que lo registra está declarado ANTES del que
+  // dispara el `axios.get`. Este test fija ese orden — no el comportamiento
+  // resultante, que ya cubren los tests de arriba y de "logout" — para que
+  // nadie pueda reordenar los dos `useEffect` sin que algo se ponga rojo.
+  it("registers the response interceptor before asking the server at startup", () => {
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+
+    expect(responseUseSpy).not.toBeNull();
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+    const interceptorOrder = responseUseSpy!.mock.invocationCallOrder[0];
+    const startupOrder = comprobarToken.mock.invocationCallOrder[0];
+    expect(interceptorOrder).toBeLessThan(startupOrder);
+  });
+});
+
 describe("logout", () => {
   // Before this branch, dropping the token from localStorage ended the only
   // credential the browser held. Now the browser also holds an httpOnly
@@ -283,6 +364,40 @@ describe("logout", () => {
       </SesionProvider>,
     );
     await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    fireEvent.click(getByText("salir"));
+
+    expect(post).toHaveBeenCalledWith(`${urlApi}auth/logout`);
+  });
+
+  it("tells the server the session is over even when the session was restored at startup", async () => {
+    // Ronda de correcciones, hallazgo 1 de la revisión — el más grave: una
+    // sesión recuperada por `/auth/me` al arrancar nunca tiene `token`
+    // (siempre es `""`), y `hasSessionRef` se derivaba de
+    // `Boolean(sesion.token)`. Con eso, el `if` de `logout()` que decide si
+    // avisar al servidor se quedaba en `false` para siempre en una sesión
+    // recuperada al recargar: la pantalla iba al login pero la fila de
+    // sesión seguía viva y la cookie seguía en el navegador — reintroduce
+    // exactamente la regresión que arregló `846e3ae`. A diferencia de los
+    // otros tres tests de este describe, esta sesión no se monta con
+    // `<Establecer>` (que sí pone un token) sino por el propio arranque, que
+    // es el único camino donde este bug existía.
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { id: 7, id_rol: 3 },
+      permisos: permisosCon("generador", "ver"),
+      expires_at: null,
+    });
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Sonda />
+        <Salir />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    expect(latest?.sesion.token).toBe(""); // the case the old ref-from-token guard could not see
 
     fireEvent.click(getByText("salir"));
 

@@ -13,8 +13,6 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SesionContext, type contextProps } from "../../context/SesionContext";
-import type { SesionInterface } from "../../interfaces/interfaces";
 import AddRevisionSheet from "./AddRevisionSheet";
 
 const createRevision = vi.hoisted(() => vi.fn());
@@ -24,19 +22,15 @@ const toastError = vi.hoisted(() => vi.fn());
 vi.mock("../../api/Revision.api", () => ({ createRevision }));
 vi.mock("sonner", () => ({ toast: { success: toastSuccess, error: toastError } }));
 
-// `autenticado: true` is set explicitly even though a cast follows: without
-// it here, this fixture would silently carry `autenticado: undefined` and no
-// compiler error would ever say so (task 5's brief flagged this exact file).
-const sesion = { usuario: { id: 7 }, token: "t", autenticado: true } as unknown as SesionInterface;
-
+// No `SesionContext.Provider` here: `AddRevisionSheet.tsx` never imports
+// `SesionContext` or reads `sesion` anywhere in its 110 lines, so wrapping it
+// in one — and fixing up the fixture's `autenticado` field, as task 5 did —
+// was dead scaffolding protecting nothing. Confirmed by removing it and
+// re-running this file: same five tests, same result.
 function renderSheet() {
   const onSuccess = vi.fn();
   const setOpen = vi.fn();
-  render(
-    <SesionContext.Provider value={{ sesion } as unknown as contextProps}>
-      <AddRevisionSheet eventoId={42} open onSuccess={onSuccess} setOpen={setOpen} />
-    </SesionContext.Provider>,
-  );
+  render(<AddRevisionSheet eventoId={42} open onSuccess={onSuccess} setOpen={setOpen} />);
   return { onSuccess, setOpen };
 }
 
