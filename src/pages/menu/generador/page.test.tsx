@@ -114,7 +114,7 @@ const resultFor = (config: ReportConfig, over: Partial<ReportResult> = {}): Repo
 // silently carry `autenticado: undefined` past the `as never` cast below,
 // and no compiler error would ever say so (task 5's brief flagged this file).
 const sesion = {
-  sesion: { token: "t0", usuario: { ...usuarioExample, id: 7 }, autenticado: true },
+  sesion: { usuario: { ...usuarioExample, id: 7 }, autenticado: true },
   setSesion: vi.fn(),
   loading: false,
   logout: vi.fn(),
@@ -169,16 +169,19 @@ beforeEach(() => {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("catalog loading", () => {
-  it("fetches the catalog once, not on every token renewal", async () => {
-    // The server re-issues the token on every response. When the effect
+  it("fetches the catalog once, not on every new session object", async () => {
+    // The session used to carry a token the server re-issued on every
+    // response, so this object changed identity constantly; when the effect
     // depended on it, generating a report wiped the configuration and reset
-    // the detail level to "evento".
+    // the detail level to "evento". The token is gone, the hazard is not —
+    // anything that replaces the session object hands this page a new
+    // identity, and a role change now does exactly that.
     const { rerender } = renderPage();
     await ready();
     expect(api.getCatalogo).toHaveBeenCalledTimes(1);
 
     rerender(
-      <SesionContext.Provider value={{ ...sesion, sesion: { ...sesion.sesion, token: "t1" } } as never}>
+      <SesionContext.Provider value={{ ...sesion, sesion: { ...sesion.sesion } } as never}>
         <TooltipProvider><GeneradorPage /></TooltipProvider>
       </SesionContext.Provider>,
     );

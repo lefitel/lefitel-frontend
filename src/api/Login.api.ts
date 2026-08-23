@@ -13,12 +13,19 @@ export const loginUsuario = (
   return axios
     .post(urlApi + "login", data)
     .then((response) => {
+      // The JWT the old `POST /api/login` door still signs rides inside
+      // `usuario`, and it is dropped here rather than carried along. Nothing
+      // in this application sends an `Authorization` header any more — the
+      // cookie this same response set is the credential — so keeping it would
+      // only park a week-long credential in memory with no reader, which is
+      // precisely what `x-new-token` had become on the server. The session
+      // shape no longer has a field for it either.
+      const { token: _jwt, ...usuario } = response.data.usuario;
       return {
         status: response.status,
         message: null,
         usuario: {
-          token: response.data.usuario.token,
-          usuario: response.data.usuario,
+          usuario,
           permisos: response.data.permisos,
           // Left false on purpose: this wrapper only shuttles what the server
           // sent back, it does not decide session semantics. LoginPage.tsx is

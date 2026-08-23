@@ -28,7 +28,6 @@ vi.mock("sonner", () => ({
 function Harness({ onSesion }: { onSesion: (s: SesionInterface) => void }) {
   const [sesion, setSesionState] = useState<SesionInterface>({
     usuario: usuarioExample,
-    token: "",
     autenticado: false,
   });
 
@@ -61,7 +60,6 @@ describe("logging in", () => {
       status: 200,
       message: null,
       usuario: {
-        token: "un-token",
         usuario: { ...usuarioExample, user: "ada" },
         // What the API wrapper actually hands back today: never true on its
         // own. If this test only checked "did setSesion get called", it
@@ -111,7 +109,6 @@ describe("logging in", () => {
       status: 200,
       message: null,
       usuario: {
-        token: "un-token",
         usuario: { ...usuarioExample, user: "ada" },
         autenticado: false,
       },
@@ -125,10 +122,11 @@ describe("logging in", () => {
     await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
 
     await waitFor(() => expect(loginUsuario).toHaveBeenCalledTimes(1));
-    // The server's answer carries a JWT in `usuario.token` for as long as the
-    // old `POST /api/login` door still issues one, but nothing on this page
-    // should still be copying it into storage the cookie already makes
-    // redundant.
+    // The old `POST /api/login` door still signs a JWT, but `Login.api.ts`
+    // now drops it on the way through and the session shape has no field left
+    // to hold one — so there is nothing on this page to copy into storage the
+    // cookie already made redundant. This assertion is what notices anybody
+    // putting it back.
     expect(localStorage.getItem("token")).toBeNull();
   });
 });

@@ -14,7 +14,6 @@ import { usuarioExample } from "./data/example";
 
 const sesionCon = (autenticado: boolean): contextProps["sesion"] => ({
   usuario: usuarioExample,
-  token: "",
   autenticado,
 });
 

@@ -20,8 +20,9 @@
 //     `${url}${path}` with no separator — turned a stored ".attacker.tld/x.jpg"
 //     into a request to "https://our-api.example.attacker.tld/x.jpg". The
 //     response interceptor in `context/SesionProvider.tsx` carries the other half
-//     of that same story, where such a host could answer with an `x-new-token`
-//     the application would adopt.
+//     of that same story: such a host controls its own response headers, so it
+//     could answer with an `x-osefi-role` of its choosing — which is why that
+//     interceptor acts on nothing that did not come from our own origin.
 //
 // Nothing here asserted that property before, so the separator could have gone
 // back to being a template string at any point and only the comment would have

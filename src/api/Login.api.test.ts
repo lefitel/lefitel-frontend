@@ -18,8 +18,9 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { comprobarToken } from "./Login.api";
+import { comprobarToken, loginUsuario } from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
+import type { UsuarioInterface } from "../interfaces/interfaces";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -80,5 +81,41 @@ describe("comprobarToken", () => {
     expect(res.status).toBe(500);
     expect(res.usuario).toBeNull();
     expect(res.expires_at).toBeNull();
+  });
+});
+
+describe("loginUsuario", () => {
+  it("drops the JWT the old login door still returns", async () => {
+    // `POST /api/login` still signs a seven-day JWT and sends it back nested
+    // inside `usuario`. Nothing in this application sends an `Authorization`
+    // header any more — the cookie that same response sets is the credential
+    // — so a token kept here would be a week-long credential sitting in
+    // memory with no reader at all.
+    //
+    // This needs an assertion because the compiler cannot see it. Putting
+    // `token` back on the session object would be an excess property and fail
+    // the typecheck; letting it ride *inside* `usuario` would not, because
+    // `response.data` is `any` and `UsuarioInterface` never mentions a token.
+    // That is the version of this mistake nothing else would notice.
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: {
+        usuario: { ...usuarioDelServidor, token: "jwt.recien.firmado" },
+        permisos: permisosDelServidor,
+      },
+    });
+
+    const res = await loginUsuario({} as UsuarioInterface);
+
+    expect(res.usuario).not.toBeNull();
+    expect(JSON.stringify(res.usuario)).not.toContain("jwt.recien.firmado");
+    expect(res.usuario?.usuario).not.toHaveProperty("token");
+    // And the fields the screen actually draws from survived the strip.
+    expect(res.usuario?.usuario.id).toBe(7);
+    expect(res.usuario?.usuario.user).toBe("ada");
+    expect(res.usuario?.permisos).toEqual(permisosDelServidor);
+    // Never true on its own: `LoginPage.tsx` is what turns a successful
+    // request into a session.
+    expect(res.usuario?.autenticado).toBe(false);
   });
 });

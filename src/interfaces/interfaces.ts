@@ -2,7 +2,6 @@ import type { Permisos } from "../lib/permissions";
 
 export interface SesionInterface {
   usuario: UsuarioInterface;
-  token: string;
   /**
    * Whether the server has confirmed there is a session. This is not "do we
    * have user data" — `usuario` always holds *some* shape, even the empty

@@ -12,7 +12,6 @@ import { markReleaseSeen, resetSeenRelease } from "../hooks/useSeenRelease";
 const sesion: contextProps = {
   sesion: {
     usuario: { ...usuarioExample, name: "Ada", lastname: "Lovelace", user: "ada", id_rol: 1 },
-    token: "t",
     autenticado: true,
   },
   setSesion: vi.fn(),
