@@ -1,7 +1,8 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ColumnDef, SortingState } from "@tanstack/react-table";
+import { SortingState } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon, CheckIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -374,7 +375,7 @@ const PostePage = () => {
         }
     };
 
-    const columns = useMemo<ColumnDef<PosteInterface>[]>(() => [
+    const columns = useMemo<Col<PosteInterface>[]>(() => [
         {
             id: "num",
             header: "#",
@@ -606,7 +607,7 @@ const PostePage = () => {
         },
     ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, page, pageSize, materialList, propietarioList, savingMaterialIds, savingPropietarioIds, handleMaterialChange, handlePropietarioChange]);
 
-    const archivedColumns = useMemo<ColumnDef<PosteInterface>[]>(() => [
+    const archivedColumns = useMemo<Col<PosteInterface>[]>(() => [
         { accessorKey: "name", header: "Nombre" },
         {
             id: "tramo",

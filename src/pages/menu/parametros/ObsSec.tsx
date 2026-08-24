@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { CheckIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
@@ -222,14 +222,14 @@ const ObsSec = ({ innerTab }: Props) => {
         setDeleting(false);
     };
 
-    const columns = useMemo<ColumnDef<ObsInterface>[]>(() => [
+    const columns = useMemo<Col<ObsInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },
@@ -338,14 +338,14 @@ const ObsSec = ({ innerTab }: Props) => {
         },
     ], [openEdit, rol, savingCriticalityIds, handleCriticalityChange, savingTipoObsIds, handleTipoObsChange, tipoObsList]);
 
-    const archivedColumns = useMemo<ColumnDef<ObsInterface>[]>(() => [
+    const archivedColumns = useMemo<Col<ObsInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },

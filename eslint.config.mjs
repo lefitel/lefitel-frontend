@@ -13,7 +13,13 @@ export default [
             globals: globals.browser,
             parser: parserTs,
             parserOptions: {
-                project: "./tsconfig.json",
+                // Both, because the two configs split the codebase between
+                // them: tsconfig.json stopped including tests so Node's globals
+                // could be confined to tsconfig.test.json, and a file in
+                // neither project is a file the typed rules cannot parse at
+                // all — which reads as 29 "Parsing error" lines, not as a
+                // missing rule.
+                project: ["./tsconfig.json", "./tsconfig.test.json"],
                 ecmaVersion: "latest",
                 sourceType: "module",
             },

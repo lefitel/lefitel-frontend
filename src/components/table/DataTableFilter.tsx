@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Column, Table } from "@tanstack/react-table";
+import type { RowData } from "@tanstack/react-table";
+// `Tbl` and `ColumnOf` are `Table` and `Column` with the feature set already
+// supplied; see `tableFeatures.ts`.
+import type { ColumnOf, Tbl } from "./tableFeatures";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,18 +13,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChevronDownIcon, XIcon } from "lucide-react";
 
-interface DynamicColumnFilterProps<TData> {
-    table: Table<TData>;
+interface DynamicColumnFilterProps<TData extends RowData> {
+    table: Tbl<TData>;
     placeholder?: string;
 }
 
-function getColumnLabel<TData>(column: Column<TData, unknown>): string {
+function getColumnLabel<TData extends RowData>(column: ColumnOf<TData>): string {
     const header = column.columnDef.header;
     if (typeof header === "string" && header) return header;
     return column.id;
 }
 
-function DynamicColumnFilter<TData>({ table, placeholder }: DynamicColumnFilterProps<TData>) {
+function DynamicColumnFilter<TData extends RowData>({ table, placeholder }: DynamicColumnFilterProps<TData>) {
     const columns = table.getAllColumns().filter((column) => column.getCanFilter());
     const [selectedColumnId, setSelectedColumnId] = useState<string>(columns[0]?.id ?? "");
 

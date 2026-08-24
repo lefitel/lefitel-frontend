@@ -1,0 +1,30 @@
+{
+  // The tests, which are the only files here allowed to know about Node.
+  //
+  // Three of them read the repository off disk — `criticality.test.ts` walks
+  // src/ looking for colour classes, `http.test.ts` and `password.test.ts` read
+  // sibling files — so they import `node:fs`, `node:path` and `node:url`, and
+  // TypeScript cannot type those without `@types/node` in scope.
+  //
+  // Putting `"types": ["node"]` in tsconfig.json would have been one line, and
+  // would also have handed `process`, `Buffer` and `__dirname` to every
+  // component: `process.env.FOO` in a screen would then compile clean and leave
+  // a white page on a phone, with nothing between the mistake and the field.
+  // So the Node globals live here, where only tests can see them, and
+  // tsconfig.json excludes tests in exchange. `api/tsconfig.test.json` splits
+  // the same way for the same reason.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Only files this config lists are checked; `noUnusedLocals` and the rest
+    // are inherited, so a test is held to the same standard as a screen.
+    "noEmit": true
+  },
+  // `vite-env.d.ts` is listed and not merely nearby: a triple-slash reference
+  // only takes effect from a file the program actually contains, and everything
+  // ambient lives in that one — `vite/client` for `import.meta.env`, the
+  // `virtual:pwa-register/react` module, and the injected `__APP_VERSION__`.
+  // Leave it out and every screen a test imports loses all three at once.
+  "include": ["src/vite-env.d.ts", "src/**/*.test.ts", "src/**/*.test.tsx", "src/test/**/*"],
+  "exclude": ["node_modules", "dist"]
+}

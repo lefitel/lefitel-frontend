@@ -1,15 +1,15 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ColumnDef, flexRender, RowSelectionState } from "@tanstack/react-table";
 import {
     ColumnFiltersState,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getPaginationRowModel,
-    getSortedRowModel,
+    ColumnVisibilityState,
+    flexRender,
+    RowSelectionState,
     SortingState,
-    useReactTable,
-    VisibilityState,
+    useTable,
 } from "@tanstack/react-table";
+// Which capabilities the table has, and the column type with that set already
+// filled in. See `tableFeatures.ts` for why it is declared once and not here.
+import { appFeatures, type Col } from "./tableFeatures";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import {
     DropdownMenu,
@@ -60,14 +60,14 @@ interface ServerSideProps {
 interface Props<T extends IGeneral> {
     data: T[] | null;
     actions: ReactNode;
-    columns: ColumnDef<T>[];
+    columns: Col<T>[];
     hasOptions?: boolean;
     hasPaginated?: boolean;
     loading?: boolean;
     onRetry?: () => void;
     onRowClick?: (row: T) => void;
     getRowClassName?: (row: T) => string;
-    initialColumnVisibility?: VisibilityState;
+    initialColumnVisibility?: ColumnVisibilityState;
     initialSorting?: SortingState;
     getRowId?: (row: T) => string;
     rowSize?: RowSize;
@@ -94,7 +94,7 @@ const DataTable = <T extends IGeneral>({
 }: Props<T>) => {
     const [filterOpen, setFilterOpen] = useState(false);
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(initialColumnVisibility);
+    const [columnVisibility, setColumnVisibility] = useState<ColumnVisibilityState>(initialColumnVisibility);
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [sorting, setSorting] = useState<SortingState>(initialSorting);
     const [pagination, setPagination] = useState({
@@ -134,7 +134,11 @@ const DataTable = <T extends IGeneral>({
         serverSide.onPageChange(pagination.pageIndex + 1, pagination.pageSize);
     }, [pagination]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const table = useReactTable({
+    const table = useTable({
+        // Sorting, filtering, pagination, selection and column visibility, and
+        // the row models behind them. v8 supplied all of it whether a table used
+        // it or not; here it is a list, and the bundle carries only the list.
+        features: appFeatures,
         data: data ?? [],
         columns,
         getRowId: getRowId ?? ((row) => (row.id ?? "").toString()),
@@ -150,6 +154,10 @@ const DataTable = <T extends IGeneral>({
             manualFiltering: true,
             manualSorting: true,
             rowCount: serverSide.total,
+            // Every click adds a column instead of replacing one, so two-level
+            // ordering is reachable without a modifier key — which a phone in a
+            // field does not have. `DataTable.test.tsx` pins the list the server
+            // is then sent, order included.
             isMultiSortEvent: () => true,
         } : {}),
         enableRowSelection: true,
@@ -158,10 +166,6 @@ const DataTable = <T extends IGeneral>({
         onColumnFiltersChange: setColumnFilters,
         onColumnVisibilityChange: setColumnVisibility,
         onPaginationChange: setPagination,
-        getCoreRowModel: getCoreRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
-        getPaginationRowModel: getPaginationRowModel(),
-        getSortedRowModel: getSortedRowModel(),
     });
 
     // Estado: Cargando sin datos previos → skeleton completo
@@ -283,7 +287,7 @@ const DataTable = <T extends IGeneral>({
                                                             ) : (
                                                                 <ArrowUpDownIcon className="h-3.5 w-3.5" />
                                                             )}
-                                                            {sorted && table.getState().sorting.length > 1 && (
+                                                            {sorted && sorting.length > 1 && (
                                                                 <span className="text-[10px] leading-none">{header.column.getSortIndex() + 1}</span>
                                                             )}
                                                         </span>
@@ -329,7 +333,7 @@ const DataTable = <T extends IGeneral>({
                 <div className="flex items-center justify-between px-4">
                     <div className="hidden flex-1 text-sm text-muted-foreground lg:flex">
                         {(() => {
-                            const { pageIndex, pageSize: ps } = table.getState().pagination;
+                            const { pageIndex, pageSize: ps } = pagination;
                             const total = serverSide ? serverSide.total : table.getFilteredRowModel().rows.length;
                             const from = total === 0 ? 0 : pageIndex * ps + 1;
                             const to = Math.min((pageIndex + 1) * ps, total);
@@ -342,13 +346,13 @@ const DataTable = <T extends IGeneral>({
                                 Mostrar
                             </Label>
                             <Select
-                                value={`${table.getState().pagination.pageSize}`}
+                                value={`${pagination.pageSize}`}
                                 onValueChange={(value) => {
                                     table.setPageSize(Number(value));
                                 }}
                             >
                                 <SelectTrigger className="w-20" id="rows-per-page">
-                                    <SelectValue placeholder={String(table.getState().pagination.pageSize)} />
+                                    <SelectValue placeholder={String(pagination.pageSize)} />
                                 </SelectTrigger>
                                 <SelectContent side="top">
                                     {[15, 25, 50, 100].map((pageSize) => (
@@ -360,7 +364,7 @@ const DataTable = <T extends IGeneral>({
                             </Select>
                         </div>
                         <div className="flex w-fit items-center justify-center text-sm text-muted-foreground">
-                            Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}
+                            Página {pagination.pageIndex + 1} de {table.getPageCount()}
                         </div>
                         <div className="ml-auto flex items-center gap-1 lg:ml-0">
                             <Button

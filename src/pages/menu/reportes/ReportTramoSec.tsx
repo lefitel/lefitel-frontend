@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ColumnDef, Row } from "@tanstack/react-table";
-
+import type { Col, Rw } from "../../../components/table/tableFeatures";
 import { getReporteTramo } from "../../../api/reporte.api";
 import { getCiudad } from "../../../api/Ciudad.api";
 import {
@@ -166,14 +165,14 @@ const ReportTramoSec = () => {
     </span>
   );
 
-  const columns = useMemo<ColumnDef<EventoInterface>[]>(() => [
+  const columns = useMemo<Col<EventoInterface>[]>(() => [
     {
       id: "num",
       header: "#",
       enableSorting: false,
       cell: ({ row, table }) => {
         const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.getState().pagination;
+        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
         return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
       },
     },
@@ -194,7 +193,7 @@ const ReportTramoSec = () => {
       id: `prop_${prop.id}`,
       header: () => vHeader(prop.name),
       enableSorting: false,
-      cell: ({ row }: { row: Row<EventoInterface> }) =>
+      cell: ({ row }: { row: Rw<EventoInterface> }) =>
         row.original.poste?.propietario?.id === prop.id
           ? check("bg-[#BDD7EE]", "text-blue-700")
           : null,
@@ -204,7 +203,7 @@ const ReportTramoSec = () => {
       id: `mat_${mat.id}`,
       header: () => vHeader(mat.name),
       enableSorting: false,
-      cell: ({ row }: { row: Row<EventoInterface> }) =>
+      cell: ({ row }: { row: Rw<EventoInterface> }) =>
         row.original.poste?.material?.id === mat.id
           ? check("bg-[#E8B4B8]", "text-rose-700")
           : null,
@@ -214,7 +213,7 @@ const ReportTramoSec = () => {
       id: `adss_${adss.id}`,
       header: () => vHeader(adss.name),
       enableSorting: false,
-      cell: ({ row }: { row: Row<EventoInterface> }) =>
+      cell: ({ row }: { row: Rw<EventoInterface> }) =>
         ((row.original.poste?.adsspostes ?? []) as AdssPosteInterface[]).some((ap) => ap.id_adss === adss.id)
           ? check("bg-[#FFE599]", "text-yellow-700")
           : null,
@@ -246,7 +245,7 @@ const ReportTramoSec = () => {
       id: `obs_${obs.id}`,
       header: () => vHeader(obs.name),
       enableSorting: false,
-      cell: ({ row }: { row: Row<EventoInterface> }) =>
+      cell: ({ row }: { row: Rw<EventoInterface> }) =>
         (row.original.eventoObs ?? []).some((eo: EventoObsInterface) => eo.id_obs === obs.id)
           ? check("bg-[#D4EDDA]", "text-green-700")
           : null,

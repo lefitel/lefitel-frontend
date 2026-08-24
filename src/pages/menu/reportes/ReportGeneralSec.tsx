@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
-
+import type { Col } from "../../../components/table/tableFeatures";
 import { getReporteGeneral } from "../../../api/reporte.api";
 import { getCiudad } from "../../../api/Ciudad.api";
 import { CiudadInterface, EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
@@ -156,14 +155,14 @@ const ReportGeneralSec = () => {
     }
   };
 
-  const columns = useMemo<ColumnDef<EventoInterface>[]>(() => [
+  const columns = useMemo<Col<EventoInterface>[]>(() => [
     {
       id: "num",
       header: "#",
       enableSorting: false,
       cell: ({ row, table }) => {
         const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.getState().pagination;
+        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
         return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
       },
     },

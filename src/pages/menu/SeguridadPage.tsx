@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
+import type { Col } from "../../components/table/tableFeatures";
 import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ExcelJS from "exceljs";
@@ -368,14 +368,14 @@ const SeguridadPage = () => {
 
     const navigate = useNavigate();
 
-    const columns = useMemo<ColumnDef<UsuarioInterface>[]>(() => [
+    const columns = useMemo<Col<UsuarioInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },
@@ -462,14 +462,14 @@ const SeguridadPage = () => {
         },
     ], [navigate, rol]);
 
-    const archivedColumns = useMemo<ColumnDef<UsuarioInterface>[]>(() => [
+    const archivedColumns = useMemo<Col<UsuarioInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },

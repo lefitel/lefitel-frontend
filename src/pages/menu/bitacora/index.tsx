@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ColumnDef, SortingState } from "@tanstack/react-table";
+import { SortingState } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { getAllBitacora, BitacoraFilters } from "../../../api/Bitacora.api";
 import { getUsuario } from "../../../api/Usuario.api";
 import { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
@@ -261,14 +262,14 @@ const BitacoraPage = () => {
     setUserId("all");
   };
 
-  const columns = useMemo<ColumnDef<BitacoraInterface>[]>(() => [
+  const columns = useMemo<Col<BitacoraInterface>[]>(() => [
     {
       id: "num",
       header: "#",
       enableSorting: false,
       cell: ({ row, table }) => {
         const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize: ps } = table.getState().pagination;
+        const { pageIndex, pageSize: ps } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
         return <span className="text-xs text-muted-foreground">{pageIndex * ps + visibleIndex + 1}</span>;
       },
     },

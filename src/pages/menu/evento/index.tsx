@@ -1,7 +1,8 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { ColumnDef, SortingState } from "@tanstack/react-table";
+import { SortingState } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -332,7 +333,7 @@ const EventoPage = () => {
         }
     };
 
-    const columns = useMemo<ColumnDef<EventoInterface>[]>(() => [
+    const columns = useMemo<Col<EventoInterface>[]>(() => [
         {
             id: "num",
             header: "#",
@@ -585,7 +586,7 @@ const EventoPage = () => {
         },
     ], [sesion.usuario.id_rol, navigate, page, pageSize, canEdit, savingPriorityIds, handlePriorityToggle]);
 
-    const archivedColumns = useMemo<ColumnDef<EventoInterface>[]>(() => [
+    const archivedColumns = useMemo<Col<EventoInterface>[]>(() => [
         {
             accessorKey: "poste",
             header: "Poste",

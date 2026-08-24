@@ -1,6 +1,6 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import type { Col } from "../../components/table/tableFeatures";
 import { SesionContext } from "../../context/SesionContext";
 import { can } from "../../lib/permissions";
 import {
@@ -160,7 +160,7 @@ const FilesPage = () => {
     return files;
   }, [files, orphans, statusFilter]);
 
-  const columns = useMemo<ColumnDef<OrphanFileInfo>[]>(() => [
+  const columns = useMemo<Col<OrphanFileInfo>[]>(() => [
     {
       id: "preview",
       header: "Vista previa",
@@ -271,7 +271,7 @@ const FilesPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   ], [deletingName, navigate]);
 
-  const brokenColumns = useMemo<ColumnDef<BrokenRef>[]>(() => [
+  const brokenColumns = useMemo<Col<BrokenRef>[]>(() => [
     {
       accessorKey: "tipo",
       header: "Tipo",

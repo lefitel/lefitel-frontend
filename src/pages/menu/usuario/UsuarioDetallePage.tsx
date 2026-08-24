@@ -1,6 +1,6 @@
 import React, { useContext, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ColumnDef } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { EventoInterface } from "../../../interfaces/interfaces";
@@ -224,7 +224,7 @@ export default function UsuarioDetallePage() {
     setSavingPass(false);
   };
 
-  const columns = useMemo<ColumnDef<EventoInterface>[]>(() => [
+  const columns = useMemo<Col<EventoInterface>[]>(() => [
     {
       accessorKey: "state",
       header: "Estado",

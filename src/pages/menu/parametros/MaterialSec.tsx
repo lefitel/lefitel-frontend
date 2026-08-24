@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { ColumnDef } from "@tanstack/react-table";
+import type { Col } from "../../../components/table/tableFeatures";
 import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
@@ -146,14 +146,14 @@ const MaterialSec = ({ innerTab }: Props) => {
         setDeleting(false);
     };
 
-    const columns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+    const columns = useMemo<Col<MaterialInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },
@@ -207,14 +207,14 @@ const MaterialSec = ({ innerTab }: Props) => {
         },
     ], [openEdit, rol]);
 
-    const archivedColumns = useMemo<ColumnDef<MaterialInterface>[]>(() => [
+    const archivedColumns = useMemo<Col<MaterialInterface>[]>(() => [
         {
             id: "num",
             header: "#",
             enableSorting: false,
             cell: ({ row, table }) => {
                 const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.getState().pagination;
+                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
                 return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
             },
         },

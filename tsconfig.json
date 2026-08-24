@@ -24,5 +24,10 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
+  // The tests are checked by `tsconfig.test.json`, which is the only config
+  // that puts Node's globals in scope. Keeping them out of this one is what
+  // stops `process.env` and `__dirname` from compiling inside a screen; see
+  // that file for the whole reasoning. `npm run typecheck` runs both.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/test"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
