@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
-import { can } from "../../../lib/permissions";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { editUserName, editUserPass, searchUsuario_user } from "../../../api/Usuario.api";
 import { url } from "../../../api/url";
@@ -95,9 +94,18 @@ export default function UsuarioDetallePage() {
     ? `${d.usuario.name[0] ?? ""}${d.usuario.lastname[0] ?? ""}`.toUpperCase()
     : "??";
 
+  /**
+   * Whose account this page is showing, and the only question either credential
+   * form asks.
+   *
+   * `can(rol, "seguridad", "editar")` used to be read here as well, under the
+   * name `isAdmin`, and the password form branched on it. It is gone rather
+   * than left unused: the permission decides whether this page may act on
+   * *somebody else's* account at all, which the server settles on every
+   * request, and reading it here only ever produced the wrong answer to "must
+   * the current password be typed" — see `handleSavePassword`.
+   */
   const isOwnProfile = sesion.usuario.id === d.usuario?.id;
-  const rol     = sesion.usuario.id_rol;
-  const isAdmin = can(rol, "seguridad", "editar");
 
   const handleSaveUsername = async () => {
     if (!newUser.trim()) return toast.warning("El nombre de usuario no puede estar vacío");
@@ -163,11 +171,30 @@ export default function UsuarioDetallePage() {
   const handleSavePassword = async () => {
     if (!newPass.trim()) return toast.warning("Ingresa la nueva contraseña");
     if (newPass !== newPass2) return toast.warning("Las contraseñas no coinciden");
-    if (!isAdmin && !oldPass.trim()) return toast.warning("Ingresa tu contraseña actual");
+    /**
+     * The current password is asked for when the account is your own, and the
+     * permission has nothing to do with it.
+     *
+     * **What this replaced.** The condition was `isAdmin`, so anybody who could
+     * manage accounts got no field to type it in — their own account included —
+     * and the request went out with no password on it. The server agreed, which
+     * is the hole: on an unattended machine with an administrator's session
+     * open, whoever sits down sets a new password, keeps the session already
+     * there and ends every other one in the same write. `updateUserPass`
+     * demands it now, so a screen that cannot send it would answer 400 to a
+     * request the person has no way of completing.
+     *
+     * `isOwnProfile` and not `!isAdmin`, which are different questions: the
+     * exemption is for resetting *somebody else's* password, because there is
+     * none the caller could be expected to know. Exactly the line the rename
+     * above already draws, and the same one the server draws — see
+     * `requiresOwnPassword` there.
+     */
+    if (isOwnProfile && !oldPass.trim()) return toast.warning("Ingresa tu contraseña actual");
     if (!d.usuario?.id) return;
     setSavingPass(true);
     const res = await editUserPass(
-      { ...d.usuario, pass: newPass, oldPass: isAdmin ? undefined : oldPass }
+      { ...d.usuario, pass: newPass, oldPass: isOwnProfile ? oldPass : undefined }
     );
     if (res.status === 200) {
       toast.success("Contraseña actualizada");
@@ -472,13 +499,16 @@ export default function UsuarioDetallePage() {
           <SheetHeader>
             <SheetTitle>Cambiar contraseña</SheetTitle>
             <SheetDescription>
-              {isAdmin
-                ? "Como administrador puedes cambiar la contraseña sin necesitar la actual."
-                : "Ingresa la contraseña actual y la nueva."}
+              {isOwnProfile
+                ? "Ingresa la contraseña actual y la nueva."
+                : "Como administrador puedes cambiar la contraseña sin necesitar la actual."}
             </SheetDescription>
           </SheetHeader>
           <div className="flex flex-col gap-4 px-4 py-6">
-            {!isAdmin && (
+            {/* Your own account, and not "whoever lacks the permission" — see
+                `handleSavePassword`. Hidden here while the server demanded it
+                is a form nobody can submit. */}
+            {isOwnProfile && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="old-pass">Contraseña actual</Label>
                 <Input id="old-pass" type="password" value={oldPass}

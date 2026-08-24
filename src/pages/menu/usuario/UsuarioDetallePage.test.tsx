@@ -49,8 +49,29 @@ const usuario: UsuarioInterface = {
 };
 
 const editUserName = vi.fn();
+const editUserPass = vi.fn();
 const searchUsuario_user = vi.fn();
 const load = vi.fn();
+
+/**
+ * `can` answers yes to everything, and this screen does not ask it any more.
+ *
+ * Both halves matter. The screen used to decide whether to *show* the current
+ * password box by asking `can(rol, "seguridad", "editar")`, which meant anybody
+ * who could manage accounts had no box to type it in — on their own account
+ * included — and the change went out with no password on it. That is the hole
+ * the server closed, so the box is drawn from ownership now and this module is
+ * not imported here at all.
+ *
+ * The mock stays because it is what makes the password tests below *fail* if the
+ * old question ever comes back: re-introduce `isAdmin` and `can` answers true,
+ * the box disappears, and the test looking for it cannot find it. Left real
+ * except for `can`, since `interfaces.ts` reaches into this module for the rest.
+ */
+vi.mock("../../../lib/permissions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../lib/permissions")>()),
+  can: () => true,
+}));
 
 vi.mock("../../../api/Login.api", () => ({
   // Both named, and both throw. This screen must reach the auth API for nothing
@@ -77,7 +98,7 @@ vi.mock("../../../api/Login.api", () => ({
 }));
 vi.mock("../../../api/Usuario.api", () => ({
   editUserName: (...args: unknown[]) => editUserName(...args),
-  editUserPass: vi.fn(),
+  editUserPass: (...args: unknown[]) => editUserPass(...args),
   searchUsuario_user: (...args: unknown[]) => searchUsuario_user(...args),
 }));
 vi.mock("sonner", () => ({
@@ -138,12 +159,33 @@ async function renombrar(nuevo: string, password: string) {
 /** The single object `editUserName` was called with. */
 const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
 
+/**
+ * Open the "Contraseña" panel, fill it in and press save.
+ *
+ * `actual` is left out for the case the panel does not offer the box, which is
+ * every profile that is not your own.
+ */
+async function cambiarPassword(nueva: string, actual?: string) {
+  const user = userEvent.setup();
+
+  await user.click(screen.getByRole("button", { name: /^contraseña$/i }));
+  await user.type(await screen.findByLabelText("Nueva contraseña"), nueva);
+  await user.type(screen.getByLabelText("Confirmar contraseña"), nueva);
+  if (actual !== undefined) await user.type(screen.getByLabelText("Contraseña actual"), actual);
+  await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+  return user;
+}
+
+/** The single object `editUserPass` was called with. */
+const enviadoPass = () => editUserPass.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
+
 beforeEach(() => {
   vi.clearAllMocks();
   // "Not found" is what a free username looks like through this API: the screen
   // treats a resolved search as "taken" and a rejection as "available".
   searchUsuario_user.mockRejectedValue(new Error("no existe"));
   editUserName.mockResolvedValue({ status: 200 });
+  editUserPass.mockResolvedValue({ status: 200 });
 });
 
 describe("changing your own username", () => {
@@ -226,6 +268,69 @@ describe("changing your own username", () => {
   });
 });
 
+/**
+ * Changing your own password asks for the current one, and the permission has
+ * nothing to do with it.
+ *
+ * The hole: the box was drawn on `!isAdmin`, so anybody holding
+ * `seguridad.editar` was shown no box at all and the request went out with no
+ * password — their own account included. On an unattended machine with an
+ * administrator's session open, whoever sat down set a new password, kept the
+ * session already there and ended every other one of that account in the same
+ * write. `can` answers true throughout this file (see the mock at the top), so
+ * bringing that question back makes these two tests fail rather than pass more
+ * quietly.
+ */
+describe("changing your own password", () => {
+  it("sends the current password along with the change", async () => {
+    render(<Harness />);
+    await cambiarPassword("una-clave-de-prueba", "la-mia");
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    expect(enviadoPass().pass).toBe("una-clave-de-prueba");
+    // The value only the keyboard could have produced, not the record's own
+    // `pass` field — empty on this fixture and a hash on a real one. A test
+    // comparing against `undefined` is how the same assertion passed against an
+    // endpoint that sent nothing, earlier in this plan.
+    expect(enviadoPass().oldPass).toBe("la-mia");
+    expect(enviadoPass().oldPass).not.toBe(usuario.pass);
+  });
+
+  it("sends nothing at all when the current password box was left empty", async () => {
+    // Fill in the new one twice, forget the current one, press save. Nothing
+    // leaves the browser: the server would refuse it anyway, and the attempt
+    // would spend one of the five confirmations this account gets in a quarter
+    // of an hour.
+    render(<Harness />);
+    await cambiarPassword("una-clave-de-prueba");
+
+    expect(editUserPass).not.toHaveBeenCalled();
+  });
+});
+
+describe("resetting somebody else's password", () => {
+  it("sends no password and does not ask for one", async () => {
+    // The half the exemption exists for, and it has to keep working: an
+    // administrator resets a password precisely because that person cannot get
+    // in, so there is none either of them could supply. The server draws the
+    // same line — `requiresOwnPassword` is true only for the caller's own id,
+    // permission or no permission.
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: /^contraseña$/i }));
+    await user.type(await screen.findByLabelText("Nueva contraseña"), "una-clave-de-prueba");
+    await user.type(screen.getByLabelText("Confirmar contraseña"), "una-clave-de-prueba");
+    // No box, so `oldPass` below cannot have come from something somebody typed.
+    expect(screen.queryByLabelText("Contraseña actual")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    expect(enviadoPass().pass).toBe("una-clave-de-prueba");
+    expect(enviadoPass().oldPass).toBeUndefined();
+  });
+});
+
 describe("renaming somebody else's account", () => {
   it("sends no password, because there is none the caller could know", async () => {
     /**
@@ -233,7 +338,7 @@ describe("renaming somebody else's account", () => {
      *
      * `seguridad.editar` is what authorises acting on another account, and the
      * target's password is unknown to the caller by design — so there is nothing
-     * to confirm. The server draws the same line: `renameRequiresOwnPassword`
+     * to confirm. The server draws the same line: `requiresOwnPassword`
      * is true only for the caller's own id, permission or no permission.
      *
      * There is no password field on screen in this case at all, which is what
