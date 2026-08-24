@@ -18,8 +18,18 @@ import type { Permisos } from "../lib/permissions";
  * down, not the password wrong — and `LoginPage.tsx` shows `message` on any
  * non-200, so the person reads "inténtelo de nuevo en unos minutos" rather
  * than being left to conclude they have forgotten their password. The
- * flattening to 500 is why `UsuarioDetallePage.tsx` can compare against one
- * number.
+ * flattening is what `LoginPage.tsx` is written around, and it is the only
+ * screen entitled to be: it has one question to ask and one place to show the
+ * answer.
+ *
+ * **Nothing else may use this function to check a password.**
+ * `UsuarioDetallePage.tsx` did, to confirm a change of your own username, and it
+ * decided the password was right by finding `status === 500` — a number the real
+ * refusal (400) only ever reached because of the flattening above. It worked, by
+ * accident, and would have stopped working the day any real status arrived
+ * unflattened, with nothing turning red. `confirmarPassword` below is what that
+ * screen asks now: it answers with a field, so there is no status code left to
+ * be accidentally right about.
  */
 export const loginUsuario = (
   data: UsuarioInterface
@@ -71,6 +81,54 @@ export const loginUsuario = (
         usuario: null,
       };
     });
+};
+
+/**
+ * Is this really my password? Asked before something that needs confirming.
+ *
+ * **What this replaces.** `UsuarioDetallePage.tsx` used to confirm the password
+ * for a change of your own username by calling `loginUsuario` above — a whole
+ * login, to answer a question about somebody already logged in. It opened a
+ * second session, so the rotation on the way in revoked the one the browser was
+ * using; it wrote "Inició sesión" into the bitácora for a login nobody
+ * performed; a typo counted as a failed login attempt, so getting your own
+ * password wrong a few times while renaming yourself **locked you out of the
+ * ERP**; and the check itself worked by accident — the screen compared
+ * `status === 500` while the API answered 400, and what made those meet was the
+ * flattening this very file does deliberately for another reason.
+ *
+ * **So the answer is a field, not a status.** `POST /api/auth/confirm-password`
+ * answers 200 with `{ correcta: boolean }` for both answers, and the only thing
+ * that gets past this function is the server saying exactly `true`. Everything
+ * else is `false` with something to show: a wrong password, a 429 for too many
+ * attempts, a 401 whose session has ended, a 500, a dropped connection, a body
+ * that arrives without the field at all. No caller has a status code to compare
+ * against, and there is no shape of failure that reads as a confirmation.
+ *
+ * That asymmetry is the point and it is worth saying plainly: `correcta: false`
+ * does **not** mean "the password is wrong". It means "not confirmed", and the
+ * sentence in `message` is what distinguishes the cases for the person reading
+ * the screen. Anything that needs the difference for its own logic must not use
+ * this function — it should be given a reason by the server, not infer one.
+ */
+export const confirmarPassword = (
+  pass: string
+): Promise<{ correcta: boolean; message: string | null }> => {
+  return axios
+    .post(urlApi + "auth/confirm-password", { pass })
+    .then((response) => ({
+      // `=== true` and not `!!`: `response.data` is `any`, so a body that
+      // answered `"correcta": "false"` — a string, which is truthy — would
+      // otherwise confirm a password the server just refused.
+      correcta: response.data?.correcta === true,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      correcta: false,
+      message:
+        (e.response?.data?.message as string | undefined) ??
+        "No se pudo verificar su contraseña. Inténtelo de nuevo.",
+    }));
 };
 
 /**

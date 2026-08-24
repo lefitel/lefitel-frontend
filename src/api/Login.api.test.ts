@@ -23,7 +23,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { comprobarToken, loginUsuario } from "./Login.api";
+import { comprobarToken, confirmarPassword, loginUsuario } from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
@@ -145,5 +145,110 @@ describe("loginUsuario", () => {
     // Never true on its own: `LoginPage.tsx` is what turns a successful
     // request into a session.
     expect(res.usuario?.autenticado).toBe(false);
+  });
+});
+
+/**
+ * The wrapper that replaced "call the login and read a status code".
+ *
+ * Its whole job is that nothing but an explicit `true` from the server gets
+ * through, so the tests are the list of ways the answer can arrive wrong:
+ * `false`, a truthy string, a body with no such field, a 429, a 401, and a
+ * network that never answered. All of them are one result — not confirmed —
+ * and the caller has no status code to compare against, which is the thing the
+ * old check got accidentally right and would eventually have got wrong.
+ */
+describe("confirmarPassword", () => {
+  it("asks POST /api/auth/confirm-password, sending only the password", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { correcta: true } });
+
+    await confirmarPassword("la-mia");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    // Anchored at the end so `/auth/login` cannot satisfy it: calling the login
+    // here is the defect this endpoint exists to remove.
+    expect(post.mock.calls[0][0]).toMatch(/auth\/confirm-password$/);
+    expect(post.mock.calls[0][0]).not.toMatch(/login/);
+    // The body is the password and nothing else — no username, no id. Which
+    // account it is about comes off the session cookie on the server, and a
+    // field here would be a field somebody could change.
+    expect(post.mock.calls[0][1]).toEqual({ pass: "la-mia" });
+  });
+
+  it("confirms only on an explicit true", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { correcta: true } });
+
+    expect(await confirmarPassword("la-mia")).toEqual({ correcta: true, message: null });
+  });
+
+  it("does not confirm on a false, and carries the server's sentence", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { correcta: false, message: "Esa no es su contraseña actual." },
+    });
+
+    const res = await confirmarPassword("no-es-la-mia");
+
+    expect(res.correcta).toBe(false);
+    expect(res.message).toBe("Esa no es su contraseña actual.");
+  });
+
+  it("does not confirm on anything that is merely truthy", async () => {
+    // `response.data` is `any`. A body answering the string "false" — which is
+    // truthy — is what a `!!` here would confirm, and it is not a hypothetical
+    // shape: it is what a proxy or a serialiser that stringifies booleans
+    // sends.
+    for (const correcta of ["false", "true", 1, {}, [], "sí"]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { correcta } });
+
+      expect((await confirmarPassword("x")).correcta, JSON.stringify(correcta)).toBe(false);
+    }
+  });
+
+  it("does not confirm a 200 whose body has no such field", async () => {
+    // The answer an older API version, a proxy with an opinion, or a rewritten
+    // endpoint would give. Absence is not consent.
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: {} });
+
+    expect((await confirmarPassword("x")).correcta).toBe(false);
+  });
+
+  it("does not confirm when the attempts ran out, and says what happened", async () => {
+    // A 429 from the endpoint's own budget. This must never read as an answer
+    // about the password in either direction: the person needs to be told to
+    // wait, not that they typed it wrong.
+    const error = Object.assign(new Error("429"), {
+      response: { status: 429, data: { message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." } },
+    });
+    vi.spyOn(axios, "post").mockRejectedValue(error);
+
+    const res = await confirmarPassword("x");
+
+    expect(res.correcta).toBe(false);
+    expect(res.message).toMatch(/Espere/);
+  });
+
+  it("does not confirm when the session has ended", async () => {
+    const error = Object.assign(new Error("401"), {
+      response: { status: 401, data: { message: "Su cuenta ya no está activa." } },
+    });
+    vi.spyOn(axios, "post").mockRejectedValue(error);
+
+    expect(await confirmarPassword("x")).toEqual({
+      correcta: false,
+      message: "Su cuenta ya no está activa.",
+    });
+  });
+
+  it("does not confirm when nothing answered at all, and still has something to show", async () => {
+    // No `response`, so no message from the server. A screen with an empty
+    // toast is how "it just did nothing" happens.
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    const res = await confirmarPassword("x");
+
+    expect(res.correcta).toBe(false);
+    expect(res.message).toBe("No se pudo verificar su contraseña. Inténtelo de nuevo.");
   });
 });

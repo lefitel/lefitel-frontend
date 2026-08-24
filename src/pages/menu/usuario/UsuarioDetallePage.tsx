@@ -6,7 +6,7 @@ import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { editUserName, editUserPass, searchUsuario_user } from "../../../api/Usuario.api";
-import { loginUsuario } from "../../../api/Login.api";
+import { confirmarPassword } from "../../../api/Login.api";
 import { url } from "../../../api/url";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -107,10 +107,31 @@ export default function UsuarioDetallePage() {
 
     setSavingUser(true);
 
+    /**
+     * Confirming it is really you, without logging you in again.
+     *
+     * This used to call `loginUsuario` and decide from `auth.status === 500`,
+     * and every part of that was wrong in a way nothing on screen showed. The
+     * login opened a second session, and the rotation on the way in revoked the
+     * one this very tab was using; it wrote "Inició sesión" into the bitácora
+     * for a login that never happened; and a mistyped password counted as a
+     * failed login attempt, so trying a few times here **locked the account out
+     * of the ERP** while the toast said only "Contraseña incorrecta". The check
+     * also only worked by accident: the API answers 400 to a wrong password and
+     * `Login.api.ts` flattens every non-2xx to 500, so the day a real status
+     * arrived intact the comparison would have gone quietly false and the rename
+     * would have proceeded with the wrong password.
+     *
+     * `confirmarPassword` asks an endpoint that issues nothing and answers with
+     * a field. **Only an explicit `true` continues** — a wrong password, too
+     * many attempts, an expired session, a broken network and a body missing the
+     * field are all `false`, each with its own sentence to show. There is no
+     * status code here to be accidentally right about.
+     */
     if (isOwnProfile) {
-      const auth = await loginUsuario({ ...sesion.usuario, pass: currentPassUser });
-      if (auth.status === 500) {
-        toast.error(auth.message ?? "Contraseña incorrecta");
+      const confirmacion = await confirmarPassword(currentPassUser);
+      if (!confirmacion.correcta) {
+        toast.error(confirmacion.message ?? "No se pudo confirmar su contraseña");
         setSavingUser(false);
         return;
       }
