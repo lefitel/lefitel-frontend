@@ -122,6 +122,57 @@ beforeEach(() => {
   // picker, which an object's `toString()` does not survive.
   searchUsuario.mockResolvedValue(PERFIL_CARGADO);
   editUserName.mockResolvedValue({ status: 200 });
+  editUserPass.mockResolvedValue({ status: 200 });
+});
+
+/**
+ * Changing your own password from this screen, which is where everybody does it.
+ *
+ * This path was never tested, and it is the one the server's rule now applies to
+ * universally. It always sent `oldPass`, so nothing here is a fix — it is the
+ * only thing that would notice if the payload were ever tidied up, and after
+ * `updateUserPass` started demanding the current password of *everybody* changing
+ * their own, dropping it would answer 400 to every password change in the ERP
+ * rather than only to the ones made by people without the permission.
+ */
+describe("changing your own password from the profile page", () => {
+  async function cambiarPassword(actual: string, nueva: string) {
+    const user = userEvent.setup();
+    render(<Harness />);
+    // The page shows skeletons until the profile resolves.
+    await user.type(await screen.findByLabelText(/contraseña actual/i), actual);
+    await user.type(screen.getByLabelText("Nueva contraseña"), nueva);
+    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), nueva);
+    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
+    await user.click(await screen.findByRole("button", { name: /sí, cambiar/i }));
+    return user;
+  }
+
+  it("sends the current password with the new one", async () => {
+    await cambiarPassword("la-mia", "una-clave-de-prueba");
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    const enviado = editUserPass.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
+    expect(enviado.pass).toBe("una-clave-de-prueba");
+    // Typed, and not the record's own `pass` field, which carries a hash on this
+    // fixture for exactly this reason.
+    expect(enviado.oldPass).toBe("la-mia");
+    expect(enviado.oldPass).not.toBe(usuario.pass);
+  });
+
+  it("sends nothing when the current password box was left empty", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await user.type(await screen.findByLabelText("Nueva contraseña"), "una-clave-de-prueba");
+    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), "una-clave-de-prueba");
+    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
+
+    // Not even the confirmation dialog: an empty attempt would be refused
+    // anyway, and it would spend one of the five confirmations this account gets
+    // in a quarter of an hour.
+    expect(screen.queryByRole("button", { name: /sí, cambiar/i })).toBeNull();
+    expect(editUserPass).not.toHaveBeenCalled();
+  });
 });
 
 describe("renaming your own account from the profile page", () => {
