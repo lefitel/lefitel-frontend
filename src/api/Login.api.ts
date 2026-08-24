@@ -27,9 +27,14 @@ import type { Permisos } from "../lib/permissions";
  * decided the password was right by finding `status === 500` — a number the real
  * refusal (400) only ever reached because of the flattening above. It worked, by
  * accident, and would have stopped working the day any real status arrived
- * unflattened, with nothing turning red. `confirmarPassword` below is what that
- * screen asks now: it answers with a field, so there is no status code left to
- * be accidentally right about.
+ * unflattened, with nothing turning red.
+ *
+ * There is no confirmation wrapper here to point at instead, and that is the
+ * point: the password now rides on the request that performs the change —
+ * `editUserName` and `editUserPass` in `Usuario.api.ts` — and the server
+ * compares it there. So there is no status code anywhere for a screen to be
+ * accidentally right about, and nothing on this side deciding whether a
+ * credential was good.
  */
 export const loginUsuario = (
   data: UsuarioInterface
@@ -84,63 +89,41 @@ export const loginUsuario = (
 };
 
 /**
- * Is this really my password? Asked before something that needs confirming.
+ * `confirmarPassword` used to live here, and it is retired along with the
+ * `POST /api/auth/confirm-password` it called. Written down rather than simply
+ * deleted, because the reason is a design decision and the next plan is the one
+ * most likely to want it back.
  *
- * **What this replaces.** `UsuarioDetallePage.tsx` used to confirm the password
- * for a change of your own username by calling `loginUsuario` above — a whole
- * login, to answer a question about somebody already logged in. It opened a
- * second session, so the rotation on the way in revoked the one the browser was
- * using; it wrote "Inició sesión" into the bitácora for a login nobody
- * performed; a typo counted as a failed login attempt, so getting your own
- * password wrong a few times while renaming yourself **locked you out of the
- * ERP**; and the check itself worked by accident — the screen compared
- * `status === 500` while the API answered 400, and what made those meet was the
- * flattening this very file does deliberately for another reason.
+ * **What it was for.** `UsuarioDetallePage.tsx` asked it "is this really my
+ * password?" before renaming your own account. That was already the second
+ * attempt: the first called `loginUsuario` above and read `status === 500`,
+ * which opened a second session, revoked the very one the tab was using, wrote
+ * "Inició sesión" into the bitácora for a login nobody performed, and counted a
+ * typo as a failed login attempt — so mistyping your password a few times while
+ * renaming yourself locked you out of the ERP.
  *
- * **So the answer is a field, not a status.** `POST /api/auth/confirm-password`
- * answers 200 with `{ correcta: boolean }` for both answers, and the only thing
- * that gets past this function is the server saying exactly `true`. Everything
- * else is `false` with something to show: a wrong password, a 429 for too many
- * attempts, a 401 whose session has ended, a 500, a dropped connection, a body
- * that arrives without the field at all. No caller has a status code to compare
- * against, and there is no shape of failure that reads as a confirmation.
+ * **Why the replacement went too.** A confirmation that lives only in the client
+ * is optional by definition: whoever does not want to type the password uses the
+ * other screen, or `curl`. So the server was made to demand it on the write, and
+ * the screens send it there — `oldPass` on `editUserName` and `editUserPass` in
+ * `Usuario.api.ts`. That left this asking a question nothing needed answered,
+ * and the rule it broke is the one the whole plan turns on: the credential that
+ * authorises an operation travels in the request that performs it. Confirming
+ * first *and* sending it would compare one password twice, out of two budgets,
+ * from two pieces of code that have to agree.
  *
- * That asymmetry is the point and it is worth saying plainly: `correcta: false`
- * does **not** mean "the password is wrong". It means "not confirmed", and the
- * sentence in `message` is what distinguishes the cases for the person reading
- * the screen. Anything that needs the difference for its own logic must not use
- * this function — it should be given a reason by the server, not infer one.
+ * **The step-up of the MFA plan does not bring it back.** That design has the
+ * first enrolment of a factor re-ask for the password, and under the same rule
+ * that means `pass` on the enrolment request itself, not a confirmation
+ * beforehand; everything else on its list is satisfied by how recently the
+ * factor was used, not by a password at all.
  *
- * **Nothing calls this today, and that is deliberate rather than an oversight.**
- * The screen it was written for now sends the password on the rename itself,
- * because the server demands it there: a prior confirmation cannot stand in for
- * a check the write performs, and doing both would compare one password twice
- * out of two budgets from two pieces of code that have to agree. So the reason
- * this survives is not this caller — it is that the endpoint behind it is the
- * right shape for the next thing that has to ask "is it really you?" before
- * something irreversible, and the design of the MFA plan expects exactly that.
- * Whether it earns its keep is a decision for that plan; retiring it belongs
- * there too, together with the endpoint, and not as a side effect here.
+ * **What keeping it cost.** It was the only endpoint in the API that compared a
+ * password with no operation behind it, reachable by any authenticated session,
+ * drinking from the same five-per-quarter-hour ration as the two gates people
+ * actually use — so an unreachable path could spend the budget that renaming
+ * yourself and changing your password depend on.
  */
-export const confirmarPassword = (
-  pass: string
-): Promise<{ correcta: boolean; message: string | null }> => {
-  return axios
-    .post(urlApi + "auth/confirm-password", { pass })
-    .then((response) => ({
-      // `=== true` and not `!!`: `response.data` is `any`, so a body that
-      // answered `"correcta": "false"` — a string, which is truthy — would
-      // otherwise confirm a password the server just refused.
-      correcta: response.data?.correcta === true,
-      message: (response.data?.message as string | undefined) ?? null,
-    }))
-    .catch((e) => ({
-      correcta: false,
-      message:
-        (e.response?.data?.message as string | undefined) ??
-        "No se pudo verificar su contraseña. Inténtelo de nuevo.",
-    }));
-};
 
 /**
  * Who is logged in right now, according to the server.

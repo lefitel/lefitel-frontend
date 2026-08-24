@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { createUsuario, editUsuario, searchUsuario_user } from "../../../api/Usuario.api";
+import { passwordLengthError } from "../../../lib/password";
 import { uploadImage } from "../../../api/Upload.api";
 import { getRol } from "../../../api/Rol.api";
 import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
@@ -86,7 +87,22 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
         if (!isEditing) {
             if (!user.trim()) newErrors.user = "El usuario es requerido";
             if (!pass.trim()) newErrors.pass = "La contraseña es requerida";
-            else if (pass !== confirmPass) newErrors.confirmPass = "Las contraseñas no coinciden";
+            else {
+                /**
+                 * The server's length rule, from `lib/password.ts`.
+                 *
+                 * Not about a rate limit here — creating an account does not
+                 * touch the confirmation budget — but about a dead end. The
+                 * server refuses a password under `PASSWORD_MIN_LENGTH` with a
+                 * sentence saying so, and `createUsuario` throws that sentence
+                 * away: it flattens every failure to the number 400, so this
+                 * sheet could only say "No se pudo crear el usuario" and the
+                 * person had nothing to act on. Refusing here shows the reason.
+                 */
+                const demasiadoCorta = passwordLengthError(pass);
+                if (demasiadoCorta) newErrors.pass = demasiadoCorta;
+                if (pass !== confirmPass) newErrors.confirmPass = "Las contraseñas no coinciden";
+            }
         }
         if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
 

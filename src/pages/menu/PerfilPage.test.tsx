@@ -23,6 +23,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PerfilPage from "./PerfilPage";
 import { SesionContext, type contextProps } from "../../context/SesionContext";
+import { PASSWORD_MIN_LENGTH } from "../../lib/password";
 import type { SesionInterface, UsuarioInterface } from "../../interfaces/interfaces";
 
 const YO = 7;
@@ -58,14 +59,13 @@ vi.mock("../../api/Usuario.api", () => ({
   editUserPass: (...args: unknown[]) => editUserPass(...args),
   searchUsuario: (...args: unknown[]) => searchUsuario(...args),
 }));
-// Named and throwing: this screen must not reach the auth API to rename
-// anybody. The password rides on the rename itself, so confirming it first
-// would compare the same password twice, out of two budgets, from two pieces of
-// code that have to agree — which is the divergence this plan keeps finding.
+// Named and throwing: this screen must not reach the auth API to rename anybody.
+// The password rides on the rename itself, and the server compares it there.
+//
+// There is no `confirmarPassword` in this factory because there is no such export
+// any more — it and its endpoint are retired, and the compiler now refuses a call
+// to it, which is a harder guarantee than a throwing stub was.
 vi.mock("../../api/Login.api", () => ({
-  confirmarPassword: () => {
-    throw new Error("la contraseña viaja con el renombrado; no se confirma aparte");
-  },
   loginUsuario: () => {
     throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
   },
@@ -158,6 +158,48 @@ describe("changing your own password from the profile page", () => {
     // fixture for exactly this reason.
     expect(enviado.oldPass).toBe("la-mia");
     expect(enviado.oldPass).not.toBe(usuario.pass);
+  });
+
+  it("does not send a password the server is going to refuse for being too short", async () => {
+    /**
+     * This screen checked `< 6` while the server demands twelve, and the gap was
+     * written off as harmless because the server refuses correctly. What that
+     * missed is the price: the 400 costs one of the five confirmations this
+     * account gets per quarter of an hour, the token is taken before the server
+     * looks at the new password, and the same ration also pays for renaming
+     * itself. Nine, ten, eleven — the way anybody reacts to a length error — and
+     * the person is locked out of both operations for fifteen minutes.
+     *
+     * Eleven characters, so this fails against the old rule rather than against
+     * no rule at all.
+     */
+    const user = userEvent.setup();
+    render(<Harness />);
+    const corta = "a".repeat(PASSWORD_MIN_LENGTH - 1);
+    await user.type(await screen.findByLabelText(/contraseña actual/i), "la-mia");
+    await user.type(screen.getByLabelText("Nueva contraseña"), corta);
+    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), corta);
+    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
+
+    // Not even the confirmation dialog, so nothing can reach the server behind
+    // it.
+    expect(screen.queryByRole("button", { name: /sí, cambiar/i })).toBeNull();
+    expect(editUserPass).not.toHaveBeenCalled();
+    const { toast } = await import("sonner");
+    // And the person is told the actual rule. Matched loosely on purpose: the
+    // number belongs to `lib/password.ts`, which is where it is pinned to the
+    // server's.
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/al menos \d+ caracteres/));
+  });
+
+  it("sends a password of exactly the minimum length", async () => {
+    // The other direction, which nothing else here would catch: a client rule
+    // stricter than the server's blocks passwords that were perfectly good.
+    const laMinima = "a".repeat(PASSWORD_MIN_LENGTH);
+    await cambiarPassword("la-mia", laMinima);
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    expect((editUserPass.mock.calls[0][0] as UsuarioInterface).pass).toBe(laMinima);
   });
 
   it("sends nothing when the current password box was left empty", async () => {

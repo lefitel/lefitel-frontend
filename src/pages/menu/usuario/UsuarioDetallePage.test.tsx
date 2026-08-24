@@ -29,6 +29,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import UsuarioDetallePage from "./UsuarioDetallePage";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
+import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
 import type { SesionInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 
 const YO = 7;
@@ -74,8 +75,8 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
 }));
 
 vi.mock("../../../api/Login.api", () => ({
-  // Both named, and both throw. This screen must reach the auth API for nothing
-  // at all while renaming somebody.
+  // Named and throwing. This screen must reach the auth API for nothing at all
+  // while renaming somebody.
   //
   // `loginUsuario` is the original sin: calling it opened a second session whose
   // rotation revoked the one this very tab was using, wrote "Inició sesión" to
@@ -83,17 +84,13 @@ vi.mock("../../../api/Login.api", () => ({
   // login attempt — so getting your own password wrong a few times here **locked
   // the account out of the ERP**.
   //
-  // `confirmarPassword` is the second path, and it throws for a different
-  // reason: it works, it is harmless, and it must not be here. The password now
-  // travels on the rename itself, so confirming it first would compare the same
-  // password twice, out of two budgets, from two pieces of code that have to
-  // agree — and two ways of doing one thing diverging is the accident this whole
-  // plan has been chasing.
+  // `confirmarPassword` was the second path and used to be stubbed here too. It
+  // is gone from the module altogether now, along with its endpoint: the password
+  // travels on the rename, so confirming it first would compare the same password
+  // twice, out of two budgets, from two pieces of code that have to agree. A stub
+  // is no longer what stops it — the export does not exist, so the compiler does.
   loginUsuario: () => {
     throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
-  },
-  confirmarPassword: () => {
-    throw new Error("la contraseña viaja con el renombrado; no se confirma aparte");
   },
 }));
 vi.mock("../../../api/Usuario.api", () => ({
@@ -294,6 +291,39 @@ describe("changing your own password", () => {
     // endpoint that sent nothing, earlier in this plan.
     expect(enviadoPass().oldPass).toBe("la-mia");
     expect(enviadoPass().oldPass).not.toBe(usuario.pass);
+  });
+
+  it("does not send a password the server is going to refuse for being too short", async () => {
+    /**
+     * This panel validated the length not at all, which is worse than the
+     * profile page's stale `6`: there was no number to be wrong, so a
+     * two-character password was pressable. And the refusal is not free — it
+     * costs one of the five confirmations the account gets per quarter of an
+     * hour, spent before the server has looked at the new password, out of the
+     * same ration that pays for renaming itself.
+     *
+     * Eleven characters: one short, so this pins the boundary and not merely
+     * "something is checked".
+     */
+    render(<Harness />);
+    await cambiarPassword("a".repeat(PASSWORD_MIN_LENGTH - 1), "la-mia");
+
+    expect(editUserPass).not.toHaveBeenCalled();
+    const { toast } = await import("sonner");
+    // Matched loosely: the number lives in `lib/password.ts`, which is where it
+    // is pinned against the server's own.
+    expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/al menos \d+ caracteres/));
+  });
+
+  it("sends a password of exactly the minimum length", async () => {
+    // The other direction: a client rule stricter than the server's would refuse
+    // passwords that were fine, and nothing else here would notice.
+    const laMinima = "a".repeat(PASSWORD_MIN_LENGTH);
+    render(<Harness />);
+    await cambiarPassword(laMinima, "la-mia");
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    expect(enviadoPass().pass).toBe(laMinima);
   });
 
   it("sends nothing at all when the current password box was left empty", async () => {

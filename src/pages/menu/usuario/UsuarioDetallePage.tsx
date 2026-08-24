@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { editUserName, editUserPass, searchUsuario_user } from "../../../api/Usuario.api";
+import { passwordLengthError } from "../../../lib/password";
 import { url } from "../../../api/url";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -133,13 +134,13 @@ export default function UsuarioDetallePage() {
      * accidentally right, since the API answered 400 and `Login.api.ts` flattens
      * every non-2xx to 500.
      *
-     * Then it asked `confirmarPassword` — an endpoint that issues nothing and
-     * answers with a field — and, having been told yes, sent the rename **with
-     * no password on it at all**. Which is why the gate was worth nothing: the
-     * other screen that renames the same account, `PerfilPage`, asked for
-     * nothing and the server accepted it. A confirmation that lives only in the
-     * client is optional by definition — whoever does not want to type it uses
-     * the other screen, or `curl`.
+     * Then it asked `confirmarPassword` — an endpoint that issued nothing and
+     * answered with a field, since retired along with its wrapper — and, having
+     * been told yes, sent the rename **with no password on it at all**. Which is
+     * why the gate was worth nothing: the other screen that renames the same
+     * account, `PerfilPage`, asked for nothing and the server accepted it. A
+     * confirmation that lives only in the client is optional by definition —
+     * whoever does not want to type it uses the other screen, or `curl`.
      *
      * So `updateUserName` demands it now, and this sends it. **One path and not
      * both:** confirming first and then sending it too would compare the same
@@ -171,6 +172,23 @@ export default function UsuarioDetallePage() {
   const handleSavePassword = async () => {
     if (!newPass.trim()) return toast.warning("Ingresa la nueva contraseña");
     if (newPass !== newPass2) return toast.warning("Las contraseñas no coinciden");
+    /**
+     * The length the server demands, checked here because the refusal is not
+     * free.
+     *
+     * This screen validated the length not at all, which was worse than the
+     * profile page's stale `6` in one respect: there was no number to be wrong,
+     * so a two-character password was pressable. Every such attempt spends one
+     * of the five confirmations the account gets per quarter of an hour — the
+     * same ration that pays for renaming itself — and it is spent before the
+     * server has looked at the password at all.
+     *
+     * Only the length, and from `lib/password.ts` rather than a digit typed
+     * here. The rest of the policy stays the server's, and its sentence is what
+     * the toast below shows.
+     */
+    const demasiadoCorta = passwordLengthError(newPass);
+    if (demasiadoCorta) return toast.warning(demasiadoCorta);
     /**
      * The current password is asked for when the account is your own, and the
      * permission has nothing to do with it.

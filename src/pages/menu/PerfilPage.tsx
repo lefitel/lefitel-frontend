@@ -23,6 +23,7 @@ import {
   ShieldCheckIcon, Loader2Icon, SaveIcon,
 } from "lucide-react";
 import { editUsuario, editUserName, editUserPass, searchUsuario } from "../../api/Usuario.api";
+import { passwordLengthError } from "../../lib/password";
 import { UsuarioInterface } from "../../interfaces/interfaces";
 
 const PerfilPage = () => {
@@ -123,8 +124,9 @@ const PerfilPage = () => {
    *
    * **Sent with the change, not confirmed before it.** `updateUserName` demands
    * it server-side now, so a prior call to `POST /api/auth/confirm-password`
-   * could not stand in for this — it would only add a second comparison, out of
-   * a second budget, in a second place the rule can drift. One path: the
+   * could not stand in for this: it would only add a second comparison, out of a
+   * second budget, in a second place the rule can drift. That endpoint has since
+   * been retired, for exactly this reason. One path: the
    * credential that authorises an operation rides on the request that performs
    * it, the way `editUserPass` beside it always has.
    *
@@ -186,7 +188,23 @@ const PerfilPage = () => {
     if (!accountData.oldPass) return toast.warning("Debe proporcionar su contraseña actual.");
     if (!accountData.pass || !accountData.confirmPass) return toast.warning("Debe rellenar ambos campos de nueva contraseña.");
     if (accountData.pass !== accountData.confirmPass) return toast.warning("Las contraseñas no coinciden.");
-    if (accountData.pass.length < 6) return toast.warning("La nueva contraseña debe tener al menos 6 caracteres.");
+    /**
+     * The server's own rule, taken from the one place it lives on this side —
+     * `lib/password.ts` — and not a number typed in here.
+     *
+     * This line said `< 6` while the server demanded twelve, and the gap was
+     * declared harmless because "the server rejects correctly, so no weak
+     * password gets in". What that reasoning missed is the price of the
+     * rejection: the refusal costs one of the five password confirmations this
+     * account gets per quarter of an hour, the token is taken *before* the
+     * server looks at the new password, and the same ration also pays for
+     * renaming yourself. So somebody who reacts to "at least 12 characters" the
+     * way people do — nine, then ten, then eleven — is told to wait fifteen
+     * minutes for having corrected their own typing, and cannot change their
+     * username either.
+     */
+    const demasiadoCorta = passwordLengthError(accountData.pass);
+    if (demasiadoCorta) return toast.warning(demasiadoCorta);
     setConfirmPass(true);
   };
 
