@@ -1,19 +1,27 @@
-// Renaming your own account is gated on your password, and this is the test
-// whose absence let the gate be decorative.
+// Renaming your own account carries your password, and this file is what keeps
+// the gate from being decorative.
 //
-// The screen asks for the current password "para confirmar" before it changes
-// your own username. Nothing in this repository asserted that the answer was
-// ever looked at. What it actually did was call the whole login and compare
-// `status === 500`, while the API answers **400** to a wrong password; the two
-// met only because `Login.api.ts` flattens every non-2xx response to 500 —
-// deliberately, for an unrelated reason. So the confirmation worked by accident,
-// and the day a real status reached the screen intact it would have started
-// letting wrong passwords through with nothing on screen or in CI to say so.
+// It has been decorative twice. First the screen checked the password by calling
+// the whole login and comparing `status === 500`, while the API answered 400 —
+// the two met only because `Login.api.ts` flattens every non-2xx to 500,
+// deliberately and for an unrelated reason. So the check worked by accident, and
+// the day a real status arrived intact it would have started letting wrong
+// passwords through with nothing on screen or in CI to say so.
 //
-// Hence the shape of every test below: they assert what `editUserName` was —
-// or was not — **called with**, not what a toast said. A confirmation that does
-// not confirm still shows the same happy toast; the only observable difference
-// is whether the change was sent.
+// Then the accident was fixed and the gate was still worth nothing, for a
+// reason no test here could see: the screen confirmed the password against
+// `POST /api/auth/confirm-password` and then sent the rename **without it**. The
+// server demanded nothing, and the other screen that renames the same account
+// asked for nothing at all. A confirmation that lives only in the client is
+// optional by definition — whoever does not want to type it uses the other
+// screen, or `curl`.
+//
+// So `updateUserName` demands it server-side, and this screen sends it with the
+// change. Hence the shape of every test below: they assert what `editUserName`
+// was — or was not — **called with**, and specifically whether `oldPass` was on
+// it. A rename that reaches the server without a password is refused there now,
+// so the observable failure is a 400 the person cannot act on; the toast looks
+// the same either way.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
@@ -24,8 +32,9 @@ import { SesionContext, type contextProps } from "../../../context/SesionContext
 import type { SesionInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 
 const YO = 7;
+const OTRA_PERSONA = 99;
 
-/** The account being looked at, which in every test below is the caller's own. */
+/** The account being looked at. The caller is this person unless a test says so. */
 const usuario: UsuarioInterface = {
   id: YO,
   name: "Isaias",
@@ -39,18 +48,31 @@ const usuario: UsuarioInterface = {
   rol: { id: 3, name: "Coordinador", description: "" },
 };
 
-const confirmarPassword = vi.fn();
 const editUserName = vi.fn();
 const searchUsuario_user = vi.fn();
 const load = vi.fn();
 
 vi.mock("../../../api/Login.api", () => ({
-  confirmarPassword: (...args: unknown[]) => confirmarPassword(...args),
-  // Named so the mock fails loudly if this screen ever reaches for the login
-  // again to check a password. That is what it used to do, and it cost a
-  // revoked session, a false bitácora line and a self-inflicted lockout.
+  // Both named, and both throw. This screen must reach the auth API for nothing
+  // at all while renaming somebody.
+  //
+  // `loginUsuario` is the original sin: calling it opened a second session whose
+  // rotation revoked the one this very tab was using, wrote "Inició sesión" to
+  // the bitácora for a login nobody performed, and counted a typo as a failed
+  // login attempt — so getting your own password wrong a few times here **locked
+  // the account out of the ERP**.
+  //
+  // `confirmarPassword` is the second path, and it throws for a different
+  // reason: it works, it is harmless, and it must not be here. The password now
+  // travels on the rename itself, so confirming it first would compare the same
+  // password twice, out of two budgets, from two pieces of code that have to
+  // agree — and two ways of doing one thing diverging is the accident this whole
+  // plan has been chasing.
   loginUsuario: () => {
     throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
+  },
+  confirmarPassword: () => {
+    throw new Error("la contraseña viaja con el renombrado; no se confirma aparte");
   },
 }));
 vi.mock("../../../api/Usuario.api", () => ({
@@ -62,7 +84,7 @@ vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 // The hook does three network reads on mount. Replaced wholesale: what is under
-// test is the confirmation, and the events table and bitácora are furniture.
+// test is the rename, and the events table and bitácora are furniture.
 vi.mock("./useUsuarioDetalleData", () => ({
   useUsuarioDetalleData: () => ({
     usuario,
@@ -73,8 +95,15 @@ vi.mock("./useUsuarioDetalleData", () => ({
   }),
 }));
 
-function Harness() {
-  const sesion: SesionInterface = { usuario, autenticado: true };
+/**
+ * The screen, seen by whoever is logged in.
+ *
+ * `quien` defaults to the owner of the record, which is the case every test but
+ * one is about. The other passes somebody else, because whether the password is
+ * asked for at all depends on that and nothing else.
+ */
+function Harness({ quien = YO }: { quien?: number }) {
+  const sesion: SesionInterface = { usuario: { ...usuario, id: quien }, autenticado: true };
   const value: contextProps = { sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() };
   return (
     <SesionContext.Provider value={value}>
@@ -106,6 +135,9 @@ async function renombrar(nuevo: string, password: string) {
   return user;
 }
 
+/** The single object `editUserName` was called with. */
+const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
+
 beforeEach(() => {
   vi.clearAllMocks();
   // "Not found" is what a free username looks like through this API: the screen
@@ -115,81 +147,38 @@ beforeEach(() => {
 });
 
 describe("changing your own username", () => {
-  it("asks the confirmation endpoint, and never the login", async () => {
-    confirmarPassword.mockResolvedValue({ correcta: true, message: null });
-
-    await renombrar("isalas", "la-mia");
-
-    await waitFor(() => expect(confirmarPassword).toHaveBeenCalledTimes(1));
-    // The password, and nothing else. The old call handed the whole session
-    // user object to the login, which is how a rename came to open a session.
-    expect(confirmarPassword).toHaveBeenCalledWith("la-mia");
-  });
-
-  it("sends the change once the password is confirmed", async () => {
-    confirmarPassword.mockResolvedValue({ correcta: true, message: null });
-
+  it("sends the password along with the change", async () => {
+    // The break-it test of this task on the client. Drop `oldPass` from the
+    // call — which is exactly what this screen used to do, having confirmed the
+    // password a moment earlier — and this fails. Nothing else would: the
+    // request still goes out, the toast is still the happy one, and the only
+    // thing that changes is that the server refuses it.
     await renombrar("isalas", "la-mia");
 
     await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
-    expect((editUserName.mock.calls[0][0] as UsuarioInterface).user).toBe("isalas");
+    expect(enviado().user).toBe("isalas");
+    expect(enviado().oldPass).toBe("la-mia");
   });
 
-  it("does not send the change when the server says the password is not confirmed", async () => {
-    /**
-     * The break-it test of this task on the client side, and the one whose
-     * absence let the accident through: make the check accept any answer — drop
-     * the `if`, or read a status instead of the field — and this fails.
-     *
-     * It asserts on `editUserName`, not on a toast. A confirmation that does not
-     * confirm shows exactly the same error toast when the server refuses; what
-     * separates a working gate from a broken one is only whether the rename was
-     * sent.
-     */
-    confirmarPassword.mockResolvedValue({ correcta: false, message: "Esa no es su contraseña actual." });
+  it("sends the password that was typed, and not some other field of the record", async () => {
+    // Cheap, and it caught its own family of mistake earlier in this plan: a
+    // test that compared against `undefined` because the fixture carried no
+    // password would have passed against an endpoint that sent nothing. So the
+    // value asserted is one only the keyboard could have produced.
+    await renombrar("isalas", "una-contraseña-inconfundible");
 
-    await renombrar("isalas", "no-es-la-mia");
-
-    await waitFor(() => expect(confirmarPassword).toHaveBeenCalledTimes(1));
-    expect(editUserName).not.toHaveBeenCalled();
-    // Nor did it get as far as asking whether the new name is free: the
-    // confirmation is the first gate, not a formality after the fact.
-    expect(searchUsuario_user).not.toHaveBeenCalled();
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(enviado().oldPass).toBe("una-contraseña-inconfundible");
+    // Not the `pass` field of the user record, which is empty on this fixture
+    // and is a hash on a real one.
+    expect(enviado().oldPass).not.toBe(usuario.pass);
   });
 
-  it("refuses on an answer that is merely not `true`, not only on an explicit false", async () => {
-    // The failures that are not a wrong password: too many attempts, an expired
-    // session, a dead network, a body that arrived without the field. Every one
-    // of them reaches this screen as `correcta: false`, and none of them may
-    // read as a confirmation — which is the property the old `status === 500`
-    // comparison had exactly backwards.
-    for (const respuesta of [
-      { correcta: false, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
-      { correcta: false, message: "Su sesión expiró. Vuelva a iniciar sesión." },
-      { correcta: false, message: "No se pudo verificar su contraseña. Inténtelo de nuevo." },
-      { correcta: undefined as unknown as boolean, message: null },
-    ]) {
-      // Unmounted between rounds by hand: the automatic cleanup only runs
-      // after the whole test, and the panel this opens leaves the body with
-      // `pointer-events: none` while it is mounted, so the second round could
-      // not click anything.
-      cleanup();
-      vi.clearAllMocks();
-      searchUsuario_user.mockRejectedValue(new Error("no existe"));
-      confirmarPassword.mockResolvedValue(respuesta);
-
-      await renombrar("isalas", "algo");
-
-      await waitFor(() => expect(confirmarPassword).toHaveBeenCalledTimes(1));
-      expect(editUserName, JSON.stringify(respuesta)).not.toHaveBeenCalled();
-    }
-  });
-
-  it("does not even ask when the password box was left empty", async () => {
-    // Cheap, and it is the case somebody actually hits: press save, having
-    // filled in the name and forgotten the password. Nothing should leave the
-    // browser — an empty attempt would spend one of the five the endpoint
-    // allows in a quarter of an hour.
+  it("sends nothing at all when the password box was left empty", async () => {
+    // The case somebody actually hits: fill in the name, forget the password,
+    // press save. Nothing should leave the browser — an empty attempt would be
+    // refused anyway, and it would spend one of the five confirmations the
+    // account is allowed in a quarter of an hour.
     const user = userEvent.setup();
     render(<Harness />);
 
@@ -199,7 +188,70 @@ describe("changing your own username", () => {
     await user.type(campoUsuario, "isalas");
     await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
-    expect(confirmarPassword).not.toHaveBeenCalled();
     expect(editUserName).not.toHaveBeenCalled();
+    expect(searchUsuario_user).not.toHaveBeenCalled();
+  });
+
+  it("keeps the refusal visible instead of pretending it worked", async () => {
+    // What a refused rename looks like now that the server is the one refusing:
+    // a 400 for a missing password, a 401 for a wrong one, a 429 for too many
+    // tries. None of them may be reported as a success, and none may leave the
+    // session's username updated to a name the server did not accept.
+    for (const respuesta of [
+      { status: 400, message: "Debe proporcionar su contraseña actual." },
+      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
+      { status: 500, message: "Error desconocido" },
+    ]) {
+      // Unmounted between rounds by hand: the automatic cleanup only runs after
+      // the whole test, and the panel this opens leaves the body with
+      // `pointer-events: none` while it is mounted, so the second round could
+      // not click anything.
+      cleanup();
+      vi.clearAllMocks();
+      searchUsuario_user.mockRejectedValue(new Error("no existe"));
+      editUserName.mockResolvedValue(respuesta);
+
+      await renombrar("isalas", "algo");
+
+      const { toast } = await import("sonner");
+      await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+      expect(toast.success, JSON.stringify(respuesta)).not.toHaveBeenCalled();
+      // The server's own sentence, not one this screen made up: a 429 and a
+      // wrong password are different things to be told.
+      expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message);
+      // And nothing was reloaded, which is what a successful rename does.
+      expect(load, JSON.stringify(respuesta)).not.toHaveBeenCalled();
+    }
+  });
+});
+
+describe("renaming somebody else's account", () => {
+  it("sends no password, because there is none the caller could know", async () => {
+    /**
+     * The other half of the decision, and the reason the rule is not "always".
+     *
+     * `seguridad.editar` is what authorises acting on another account, and the
+     * target's password is unknown to the caller by design — so there is nothing
+     * to confirm. The server draws the same line: `renameRequiresOwnPassword`
+     * is true only for the caller's own id, permission or no permission.
+     *
+     * There is no password field on screen in this case at all, which is what
+     * makes the assertion below possible: whatever `oldPass` is, it cannot have
+     * come from a box somebody typed in.
+     */
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /cambiar usuario/i }));
+    const campoUsuario = await screen.findByLabelText("Nuevo usuario");
+    await user.clear(campoUsuario);
+    await user.type(campoUsuario, "isalas");
+    expect(screen.queryByLabelText("Contraseña actual")).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(enviado().user).toBe("isalas");
+    expect(enviado().oldPass).toBeUndefined();
   });
 });

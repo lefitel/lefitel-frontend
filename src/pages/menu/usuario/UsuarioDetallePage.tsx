@@ -6,7 +6,6 @@ import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { editUserName, editUserPass, searchUsuario_user } from "../../../api/Usuario.api";
-import { confirmarPassword } from "../../../api/Login.api";
 import { url } from "../../../api/url";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -107,36 +106,6 @@ export default function UsuarioDetallePage() {
 
     setSavingUser(true);
 
-    /**
-     * Confirming it is really you, without logging you in again.
-     *
-     * This used to call `loginUsuario` and decide from `auth.status === 500`,
-     * and every part of that was wrong in a way nothing on screen showed. The
-     * login opened a second session, and the rotation on the way in revoked the
-     * one this very tab was using; it wrote "Inició sesión" into the bitácora
-     * for a login that never happened; and a mistyped password counted as a
-     * failed login attempt, so trying a few times here **locked the account out
-     * of the ERP** while the toast said only "Contraseña incorrecta". The check
-     * also only worked by accident: the API answers 400 to a wrong password and
-     * `Login.api.ts` flattens every non-2xx to 500, so the day a real status
-     * arrived intact the comparison would have gone quietly false and the rename
-     * would have proceeded with the wrong password.
-     *
-     * `confirmarPassword` asks an endpoint that issues nothing and answers with
-     * a field. **Only an explicit `true` continues** — a wrong password, too
-     * many attempts, an expired session, a broken network and a body missing the
-     * field are all `false`, each with its own sentence to show. There is no
-     * status code here to be accidentally right about.
-     */
-    if (isOwnProfile) {
-      const confirmacion = await confirmarPassword(currentPassUser);
-      if (!confirmacion.correcta) {
-        toast.error(confirmacion.message ?? "No se pudo confirmar su contraseña");
-        setSavingUser(false);
-        return;
-      }
-    }
-
     try {
       await searchUsuario_user(newUser.trim());
       toast.warning("Ese nombre de usuario ya está en uso");
@@ -144,7 +113,41 @@ export default function UsuarioDetallePage() {
       return;
     } catch { /* no existe, se puede continuar */ }
 
-    const res = await editUserName({ ...d.usuario, user: newUser });
+    /**
+     * The password travels with the change, and it is the server that checks it.
+     *
+     * **What this replaced, twice over.** First it called `loginUsuario` and read
+     * `auth.status === 500`: that opened a second session, and the rotation on
+     * the way in revoked the one this very tab was using; it wrote "Inició
+     * sesión" into the bitácora for a login nobody performed; a mistyped
+     * password counted as a failed login attempt, so trying a few times here
+     * **locked the account out of the ERP**; and the comparison itself was only
+     * accidentally right, since the API answered 400 and `Login.api.ts` flattens
+     * every non-2xx to 500.
+     *
+     * Then it asked `confirmarPassword` — an endpoint that issues nothing and
+     * answers with a field — and, having been told yes, sent the rename **with
+     * no password on it at all**. Which is why the gate was worth nothing: the
+     * other screen that renames the same account, `PerfilPage`, asked for
+     * nothing and the server accepted it. A confirmation that lives only in the
+     * client is optional by definition — whoever does not want to type it uses
+     * the other screen, or `curl`.
+     *
+     * So `updateUserName` demands it now, and this sends it. **One path and not
+     * both:** confirming first and then sending it too would compare the same
+     * password twice, out of two budgets, from two pieces of code that have to
+     * agree — and the divergence between two ways of doing one thing is the
+     * accident this whole plan has been chasing.
+     *
+     * Only when the profile is your own. Renaming somebody else is what
+     * `seguridad.editar` authorises, and there is no password here anybody could
+     * be expected to know; the server draws the same line.
+     */
+    const res = await editUserName({
+      ...d.usuario,
+      user: newUser,
+      oldPass: isOwnProfile ? currentPassUser : undefined,
+    });
     if (res.status === 200) {
       toast.success("Nombre de usuario actualizado");
       setOpenUsername(false);

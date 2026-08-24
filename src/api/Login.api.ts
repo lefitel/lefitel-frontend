@@ -110,6 +110,17 @@ export const loginUsuario = (
  * sentence in `message` is what distinguishes the cases for the person reading
  * the screen. Anything that needs the difference for its own logic must not use
  * this function — it should be given a reason by the server, not infer one.
+ *
+ * **Nothing calls this today, and that is deliberate rather than an oversight.**
+ * The screen it was written for now sends the password on the rename itself,
+ * because the server demands it there: a prior confirmation cannot stand in for
+ * a check the write performs, and doing both would compare one password twice
+ * out of two budgets from two pieces of code that have to agree. So the reason
+ * this survives is not this caller — it is that the endpoint behind it is the
+ * right shape for the next thing that has to ask "is it really you?" before
+ * something irreversible, and the design of the MFA plan expects exactly that.
+ * Whether it earns its keep is a decision for that plan; retiring it belongs
+ * there too, together with the endpoint, and not as a side effect here.
  */
 export const confirmarPassword = (
   pass: string

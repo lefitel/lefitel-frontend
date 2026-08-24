@@ -1,0 +1,208 @@
+// The profile page renames the account it belongs to, and until this task it
+// did so having asked for nothing.
+//
+// That is the hole. `UsuarioDetallePage` asked for a password before renaming
+// your own account; this screen renamed the same account, through the same
+// endpoint, with no password anywhere on it. Same operation, same account, two
+// screens — so the confirmation was optional in practice: whoever did not want
+// to type it opened this one instead. And a username is half of the credential.
+// Change somebody's and they cannot log in, not because they have forgotten
+// their password but because they no longer know what name to offer it with. So
+// what the hole bought was locking somebody out of their own account without
+// ever knowing their password: the unattended machine in the office, the shared
+// field laptop.
+//
+// The server refuses a self-rename with no password now. These tests are about
+// the other half: that this screen asks for one and puts it on the request. They
+// assert what `editUserName` was called with rather than what a toast said,
+// because a screen that sends nothing shows the same spinner and gets a 400 the
+// person cannot do anything about.
+
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import PerfilPage from "./PerfilPage";
+import { SesionContext, type contextProps } from "../../context/SesionContext";
+import type { SesionInterface, UsuarioInterface } from "../../interfaces/interfaces";
+
+const YO = 7;
+
+const usuario: UsuarioInterface = {
+  id: YO,
+  name: "Isaias",
+  lastname: "Salas",
+  birthday: new Date("1990-01-01"),
+  image: "",
+  phone: "700",
+  user: "isaias",
+  // A hash, the way a real record carries one. Deliberately not empty: a test
+  // whose fixture has no password can assert `oldPass` against `undefined` and
+  // pass against a screen that sends nothing, which is a mistake this plan
+  // already made once.
+  pass: "$2a$12$un-hash-cualquiera",
+  id_rol: 3,
+  rol: { id: 3, name: "Coordinador", description: "" },
+};
+
+/** The same record as it arrives over the wire: `birthday` is a string there. */
+const PERFIL_CARGADO = { ...usuario, birthday: "1990-01-01" as unknown as Date };
+
+const editUserName = vi.fn();
+const editUsuario = vi.fn();
+const editUserPass = vi.fn();
+const searchUsuario = vi.fn();
+
+vi.mock("../../api/Usuario.api", () => ({
+  editUserName: (...args: unknown[]) => editUserName(...args),
+  editUsuario: (...args: unknown[]) => editUsuario(...args),
+  editUserPass: (...args: unknown[]) => editUserPass(...args),
+  searchUsuario: (...args: unknown[]) => searchUsuario(...args),
+}));
+// Named and throwing: this screen must not reach the auth API to rename
+// anybody. The password rides on the rename itself, so confirming it first
+// would compare the same password twice, out of two budgets, from two pieces of
+// code that have to agree — which is the divergence this plan keeps finding.
+vi.mock("../../api/Login.api", () => ({
+  confirmarPassword: () => {
+    throw new Error("la contraseña viaja con el renombrado; no se confirma aparte");
+  },
+  loginUsuario: () => {
+    throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
+  },
+}));
+vi.mock("sonner", () => ({
+  toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
+}));
+
+function Harness() {
+  const sesion: SesionInterface = { usuario, autenticado: true };
+  const value: contextProps = { sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() };
+  return (
+    <SesionContext.Provider value={value}>
+      <PerfilPage />
+    </SesionContext.Provider>
+  );
+}
+
+/**
+ * Type a new username, optionally a password, and go through the confirmation
+ * dialog to the save.
+ *
+ * Driven through the real controls: the thing being asserted is what the screen
+ * sends given what somebody typed, and the dialog is part of that path — the
+ * request only leaves after "Sí, cambiar".
+ */
+async function renombrar(nuevo: string, password?: string) {
+  const user = userEvent.setup();
+  render(<Harness />);
+  // The page loads the profile on mount and shows skeletons until it resolves.
+  const campoUsuario = await screen.findByLabelText("Usuario");
+
+  await user.clear(campoUsuario);
+  await user.type(campoUsuario, nuevo);
+  if (password !== undefined) {
+    await user.type(screen.getByLabelText(/confirma tu contraseña/i), password);
+  }
+  await user.click(screen.getByRole("button", { name: /actualizar/i }));
+  return user;
+}
+
+/** Get past the "¿Cambiar nombre de usuario?" dialog. */
+async function confirmar(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: /sí, cambiar/i }));
+}
+
+/** The single object `editUserName` was called with. */
+const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  // As the API really answers it: JSON, so `birthday` is a string and not a
+  // `Date`. The screen slices the first ten characters off it to feed the date
+  // picker, which an object's `toString()` does not survive.
+  searchUsuario.mockResolvedValue(PERFIL_CARGADO);
+  editUserName.mockResolvedValue({ status: 200 });
+});
+
+describe("renaming your own account from the profile page", () => {
+  it("sends the current password with the change", async () => {
+    // The break-it test of this task on the client. Take the password field off
+    // this screen, or stop putting `oldPass` on the call, and this fails —
+    // which is more than could be said before, when the screen sent the rename
+    // with nothing at all and every test in this repository stayed green.
+    const user = await renombrar("isalas", "la-mia");
+    await confirmar(user);
+
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(enviado().user).toBe("isalas");
+    expect(enviado().oldPass).toBe("la-mia");
+  });
+
+  it("sends what was typed, and not the record's own password field", async () => {
+    // The fixture carries a hash in `pass`, so a screen that forwarded the whole
+    // record and called that a confirmation would be caught here rather than
+    // passing on an `undefined` that happened to match.
+    const user = await renombrar("isalas", "una-contraseña-inconfundible");
+    await confirmar(user);
+
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(enviado().oldPass).toBe("una-contraseña-inconfundible");
+    expect(enviado().oldPass).not.toBe(usuario.pass);
+  });
+
+  it("does not even open the dialog when the password box was left empty", async () => {
+    // Fill in the name, forget the password, press save. Nothing leaves the
+    // browser: the server would refuse it anyway, and the attempt would spend
+    // one of the five confirmations the account gets in a quarter of an hour.
+    await renombrar("isalas");
+
+    expect(screen.queryByRole("button", { name: /sí, cambiar/i })).toBeNull();
+    expect(editUserName).not.toHaveBeenCalled();
+  });
+
+  it("reports the server's refusal rather than a success", async () => {
+    // A 400 for a missing password, a 401 for a wrong one, a 429 for too many
+    // tries. Each is a different thing to be told, and none of them is a
+    // rename that happened.
+    for (const respuesta of [
+      { status: 400, message: "Debe proporcionar su contraseña actual." },
+      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
+    ]) {
+      // Unmounted by hand between rounds: the automatic cleanup only runs after
+      // the whole test, and a second copy of this page on the same document
+      // makes every query ambiguous.
+      cleanup();
+      vi.clearAllMocks();
+      searchUsuario.mockResolvedValue(PERFIL_CARGADO);
+      editUserName.mockResolvedValue(respuesta);
+
+      const user = await renombrar("isalas", "algo");
+      await confirmar(user);
+
+      const { toast } = await import("sonner");
+      await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+      expect(toast.success, JSON.stringify(respuesta)).not.toHaveBeenCalled();
+      expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message);
+    }
+  });
+
+  it("keeps the rename's password separate from the password-change form", async () => {
+    // Two forms on one screen, and two boxes that must not be one value.
+    // Sharing it would mean typing into the "cambiar contraseña" card and
+    // finding the rename already armed with it — or sending a rename carrying
+    // whatever was left in a box somebody had been using for something else.
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    const paraRenombrar = screen.getByLabelText(/confirma tu contraseña/i) as HTMLInputElement;
+    const paraCambiarClave = screen.getByLabelText(/contraseña actual/i) as HTMLInputElement;
+
+    await user.type(paraCambiarClave, "para-el-cambio-de-clave");
+    expect(paraRenombrar.value).toBe("");
+
+    await user.type(paraRenombrar, "para-el-renombrado");
+    expect(paraCambiarClave.value).toBe("para-el-cambio-de-clave");
+  });
+});

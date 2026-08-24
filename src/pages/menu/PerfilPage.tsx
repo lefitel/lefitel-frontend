@@ -36,8 +36,18 @@ const PerfilPage = () => {
     birthday: "",
   });
 
+  /**
+   * `userPass` is the current password the *rename* has to carry, and it is a
+   * field of its own rather than a reuse of `oldPass` below.
+   *
+   * They are two forms on one screen. Sharing one value would mean typing the
+   * password into the "cambiar contraseña" card and finding the "nombre de
+   * usuario" card already filled in — or worse, sending a rename with whatever
+   * happened to be left in a box the person had been using for something else.
+   */
   const [accountData, setAccountData] = useState({
     user: user.user || "",
+    userPass: "",
     oldPass: "",
     pass: "",
     confirmPass: "",
@@ -100,13 +110,35 @@ const PerfilPage = () => {
     setLoadingGeneral(false);
   };
 
+  /**
+   * Renaming this account sends the current password with the change.
+   *
+   * **The hole this closes.** This screen changed the username having asked for
+   * nothing at all, while `UsuarioDetallePage` — the other screen that renames
+   * the same account — asked for a password. Same operation, same account, two
+   * screens: whoever did not want to type it used this one. And a username is
+   * half the credential, so what that bought was locking somebody out of their
+   * own account without ever knowing their password — the unattended machine in
+   * the office, or the shared field laptop.
+   *
+   * **Sent with the change, not confirmed before it.** `updateUserName` demands
+   * it server-side now, so a prior call to `POST /api/auth/confirm-password`
+   * could not stand in for this — it would only add a second comparison, out of
+   * a second budget, in a second place the rule can drift. One path: the
+   * credential that authorises an operation rides on the request that performs
+   * it, the way `editUserPass` beside it always has.
+   *
+   * The password is left in the box on failure and cleared only on success, so
+   * a 429 or a mistyped name does not cost it twice.
+   */
   const saveUsername = async () => {
     setLoadingAccount(true);
     try {
       const payload: UsuarioInterface = { ...user, user: accountData.user };
-      const response = await editUserName(payload);
+      const response = await editUserName({ ...payload, oldPass: accountData.userPass });
       if (response.status === 200) {
         setSesion((prev) => ({ ...prev, usuario: payload }));
+        setAccountData((prev) => ({ ...prev, userPass: "" }));
         toast.success("Nombre de usuario modificado.");
       } else {
         toast.error(response.message || "Error al actualizar el usuario. Podría estar en uso.");
@@ -143,6 +175,10 @@ const PerfilPage = () => {
 
   const handleSaveUsernameClick = () => {
     if (!accountData.user) return toast.warning("El nombre de usuario no puede estar vacío");
+    // Nothing leaves the browser without it. Not a security check — the server
+    // refuses an empty one anyway — but an empty attempt would spend one of the
+    // five confirmations the account is allowed in a quarter of an hour.
+    if (!accountData.userPass) return toast.warning("Debe confirmar su contraseña actual.");
     setConfirmUsername(true);
   };
 
@@ -265,6 +301,13 @@ const PerfilPage = () => {
                   </div>
                   <p className="text-xs text-muted-foreground">Usado en los registros de auditoría y para hacer login.</p>
                 </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="userPass">Confirma tu contraseña <span className="text-destructive">*</span></Label>
+                  <Input id="userPass" type="password" value={accountData.userPass} onChange={handleAccountChange} className="font-mono" placeholder="••••••••" />
+                  <p className="text-xs text-muted-foreground">
+                    Cambiar tu usuario cambia con qué nombre entras, así que hay que confirmar que eres tú.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -326,6 +369,7 @@ const PerfilPage = () => {
             <AlertDialogTitle>¿Cambiar nombre de usuario?</AlertDialogTitle>
             <AlertDialogDescription>
               Deberás ingresar al sistema con este nuevo nombre a partir de tu próxima sesión.
+              Tu contraseña no cambia.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

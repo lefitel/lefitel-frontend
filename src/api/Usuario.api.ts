@@ -47,8 +47,24 @@ export const editUsuario = (data: UsuarioInterface): Promise<number> => {
     .catch(() => 400);
 };
 
+/**
+ * Rename an account. `oldPass` is the caller's *current* password, and the
+ * server demands it whenever the account being renamed is their own.
+ *
+ * It rides on the same request as the change, rather than being confirmed
+ * beforehand through `POST /api/auth/confirm-password`. Two reasons, and the
+ * first one settles it: the server requires it now, so a prior confirmation
+ * cannot stand in for it — it would only add a second comparison, out of a
+ * second budget, in a second place where the rule can drift. And the credential
+ * that authorises an operation belongs in the request that performs it, which
+ * is how `editUserPass` has always worked.
+ *
+ * Not needed when an administrator renames somebody else: there is no password
+ * they could be expected to know. `undefined` is what goes in then, and axios
+ * omits the key.
+ */
 export const editUserName = (
-  data: UsuarioInterface
+  data: UsuarioInterface & { oldPass?: string }
 ): Promise<{ status: number; message?: string }> => {
   return axios
     .put(urlApi + urlUsuario + "username/" + data.id, data)
