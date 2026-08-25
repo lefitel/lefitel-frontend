@@ -9,7 +9,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { useState } from "react";
 import LoginPage from "./LoginPage";
 import { SesionContext, type contextProps } from "../context/SesionContext";
@@ -51,6 +51,51 @@ function Harness({ onSesion }: { onSesion: (s: SesionInterface) => void }) {
     </ThemeProvider>
   );
 }
+
+/**
+ * `HarnessConRutas`, separate from `Harness` above: this one needs a real
+ * destination for "¿Olvidaste tu contraseña?" to land on, and the login
+ * harness's bare `<MemoryRouter>` has nowhere for a `<Link>` to actually go.
+ */
+function HarnessConRutas() {
+  const value: contextProps = {
+    sesion: { usuario: usuarioExample, autenticado: false },
+    setSesion: vi.fn(),
+    loading: false,
+    logout: vi.fn(),
+  };
+
+  return (
+    <ThemeProvider>
+      <SesionContext.Provider value={value}>
+        <MemoryRouter initialEntries={["/login"]}>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/olvide-contrasena" element={<div>pantalla-olvide</div>} />
+          </Routes>
+        </MemoryRouter>
+      </SesionContext.Provider>
+    </ThemeProvider>
+  );
+}
+
+describe("the 'olvidé mi contraseña' link", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("navigates to the real recovery screen instead of showing a toast", async () => {
+    // Before Task 9 this was a `<button>` whose `onClick` fired
+    // `toast.info("Contacte con el administrador...")` — a dead end for
+    // whoever actually forgot their password. It is a router `<Link>` now.
+    const user = userEvent.setup();
+    render(<HarnessConRutas />);
+
+    await user.click(screen.getByRole("link", { name: /olvidaste tu contraseña/i }));
+
+    expect(await screen.findByText("pantalla-olvide")).toBeInTheDocument();
+    const { toast } = await import("sonner");
+    expect(toast.info).not.toHaveBeenCalled();
+  });
+});
 
 describe("logging in", () => {
   afterEach(() => vi.clearAllMocks());

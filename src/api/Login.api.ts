@@ -235,6 +235,70 @@ export const verifyEmailToken = (
     }));
 };
 
+/**
+ * `POST /auth/password/forgot` — ask for a reset link when locked out.
+ *
+ * No `authenticate` in front of this route by definition — whoever calls it
+ * cannot log in — so unlike `sendVerificationEmail` above there is no current
+ * password to send alongside the address. Same reasoning as that function for
+ * keeping the real status on failure: `ForgotPasswordPage.tsx` has to tell a
+ * 429 (three separate buckets — see `passwordForgotRateLimit` in
+ * `recoveryLimiters.ts`) apart from a 400 about the request's own shape, and
+ * folding both to 500 the way `loginUsuario` does would leave nothing to tell
+ * them apart with.
+ *
+ * The 200 body is the one sentence Global Constraint #1 fixes — sent whether
+ * or not an account exists behind the address, whether or not its email is
+ * verified — and this wrapper passes it through untouched rather than
+ * guessing at, or replacing, what the server decided to say.
+ */
+export const forgotPassword = (
+  email: string
+): Promise<{ status: number; message: string | null }> => {
+  return axios
+    .post(urlApi + "auth/password/forgot", { email })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
+    }));
+};
+
+/**
+ * `POST /auth/password/reset` — redeem the token from a reset link and set a
+ * new password.
+ *
+ * Sends only `token` and `pass`, per Global Constraint #4: this route decides
+ * whose account it is from the token's own row alone, and this function's
+ * signature has no field for an id or an email to ride along with it even by
+ * accident.
+ *
+ * A 400 here means one of two entirely different things — the link is dead
+ * (expired, already used, or never existed, all three worded identically on
+ * purpose) or the chosen password failed the server's own rule — and telling
+ * them apart is `ResetPasswordPage.tsx`'s job, not this wrapper's, so the real
+ * status and message are both preserved rather than folded down the way
+ * `loginUsuario` folds every failure to 500.
+ */
+export const resetPassword = (
+  token: string,
+  pass: string
+): Promise<{ status: number; message: string | null }> => {
+  return axios
+    .post(urlApi + "auth/password/reset", { token, pass })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
+    }));
+};
+
 export const comprobarToken = (): Promise<{
   status: number;
   usuario: UsuarioInterface | null;

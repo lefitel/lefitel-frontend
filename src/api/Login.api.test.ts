@@ -23,7 +23,14 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { comprobarToken, loginUsuario, sendVerificationEmail, verifyEmailToken } from "./Login.api";
+import {
+  comprobarToken,
+  loginUsuario,
+  sendVerificationEmail,
+  verifyEmailToken,
+  forgotPassword,
+  resetPassword,
+} from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
@@ -250,6 +257,123 @@ describe("verifyEmailToken", () => {
     vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
 
     expect(await verifyEmailToken("un-token-opaco")).toEqual({
+      status: 500,
+      message: "No se pudo conectar con el servidor.",
+    });
+  });
+});
+
+describe("forgotPassword", () => {
+  it("posts to POST /api/auth/password/forgot with only the address", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: {
+        message:
+          "Si la dirección corresponde a una cuenta con el correo verificado, se envió un enlace para restablecer la contraseña.",
+      },
+    });
+
+    await forgotPassword("perdido@osefi.net");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/password\/forgot$/);
+    // No `pass`, no id, nothing beyond the address: this route runs with no
+    // `authenticate` in front of it, so there is no current password to send
+    // alongside it the way `sendVerificationEmail` does.
+    expect(post.mock.calls[0][1]).toEqual({ email: "perdido@osefi.net" });
+  });
+
+  it("passes the uniform 200 through untouched, whatever it says", async () => {
+    // Global Constraint #1: the same sentence, whether or not an account is
+    // behind the address. This wrapper's job is to not get in the way of that
+    // — not to add a branch of its own on top of it.
+    const respuesta = {
+      message:
+        "Si la dirección corresponde a una cuenta con el correo verificado, se envió un enlace para restablecer la contraseña.",
+    };
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: respuesta });
+
+    expect(await forgotPassword("cualquiera@osefi.net")).toEqual({ status: 200, message: respuesta.message });
+  });
+
+  it("keeps the real status on failure rather than folding everything to 500, the way loginUsuario does", async () => {
+    for (const respuesta of [
+      { status: 400, message: "Debe indicar una dirección de correo válida." },
+      { status: 429, message: "Demasiadas solicitudes para esta dirección. Espere unos minutos." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await forgotPassword("perdido@osefi.net"), JSON.stringify(respuesta)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await forgotPassword("perdido@osefi.net")).toEqual({
+      status: 500,
+      message: "No se pudo conectar con el servidor.",
+    });
+  });
+});
+
+describe("resetPassword", () => {
+  it("posts to POST /api/auth/password/reset with only the token and the new password", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Contraseña actualizada. Inicia sesión con tu contraseña nueva." },
+    });
+
+    await resetPassword("un-token-opaco", "una-clave-nueva-larga");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/password\/reset$/);
+    // Global Constraint #4: no id, no email — whose account this is comes
+    // solely from the token's own row on the server. This assertion is what
+    // would fail if a future change ever tried to smuggle either one in.
+    expect(post.mock.calls[0][1]).toEqual({ token: "un-token-opaco", pass: "una-clave-nueva-larga" });
+  });
+
+  it("reports a 200 with the server's own confirmation", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Contraseña actualizada. Inicia sesión con tu contraseña nueva." },
+    });
+
+    expect(await resetPassword("un-token-opaco", "una-clave-nueva-larga")).toEqual({
+      status: 200,
+      message: "Contraseña actualizada. Inicia sesión con tu contraseña nueva.",
+    });
+  });
+
+  it("keeps the real status on failure — a weak-password 400 must read differently from a dead-link 400", async () => {
+    for (const respuesta of [
+      { status: 400, message: "Este enlace ya no es válido. Solicite uno nuevo." },
+      { status: 400, message: "Debe indicar el token y la contraseña nueva." },
+      { status: 429, message: "Demasiadas solicitudes desde esta red. Espere unos minutos." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await resetPassword("un-token-opaco", "una-clave-nueva-larga"), JSON.stringify(respuesta)).toEqual(
+        respuesta
+      );
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await resetPassword("un-token-opaco", "una-clave-nueva-larga")).toEqual({
       status: 500,
       message: "No se pudo conectar con el servidor.",
     });

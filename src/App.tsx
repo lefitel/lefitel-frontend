@@ -25,6 +25,8 @@ import BitacoraPage from "./pages/menu/bitacora";
 import { TooltipProvider } from "./components/ui/tooltip";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import { Toaster } from "@/components/ui/sonner";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { ThemeProvider as ShadcnThemeProvider } from "@/components/theme-provider";
@@ -132,6 +134,8 @@ const App = () => {
 
               <Route element={<PublicRoutes />}>
                 <Route path="/login" element={<LoginPage />} />
+                <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
+                <Route path="/nueva-contrasena" element={<ResetPasswordPage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/app/home" replace />} />

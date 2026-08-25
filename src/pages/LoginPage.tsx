@@ -1,6 +1,6 @@
 import { useContext, useState } from "react";
 import { toast } from "sonner";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import { Loader2, LogIn, SunIcon, MoonIcon } from "lucide-react";
 import { motion } from "motion/react";
 
@@ -237,13 +237,12 @@ const LoginPage = () => {
                 <Label htmlFor="contrasena" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
                   Contraseña
                 </Label>
-                <button
-                  type="button"
-                  onClick={() => toast.info("Contacte con el administrador del sistema para restablecer su acceso.")}
-                  className="text-xs text-muted-foreground/70 hover:text-primary transition-colors cursor-pointer bg-transparent border-none p-0"
+                <Link
+                  to="/olvide-contrasena"
+                  className="text-xs text-muted-foreground/70 hover:text-primary transition-colors"
                 >
                   ¿Olvidaste tu contraseña?
-                </button>
+                </Link>
               </div>
               <Input
                 id="contrasena"
