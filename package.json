@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json",
+    "build": "node node_modules/typescript7/bin/tsc && vite build",
+    "typecheck": "node node_modules/typescript7/bin/tsc --noEmit && node node_modules/typescript7/bin/tsc --noEmit -p tsconfig.test.json",
     "lint": "eslint src",
     "preview": "vite preview",
     "test": "vitest run",
@@ -74,6 +74,7 @@
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
+    "typescript7": "npm:typescript@^7.0.2",
     "vite": "^8.2.2",
     "vite-plugin-pwa": "^1.3.0",
     "vitest": "^4.1.10"
