@@ -23,7 +23,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { comprobarToken, loginUsuario } from "./Login.api";
+import { comprobarToken, loginUsuario, sendVerificationEmail, verifyEmailToken } from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
@@ -145,6 +145,114 @@ describe("loginUsuario", () => {
     // Never true on its own: `LoginPage.tsx` is what turns a successful
     // request into a session.
     expect(res.usuario?.autenticado).toBe(false);
+  });
+});
+
+describe("sendVerificationEmail", () => {
+  it("posts to POST /api/auth/email/send with the address and the current password", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Si la dirección es válida, se envió un enlace de verificación." },
+    });
+
+    await sendVerificationEmail("nueva@osefi.net", "la-mia");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/email\/send$/);
+    expect(post.mock.calls[0][1]).toEqual({ email: "nueva@osefi.net", pass: "la-mia" });
+  });
+
+  it("passes the uniform 200 through untouched, without guessing at what happened server-side", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Si la dirección es válida, se envió un enlace de verificación." },
+    });
+
+    const res = await sendVerificationEmail("nueva@osefi.net", "la-mia");
+
+    expect(res).toEqual({
+      status: 200,
+      message: "Si la dirección es válida, se envió un enlace de verificación.",
+    });
+  });
+
+  it("keeps the real status on failure rather than folding everything to 500, the way loginUsuario does", async () => {
+    // The whole point of this file's comment on the function: PerfilPage.tsx
+    // has to tell a 429 apart from a 401, and a 401 for a wrong password
+    // apart from a 401 for an archived account. None of that is possible if
+    // this wrapper hard-codes `status: 500` on every rejection.
+    for (const respuesta of [
+      { status: 400, message: "Debe indicar una dirección de correo válida." },
+      { status: 400, message: "Debe proporcionar su contraseña actual." },
+      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      { status: 401, message: "Su cuenta ya no está activa." },
+      { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await sendVerificationEmail("nueva@osefi.net", "la-mia"), JSON.stringify(respuesta)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await sendVerificationEmail("nueva@osefi.net", "la-mia")).toEqual({
+      status: 500,
+      message: "No se pudo conectar con el servidor.",
+    });
+  });
+});
+
+describe("verifyEmailToken", () => {
+  it("posts to POST /api/auth/email/verify with only the token", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Correo verificado." },
+    });
+
+    await verifyEmailToken("un-token-opaco");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/email\/verify$/);
+    expect(post.mock.calls[0][1]).toEqual({ token: "un-token-opaco" });
+  });
+
+  it("reports a 200 with the server's own confirmation", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { message: "Correo verificado." } });
+
+    expect(await verifyEmailToken("un-token-opaco")).toEqual({ status: 200, message: "Correo verificado." });
+  });
+
+  it("keeps the real status on failure — a 429 must not read as the generic 500 a broken link would", async () => {
+    for (const respuesta of [
+      { status: 400, message: "Debe indicar el token." },
+      { status: 400, message: "Este enlace ya no es válido. Solicite uno nuevo." },
+      { status: 429, message: "Demasiados intentos. Espere unos minutos." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await verifyEmailToken("un-token-opaco"), JSON.stringify(respuesta)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await verifyEmailToken("un-token-opaco")).toEqual({
+      status: 500,
+      message: "No se pudo conectar con el servidor.",
+    });
   });
 });
 

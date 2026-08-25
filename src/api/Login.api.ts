@@ -156,6 +156,85 @@ export const loginUsuario = (
  * this shape is what makes that unwriteable rather than merely discouraged —
  * there is nothing here for a future caller to pick up by mistake.
  */
+/**
+ * `POST /auth/email/send` — register (or replace) the recovery address on my
+ * own account, and ask me to confirm it.
+ *
+ * Takes `pass`, the caller's *current* password, and it is not optional: the
+ * server refuses this call without it. That requirement is not in the
+ * original design for this screen — it was added after the fact to close a
+ * real account-takeover chain (steal a live session, point recovery at an
+ * address you control, verify it, wait, then reset the password and lock the
+ * real owner out through the very door meant to let them back in). See
+ * `api/src/controllers/email.controller.ts`'s comment on `sendVerificationEmail`
+ * for the full chain. `PerfilPage.tsx` is what collects this password; it is
+ * never the record's own `pass` field, which on this side is a hash.
+ *
+ * **Status is preserved, not folded to 500 the way `loginUsuario` above folds
+ * it.** That flattening is deliberate there, for a screen with one question
+ * and one place to show the answer — see its own comment. Here it would be a
+ * bug: `PerfilPage.tsx` has to tell a 429 (rate limit — say so in plain words)
+ * apart from a 401 with `CUENTA_INACTIVA` ("su cuenta ya no está activa", not a
+ * wrong password) apart from a 401 for an actually wrong password, and all
+ * three arrive as different `message`s on the *same or different* status
+ * codes. Collapsing the status here would still leave `message` readable, but
+ * it is not a chance worth taking on the one screen that changes how somebody
+ * gets back into their account.
+ *
+ * The uniform 200 (`EMAIL_ENVIO_RESPUESTA`, Global Constraint #1) is passed
+ * through untouched — this wrapper does not know and must not guess whether
+ * the address was free, already claimed by another unverified account, or
+ * whether the mail actually went out.
+ */
+export const sendVerificationEmail = (
+  email: string,
+  pass: string
+): Promise<{ status: number; message: string | null }> => {
+  return axios
+    .post(urlApi + "auth/email/send", { email, pass })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
+    }));
+};
+
+/**
+ * `POST /auth/email/verify` — redeem the token from the verification link.
+ *
+ * The link is `{origin}/perfil#verify_email=TOKEN` — the token rides in the
+ * URL *fragment*, never the query string, precisely so it never reaches this
+ * server, a proxy, or a `Referer` header. `PerfilPage.tsx` is the only caller,
+ * and it reads that fragment, calls this, and strips the fragment from the
+ * address bar before this promise even settles — see its own comment for why
+ * the order matters. Nothing in this function ever receives or logs the token
+ * beyond handing it straight to the one request it is for.
+ *
+ * Same reasoning as `sendVerificationEmail` above for keeping the real status
+ * on a failure: `TOKEN_INVALIDO` (400) covers four different server-side
+ * causes on purpose (expired, already used, never existed, or the address it
+ * named got claimed by someone else in the meantime) and a 429 from
+ * `emailVerifyLimiter` needs to read as "espera un rato", not as a broken
+ * link.
+ */
+export const verifyEmailToken = (
+  token: string
+): Promise<{ status: number; message: string | null }> => {
+  return axios
+    .post(urlApi + "auth/email/verify", { token })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
+    }));
+};
+
 export const comprobarToken = (): Promise<{
   status: number;
   usuario: UsuarioInterface | null;

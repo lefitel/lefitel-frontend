@@ -188,6 +188,31 @@ export interface UsuarioInterface {
   pass: string;
   id_rol: number;
 
+  /**
+   * The recovery address, as `GET /auth/me` and `GET /usuario/:id` both send
+   * it — optional and nullable because most of this repository's mocks and
+   * fixtures predate the field and never set it, and because a real account
+   * without one yet answers with `null`, not an absent key.
+   *
+   * Not writable through `editUsuario`/`createUsuario`: the API's own
+   * `EDITABLE_FIELDS`/`CREATABLE_FIELDS` whitelist in `usuario.controller.ts`
+   * leaves it out on purpose, so an admin screen cannot set somebody else's
+   * recovery address. The only write path is `sendVerificationEmail` in
+   * `Login.api.ts`, which requires the caller's own current password and only
+   * ever acts on the caller's own account.
+   */
+  email?: string | null;
+  /**
+   * When the address above was confirmed, or `null` if it never was — ISO
+   * 8601, matching every other timestamp this interface already carries.
+   *
+   * This is the field that actually matters. A saved-but-unverified address
+   * is exactly as useless as no address at all: `/password/forgot` only
+   * operates on a verified one, so a screen that shows `email` without this
+   * lets somebody believe their way back in is already set up when it is not.
+   */
+  email_verified_at?: string | null;
+
   rol?: RolInterface | null;
 
   createdAt?: Date | null;

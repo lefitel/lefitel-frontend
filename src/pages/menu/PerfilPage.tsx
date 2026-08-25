@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect, useRef } from "react";
 import { SesionContext } from "../../context/SesionContext";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,11 +20,49 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   UserIcon, KeyIcon, PhoneIcon, FingerprintIcon,
-  ShieldCheckIcon, Loader2Icon, SaveIcon,
+  ShieldCheckIcon, Loader2Icon, SaveIcon, MailIcon, SendIcon,
+  MailCheckIcon, MailWarningIcon,
 } from "lucide-react";
 import { editUsuario, editUserName, editUserPass, searchUsuario } from "../../api/Usuario.api";
+import { sendVerificationEmail, verifyEmailToken } from "../../api/Login.api";
 import { passwordLengthError } from "../../lib/password";
 import { UsuarioInterface } from "../../interfaces/interfaces";
+
+/**
+ * The same loose, non-RFC shape check `email.controller.ts` runs server-side
+ * (`EMAIL_SHAPE` there). Copied rather than shared — the two repositories
+ * cannot import from each other — and kept deliberately loose for the same
+ * reason the server's is: this is a cheap filter against an obvious typo, not
+ * a security boundary. The server is still the one that decides whether an
+ * address is acceptable; this only saves a round trip, a rate-limit charge,
+ * and a `pc:<id>` confirmation-budget slot on a string that was never going
+ * to pass.
+ */
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * One place to turn a `{status, message}` from `sendVerificationEmail` or
+ * `verifyEmailToken` into what the person reads.
+ *
+ * The 429 branch exists because of a trap specific to this pair of calls: a
+ * rate limit reaching this card can come from three different buckets
+ * (`passwordConfirmLimiter`, `emailSendLimiter`, or `emailVerifyLimiter` — see
+ * `auth.routes.ts`), each with its own wording, and none of that wording says
+ * "wait" as plainly as this screen needs it to. Overriding it here rather
+ * than showing whichever sentence happened to come back keeps the message
+ * this card gives stable even if a limiter's own text changes.
+ *
+ * Every other status shows the server's own sentence verbatim, which is what
+ * actually keeps a 401 for "your password is wrong" apart from a 401 for
+ * "your account is no longer active" — the two share a status code, but the
+ * server already worded them as two different sentences, so passing `message`
+ * through unmodified is the whole fix. Hard-coding one generic sentence for
+ * every 401 here would silently re-merge them.
+ */
+const describeEmailError = (status: number, message: string | null): string => {
+  if (status === 429) return "Has pedido demasiados correos. Espera un rato antes de volver a intentarlo.";
+  return message || "Ocurrió un error en el servidor.";
+};
 
 const PerfilPage = () => {
   const { sesion, setSesion } = useContext(SesionContext);
@@ -54,14 +92,36 @@ const PerfilPage = () => {
     confirmPass: "",
   });
 
+  /**
+   * The recovery address as the server currently has it, kept apart from
+   * `emailForm` below the same way `accountData.user` is kept apart from the
+   * box that renames it: one is "what is saved", the other is "what is being
+   * typed". `email: null` and `verifiedAt: null` is the true starting shape —
+   * not "no address yet" as an empty string, which would be indistinguishable
+   * from somebody who cleared the input by hand.
+   *
+   * Seeded from nothing here and filled in by the profile-loading effect
+   * below, together with `formData`: the whole email card sits behind the
+   * same `loadingProfile` skeleton as the rest of this page, so there is no
+   * window where it could flash "sin configurar" for an account that has a
+   * verified address and just hasn't heard back from the server yet.
+   */
+  const [recovery, setRecovery] = useState<{ email: string | null; verifiedAt: string | null }>({
+    email: null,
+    verifiedAt: null,
+  });
+  const [emailForm, setEmailForm] = useState({ email: "", pass: "" });
+
   const [loadingGeneral, setLoadingGeneral] = useState(false);
   const [loadingAccount, setLoadingAccount] = useState(false);
   const [loadingPass, setLoadingPass] = useState(false);
+  const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingProfile, setLoadingProfile] = useState(true);
 
   const [confirmGeneral, setConfirmGeneral] = useState(false);
   const [confirmUsername, setConfirmUsername] = useState(false);
   const [confirmPass, setConfirmPass] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState(false);
 
   useEffect(() => {
     if (!user.id) return;
@@ -74,10 +134,72 @@ const PerfilPage = () => {
           phone: data.phone || "",
           birthday: data.birthday ? String(data.birthday).slice(0, 10) : "",
         });
+        setEmailForm((prev) => ({ ...prev, email: data.email ?? "" }));
+        setRecovery((prev) => ({
+          email: data.email ?? null,
+          // `data.email_verified_at ?? prev.verifiedAt`, not a flat overwrite:
+          // the hash-verification effect below can resolve *before* this GET
+          // does (both fire on mount, and neither request waits for the
+          // other), and if this one happened to be reading the database a
+          // moment before that UPDATE committed, a flat assignment here would
+          // silently put a just-verified address back to "sin verificar" the
+          // instant this `.then` ran. Nothing else in this component ever
+          // moves `verifiedAt` from a real timestamp back to `null` except
+          // `sendEmail` explicitly starting a new verification, so trusting
+          // whichever source has already reported "verified" is always safe.
+          verifiedAt: data.email_verified_at ?? prev.verifiedAt,
+        }));
       })
       .catch(() => toast.error("No se pudieron cargar los datos del perfil."))
       .finally(() => setLoadingProfile(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /**
+   * Redeeming the token from a verification link, if this page was opened
+   * from one.
+   *
+   * `{origin}/perfil#verify_email=TOKEN` — the API puts the token in the URL
+   * *fragment*, never the query string, because a fragment is the one part of
+   * a URL that never leaves the browser: it does not reach this server, any
+   * proxy in between, or the `Referer` header of wherever the link might have
+   * been opened from. Reading it and stripping it out of the address bar is
+   * this effect's whole job, and the two rules that make that actually hold:
+   *
+   * - The fragment is cleared *before* the network call, not after. Waiting
+   *   for the response would leave a single-use, opaque credential sitting in
+   *   the address bar (and in the browser's own history) for as long as the
+   *   request takes — including forever, if the tab is closed first.
+   * - The token is never logged, never put in a toast, never re-inserted into
+   *   the URL on failure. The one thing shown to the person is
+   *   `describeEmailError`'s sentence, which only ever contains the server's
+   *   own wording, not the token itself.
+   *
+   * `hashConsumedRef` guards against React 18 StrictMode's deliberate double
+   * invocation of effects in development: the token is single-use, so a
+   * second call in the same mount would redeem it once and then report
+   * "enlace ya no es válido" for the second — a false alarm nowhere near a
+   * real failure.
+   */
+  const hashConsumedRef = useRef(false);
+  useEffect(() => {
+    const match = /^#verify_email=(.+)$/.exec(window.location.hash);
+    if (!match || hashConsumedRef.current) return;
+    hashConsumedRef.current = true;
+
+    const token = decodeURIComponent(match[1]);
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+    verifyEmailToken(token).then((response) => {
+      if (response.status === 200) {
+        toast.success(response.message || "Correo verificado.");
+        setRecovery((prev) => ({ ...prev, verifiedAt: new Date().toISOString() }));
+      } else {
+        toast.error(describeEmailError(response.status, response.message));
+      }
+    });
+    // Once, on mount: this reads a one-shot credential out of the address the
+    // browser was opened with, which does not reappear while the tab stays open.
   }, []);
 
   const handleGeneralChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,6 +208,10 @@ const PerfilPage = () => {
 
   const handleAccountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setAccountData({ ...accountData, [e.target.id]: e.target.value });
+  };
+
+  const handleEmailFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEmailForm({ ...emailForm, [e.target.id]: e.target.value });
   };
 
   const saveGeneralInfo = async () => {
@@ -208,6 +334,62 @@ const PerfilPage = () => {
     setConfirmPass(true);
   };
 
+  /**
+   * `email_verified_at` is never set from here — it comes back only from the
+   * server, on the next load or from the verification effect above — because
+   * this call always sends the address off unverified, whatever it was
+   * before. That is not a client choice: the server nulls it on every
+   * successful `/auth/email/send`, even when the address typed in is byte for
+   * byte the one already on file, so a "reenviar" click and a genuine change
+   * of address are the same request and this function does not need to tell
+   * them apart.
+   */
+  const sendEmail = async () => {
+    setLoadingEmail(true);
+    try {
+      const direccion = emailForm.email.trim();
+      const response = await sendVerificationEmail(direccion, emailForm.pass);
+      if (response.status === 200) {
+        toast.success(response.message || "Se envió un enlace de verificación.");
+        setEmailForm((prev) => ({ ...prev, pass: "" }));
+        setRecovery({ email: direccion, verifiedAt: null });
+      } else {
+        toast.error(describeEmailError(response.status, response.message));
+      }
+    } catch {
+      toast.error("Ocurrió un error en el servidor.");
+    }
+    setLoadingEmail(false);
+  };
+
+  const handleSendEmailClick = () => {
+    const direccion = emailForm.email.trim();
+    if (!direccion) return toast.warning("Debe indicar una dirección de correo.");
+    if (!EMAIL_SHAPE.test(direccion)) return toast.warning("Debe indicar una dirección de correo válida.");
+    // Same reasoning as `accountData.userPass` above: an attempt with no
+    // password is refused by the server anyway, and letting it leave the
+    // browser would spend one of the five confirmations this account gets
+    // per quarter of an hour for nothing.
+    if (!emailForm.pass) return toast.warning("Debe proporcionar su contraseña actual.");
+    setConfirmEmail(true);
+  };
+
+  const emailVerificado = recovery.verifiedAt !== null;
+  // Whether the box still reads exactly what the server has on file. Used
+  // only to pick the button's label and the confirmation dialog's wording —
+  // the request itself is identical either way, see `sendEmail`'s comment.
+  const emailSinCambios = emailForm.email.trim() !== "" && emailForm.email.trim() === (recovery.email ?? "");
+  // None of these three strings may contain "actualizar": `renombrar()` in
+  // `PerfilPage.test.tsx` reaches the username card's own button with
+  // `getByRole("button", { name: /actualizar/i })`, unanchored, so a second
+  // button whose label merely *contains* that word makes the query ambiguous
+  // and throws — same trap as the label text above, different query.
+  const emailButtonLabel = !recovery.email
+    ? "Verificar correo"
+    : !emailVerificado && emailSinCambios
+      ? "Reenviar verificación"
+      : "Guardar y verificar";
+
   return (
     <div className="p-6 md:p-8 w-full mx-auto space-y-6">
       {/* Header */}
@@ -299,6 +481,94 @@ const PerfilPage = () => {
 
           {/* Columna derecha */}
           <div className="space-y-6">
+
+            {/* Correo de recuperación */}
+            <Card className="shadow-sm border-muted/60">
+              <CardHeader className="border-b border-border/40 pb-4">
+                <CardTitle className="text-base flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <MailIcon className="h-4 w-4 text-muted-foreground" />
+                    Correo de recuperación
+                  </span>
+                  {/*
+                    The one thing this card exists to make obvious without
+                    reading anything else on it: a saved-but-unverified
+                    address is exactly as useless as none at all, because
+                    `/password/forgot` only ever acts on a verified one. Three
+                    states, three unmistakably different badges — colour and
+                    text both — rather than one line of fine print under the
+                    input that only the careful would read.
+                  */}
+                  {!recovery.email ? (
+                    <Badge variant="outline" className="text-muted-foreground shrink-0 font-normal">
+                      Sin configurar
+                    </Badge>
+                  ) : emailVerificado ? (
+                    <Badge className="bg-green-500/10 text-green-600 border-green-500/20 shadow-none shrink-0 gap-1 font-normal">
+                      <MailCheckIcon className="h-3 w-3" />
+                      Verificado
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 shadow-none shrink-0 gap-1 font-normal">
+                      <MailWarningIcon className="h-3 w-3" />
+                      Sin verificar
+                    </Badge>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-4">
+                {recovery.email && !emailVerificado && (
+                  <p className="text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-2">
+                    Todavía no confirmaste esta dirección: mientras tanto, no sirve para recuperar tu cuenta.
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">Dirección de correo</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={emailForm.email}
+                    onChange={handleEmailFormChange}
+                    placeholder="tu.correo@ejemplo.com"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Se usa únicamente para recuperar tu cuenta si olvidas tu contraseña.
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  {/*
+                    Deliberately not "Confirma tu contraseña" (the username
+                    card's own label, a few lines down) or "Contraseña
+                    actual" (the password card's): `PerfilPage.test.tsx`
+                    already uses `getByLabelText(/confirma tu contraseña/i)`
+                    and `getByLabelText(/contraseña actual/i)` to reach those
+                    two fields specifically, and `getByLabelText` throws on an
+                    ambiguous match rather than picking one. A third field on
+                    the same page answering to either phrase would have broken
+                    every one of those tests without changing anything they
+                    are actually about.
+                  */}
+                  <Label htmlFor="emailPass">Confirma con tu contraseña <span className="text-destructive">*</span></Label>
+                  <Input
+                    id="emailPass"
+                    type="password"
+                    value={emailForm.pass}
+                    onChange={(e) => setEmailForm((prev) => ({ ...prev, pass: e.target.value }))}
+                    className="font-mono"
+                    placeholder="••••••••"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Registrar o cambiar tu correo de recuperación exige confirmar que eres tú.
+                  </p>
+                </div>
+                <div className="flex justify-end pt-1">
+                  <Button onClick={handleSendEmailClick} disabled={loadingEmail} variant="outline" className="gap-2">
+                    {loadingEmail ? <Loader2Icon className="h-4 w-4 animate-spin" /> : <SendIcon className="h-4 w-4" />}
+                    {emailButtonLabel}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Nombre de usuario */}
             <Card className="shadow-sm border-muted/60">
@@ -413,6 +683,31 @@ const PerfilPage = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Sí, cambiar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm: correo de recuperación */}
+      <AlertDialog open={confirmEmail} onOpenChange={(o) => !o && setConfirmEmail(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Enviar verificación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se enviará un enlace de verificación a esa dirección. Hasta que lo confirmes desde tu
+              correo, no podrás usarla para recuperar tu cuenta.
+              {emailVerificado && (
+                <>
+                  {" "}Tu dirección actual, ya verificada, quedará sin verificar y se avisará a esa
+                  misma casilla del cambio.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmEmail(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => { setConfirmEmail(false); sendEmail(); }}>
+              Sí, enviar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -20,7 +20,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import DataTable from "../../../components/table/DataTable";
 import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
 import {
-  CalendarIcon, PhoneIcon, UserIcon, ShieldIcon,
+  CalendarIcon, PhoneIcon, UserIcon, ShieldIcon, MailIcon,
   PencilIcon, RefreshCwIcon, ActivityIcon, CheckCircle2Icon,
   ClockIcon, ZapIcon, KeyRoundIcon, AtSignIcon,
   TrendingUpIcon, AlertCircleIcon, LogInIcon, Trash2Icon,
@@ -411,6 +411,27 @@ export default function UsuarioDetallePage() {
                 label="Rol" value={d.usuario?.rol?.name ?? "—"} />
               <InfoRow icon={<PhoneIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
                 label="Teléfono" value={d.usuario?.phone || "—"} />
+              {/*
+                Read-only, unlike every field beside it: `email` is not on
+                `usuario.controller.ts`'s `EDITABLE_FIELDS` whitelist, so this
+                admin screen has no way to set it even if a box were added —
+                the only write path is the account's own owner, from
+                `PerfilPage.tsx`, with their current password. Shown here
+                because the API already sends it back (only `pass` is
+                excluded from this response) and an administrator looking at
+                somebody's account benefits from seeing whether their way
+                back in is actually usable — a saved-but-unverified address
+                is not, `/password/forgot` ignores it.
+              */}
+              <InfoRow icon={<MailIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
+                label="Correo de recuperación"
+                value={
+                  !d.usuario?.email
+                    ? "Sin configurar"
+                    : d.usuario.email_verified_at
+                      ? `${d.usuario.email} (verificado)`
+                      : `${d.usuario.email} (sin verificar)`
+                } />
               <InfoRow icon={<CalendarIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
                 label="Fecha de nacimiento"
                 value={d.usuario?.birthday

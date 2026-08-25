@@ -52,6 +52,8 @@ const editUserName = vi.fn();
 const editUsuario = vi.fn();
 const editUserPass = vi.fn();
 const searchUsuario = vi.fn();
+const sendVerificationEmail = vi.fn();
+const verifyEmailToken = vi.fn();
 
 vi.mock("../../api/Usuario.api", () => ({
   editUserName: (...args: unknown[]) => editUserName(...args),
@@ -69,6 +71,8 @@ vi.mock("../../api/Login.api", () => ({
   loginUsuario: () => {
     throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
   },
+  sendVerificationEmail: (...args: unknown[]) => sendVerificationEmail(...args),
+  verifyEmailToken: (...args: unknown[]) => verifyEmailToken(...args),
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
@@ -123,6 +127,13 @@ beforeEach(() => {
   searchUsuario.mockResolvedValue(PERFIL_CARGADO);
   editUserName.mockResolvedValue({ status: 200 });
   editUserPass.mockResolvedValue({ status: 200 });
+  sendVerificationEmail.mockResolvedValue({ status: 200, message: "Si la dirección es válida, se envió un enlace de verificación." });
+  verifyEmailToken.mockResolvedValue({ status: 200, message: "Correo verificado." });
+  // The hash-verification effect reads this on every mount. Left over from a
+  // previous test, it would fire `verifyEmailToken` in tests that have
+  // nothing to do with it — the true reset belongs here, not scattered across
+  // whichever `describe` block happens to set it.
+  window.location.hash = "";
 });
 
 /**
@@ -297,5 +308,201 @@ describe("renaming your own account from the profile page", () => {
 
     await user.type(paraRenombrar, "para-el-renombrado");
     expect(paraCambiarClave.value).toBe("para-el-cambio-de-clave");
+  });
+});
+
+/**
+ * The recovery email card, Task 8 of `2026-08-25-correo-verificado-y-recuperacion`.
+ *
+ * The acceptance criterion that actually matters here is not "the form
+ * submits" — it is that the three states (no address, saved-but-unverified,
+ * verified) read as three different things without anyone having to study the
+ * card. A saved-but-unverified address is exactly as useless as none at all,
+ * because `/password/forgot` refuses to act on one — so the tests below
+ * assert on the visible badge text and the warning caption, not on internal
+ * state, the same way a person reading the screen would tell the states apart.
+ */
+describe("recovery email — the three states", () => {
+  it("reads 'Sin configurar' when the account has no address on file", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: null, email_verified_at: null });
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    expect(await screen.findByText("Sin configurar")).toBeInTheDocument();
+    expect(screen.queryByText("Sin verificar")).toBeNull();
+    expect(screen.queryByText("Verificado")).toBeNull();
+  });
+
+  it("reads 'Sin verificar', with the warning that it cannot recover the account yet, when the address was saved but never confirmed", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    expect(await screen.findByText("Sin verificar")).toBeInTheDocument();
+    expect(screen.getByText(/no sirve para recuperar tu cuenta/i)).toBeInTheDocument();
+    expect(screen.queryByText("Verificado")).toBeNull();
+    expect(screen.queryByText("Sin configurar")).toBeNull();
+  });
+
+  it("reads 'Verificado', with no warning at all, when the address was confirmed", async () => {
+    searchUsuario.mockResolvedValue({
+      ...PERFIL_CARGADO,
+      email: "isaias@osefi.net",
+      email_verified_at: "2026-08-20T00:00:00.000Z",
+    });
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    expect(await screen.findByText("Verificado")).toBeInTheDocument();
+    expect(screen.queryByText("Sin verificar")).toBeNull();
+    expect(screen.queryByText("Sin configurar")).toBeNull();
+    expect(screen.queryByText(/no sirve para recuperar tu cuenta/i)).toBeNull();
+  });
+
+  it("pre-fills the address box with whatever is already on file, unverified or not", async () => {
+    // So resending to the same address is retyping a password, not the address.
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    expect((screen.getByLabelText("Dirección de correo") as HTMLInputElement).value).toBe("isaias@osefi.net");
+  });
+});
+
+describe("sending a verification email", () => {
+  /** Fill both boxes and press the card's own submit button. */
+  async function intentarEnviar(email: string, pass: string) {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    const campoEmail = screen.getByLabelText("Dirección de correo") as HTMLInputElement;
+    await user.clear(campoEmail);
+    if (email) await user.type(campoEmail, email);
+    if (pass) await user.type(screen.getByLabelText(/confirma con tu contraseña/i), pass);
+    await user.click(screen.getByRole("button", { name: /verificar correo|reenviar verificación|guardar y verificar/i }));
+    return user;
+  }
+
+  it("does not even open the confirmation dialog with no address at all", async () => {
+    await intentarEnviar("", "la-mia");
+
+    expect(screen.queryByRole("button", { name: /sí, enviar/i })).toBeNull();
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not open the dialog for a string that is not shaped like an address", async () => {
+    await intentarEnviar("esto-no-es-un-correo", "la-mia");
+
+    expect(screen.queryByRole("button", { name: /sí, enviar/i })).toBeNull();
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it("does not open the dialog with the password box left empty", async () => {
+    // The server refuses this with 400 either way — refusing here first saves
+    // the round trip and, more to the point, a slot of the five confirmations
+    // this account is allowed per quarter of an hour, shared with the
+    // username and password cards on this same page.
+    await intentarEnviar("nueva@osefi.net", "");
+
+    expect(screen.queryByRole("button", { name: /sí, enviar/i })).toBeNull();
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+  });
+
+  it("sends the trimmed address and the typed password, then clears only the password on success", async () => {
+    const user = await intentarEnviar("  nueva@osefi.net  ", "la-mia");
+    await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+
+    await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+    expect(sendVerificationEmail).toHaveBeenCalledWith("nueva@osefi.net", "la-mia");
+
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect((screen.getByLabelText(/confirma con tu contraseña/i) as HTMLInputElement).value).toBe("");
+  });
+
+  it("turns a 429 into a plain-language wait-and-retry message, whichever limiter actually fired", async () => {
+    // The known trap this pair of calls sits on: three different rate-limit
+    // buckets can answer this one request (`passwordConfirmLimiter`,
+    // `emailSendLimiter` — see `auth.routes.ts`), each with its own wording,
+    // and none of it says "wait" as plainly as this card needs to. The
+    // assertion is on the card's own sentence, not on whichever the mock
+    // happens to send back.
+    sendVerificationEmail.mockResolvedValue({
+      status: 429,
+      message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar.",
+    });
+    const user = await intentarEnviar("nueva@osefi.net", "la-mia");
+    await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/demasiados correos/i));
+  });
+
+  it("shows the server's own sentence for a wrong password apart from an inactive account, though both are a 401", async () => {
+    // The pointed case from the task: an account archived between
+    // `authenticate` and the handler answers 401 too, and it must not read as
+    // a password mistake — the session, not the password, is what ended.
+    for (const respuesta of [
+      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      { status: 401, message: "Su cuenta ya no está activa." },
+    ]) {
+      cleanup();
+      vi.clearAllMocks();
+      searchUsuario.mockResolvedValue(PERFIL_CARGADO);
+      sendVerificationEmail.mockResolvedValue(respuesta);
+
+      const user = await intentarEnviar("nueva@osefi.net", "algo");
+      await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+
+      const { toast } = await import("sonner");
+      await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+      expect(toast.success, JSON.stringify(respuesta)).not.toHaveBeenCalled();
+      expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message);
+    }
+  });
+});
+
+/**
+ * `{origin}/perfil#verify_email=TOKEN` — the API puts the token in the
+ * fragment rather than the query string precisely so it never reaches a
+ * server, a proxy, or a `Referer` header. These tests are about the two
+ * guarantees that make that hold on this side: the token is read once and
+ * redeemed, and the fragment is gone from the address bar regardless of
+ * whether redeeming it actually worked.
+ */
+describe("verifying via the link's fragment token", () => {
+  it("redeems the token and clears the fragment from the address bar", async () => {
+    window.location.hash = "#verify_email=un-token-opaco";
+
+    render(<Harness />);
+
+    await waitFor(() => expect(verifyEmailToken).toHaveBeenCalledWith("un-token-opaco"));
+    expect(window.location.hash).toBe("");
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+  });
+
+  it("clears the fragment even when the token is refused, so a dead link never lingers in the address bar", async () => {
+    window.location.hash = "#verify_email=un-token-caducado";
+    verifyEmailToken.mockResolvedValue({ status: 400, message: "Este enlace ya no es válido. Solicite uno nuevo." });
+
+    render(<Harness />);
+
+    await waitFor(() => expect(verifyEmailToken).toHaveBeenCalledWith("un-token-caducado"));
+    expect(window.location.hash).toBe("");
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Este enlace ya no es válido. Solicite uno nuevo."));
+  });
+
+  it("does nothing when the page was opened with no token in the address", async () => {
+    window.location.hash = "";
+
+    render(<Harness />);
+    await screen.findByLabelText("Usuario");
+
+    expect(verifyEmailToken).not.toHaveBeenCalled();
   });
 });
