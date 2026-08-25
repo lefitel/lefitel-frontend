@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col } from "../../components/table/tableFeatures";
-import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon, MailCheckIcon, MailWarningIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -15,6 +15,7 @@ import { url } from "../../api/url";
 import { UsuarioInterface } from "../../interfaces/interfaces";
 import { Button } from "../../components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "../../components/ui/avatar";
+import { Badge } from "../../components/ui/badge";
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
     DropdownMenuSeparator, DropdownMenuTrigger,
@@ -29,6 +30,7 @@ import UsuarioSheet from "../../components/dialogs/upsert/UsuarioSheet";
 import PermissionGuard from "../../components/PermissionGuard";
 import PermisosPanel from "../../components/PermisosPanel";
 import { ImageLightbox } from "../../components/ui/image-viewer";
+import { maskEmail } from "../../lib/email";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -406,6 +408,57 @@ const SeguridadPage = () => {
             accessorKey: "id_rol",
             header: "Rol",
             cell: ({ row }) => row.original.rol?.name ?? `Rol ${row.original.id_rol}`,
+        },
+        {
+            id: "recoveryEmail",
+            header: "Correo de recuperación",
+            enableSorting: false,
+            /**
+             * The reason this column exists: a saved-but-unverified address
+             * is exactly as useless as none at all — `/password/forgot`
+             * only ever acts on a verified one — and the mistake this catches
+             * is invisible until the day it matters. An errata verified by
+             * resend still passes as "verified" the moment it is set; it only
+             * fails months later, when that mailbox closes and turns out to
+             * be the only way back in. The badge is what lets an
+             * administrator notice that risk across the whole staff at a
+             * glance, without opening each account.
+             *
+             * Three states, distinguished by colour and icon and not merely
+             * by text — the same visual language `PerfilPage.tsx` already
+             * uses for the same three states on the account's own screen, so
+             * "verified" means the same badge everywhere in the app. The
+             * address itself is masked with `maskEmail`: enough for an
+             * administrator to recognise it (or notice it looks wrong) without
+             * this list becoming a directory of everyone's full recovery
+             * address.
+             */
+            cell: ({ row }) => {
+                const { email, email_verified_at } = row.original;
+                if (!email) {
+                    return (
+                        <Badge variant="outline" className="text-muted-foreground shrink-0 font-normal">
+                            Sin configurar
+                        </Badge>
+                    );
+                }
+                return (
+                    <div className="flex items-center gap-1.5">
+                        {email_verified_at ? (
+                            <Badge className="bg-green-500/10 text-green-600 border-green-500/20 shadow-none shrink-0 gap-1 font-normal">
+                                <MailCheckIcon className="h-3 w-3" />
+                                Verificado
+                            </Badge>
+                        ) : (
+                            <Badge className="bg-amber-500/10 text-amber-600 border-amber-500/20 shadow-none shrink-0 gap-1 font-normal">
+                                <MailWarningIcon className="h-3 w-3" />
+                                Sin verificar
+                            </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">{maskEmail(email)}</span>
+                    </div>
+                );
+            },
         },
         {
             accessorKey: "createdAt",
