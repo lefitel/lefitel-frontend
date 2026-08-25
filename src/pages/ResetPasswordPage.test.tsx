@@ -12,7 +12,10 @@ import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
-import ResetPasswordPage from "./ResetPasswordPage";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import ResetPasswordPage, { ENLACE_INVALIDO as ENLACE_INVALIDO_EXPORTADO } from "./ResetPasswordPage";
 import { ThemeProvider } from "../components/theme-provider";
 import { PASSWORD_MIN_LENGTH } from "../lib/password";
 
@@ -184,5 +187,54 @@ describe("rate limiting", () => {
       expect(toast.error).toHaveBeenCalledWith("Demasiados intentos. Espera unos minutos antes de volver a intentarlo.")
     );
     expect(screen.queryByText(/enlace no válido/i)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The mirror check `password.test.ts` already runs for `PASSWORD_MIN_LENGTH`,
+ * repeated here for `ENLACE_INVALIDO`.
+ *
+ * Every test above compares a server response against `ENLACE_INVALIDO` —
+ * this screen's own copy of the sentence — so none of them can notice the
+ * copy going stale: a rename on the server's side would leave every test in
+ * this file still comparing the constant against itself, all still green,
+ * while the real site quietly stopped recognising a dead link. This is the
+ * one test that reads the actual source instead of trusting the copy.
+ */
+describe("the sentence the server actually sends for a dead link", () => {
+  it("matches TOKEN_INVALIDO in the api repository", (ctx) => {
+    // Same resolution `password.test.ts` uses, one directory further down
+    // (`src/pages` instead of `src/lib`) — same three `..` to reach the
+    // sibling `api` checkout either way.
+    const aqui = path.dirname(fileURLToPath(import.meta.url));
+    const controladorDelServidor = path.resolve(aqui, "../../../api/src/controllers/password.controller.ts");
+
+    // Copied from `password.test.ts` rather than reinvented: a build that has
+    // only `web` checked out — a CI job, a Vercel deploy — has nowhere to
+    // read the server's source from, so this skips visibly there instead of
+    // failing for a reason that has nothing to do with this change.
+    if (!existsSync(controladorDelServidor)) {
+      ctx.skip(`sin el repositorio api al lado no se puede comprobar (${controladorDelServidor})`);
+      return;
+    }
+
+    const fuente = readFileSync(controladorDelServidor, "utf-8");
+    const declarado = /export const TOKEN_INVALIDO\s*=\s*"([^"]+)"/.exec(fuente);
+
+    expect(
+      declarado,
+      `TOKEN_INVALIDO ya no se declara en ${controladorDelServidor}: ` +
+        "la fuente de verdad se movió y este espejo dejó de estar comprobado."
+    ).not.toBeNull();
+    expect(
+      ENLACE_INVALIDO_EXPORTADO,
+      "el servidor cambió la frase que marca un enlace muerto (expirado, ya usado o " +
+        "inexistente) y ResetPasswordPage.tsx no se enteró: compara su propio " +
+        "ENLACE_INVALIDO contra el mensaje que llega para decidir si muestra el panel " +
+        "\"pide otro enlace\" con su botón, así que un enlace realmente muerto caería " +
+        "ahora en el toast de error genérico — sin ese botón — justo para la persona " +
+        "que ya está bloqueada fuera de su cuenta. web/src/pages/ResetPasswordPage.tsx " +
+        "tiene que seguir a api/src/controllers/password.controller.ts."
+    ).toBe(declarado![1]);
   });
 });

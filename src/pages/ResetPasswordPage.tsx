@@ -23,8 +23,17 @@ import { Label } from "@/components/ui/label";
  * see `password.ts`'s own comment on why that list is not mirrored here), and
  * that case must send the person back to retyping a password, not to
  * "solicite un enlace nuevo".
+ *
+ * **Exported so `ResetPasswordPage.test.tsx` can pin it against the real
+ * source**, the same way `PASSWORD_MIN_LENGTH` in `lib/password.ts` is pinned
+ * against `api/src/config/security.ts`. Two repositories cannot share a
+ * constant, so a silent rename on the server's side would otherwise leave
+ * this comparison matching nothing forever — every test here still green,
+ * because they all check this constant against itself — while every dead
+ * link on the real site fell into the generic error toast instead of the
+ * "pide otro enlace" panel, for exactly the person who is already locked out.
  */
-const ENLACE_INVALIDO = "Este enlace ya no es válido. Solicite uno nuevo.";
+export const ENLACE_INVALIDO = "Este enlace ya no es válido. Solicite uno nuevo.";
 
 /**
  * `/password/reset` is rate-limited by IP and, separately, by the token being
