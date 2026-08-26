@@ -44,3 +44,19 @@ export const MENU_ITEMS: MenuItem[] = [
 /** The screens a role may open. */
 export const visibleMenuItems = (rol: number): MenuItem[] =>
   MENU_ITEMS.filter((item) => item.modulo === null || can(rol, item.modulo, "ver"));
+
+/**
+ * The first screen with real content this role can open, or null when there is
+ * none.
+ *
+ * `visibleMenuItems(rol)[0]` cannot answer this: Inicio belongs to no module, so
+ * it is always first and always present, and every caller asking "where can they
+ * go" got `/app/home` back whatever the role held. That was fine while the home
+ * page showed something to everyone. It stopped being fine when the dashboard
+ * began asking for `eventos.ver`: a role without it now lands on a screen that
+ * cannot load, and the honest answers are "somewhere else you can actually be"
+ * or "nowhere — go and ask an administrator". Telling those two apart is what
+ * this is for.
+ */
+export const firstModuleScreen = (rol: number): MenuItem | null =>
+  MENU_ITEMS.find((item) => item.modulo !== null && can(rol, item.modulo, "ver")) ?? null;

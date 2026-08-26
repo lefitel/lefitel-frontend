@@ -1,6 +1,6 @@
 import { Route, Routes, BrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import LandingPage from "./pages/LandingPage";
-import { visibleMenuItems } from "./components/menuItems";
+import { firstModuleScreen, visibleMenuItems } from "./components/menuItems";
 import { can, type Modulo } from "./lib/permissions";
 import LoadingPage from "./pages/LoadingPage";
 import { SesionContext } from "./context/SesionContext";
@@ -21,6 +21,7 @@ import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
 import PerfilPage from "./pages/menu/PerfilPage";
 import NovedadesPage from "./pages/menu/NovedadesPage";
+import SinAccesoPage from "./pages/menu/SinAccesoPage";
 import BitacoraPage from "./pages/menu/bitacora";
 import { TooltipProvider } from "./components/ui/tooltip";
 import HomePage from "./pages/HomePage";
@@ -70,6 +71,37 @@ const ModuleRoute = ({ modulo }: { modulo: Modulo }) => {
   return <Outlet />;
 };
 
+/**
+ * What `/app/home` shows, which is not always the dashboard any more.
+ *
+ * This route belongs to no module and is where every redirect in `ModuleRoute`
+ * below lands, so it has to be somewhere every session can be. That used to be
+ * free: the dashboard's endpoint asked for no permission and handed its data to
+ * anybody with a session, which was the hole that got it gated on `eventos.ver`.
+ *
+ * Gating it turned this route into the dead end the comment above describes,
+ * one step further along: the redirect lands, the page mounts, the request comes
+ * back 403, and the screen reports a network failure for a refusal that is
+ * permanent. Three outcomes, and they are not the same conversation:
+ *
+ *   - may see incidents → the dashboard, as before;
+ *   - may see something else → go there, rather than sit on a screen that
+ *     cannot load while the sidebar lists screens that can;
+ *   - may see nothing → say so, and say who to ask.
+ *
+ * Decided from the permission matrix the session already carries, not from a
+ * 403: the answer is known before the request, and asking anyway would mean a
+ * wasted round trip and a spinner before the bad news.
+ */
+export const HomeRoute = () => {
+  const { sesion } = useContext(SesionContext);
+  const rol = sesion.usuario.id_rol;
+  if (can(rol, "eventos", "ver")) return <InicioPage />;
+  const elsewhere = firstModuleScreen(rol);
+  if (elsewhere) return <Navigate to={elsewhere.path} replace />;
+  return <SinAccesoPage />;
+};
+
 const App = () => {
   return (
     <SesionProvider>
@@ -86,7 +118,7 @@ const App = () => {
                   {/* Belongs to no module: anyone with a session. Their own
                       profile is theirs, the home page is where every redirect
                       lands, and the release notes are the same for everyone. */}
-                  <Route path="home"      element={<InicioPage />} />
+                  <Route path="home"      element={<HomeRoute />} />
                   <Route path="perfil"    element={<PerfilPage />} />
                   <Route path="novedades" element={<NovedadesPage />} />
 
@@ -135,8 +167,24 @@ const App = () => {
               <Route element={<PublicRoutes />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
-                <Route path="/nueva-contrasena" element={<ResetPasswordPage />} />
               </Route>
+
+              {/* Deliberately NOT inside `PublicRoutes`, unlike the two above.
+                  `PublicRoutes` sends anyone holding a session to /app/home,
+                  and this is the one screen where that is wrong: the person
+                  arrives from an email link with a single-use token in the URL
+                  fragment, and `Navigate` discards fragments. A stale session
+                  in this browser — or simply being logged in on the machine
+                  where the mail was opened, which is the ordinary case — would
+                  swallow the token and land them on the home page with nothing
+                  said. The reset itself revokes every session for that account
+                  anyway, so having one open changes nothing about what happens
+                  here.
+
+                  `/olvide-contrasena` stays behind the guard on purpose:
+                  somebody with a live session can change their password from
+                  their own profile, so sending them there costs nothing. */}
+              <Route path="/nueva-contrasena" element={<ResetPasswordPage />} />
 
               <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>

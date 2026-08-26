@@ -29,6 +29,7 @@ import DataTable from "../../components/table/DataTable";
 import UsuarioSheet from "../../components/dialogs/upsert/UsuarioSheet";
 import PermissionGuard from "../../components/PermissionGuard";
 import PermisosPanel from "../../components/PermisosPanel";
+import RolesPanel from "../../components/RolesPanel";
 import { ImageLightbox } from "../../components/ui/image-viewer";
 import { maskEmail } from "../../lib/email";
 
@@ -299,6 +300,7 @@ const SeguridadPage = () => {
     const rol = sesion.usuario.id_rol;
 
     const [innerTab, setInnerTab] = useState<InnerTab>("activos");
+    const [matrizKey, setMatrizKey] = useState(0);
 
     const [list, setList] = useState<UsuarioInterface[] | null>(null);
     const [loading, setLoading] = useState(true);
@@ -655,7 +657,18 @@ const SeguridadPage = () => {
                 />
             )}
 
-            {innerTab === "permisos" && <PermisosPanel />}
+            {innerTab === "permisos" && (
+                                /* Roles above the grid they are the columns of.
+                                   Creating one used to be impossible from here —
+                                   `Rol.api.ts` exposed only `getRol` — so a role
+                                   created by hand appeared in the matrix with no
+                                   way to have been made. The key bump reloads the
+                                   matrix when the list of roles changes. */
+                                <div className="space-y-6">
+                                    <RolesPanel onChange={() => setMatrizKey((k) => k + 1)} />
+                                    <PermisosPanel key={matrizKey} />
+                                </div>
+                            )}
 
             <PermissionGuard module="seguridad" action="editar" open={editOpen} onOpenChange={setEditOpen}>
                 <UsuarioSheet
