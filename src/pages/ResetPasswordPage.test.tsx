@@ -238,3 +238,37 @@ describe("the sentence the server actually sends for a dead link", () => {
     ).toBe(declarado![1]);
   });
 });
+
+/**
+ * Where this screen is mounted is part of whether it works at all, so it is
+ * pinned here rather than left to whoever next tidies `App.tsx`.
+ *
+ * It sat inside `<PublicRoutes />` until the final review, and `PublicRoutes`
+ * sends anyone holding a session to `/app/home`. The ordinary case for a
+ * password reset is somebody who is *still logged in on the machine where
+ * they opened the mail* — a second device, a stale tab, a shared PC — and for
+ * all of them the guard swallowed the link: `Navigate` discards the URL
+ * fragment, so the single-use token went with it and the person landed on the
+ * home page with nothing said. Same failure shape as the verification link
+ * pointing at `/perfil` instead of `/app/perfil`, in a different file.
+ */
+describe("the reset screen is reachable with a session open", () => {
+  it("is not mounted inside PublicRoutes in App.tsx", async () => {
+    const { readFileSync } = await import("node:fs");
+    const app = readFileSync("src/App.tsx", "utf8");
+
+    const guardStart = app.indexOf("<Route element={<PublicRoutes />}>");
+    expect(guardStart, "PublicRoutes ya no existe en App.tsx: esta guarda no está comprobando nada.").toBeGreaterThan(-1);
+    const guardEnd = app.indexOf("</Route>", guardStart);
+    const ruta = app.indexOf('path="/nueva-contrasena"');
+
+    expect(ruta, "App.tsx ya no declara /nueva-contrasena.").toBeGreaterThan(-1);
+    expect(
+      ruta > guardStart && ruta < guardEnd,
+      "/nueva-contrasena ha vuelto dentro de PublicRoutes. Con una sesión abierta, " +
+        "esa guarda redirige a /app/home y `Navigate` se lleva el fragmento con el " +
+        "token dentro: el enlace del correo deja de funcionar para quien tenga la " +
+        "sesión abierta, que es el caso normal.",
+    ).toBe(false);
+  });
+});
