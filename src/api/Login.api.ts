@@ -1,6 +1,6 @@
 import axios from "axios";
 import { urlApi } from "./url";
-import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
+import { SesionActivaInterface, SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import type { Permisos } from "../lib/permissions";
 
 /**
@@ -316,3 +316,77 @@ export const comprobarToken = (): Promise<{
       usuario: null,
     }));
 };
+
+/**
+ * `GET /api/auth/sessions` — the devices this account is logged in on.
+ *
+ * Written here rather than in a file of its own because everything that reads
+ * or ends a session is auth-scoped and already lives in this module: `login`
+ * opens one, `comprobarToken` asks whether one is still good, and these three
+ * are the rest of the same surface.
+ *
+ * The list is returned empty on any failure rather than thrown, and that is a
+ * decision about the screen, not laziness. `PerfilPage` asks for this beside
+ * the profile itself; a 500 here must not take the page down with it, because
+ * everything else on it — the name, the phone, the recovery address — is
+ * independent and still worth showing. The section simply does not render.
+ */
+export const getSessions = (): Promise<SesionActivaInterface[]> =>
+  axios
+    .get(`${urlApi}auth/sessions`)
+    .then((r) => (r.data?.sesiones as SesionActivaInterface[]) ?? [])
+    .catch(() => []);
+
+/**
+ * `DELETE /api/auth/sessions/:id` — end one of my own sessions.
+ *
+ * The id is a UUID the server itself sent in `getSessions`, and it is put in
+ * the path unencoded for the same reason nothing else here encodes one: it is
+ * a UUID, which has no character that means anything in a path segment. Should
+ * that ever stop being true — a different id format — this is the line that
+ * has to change.
+ *
+ * Answers 404 both for a session that does not exist and for one belonging to
+ * somebody else, deliberately, so this endpoint cannot be used to find out who
+ * is logged in right now. The screen therefore says the same thing for both,
+ * which is the truth it is allowed to know: that row is not yours to close.
+ */
+export const endSession = (
+  id: string
+): Promise<{ status: number; message: string | null }> =>
+  axios
+    .delete(`${urlApi}auth/sessions/${id}`)
+    .then((r) => ({ status: r.status, message: r.data?.message ?? null }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo cerrar la sesión.",
+    }));
+
+/**
+ * `POST /api/auth/logout-all` — end every session of this account, this one
+ * included.
+ *
+ * The caller's own cookie is cleared by the server on the way out, so whoever
+ * presses this is logged out here too. That is the point of the button and not
+ * a side effect: it exists for the laptop left open somewhere, and a version
+ * that spared the current device would leave the person unsure which sessions
+ * actually died. `cerradas` is how many rows were revoked, which is what the
+ * screen tells them afterwards.
+ */
+export const logoutAllSessions = (): Promise<{
+  status: number;
+  message: string | null;
+  cerradas: number;
+}> =>
+  axios
+    .post(`${urlApi}auth/logout-all`)
+    .then((r) => ({
+      status: r.status,
+      message: r.data?.message ?? null,
+      cerradas: (r.data?.cerradas as number) ?? 0,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudieron cerrar las sesiones.",
+      cerradas: 0,
+    }));

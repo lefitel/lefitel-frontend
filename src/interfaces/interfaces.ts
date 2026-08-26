@@ -232,3 +232,26 @@ export interface SolucionInterface {
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
+
+/**
+ * One row of `GET /api/auth/sessions` — a device this account is logged in on.
+ *
+ * The server projects this field by field out of the `sesiones` table rather
+ * than handing back the row, so what arrives here is deliberately smaller than
+ * what is stored: `token_hash` never leaves the API, and neither does anything
+ * a later column might add.
+ *
+ * `user_agent` and `ip_address` are nullable because the columns are: a session
+ * row can be created by a client that sent neither. Nothing on this side may
+ * assume a string is there.
+ */
+export interface SesionActivaInterface {
+  id: string;
+  user_agent: string | null;
+  ip_address: string | null;
+  created_at: string;
+  last_used_at: string;
+  expires_at: string;
+  /** Whether this row is the session the request itself was made with. */
+  actual: boolean;
+}

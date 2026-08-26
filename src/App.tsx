@@ -19,7 +19,7 @@ import GeneradorPage from "./pages/menu/generador";
 import SeguridadPage from "./pages/menu/SeguridadPage";
 import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
-import PerfilPage from "./pages/menu/PerfilPage";
+import PerfilPage from "./pages/menu/perfil/PerfilPage";
 import NovedadesPage from "./pages/menu/NovedadesPage";
 import SinAccesoPage from "./pages/menu/SinAccesoPage";
 import BitacoraPage from "./pages/menu/bitacora";
