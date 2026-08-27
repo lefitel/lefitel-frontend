@@ -193,6 +193,18 @@ export default function PermisosPanel() {
               <TableRow key={modulo.key}>
                 <TableCell className="font-medium">{modulo.label}</TableCell>
                 {matriz.acciones.map((accion) => {
+                  // A module only carries the actions it declares, so most rows
+                  // have holes in them. A hole, and deliberately not a disabled
+                  // checkbox: an empty greyed box reads as "not granted yet,
+                  // somebody tick this", which is the confusion this whole
+                  // change exists to remove. Nothing there says nothing to say.
+                  //
+                  // It also keeps the screen from offering a cell the server
+                  // would refuse by name — the administrator would be told off
+                  // for something this panel put in front of them.
+                  if (!modulo.acciones.includes(accion.key)) {
+                    return <TableCell key={accion.key} className="text-center" />;
+                  }
                   const checked = valueOf(modulo.key, accion.key);
                   const changed = key(modulo.key, accion.key) in pending;
                   return (

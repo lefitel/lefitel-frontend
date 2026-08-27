@@ -10,8 +10,15 @@ export interface RolResumen {
 
 export interface MatrizPermisos {
   roles: RolResumen[];
-  /** The vocabulary comes from the server so a new module appears here on its own. */
-  modulos: { key: Modulo; label: string }[];
+  /**
+   * The vocabulary comes from the server so a new module appears here on its own.
+   *
+   * `acciones` per module is what the grid is drawn from; the flat list beside
+   * it is the dictionary of labels, kept because dropping it would break any
+   * bundle older than this deploy — and with `registerType: "prompt"` one can
+   * sit in a tab for days.
+   */
+  modulos: { key: Modulo; label: string; acciones: Accion[] }[];
   acciones: { key: Accion; label: string }[];
   permisos: Record<number, Permisos>;
 }

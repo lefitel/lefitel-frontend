@@ -23,31 +23,57 @@
 // roles are these three is worse than no name, and a fourth role has been
 // creatable for as long as that constant sat here saying otherwise.
 
-export const MODULOS = [
-  "postes",
-  "eventos",
-  "ciudades",
-  "parametros",
-  "reportes",
-  "generador",
-  "seguridad",
-  "roles",
-  "archivos",
-  "bitacora",
-] as const;
+/**
+ * The mirror of the server's `PERMISSIONS`, module by module.
+ *
+ * Every module used to carry all four verbs whether it used them or not, which
+ * left eight cells nothing ever asked about — and, worse, meant a permission
+ * that is not one of those four verbs had nowhere to live at all. This is the
+ * client half of ending that; the binding half is the server's.
+ *
+ * Kept in step by hand, like the labels above it. `getMatrizPermisos` sends the
+ * real list with every response, so the Seguridad screen never reads this
+ * constant — it is here for `sinPermisos()` and for the types.
+ */
+export const PERMISOS = {
+  postes: ["ver", "crear", "editar", "archivar"],
+  eventos: ["ver", "crear", "editar", "archivar"],
+  ciudades: ["ver", "crear", "editar", "archivar"],
+  parametros: ["ver", "crear", "editar", "archivar"],
+  generador: ["ver", "crear", "editar", "archivar"],
+  seguridad: ["ver", "crear", "editar", "archivar"],
+  roles: ["ver", "crear", "editar", "archivar"],
+  archivos: ["ver", "archivar"],
+  reportes: ["ver"],
+  bitacora: ["ver"],
+} as const satisfies Record<string, readonly string[]>;
 
+export const MODULOS = Object.keys(PERMISOS) as readonly Modulo[];
+
+/** Every action name that exists anywhere — the vocabulary, not the grid. */
 export const ACCIONES = ["ver", "crear", "editar", "archivar"] as const;
 
-export type Modulo = (typeof MODULOS)[number];
+export type Modulo = keyof typeof PERMISOS;
 export type Accion = (typeof ACCIONES)[number];
-export type Permisos = Record<Modulo, Record<Accion, boolean>>;
+
+/**
+ * `Partial` because a module only carries its own actions now, and the type has
+ * to say so rather than promise a boolean in every cell. Nothing downstream
+ * needs changing for it: `can()` below ends in `?? false`, so a hole reads as a
+ * denial exactly like an absent module already did.
+ */
+export type Permisos = Record<Modulo, Partial<Record<Accion, boolean>>>;
+
+/** The actions this module has. */
+export const accionesDe = (modulo: Modulo): readonly Accion[] =>
+  PERMISOS[modulo] as readonly Accion[];
 
 /** Every cell denied. What an unknown role, or no session, is allowed. */
 export const sinPermisos = (): Permisos => {
   const out = {} as Permisos;
   for (const modulo of MODULOS) {
-    out[modulo] = {} as Record<Accion, boolean>;
-    for (const accion of ACCIONES) out[modulo][accion] = false;
+    out[modulo] = {} as Partial<Record<Accion, boolean>>;
+    for (const accion of accionesDe(modulo)) out[modulo][accion] = false;
   }
   return out;
 };
