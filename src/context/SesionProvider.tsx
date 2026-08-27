@@ -84,9 +84,12 @@ const ROLE_HEADER = "x-osefi-role";
  * to get wrong.** A proxy that strips headers it does not recognise produces
  * exactly the same absence as a server that never sent one, so reading absence
  * as expiry would throw people out over a network configuration. `POST /login`
- * does not carry it either — it does not pass through `authenticate` — so the
- * ordinary way into the ERP starts with no deadline at all and learns one from
- * the first ordinary response. Nothing here is allowed to cancel a deadline on
+ * does carry it — `issueSession` sets it beside the cookie — but `learnDeadline`
+ * returns early while `hasSessionRef` is still false, which it is when the
+ * interceptor sees the login response, so we discard that one and learn the
+ * deadline from the first ordinary response instead.
+ *
+ * Nothing here is allowed to cancel a deadline on
  * account of a header that did not arrive; only a value that did arrive may
  * move it. See `SESSION_EXPIRES_HEADER` in `api/src/config/security.ts`.
  */
