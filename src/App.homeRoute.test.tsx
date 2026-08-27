@@ -8,7 +8,7 @@
 // comes back 403, and the dashboard reports "no hay conexión con el servidor"
 // for a refusal that is permanent and has nothing to do with the network.
 //
-// A role created from Seguridad starts with all forty cells denied, so the
+// A role created from Seguridad starts with all thirty-two cells denied, so the
 // third case below is not exotic: it is what every new role sees before anybody
 // grants it anything.
 

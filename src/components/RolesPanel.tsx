@@ -22,7 +22,7 @@ import {
  * Creating, renaming and archiving roles.
  *
  * The server has always been able to do all three — `POST /api/rol` even seeds
- * the new role's forty denied cells so it arrives editable — but nothing in the
+ * the new role's thirty-two denied cells so it arrives editable — but nothing in the
  * interface called any of it. `Rol.api.ts` exposed exactly one function, `getRol`,
  * so a role could only be created with a hand-made request, and in practice
  * never was.

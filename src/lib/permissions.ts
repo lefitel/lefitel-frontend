@@ -35,23 +35,30 @@
  * real list with every response, so the Seguridad screen never reads this
  * constant — it is here for `sinPermisos()` and for the types.
  */
+/**
+ * Every action name that exists anywhere — the vocabulary, not the grid.
+ *
+ * Declared before `PERMISOS` so the `satisfies` below can refuse a module that
+ * declares an action this list does not have. Without that tie the constant
+ * accepts any string, which on the server side meant a permission that gets
+ * honoured, cannot be revoked from the screen, and is never drawn.
+ */
+export const ACCIONES = ["ver", "crear", "editar", "archivar"] as const;
+
 export const PERMISOS = {
   postes: ["ver", "crear", "editar", "archivar"],
   eventos: ["ver", "crear", "editar", "archivar"],
   ciudades: ["ver", "crear", "editar", "archivar"],
   parametros: ["ver", "crear", "editar", "archivar"],
+  reportes: ["ver"],
   generador: ["ver", "crear", "editar", "archivar"],
   seguridad: ["ver", "crear", "editar", "archivar"],
   roles: ["ver", "crear", "editar", "archivar"],
   archivos: ["ver", "archivar"],
-  reportes: ["ver"],
   bitacora: ["ver"],
-} as const satisfies Record<string, readonly string[]>;
+} as const satisfies Record<string, readonly (typeof ACCIONES)[number][]>;
 
 export const MODULOS = Object.keys(PERMISOS) as readonly Modulo[];
-
-/** Every action name that exists anywhere — the vocabulary, not the grid. */
-export const ACCIONES = ["ver", "crear", "editar", "archivar"] as const;
 
 export type Modulo = keyof typeof PERMISOS;
 export type Accion = (typeof ACCIONES)[number];

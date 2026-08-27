@@ -202,8 +202,34 @@ export default function PermisosPanel() {
                   // It also keeps the screen from offering a cell the server
                   // would refuse by name — the administrator would be told off
                   // for something this panel put in front of them.
-                  if (!modulo.acciones.includes(accion.key)) {
-                    return <TableCell key={accion.key} className="text-center" />;
+                  // `?? true` rather than `modulo.acciones.includes(...)`: an
+                  // API that predates this field sends `modulos` without it, and
+                  // reading `.includes` off `undefined` throws *during render*.
+                  // There is no ErrorBoundary anywhere in this app, so React
+                  // unmounts the root and the whole thing goes blank — sidebar
+                  // and navigation included, with nothing left to click.
+                  //
+                  // The design only reasoned about the other direction, an old
+                  // bundle against this server, and an audit reproduced this one.
+                  // It is not only a deploy-order mistake either: an API rollback
+                  // with this bundle already in a browser gets there too, and no
+                  // order avoids that.
+                  //
+                  // Falling back to "draw it" is the safe default. The worst case
+                  // is the behaviour that existed before this change — a box the
+                  // server refuses by name — rather than an application that
+                  // disappears.
+                  if (!(modulo.acciones?.includes(accion.key) ?? true)) {
+                    return (
+                      <TableCell key={accion.key} className="text-center">
+                        {/* Not an empty cell: somebody reading the table one cell
+                            at a time hears "blank" and cannot tell "does not
+                            apply here" from "a checkbox failed to render". */}
+                        <span className="text-muted-foreground/40" aria-label="No aplica">
+                          —
+                        </span>
+                      </TableCell>
+                    );
                   }
                   const checked = valueOf(modulo.key, accion.key);
                   const changed = key(modulo.key, accion.key) in pending;

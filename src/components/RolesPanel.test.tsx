@@ -115,7 +115,7 @@ describe("RolesPanel", () => {
   });
 
   it("creates a role and says out loud that it has no permissions yet", async () => {
-    // The server seeds forty denied cells, so a new role can do nothing until
+    // The server seeds thirty-two denied cells, so a new role can do nothing until
     // somebody grants it something. An administrator who does not know that
     // files a bug about the account being broken.
     createRol.mockResolvedValue(200);

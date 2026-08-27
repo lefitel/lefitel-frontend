@@ -133,7 +133,7 @@ describe("the grid takes its shape from the server", () => {
     expect(within(filaDe("Bitácora")).getAllByRole("checkbox")).toHaveLength(1);
   });
 
-  it("leaves the cell empty where the action does not exist", async () => {
+  it("marks the cell as not applicable, with no checkbox in it", async () => {
     // The distinction this whole file exists for, asserted on the cell rather
     // than on the box. A disabled checkbox reads as "not granted yet, somebody
     // enable this" and the administrator waits for it; an empty cell says there
@@ -150,7 +150,11 @@ describe("the grid takes its shape from the server", () => {
     expect(celdas).toHaveLength(5);
     expect(within(celdas[1]).getAllByRole("checkbox")).toHaveLength(1); // Ver
     for (const celda of celdas.slice(2)) {
-      expect(celda).toBeEmptyDOMElement();
+      expect(within(celda).queryByRole("checkbox")).toBeNull();
+      // Not left blank either: somebody reading the table one cell at a time
+      // hears "blank" and cannot tell "does not apply" from "a box failed to
+      // render".
+      expect(within(celda).getByLabelText("No aplica")).toBeInTheDocument();
     }
   });
 });
@@ -173,17 +177,58 @@ describe("what reaches the server", () => {
     // The server refuses `bitacora.archivar` by name now. A screen that could
     // send it would be getting the administrator told off for something it
     // offered them.
+    //
+    // The row is asserted to hold exactly one box *before* anything is clicked,
+    // and the click goes to the last one. The earlier version clicked index 0
+    // and passed with the hole guard deleted — index 0 is `ver` whether the row
+    // has one box or four, so it could never observe the failure it is named
+    // after. An audit caught it by moving the click; this is that move, kept.
     renderPanel();
     await screen.findByText("Bitácora");
     const user = userEvent.setup();
 
     await irAlRolCliente(user);
-    await user.click(within(filaDe("Bitácora")).getAllByRole("checkbox")[0]);
+    const cajas = within(filaDe("Bitácora")).getAllByRole("checkbox");
+    expect(cajas).toHaveLength(1);
+
+    await user.click(cajas[cajas.length - 1]);
     await user.click(screen.getByRole("button", { name: /guardar/i }));
 
     await waitFor(() => expect(savePermisos).toHaveBeenCalled());
     const enviado = savePermisos.mock.calls[0][1] as Record<string, Record<string, boolean>>;
     expect(Object.keys(enviado.bitacora ?? {})).toEqual(["ver"]);
+  });
+
+  it("does not offer to edit the reader's own role", async () => {
+    // The panel opens on the first role the server sent, which is the reader's
+    // own here. The server refuses that with a 409, and offering a box it will
+    // reject is how an administrator learns to distrust the screen.
+    //
+    // Both this and the test below were missing entirely: an audit deleted each
+    // half of `disabled={!puedeEditar || esPropioRol || saving}` in turn and the
+    // six tests here stayed green through both.
+    renderPanel();
+    await screen.findByText("Postes");
+
+    for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
+      expect(caja).toBeDisabled();
+    }
+    expect(screen.getByText(/no puedes cambiarlos/i)).toBeInTheDocument();
+  });
+
+  it("does not offer to edit anything to somebody who may only look", async () => {
+    const solo = sinPermisos();
+    solo.roles.ver = true;
+    setPermisos(MI_ROL, solo);
+    renderPanel();
+    await screen.findByText("Postes");
+    const user = userEvent.setup();
+
+    await irAlRolCliente(user);
+    for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
+      expect(caja).toBeDisabled();
+    }
+    expect(screen.getByText(/solo puedes consultar/i)).toBeInTheDocument();
   });
 
   it("shows the server's refusal instead of inventing one", async () => {
