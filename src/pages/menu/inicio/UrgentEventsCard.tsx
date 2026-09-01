@@ -61,9 +61,6 @@ export function UrgentEventsCard({ urgentEvents, criticalObsEvents, loading }: U
   const [tab, setTab] = useState<Tab>("urgentes");
 
   const events = tab === "urgentes" ? urgentEvents : criticalObsEvents;
-  const level1Count = criticalObsEvents.filter((e) =>
-    (e.eventoObs ?? []).some((eo) => eo.ob?.criticality === 1)
-  ).length;
 
   return (
     <Card className="shadow-sm border-muted/60 flex flex-col h-80 sm:h-105">
@@ -101,9 +98,14 @@ export function UrgentEventsCard({ urgentEvents, criticalObsEvents, loading }: U
               </TabsTrigger>
               <TabsTrigger value="criticos" className="text-xs h-8 gap-1.5">
                 Obs. crítica
-                {!loading && level1Count > 0 && (
-                  <span className="bg-red-500/10 text-red-500 rounded-full px-1.5 py-px text-[10px] font-semibold leading-none">
-                    {level1Count}
+                {/* Its own rows, like the tab beside it. This counted only
+                    level 1 and hid itself at zero, so a list of thirty events
+                    of levels 2 to 9 sat under a tab that read as none.
+                    Catastrophic is still visible where it belongs: the list is
+                    sorted by severity and each row carries its coloured badge. */}
+                {!loading && (
+                  <span className="bg-primary/10 text-primary rounded-full px-1.5 py-px text-[10px] font-semibold leading-none">
+                    {criticalObsEvents.length}
                   </span>
                 )}
               </TabsTrigger>

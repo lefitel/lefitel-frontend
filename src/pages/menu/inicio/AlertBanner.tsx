@@ -46,14 +46,14 @@ export function AlertBanner({ alerts, loading }: AlertBannerProps) {
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
                     <span className="block text-left leading-relaxed normal-case">
-                      Eventos marcados como <strong className="font-semibold">alta prioridad</strong>, sin resolver y con más de <strong className="font-semibold">{alerts.thresholdDays} días</strong> desde su creación.
+                      Eventos marcados como <strong className="font-semibold">alta prioridad</strong>, sin resolver, y cuya fecha del incidente tiene <strong className="font-semibold">{alerts.thresholdDays} días o más</strong>. Esa fecha se elige al registrar, así que un parte antiguo cargado hoy aparece aquí de inmediato.
                     </span>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             </div>
             <p className="text-xs text-muted-foreground">
-              llevan más de {alerts.thresholdDays} días sin atender
+              llevan {alerts.thresholdDays} días o más sin atender
             </p>
           </div>
         </div>

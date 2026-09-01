@@ -47,9 +47,34 @@ export function getPeriodBounds(period: Period) {
   };
 }
 
+/**
+ * Whole days since `date`, floored at zero.
+ *
+ * A date in the future is not "open for minus three days", and the date picker
+ * offers up to ten years ahead with nothing validating it, so the dashboard
+ * really did print "-3 días". That the date can be in the future at all is a
+ * separate problem and belongs in the database, which has no rule against it.
+ */
+function daysSince(date: Date | string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000));
+}
+
+/** The span on its own, to sit in a column: "Hoy", "1 día", "5 días". */
 export function daysOpen(date: Date | string): string {
-  const days = Math.floor((Date.now() - new Date(date).getTime()) / 86_400_000);
+  const days = daysSince(date);
   if (days === 0) return "Hoy";
   if (days === 1) return "1 día";
   return `${days} días`;
+}
+
+/**
+ * The same span as a phrase that reads by itself: "hoy", "hace 5 días".
+ *
+ * For the callers that wanted `hace {…}` around `daysOpen` and got "hace Hoy".
+ */
+export function openedAgo(date: Date | string): string {
+  const days = daysSince(date);
+  if (days === 0) return "hoy";
+  if (days === 1) return "hace 1 día";
+  return `hace ${days} días`;
 }

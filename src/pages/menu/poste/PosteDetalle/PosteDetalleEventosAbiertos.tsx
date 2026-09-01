@@ -6,7 +6,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../../../../components/ui/dropdown-menu";
 import { CheckCircle2Icon, MoreHorizontalIcon } from "lucide-react";
-import { daysOpen } from "../../inicio/helpers";
+import { openedAgo } from "../../inicio/helpers";
 
 export interface EventoActionHandlers {
   onVerDetalle: (id: number) => void;
@@ -114,7 +114,7 @@ function EventoCard({
           <p className="text-xs text-muted-foreground">
             {evento.usuario ? `${evento.usuario.name} ${evento.usuario.lastname}` : "—"}
             <span className="mx-1.5 text-muted-foreground/40">·</span>
-            <span>hace {daysOpen(evento.date)}</span>
+            <span>{openedAgo(evento.date)}</span>
           </p>
         </div>
 
