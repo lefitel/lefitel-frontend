@@ -30,6 +30,7 @@ import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
@@ -334,17 +335,7 @@ const EventoPage = () => {
     };
 
     const columns = useMemo<Col<EventoInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                return (
-                    <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + visibleIndex + 1}</span>
-                );
-            },
-        },
+        rowNumberColumn({ page, pageSize }),
         {
             accessorKey: "description",
             header: "Descripción",

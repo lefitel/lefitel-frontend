@@ -32,6 +32,7 @@ import { CriticalityBadge } from "../../../components/CriticalityBadge";
 import { getEventCriticality } from "../../../lib/criticality";
 import { exportExcelGeneral, exportCsvGeneral, exportPdfGeneral, latestRevision } from "../../../lib/exports/reportGeneral";
 import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── Row color helpers ────────────────────────────────────────────────────────
 
@@ -156,16 +157,7 @@ const ReportGeneralSec = () => {
   };
 
   const columns = useMemo<Col<EventoInterface>[]>(() => [
-    {
-      id: "num",
-      header: "#",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-      },
-    },
+    rowNumberColumn(),
     {
       id: "poste",
       header: "Nmr Poste",

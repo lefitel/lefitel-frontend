@@ -35,6 +35,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { exportExcelTramo, exportCsvTramo, exportPdfTramo } from "../../../lib/exports/reportTramo";
 import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -166,16 +167,7 @@ const ReportTramoSec = () => {
   );
 
   const columns = useMemo<Col<EventoInterface>[]>(() => [
-    {
-      id: "num",
-      header: "#",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-      },
-    },
+    rowNumberColumn(),
     {
       id: "poste",
       header: "Poste",

@@ -32,6 +32,7 @@ import CiudadSheet from "../../../components/dialogs/upsert/CiudadSheet";
 import DataTable from "../../../components/table/DataTable";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 type Tab = "activos" | "archivados";
 
@@ -135,16 +136,7 @@ export default function CiudadesPage() {
   }, [tab, archivedCiudades, loadArchived]);
 
   const columns = useMemo<Col<CiudadInterface>[]>(() => [
-    {
-      id: "num",
-      header: "#",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-      },
-    },
+    rowNumberColumn(),
     {
       accessorKey: "image",
       header: "Foto",
@@ -225,16 +217,7 @@ export default function CiudadesPage() {
   ], [navigate, sesion.usuario.id_rol]);
 
   const archivedColumns = useMemo<Col<CiudadInterface>[]>(() => [
-    {
-      id: "num",
-      header: "#",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-        return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-      },
-    },
+    rowNumberColumn(),
     {
       accessorKey: "image",
       header: "Foto",

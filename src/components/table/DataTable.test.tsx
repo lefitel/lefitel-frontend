@@ -25,6 +25,7 @@ import { render, screen, within, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { SortingState } from "@tanstack/react-table";
 import type { Col } from "./tableFeatures";
+import { rowNumberColumn } from "./rowNumberColumn";
 import DataTable, { type ActiveFilter } from "./DataTable";
 import type { CiudadInterface } from "../../interfaces/interfaces";
 
@@ -266,13 +267,13 @@ describe("DataTable pagination, client side", () => {
    * The row number, which every screen builds the same way and none of them
    * tested.
    *
-   * Fourteen files declare a "#" column whose cell is
-   * `pageIndex * pageSize + visibleIndex + 1` — it has to keep counting across
-   * pages, so page two of fifteen starts at 16 and not back at 1. It reads the
-   * pagination off the table instance, which is the one piece of the v9 move
-   * that changed shape (`getState()` is gone; the controlled slices are read
-   * from `options.state`), so it is covered here once on behalf of all
-   * fourteen.
+   * Twelve screens showed this column, in nineteen copies, until it became
+   * `rowNumberColumn()` — which is what this exercises, so the assertion covers
+   * the code they all now run rather than a copy of it. It has to keep counting
+   * across pages, so page two of fifteen starts at 16 and not back at 1, and it
+   * reads the pagination off the table instance: the one piece of the v9 move
+   * that changed shape, since `getState()` is gone and the controlled slices
+   * come from `options.state`.
    */
   it("numbers the rows continuously across pages, not from one each time", async () => {
     const user = userEvent.setup();
@@ -281,19 +282,7 @@ describe("DataTable pagination, client side", () => {
         data={CIUDADES}
         actions={null}
         initialPageSize={2}
-        columns={[
-          {
-            id: "n",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-              const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-              const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-              return <span>{pageIndex * pageSize + visibleIndex + 1}</span>;
-            },
-          },
-          ...COLUMNS,
-        ]}
+        columns={[rowNumberColumn<CiudadInterface>(), ...COLUMNS]}
       />
     );
 

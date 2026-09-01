@@ -28,6 +28,7 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 interface Props { innerTab: InnerTab; }
 
@@ -223,16 +224,7 @@ const ObsSec = ({ innerTab }: Props) => {
     };
 
     const columns = useMemo<Col<ObsInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-            },
-        },
+        rowNumberColumn(),
         { accessorKey: "name", header: "Nombre" },
         { accessorKey: "description", header: "Descripción" },
         {
@@ -339,16 +331,7 @@ const ObsSec = ({ innerTab }: Props) => {
     ], [openEdit, rol, savingCriticalityIds, handleCriticalityChange, savingTipoObsIds, handleTipoObsChange, tipoObsList]);
 
     const archivedColumns = useMemo<Col<ObsInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-            },
-        },
+        rowNumberColumn(),
         { accessorKey: "name", header: "Nombre" },
         { accessorKey: "description", header: "Descripción" },
         {

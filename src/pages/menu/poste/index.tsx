@@ -32,6 +32,7 @@ import DataTable from "../../../components/table/DataTable";
 import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
@@ -376,17 +377,7 @@ const PostePage = () => {
     };
 
     const columns = useMemo<Col<PosteInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                return (
-                    <span className="text-xs text-muted-foreground">{(page - 1) * pageSize + visibleIndex + 1}</span>
-                );
-            },
-        },
+        rowNumberColumn({ page, pageSize }),
         {
             accessorKey: "name",
             header: "Nombre",

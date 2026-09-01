@@ -14,6 +14,7 @@ import { ChevronDownIcon, InfoIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import DataTable from "../../../components/table/DataTable";
 import { ACTION_LABELS } from "../../../constants/bitacora";
+import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 const ENTITIES = ["Evento", "Poste", "Ciudad", "Material", "Propietario", "Obs", "TipoObs", "Solución", "Revisión", "Usuario", "Adss", "Rol", "File"];
 
@@ -263,16 +264,7 @@ const BitacoraPage = () => {
   };
 
   const columns = useMemo<Col<BitacoraInterface>[]>(() => [
-    {
-      id: "num",
-      header: "#",
-      enableSorting: false,
-      cell: ({ row, table }) => {
-        const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-        const { pageIndex, pageSize: ps } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-        return <span className="text-xs text-muted-foreground">{pageIndex * ps + visibleIndex + 1}</span>;
-      },
-    },
+    rowNumberColumn(),
     {
       accessorKey: "createdAt",
       header: "Fecha",

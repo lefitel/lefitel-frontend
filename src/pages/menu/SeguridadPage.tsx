@@ -32,6 +32,7 @@ import PermisosPanel from "../../components/PermisosPanel";
 import RolesPanel from "../../components/RolesPanel";
 import { ImageLightbox } from "../../components/ui/image-viewer";
 import { maskEmail } from "../../lib/email";
+import { rowNumberColumn } from "../../components/table/rowNumberColumn";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -373,16 +374,7 @@ const SeguridadPage = () => {
     const navigate = useNavigate();
 
     const columns = useMemo<Col<UsuarioInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-            },
-        },
+        rowNumberColumn(),
         {
             accessorKey: "image",
             header: "Foto",
@@ -518,16 +510,7 @@ const SeguridadPage = () => {
     ], [navigate, rol]);
 
     const archivedColumns = useMemo<Col<UsuarioInterface>[]>(() => [
-        {
-            id: "num",
-            header: "#",
-            enableSorting: false,
-            cell: ({ row, table }) => {
-                const visibleIndex = table.getRowModel().rows.findIndex((r) => r.id === row.id);
-                const { pageIndex, pageSize } = table.options.state?.pagination ?? { pageIndex: 0, pageSize: 0 };
-                return <span className="text-xs text-muted-foreground">{pageIndex * pageSize + visibleIndex + 1}</span>;
-            },
-        },
+        rowNumberColumn(),
         {
             accessorKey: "image",
             header: "Foto",
