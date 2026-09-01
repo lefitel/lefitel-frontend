@@ -1184,3 +1184,50 @@ describe("the report taking shape while it is built", () => {
     expect(screen.getByText(/Una fila por cada grupo distinto/)).toBeInTheDocument();
   });
 });
+
+describe("the table scrolls, not the page", () => {
+  it("lets both columns of the layout be narrower than their contents", async () => {
+    // A class check standing in for a layout check, because jsdom has no layout
+    // engine and cannot be asked how wide anything ended up.
+    //
+    // What it guards: a `1fr` track is `minmax(auto, 1fr)`, and that `auto`
+    // minimum is the item's min-content width unless the item is a scroll
+    // container. These are plain divs holding a table whose headers are
+    // `whitespace-nowrap`, so the track grew to the full width of the table,
+    // the grid outgrew the page, and the application's `<main>` — which is
+    // `overflow-auto` — took a horizontal scrollbar. The whole page slid
+    // sideways while the table sat still inside its own scroll box, never
+    // asked to be any narrower.
+    //
+    // Losing `min-w-0` brings all of that back and nothing else fails, which
+    // is why it is worth a test that only reads a class name.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    const grid = document.querySelector<HTMLElement>('[class*="lg:grid-cols-"]');
+    expect(grid).not.toBeNull();
+    const columns = Array.from(grid!.children) as HTMLElement[];
+    expect(columns).toHaveLength(2);
+    for (const column of columns) expect(column.className).toMatch(/\bmin-w-0\b/);
+  });
+
+  it("keeps the table's own scroll box around the table", async () => {
+    // The other half: the column may now be narrower than the table, so
+    // something has to scroll. Without this the table is simply cut off.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(screen.getByText("fila")).toBeInTheDocument());
+
+    const table = screen.getByRole("table");
+    let scrolls = false;
+    for (let el = table.parentElement; el && el !== document.body; el = el.parentElement) {
+      if (/overflow-x-auto|overflow-auto/.test(el.className)) { scrolls = true; break; }
+    }
+    expect(scrolls).toBe(true);
+  });
+});

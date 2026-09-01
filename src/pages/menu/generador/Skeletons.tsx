@@ -206,15 +206,20 @@ export const PageSkeleton = () => (
       <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
     </div>
 
+    {/* `min-w-0` for the reason the real page carries it: a `1fr` track is
+        floored at its item's min-content width, and without this the column
+        holding the table widens the whole page. It is repeated here rather than
+        left out because the skeleton has to sit in the same box the page will,
+        or the layout jumps the moment the catalog lands. */}
     <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
-      <div className="space-y-4">
+      <div className="min-w-0 space-y-4">
         <CardSkeleton title="Reportes guardados" lines={3} />
         <CardSkeleton title="Nivel de detalle" lines={1} />
         <CardSkeleton title="Columnas" lines={3} />
         <CardSkeleton title="Filtros" lines={2} />
       </div>
 
-      <div>
+      <div className="min-w-0">
         <Card className="border-muted/60 shadow-sm">
           <CardHeader className="border-b border-border/40 pb-3">
             <div className="flex flex-wrap items-center justify-between gap-2">

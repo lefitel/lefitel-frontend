@@ -781,9 +781,31 @@ const GeneradorPage = () => {
         </Button>
       </div>
 
+      {/*
+        `min-w-0` on both columns, and it is not decoration.
+
+        A `1fr` track is `minmax(auto, 1fr)`, and that `auto` minimum resolves to
+        the item's automatic minimum size — its min-content width — because a
+        grid item is only floored at zero when it is itself a scroll container,
+        and these are plain divs. The result column holds a table whose headers
+        are `whitespace-nowrap`, so its min-content is the full width of the
+        table: the track grew to fit it, the grid outgrew the page, and the
+        application's `<main>` — which is `overflow-auto` — took the horizontal
+        scrollbar. Everything slid, which reads as the page scrolling sideways.
+
+        The `overflow-x-auto` around the table could not help. It scrolls when it
+        is narrower than its contents, and nothing was ever asking it to be
+        narrower: the track had already widened to accommodate it.
+
+        Zero here lets the track fall back to the space actually available, and
+        the table scrolls inside its own box, which is what it was built to do.
+        The configuration column gets the same for the same reason — its track
+        stops growing at 400px, but an item wider than its track still adds to
+        what the page can scroll.
+      */}
       <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
         {/* ── Configuration ─────────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/*
             First, not last. It used to sit under the filter list, which can be
             a hundred rows tall, so the most frequent task in the page — running
@@ -939,7 +961,7 @@ const GeneradorPage = () => {
         </div>
 
         {/* ── Results ───────────────────────────────────────────────────── */}
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           <Card className="border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
