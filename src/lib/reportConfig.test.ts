@@ -22,6 +22,7 @@ import {
   removeFilter,
   renameColumn,
   sameQuery,
+  sameShape,
   setColumnAgg,
   pruneToCatalog,
   sortLimitReached,
@@ -852,5 +853,67 @@ describe("which side of the cell a value lands on", () => {
   it("keeps the field's own type when nothing is summarised", () => {
     expect(columnKind(evento, { path: "description" })).toBe("string");
     expect(columnKind(evento, { path: "image" })).toBe("image");
+  });
+});
+
+describe("whether the table on screen can still stand for the configuration", () => {
+  const base: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [{ path: "description" }, { path: "date", agg: "max" }],
+  };
+
+  it("a different filter is the same shape", () => {
+    // Same columns in the same order: the rows on screen are still a fair
+    // picture, and taking them away over a keystroke costs the reader the row
+    // they were reading.
+    const filtered: ReportConfig = {
+      ...base,
+      filters: { op: "and", conditions: [{ path: "description", operator: "like", value: "x" }] },
+    };
+    expect(sameShape(base, filtered)).toBe(true);
+  });
+
+  it("a different order is the same shape", () => {
+    expect(sameShape(base, { ...base, sort: [{ path: "description", dir: "asc" }] })).toBe(true);
+  });
+
+  it("a different page is the same shape", () => {
+    expect(sameShape(base, { ...base, offset: 100 })).toBe(true);
+  });
+
+  it("one more column is not", () => {
+    expect(sameShape(base, { ...base, columns: [...base.columns, { path: "state" }] })).toBe(false);
+  });
+
+  it("the same columns in a different order are not", () => {
+    expect(sameShape(base, { ...base, columns: [base.columns[1], base.columns[0]] })).toBe(false);
+  });
+
+  it("a renamed header is not", () => {
+    // The header is what the table shows; an old table under a new name is
+    // showing the wrong thing just as surely as one missing a column.
+    const renamed = [{ ...base.columns[0], label: "Detalle" }, base.columns[1]];
+    expect(sameShape(base, { ...base, columns: renamed })).toBe(false);
+  });
+
+  it("a different summary on the same field is not", () => {
+    const min = [base.columns[0], { path: "date", agg: "min" as const }];
+    expect(sameShape(base, { ...base, columns: min })).toBe(false);
+  });
+
+  it("grouping is not, because it changes what a row is", () => {
+    expect(sameShape(base, { ...base, groupBy: ["description"] })).toBe(false);
+  });
+
+  it("neither is a different level of detail", () => {
+    // The same two paths mean different tables under "evento" and under
+    // "revision": the root decides what one row is.
+    expect(sameShape(base, { ...base, root: "revision" })).toBe(false);
+  });
+
+  it("an absent groupBy and an empty one are the same", () => {
+    // A saved report comes back without the key; the page builds it as [].
+    const { groupBy: _dropped, ...withoutKey } = base;
+    expect(sameShape(withoutKey as ReportConfig, { ...base, groupBy: [] })).toBe(true);
   });
 });

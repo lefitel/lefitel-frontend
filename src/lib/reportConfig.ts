@@ -525,6 +525,28 @@ export function sameQuery(a: ReportConfig, b: ReportConfig): boolean {
  * wolf is a banner nobody reads — and this one is what warns that the rows no
  * longer match the header.
  */
+/**
+ * Whether two configurations would produce a table of the same *shape*.
+ *
+ * Not the same rows — the same columns, in the same order, at the same grain.
+ * It answers one question: can the table already on screen still show what is
+ * being built? Adding a column makes the answer no, and no amount of real data
+ * in the old table helps somebody who is trying to see the new one.
+ *
+ * The root is part of the shape because it decides what a row *is*: the same
+ * two column paths mean different tables under "evento" and under "revision".
+ *
+ * Filters are not, and neither is sorting. A filter changes which rows come
+ * back and a sort changes their order, both leaving every column exactly where
+ * it was — so the rows on screen are still a fair picture of the shape, and
+ * throwing them away over a keystroke in a filter box would cost the reader the
+ * row they were reading.
+ */
+export function sameShape(a: ReportConfig, b: ReportConfig): boolean {
+  return canonical({ root: a.root, columns: a.columns, groupBy: a.groupBy ?? [] })
+    === canonical({ root: b.root, columns: b.columns, groupBy: b.groupBy ?? [] });
+}
+
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object") {

@@ -292,6 +292,34 @@ describe("running a report", () => {
     // With the switch off the table stays where it is, and then the warning is
     // the only thing telling the reader the header above no longer describes
     // the rows below.
+    //
+    // The change here is a sort, which leaves every column exactly where it
+    // was. That matters: this banner only exists for edits the table on screen
+    // can survive, and an edit that changes the shape retires the table instead
+    // (the test below). Driving this one with a new column stopped exercising
+    // the banner at all.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
+    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
+
+    expect(await screen.findByText(/Cambió la configuración/)).toBeInTheDocument();
+    // The rows are still there: they are real, and a different order is still a
+    // fair picture of the same columns.
+    expect(screen.getByText("fila")).toBeInTheDocument();
+    expect(api.runReporte).toHaveBeenCalledTimes(1);
+  });
+
+  it("retires the table when the change is one it cannot show", async () => {
+    // A new column is not a different order — the table simply does not have
+    // it, and no amount of real data in it shows the report being built. So the
+    // shape takes over, and the banner that would say "la tabla muestra el
+    // resultado anterior" above a preview of a different table steps aside.
     const user = userEvent.setup();
     renderPage();
     await ready();
@@ -302,7 +330,11 @@ describe("running a report", () => {
     await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
     await addColumn(user, /Resuelto/);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/Cambió la configuración/);
+    expect(await screen.findByText(/Vista previa/)).toBeInTheDocument();
+    expect(screen.queryByText(/Cambió la configuración/)).not.toBeInTheDocument();
+    // Both columns, including the one the old table never had.
+    expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
+      .toEqual(["Descripción", "Resuelto"]);
     expect(api.runReporte).toHaveBeenCalledTimes(1);
   });
 
@@ -333,7 +365,13 @@ describe("running a report", () => {
     api.runReporte.mockRejectedValueOnce(new Error("fallo"));
     await user.click(screen.getByRole("button", { name: /generar/i }));
 
-    await waitFor(() => expect(screen.queryByRole("table")).not.toBeInTheDocument());
+    // The rows are what must not survive: stale values under a header that no
+    // longer produced them read exactly like an answer. What takes their place
+    // is the preview, which says in as many words that its values are examples
+    // — the same state the screen is in before anything has been run.
+    await waitFor(() => expect(screen.queryByText("fila")).not.toBeInTheDocument());
+    expect(screen.getByText(/Vista previa/)).toBeInTheDocument();
+    expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
     expect(toasts[toasts.length - 1]?.kind).toBe("error");
   });
 
@@ -367,13 +405,18 @@ describe("running a report", () => {
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
 
-    // Edit after generating, then page.
-    await addColumn(user, /Resuelto/);
+    // Edit after generating, then page. The edit is a sort and the switch goes
+    // off first, both on purpose: the table has to still be on screen for there
+    // to be a Siguiente to press, and nothing else may fire a run in between.
+    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
+    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
     await user.click(screen.getByRole("button", { name: /siguiente/i }));
 
     const paged = api.runReporte.mock.calls[api.runReporte.mock.calls.length - 1]?.[0] as ReportConfig;
     expect(paged.offset).toBe(100);
-    expect(paged.columns).toHaveLength(1);   // the configuration that was run
+    // The configuration that was run, which had no sort on it.
+    expect(paged.sort ?? []).toHaveLength(0);
+    expect(paged.columns).toHaveLength(1);
   });
 });
 
@@ -845,18 +888,23 @@ describe("what the screen tells you to press", () => {
     await ready();
     await addColumn(user, /Descripción/);
 
-    // Auto off, so the stale banner is the one thing on screen telling the
+    // Auto off, so whatever is left on screen is the one thing telling the
     // reader what to do next.
     await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
     await user.click(screen.getByRole("button", { name: "Generar" }));
     await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
 
     await addColumn(user, /Resuelto/);
+    await screen.findByText(/Vista previa/);
 
-    const banner = await screen.findByRole("status");
-    expect(banner).toHaveTextContent(/Pulse Generar/);
-    // And it must not name the save button, whose only outcome is overwriting.
-    expect(banner).not.toHaveTextContent(/Pulse Actualizar/);
+    // Read off the whole page rather than one element: the instruction lives in
+    // the banner when the table survives the edit and in the preview strip when
+    // it does not, and in the strip the button's name sits inside its own tag,
+    // so no single element holds the phrase. What must hold across both is that
+    // the screen names the button that runs the report and never names the one
+    // whose only outcome is overwriting a saved report.
+    expect(document.body.textContent).toMatch(/pulse Generar/i);
+    expect(document.body.textContent).not.toMatch(/pulse Actualizar/i);
   });
 
   it("blames the filters only when there are filters", async () => {
@@ -1029,5 +1077,110 @@ describe("what the screen shows while it waits", () => {
     await user.click(screen.getByRole("button", { name: /Siguiente/ }));
 
     expect(screen.getByText("un evento concreto")).toBeInTheDocument();
+  });
+});
+
+describe("the report taking shape while it is built", () => {
+  it("has nothing to show until a column is chosen", async () => {
+    // The invitation now means one thing only: nothing has been picked yet.
+    renderPage();
+    await ready();
+
+    expect(screen.getByText(/Elija las columnas en el panel de configuración/)).toBeInTheDocument();
+    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
+  });
+
+  it("appears with the first column, before anything has been asked for", async () => {
+    // The whole point: the right-hand panel was empty until Generar was
+    // pressed, so choosing a level of detail and six columns happened blind.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    expect(await screen.findByText(/Vista previa/)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Descripción" })).toBeInTheDocument();
+    expect(api.runReporte).not.toHaveBeenCalled();
+  });
+
+  it("grows and reorders with the column list", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+
+    await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
+      .toEqual(["Descripción", "Resuelto"]));
+
+    // Moving a column in the panel moves it in the preview: the order here is
+    // the order of the exported file, and it was previously impossible to see
+    // without generating.
+    await user.click(screen.getByRole("button", { name: "Subir Resuelto" }));
+
+    await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
+      .toEqual(["Resuelto", "Descripción"]));
+    expect(api.runReporte).not.toHaveBeenCalled();
+  });
+
+  it("formats its sample values the way the real table will", async () => {
+    // The reason the placeholders go through `formatValue` and are not just
+    // invented strings: the preview is a promise about the shape *and* the
+    // formatting. A boolean column that previews "true" and returns "Sí" has
+    // taught the reader the wrong thing about their own report.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Resuelto/);
+
+    await screen.findByText(/Vista previa/);
+    const cells = screen.getAllByRole("cell").map((c) => c.textContent);
+    expect(cells.length).toBeGreaterThan(0);
+    for (const cell of cells) expect(["Sí", "No"]).toContain(cell);
+  });
+
+  it("says out loud that the values are not real", async () => {
+    // The one risk of a table full of invented values is somebody quoting one.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    const strip = await screen.findByText(/Vista previa/);
+    expect(strip.parentElement?.textContent).toMatch(/valores son de ejemplo/i);
+    // And it never states a total, which is the one placeholder that would read
+    // as an answer — it is exactly the kind of number this screen produces.
+    expect(screen.queryByText(/Mostrando/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/filas en total/)).not.toBeInTheDocument();
+  });
+
+  it("gives way to the real table as soon as there is one", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await screen.findByText(/Vista previa/);
+
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+
+    await waitFor(() => expect(screen.getByText("fila")).toBeInTheDocument());
+    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
+  });
+
+  it("shows fewer rows once the report groups, because a summary collapses them", async () => {
+    // Grouping is the hardest idea on this screen: it turns a listing into one
+    // row per distinct value. Seeing the row count drop is the cheapest way to
+    // teach it, and it costs nothing to show.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await screen.findByText(/Vista previa/);
+    const listing = screen.getAllByRole("row").length;
+
+    await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
+
+    await waitFor(() => expect(screen.getAllByRole("row").length).toBeLessThan(listing));
+    expect(screen.getByText(/Una fila por cada grupo distinto/)).toBeInTheDocument();
   });
 });

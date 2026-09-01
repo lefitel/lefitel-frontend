@@ -17,8 +17,8 @@ import {
 } from "../../../api/generador.api";
 import {
   addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
-  emptyConfig, filterLimitReached, maxColumns, maxConditions, maxSorts, moveColumn,
-  pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, setColumnAgg,
+  emptyConfig, filterLimitReached, isSummary, maxColumns, maxConditions, maxSorts, moveColumn,
+  pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
 } from "../../../lib/reportConfig";
 import axios from "axios";
@@ -47,6 +47,7 @@ import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
 import PreviewTable from "./PreviewTable";
 import SavedReports from "./SavedReports";
+import ShapePreview from "./ShapePreview";
 import { PageSkeleton, ResultSkeleton } from "./Skeletons";
 
 const GeneradorPage = () => {
@@ -182,6 +183,31 @@ const GeneradorPage = () => {
     () => result !== null && resultConfig !== null && !sameQuery(config, resultConfig),
     [result, resultConfig, config],
   );
+
+  /**
+   * Whether the table on screen can still stand for what is being built.
+   *
+   * Stale is not enough on its own. A changed filter value leaves every column
+   * where it was, so the rows are still a fair picture and taking them away
+   * would cost the reader the row they were reading. Adding, removing, moving
+   * or grouping a column is different in kind: the table simply does not have
+   * that column, and no amount of real data in it shows the one being made.
+   */
+  const shapeChanged = useMemo(
+    () => resultConfig !== null && !sameShape(config, resultConfig),
+    [config, resultConfig],
+  );
+  /** The real table is shown while it still describes the configuration's shape. */
+  const showsResult = result !== null && !shapeChanged;
+  /**
+   * The shape drawn from the configuration alone, with sample values.
+   *
+   * Distinct from the skeleton: grey bars say "the real values are on their
+   * way", and this says "this is the table you are building". The two never
+   * appear at once — a query in flight always wins, because then the values
+   * really are coming.
+   */
+  const previewing = config.columns.length > 0 && !showsResult && !running;
 
   const isMine = current === null || current.id_usuario === currentUserId;
 
@@ -1099,7 +1125,15 @@ const GeneradorPage = () => {
                 switch is off, the configuration cannot be run, or a page click
                 cancelled the refresh.
               */}
-              {stale && !autoPending && (
+              {/*
+                And only while that previous result is the thing on screen. When
+                the shape changed there is no old table any more — there is a
+                preview of the new one — and "la tabla muestra el resultado
+                anterior" printed above it would be describing something the
+                reader cannot see, next to a strip that already says what to
+                press.
+              */}
+              {stale && !autoPending && showsResult && (
                 <div
                   role="status"
                   className="mb-4 flex items-center gap-2 rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground"
@@ -1111,7 +1145,26 @@ const GeneradorPage = () => {
                 </div>
               )}
 
-              {result ? (
+              {/*
+                Four states, in the order that decides between them.
+
+                A query in flight wins over everything, because then the real
+                values genuinely are on their way and grey bars say so. Then the
+                real table, for as long as it still has the shape being built.
+                Then the shape itself, drawn from the configuration with sample
+                values. The invitation is last and now means only one thing:
+                nothing has been chosen yet.
+              */}
+              {running && !showsResult ? (
+                /*
+                  Nothing usable to keep — either the first run, or a run whose
+                  shape the table on screen no longer has. Underneath this used
+                  to sit the invitation below, so for the whole of the first
+                  query the screen answered "elija las columnas y pulse Generar"
+                  to somebody who had just done both.
+                */
+                <ResultSkeleton columns={config.columns} root={root} />
+              ) : showsResult && result ? (
                 <PreviewTable
                   result={result}
                   loading={running}
@@ -1122,21 +1175,15 @@ const GeneradorPage = () => {
                   // being edited: the wording has to describe the result shown.
                   hasFilters={(resultConfig?.filters?.conditions?.length ?? 0) > 0}
                 />
-              ) : running ? (
-                /*
-                  The first run, when there is no previous table to keep.
-                  Underneath this used to sit the invitation below — so for the
-                  whole of the first query the screen answered "elija las
-                  columnas y pulse Generar" to somebody who had just chosen the
-                  columns and pressed Generar.
-
-                  It is drawn from `config.columns`, which is what was sent, so
-                  the headers are already the report's own.
-                */
-                <ResultSkeleton columns={config.columns} root={root} />
+              ) : previewing ? (
+                <ShapePreview
+                  columns={config.columns}
+                  root={root}
+                  grouped={isSummary(config)}
+                />
               ) : (
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  Elija las columnas en el panel de configuración y pulse <strong>Generar</strong> para verlo aquí.
+                  Elija las columnas en el panel de configuración para ir viendo aquí cómo queda el reporte.
                 </p>
               )}
             </CardContent>
