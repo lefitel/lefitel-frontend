@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { SortingState } from "@tanstack/react-table";
@@ -24,7 +24,13 @@ import {
     DropdownMenuSeparator, DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import DataTable from "../../../components/table/DataTable";
+import { SegmentedControl } from "../../../components/ui/segmented-control";
+import {
+    getCriticalityMeta, getEventCriticality,
+    CRITICALITY_BAND_OPTIONS, type CriticalityBand,
+} from "../../../lib/criticality";
+import { CriticalityBadge } from "../../../components/CriticalityBadge";
+import DataTable, { type ActiveFilter } from "../../../components/table/DataTable";
 import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
 import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
@@ -34,7 +40,11 @@ import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── export helpers ───────────────────────────────────────────────────────────
 
-const HEADERS = ["#", "Poste", "Tramo", "Propietario", "Lat", "Lng", "Descripción", "Estado", "Prioritario", "Última revisión", "Observaciones"];
+// "Gravedad" sits between Estado and Prioritario because they are the three
+// facts a reader sorts on, and it must not be mistaken for either: Estado is
+// whether it is closed, Prioritario is a person's manual flag, Gravedad is the
+// worst level among the event's observations.
+const HEADERS = ["#", "Poste", "Tramo", "Propietario", "Lat", "Lng", "Descripción", "Estado", "Gravedad", "Prioritario", "Última revisión", "Observaciones"];
 const PRIMARY: [number, number, number] = [0, 31, 93];
 const ACCENT: [number, number, number] = [240, 244, 255];
 const filename = (ext: string) => {
@@ -45,21 +55,25 @@ const filename = (ext: string) => {
 };
 
 const toRows = (list: EventoInterface[]) =>
-    list.map((e, i) => [
-        String(i + 1),
-        e.poste?.name ?? "",
-        `${e.poste?.ciudadA?.name ?? ""} > ${e.poste?.ciudadB?.name ?? ""}`,
-        e.poste?.propietario?.name ?? "",
-        e.poste?.lat != null ? String(e.poste.lat) : "",
-        e.poste?.lng != null ? String(e.poste.lng) : "",
-        e.description,
-        e.state ? "Resuelto" : "Pendiente",
-        e.priority ? "Sí" : "No",
-        e.revisions?.length
-            ? new Date(Math.max(...e.revisions.map((r) => new Date(r.date).getTime()))).toLocaleDateString("es-ES")
-            : "",
-        e.eventoObs?.map((eo) => eo.ob?.name).filter(Boolean).join(", ") ?? "",
-    ]);
+    list.map((e, i) => {
+        const level = getEventCriticality(e);
+        return [
+            String(i + 1),
+            e.poste?.name ?? "",
+            `${e.poste?.ciudadA?.name ?? ""} > ${e.poste?.ciudadB?.name ?? ""}`,
+            e.poste?.propietario?.name ?? "",
+            e.poste?.lat != null ? String(e.poste.lat) : "",
+            e.poste?.lng != null ? String(e.poste.lng) : "",
+            e.description,
+            e.state ? "Resuelto" : "Pendiente",
+            level != null ? `${level} - ${getCriticalityMeta(level).label}` : "Sin clasificar",
+            e.priority ? "Sí" : "No",
+            e.revisions?.length
+                ? new Date(Math.max(...e.revisions.map((r) => new Date(r.date).getTime()))).toLocaleDateString("es-ES")
+                : "",
+            e.eventoObs?.map((eo) => eo.ob?.name).filter(Boolean).join(", ") ?? "",
+        ];
+    });
 
 const fetchLogo = async () => {
     const res = await fetch(logoUrl);
@@ -107,6 +121,7 @@ const exportExcel = async (list: EventoInterface[]) => {
         { key: "lng", width: 14 },
         { key: "desc", width: 32 },
         { key: "estado", width: 12 },
+        { key: "gravedad", width: 20 },
         { key: "prior", width: 12 },
         { key: "ultima", width: 16 },
         { key: "obs", width: 40 },
@@ -187,18 +202,22 @@ const exportPdf = async (list: EventoInterface[]) => {
         styles: { fontSize: 7, cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 }, valign: "middle", textColor: [30, 40, 60] },
         headStyles: { fillColor: PRIMARY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.5 },
         alternateRowStyles: { fillColor: ACCENT },
+        // Widths sum to 275mm, which is the A4 landscape page minus its 10mm
+        // margins. Adding a column without taking the space from another one
+        // pushes the last one off the sheet.
         columnStyles: {
             0: { cellWidth: 8 }, // #
             1: { cellWidth: 24 }, // Poste
-            2: { cellWidth: 38 }, // Tramo
+            2: { cellWidth: 34 }, // Tramo
             3: { cellWidth: 24 }, // Propietario
             4: { cellWidth: 18 }, // Lat
             5: { cellWidth: 18 }, // Lng
-            6: { cellWidth: 36 }, // Descripción
+            6: { cellWidth: 34 }, // Descripción
             7: { cellWidth: 18 }, // Estado
-            8: { cellWidth: 18 }, // Prioritario
-            9: { cellWidth: 22 }, // Última rev.
-            10: { cellWidth: 35 }, // Observaciones
+            8: { cellWidth: 22 }, // Gravedad
+            9: { cellWidth: 18 }, // Prioritario
+            10: { cellWidth: 22 }, // Última rev.
+            11: { cellWidth: 35 }, // Observaciones
         },
         margin: { left: 10, right: 10 },
         tableLineColor: [208, 216, 239],
@@ -221,6 +240,27 @@ const exportPdf = async (list: EventoInterface[]) => {
 
 type InnerTab = "activos" | "archivados";
 
+// The three questions this screen has to be able to answer, and could not.
+//
+// Filtering and sorting happen on the server, so these are not view state: each
+// one is a round trip. They are separate from the column filter bar because
+// that bar types text, and "prioritario" is not a word anyone should have to
+// spell to find four rows.
+type QuickFilters = {
+    estado: "all" | "pending" | "solved";
+    gravedad: CriticalityBand | "all";
+    prioridad: "all" | "solo";
+};
+
+const NO_QUICK_FILTERS: QuickFilters = { estado: "all", gravedad: "all", prioridad: "all" };
+
+/** The values the API understands. `evento.list.test.ts` pins the other side. */
+const quickToFilters = (q: QuickFilters): ActiveFilter[] => [
+    ...(q.estado !== "all" ? [{ column: "state", value: q.estado }] : []),
+    ...(q.gravedad !== "all" ? [{ column: "criticality", value: q.gravedad }] : []),
+    ...(q.prioridad === "solo" ? [{ column: "priority", value: "true" }] : []),
+];
+
 const EventoPage = () => {
     const { sesion } = useContext(SesionContext);
     const navigate = useNavigate();
@@ -232,8 +272,7 @@ const EventoPage = () => {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
-    const [activeFilters, setActiveFilters] = useState<{ column: string; value: string }[]>([]);
-    const [sorting, setSorting] = useState<SortingState>([]);
+    const [quickFilters, setQuickFilters] = useState<QuickFilters>(NO_QUICK_FILTERS);
 
     const [archivedList, setArchivedList] = useState<EventoInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
@@ -255,15 +294,44 @@ const EventoPage = () => {
     const canAdd = can(rol, "eventos", "crear");
     const canEdit = can(rol, "eventos", "editar");
 
-    const load = useCallback((p = page, ps = pageSize, filters = activeFilters, sort = sorting) => {
-        const sortBy = sort.map(s => s.id);
-        const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
+    // What the server is currently being asked for. It is a ref, not state,
+    // because `load` must stay referentially stable — half a dozen dialogs take
+    // it as their `onSuccess` — while still knowing the live query.
+    //
+    // Its default parameters used to come from the closure of the first render,
+    // so a bare `load()` — which is what every dialog calls after saving, and
+    // what the refresh button calls — always asked for page 1, unfiltered and
+    // unsorted. Resolve one event out of a filtered list and the filter was
+    // gone, with nothing on screen admitting it.
+    const query = useRef({
+        page: 1,
+        pageSize: 15,
+        columnFilters: [] as ActiveFilter[],
+        quick: NO_QUICK_FILTERS,
+        sorting: [] as SortingState,
+    });
+
+    const load = useCallback((next: Partial<typeof query.current> = {}) => {
+        const q = { ...query.current, ...next };
+        query.current = q;
+
+        const filters = [...q.columnFilters, ...quickToFilters(q.quick)];
+        const sortBy = q.sorting.map(s => s.id);
+        const sortOrder = q.sorting.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
+
+        setPageSize(q.pageSize);
         setLoading(true);
-        getEvento({ page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
+        getEvento({ page: q.page, limit: q.pageSize, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar eventos"); setList(null); })
             .finally(() => setLoading(false));
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []);
+
+    const applyQuickFilters = useCallback((next: Partial<QuickFilters>) => {
+        const merged = { ...quickFilters, ...next };
+        setQuickFilters(merged);
+        load({ page: 1, quick: merged });
+    }, [quickFilters, load]);
 
     const loadArchived = useCallback(() => {
         setLoadingArchived(true);
@@ -412,6 +480,25 @@ const EventoPage = () => {
             cell: ({ row }) => row.original.state
                 ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
                 : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>,
+        },
+        {
+            // Severity is not stored on the event: it is the worst — lowest —
+            // level among its observations, resolved the same way here, on the
+            // map, in the reports and in the server's ORDER BY. The column was
+            // missing entirely, which is what made an urgent event unfindable
+            // on the screen an alert points at.
+            id: "criticality",
+            header: "Gravedad",
+            enableColumnFilter: false,
+            // The accessor is what makes `getCanSort()` true: a column with only
+            // an `id` is a display column, and its header would not have
+            // responded to a click. The ordering itself is the server's — the
+            // MIN subquery in `getEvento` — but without this the request is
+            // never sent.
+            accessorFn: (row) => getEventCriticality(row),
+            // Same badge as the other events table (`ReportGeneralSec`) and the
+            // observation catalogue, so one number reads the same everywhere.
+            cell: ({ row }) => <CriticalityBadge level={getEventCriticality(row.original)} compact />,
         },
         {
             id: "fechaResolucion",
@@ -652,18 +739,67 @@ const EventoPage = () => {
             </div>
 
             {innerTab === "activos" && (
+                <>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Estado</span>
+                        <SegmentedControl
+                            size="sm"
+                            ariaLabel="Filtrar por estado"
+                            options={[
+                                { value: "all", label: "Todos" },
+                                { value: "pending", label: "Pendientes" },
+                                { value: "solved", label: "Resueltos" },
+                            ]}
+                            value={quickFilters.estado}
+                            onValueChange={(estado) => applyQuickFilters({ estado })}
+                        />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Gravedad</span>
+                        <SegmentedControl
+                            size="sm"
+                            scrollable
+                            ariaLabel="Filtrar por gravedad"
+                            options={CRITICALITY_BAND_OPTIONS}
+                            value={quickFilters.gravedad}
+                            onValueChange={(gravedad) => applyQuickFilters({ gravedad })}
+                        />
+                    </div>
+                    <SegmentedControl
+                        size="sm"
+                        ariaLabel="Filtrar por prioridad"
+                        options={[
+                            { value: "all", label: "Todas" },
+                            { value: "solo", label: "Solo prioritarias" },
+                        ]}
+                        value={quickFilters.prioridad}
+                        onValueChange={(prioridad) => applyQuickFilters({ prioridad })}
+                    />
+                    {(quickFilters.estado !== "all" || quickFilters.gravedad !== "all" || quickFilters.prioridad !== "all") && (
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs text-muted-foreground"
+                            onClick={() => { setQuickFilters(NO_QUICK_FILTERS); load({ page: 1, quick: NO_QUICK_FILTERS }); }}
+                        >
+                            Quitar filtros
+                        </Button>
+                    )}
+                </div>
+
                 <DataTable
                     data={list}
                     loading={loading}
                     columns={columns}
-                    onRetry={() => load(page, pageSize, activeFilters, sorting)}
+                    onRetry={() => load()}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     serverSide={{
                         total,
-                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, activeFilters, sorting); },
-                        onFilterChange: (filters) => { setActiveFilters(filters); setPage(1); load(1, pageSize, filters, sorting); },
-                        onSortingChange: (s) => { setSorting(s); setPage(1); load(1, pageSize, activeFilters, s); },
+                        onPageChange: (p, ps) => load({ page: p, pageSize: ps }),
+                        onFilterChange: (filters) => load({ page: 1, columnFilters: filters }),
+                        onSortingChange: (s) => load({ page: 1, sorting: s }),
                     }}
                     actions={<>
                         <DropdownMenu>
@@ -702,6 +838,7 @@ const EventoPage = () => {
                         )}
                     </>}
                 />
+                </>
             )}
 
             {innerTab === "archivados" && (

@@ -40,6 +40,8 @@ import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { daysOpen } from "../inicio/helpers";
+import { getCriticalityMeta, getEventCriticality } from "../../../lib/criticality";
+import { CriticalityBadge } from "../../../components/CriticalityBadge";
 
 export default function EventoDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -62,6 +64,12 @@ export default function EventoDetallePage() {
   const isPending = d.evento ? !d.evento.state : false;
   const eventoStatus = computeStatus(d.evento ?? null);
   const eventoCfg = STATUS_CFG[eventoStatus];
+
+  // The event's severity is the worst level among its observations — the same
+  // rule the list, the map and the reports use. This screen showed none of it,
+  // so arriving here from a "crítica" alert told you nothing about how bad the
+  // thing you were looking at was.
+  const criticality = getEventCriticality({ eventoObs: d.eventoObs });
 
   const poste = d.evento?.poste;
   const hasCoords = (poste?.lat ?? 0) !== 0 && (poste?.lng ?? 0) !== 0;
@@ -142,6 +150,16 @@ export default function EventoDetallePage() {
                     <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border-transparent shadow-none">
                       Prioritario
                     </Badge>
+                  )}
+                  {criticality != null && (
+                    <span className="inline-flex items-center gap-1.5">
+                      {/* The word is worth the pixels: the status strip below
+                          calls a manually flagged event "Crítico", and this is
+                          a different fact about a different thing. Which of the
+                          two the word should mean is an open decision. */}
+                      <span className="text-xs text-muted-foreground">Gravedad</span>
+                      <CriticalityBadge level={criticality} />
+                    </span>
                   )}
                 </div>
                 {d.evento?.description && (
@@ -280,15 +298,26 @@ export default function EventoDetallePage() {
                   <div className="px-5 py-4 border-t border-border/40">
                     <p className="text-xs text-muted-foreground mb-2">Observaciones</p>
                     <div className="flex flex-wrap gap-1.5">
-                      {d.eventoObs.map((eo) => (
-                        <Badge
-                          key={eo.id as number}
-                          variant="outline"
-                          className="text-xs font-normal"
-                        >
-                          {eo.ob?.name ?? `Obs. ${eo.id_obs}`}
-                        </Badge>
-                      ))}
+                      {/* Tinted by their own level, so a catastrophic observation
+                          does not sit here looking like the routine one beside
+                          it. Unclassified keeps the plain outline. */}
+                      {d.eventoObs.map((eo) => {
+                        const level = eo.ob?.criticality ?? null;
+                        const meta = getCriticalityMeta(level);
+                        return (
+                          <Badge
+                            key={eo.id as number}
+                            variant="outline"
+                            className={`text-xs font-normal ${level != null ? `${meta.bgClass} ${meta.textClass} ${meta.borderClass}` : ""}`}
+                            title={level != null ? `Gravedad ${level} · ${meta.label}` : "Sin clasificar"}
+                          >
+                            {eo.ob?.name ?? `Obs. ${eo.id_obs}`}
+                            {level != null && (
+                              <span className="ml-1 font-semibold tabular-nums">{level}</span>
+                            )}
+                          </Badge>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

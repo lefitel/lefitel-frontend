@@ -32,7 +32,10 @@ import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet
 import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
-import { getEventCriticality, getCriticalityMeta } from "../../../lib/criticality";
+import {
+    getEventCriticality, getCriticalityMeta, matchesCriticalityBand,
+    CRITICALITY_BAND_OPTIONS, type CriticalityBand,
+} from "../../../lib/criticality";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -68,9 +71,15 @@ const getEventStatusLabel = (e: EventoInterface): string => {
     return "Pendiente";
 };
 
-const exportCsv = (list: EventoInterface[], ciudadA: string, ciudadB: string) => {
+/**
+ * Exports exactly the rows on screen. The button lives in the same header row
+ * as the severity and status filters, so it was handed the unfiltered list:
+ * narrowing the list to three critical events and pressing CSV downloaded all
+ * four hundred, with nothing on screen saying so.
+ */
+const exportCsv = (rowsOnScreen: EventoInterface[], ciudadA: string, ciudadB: string) => {
     const headers = ["Poste", "Descripción", "Fecha", "Criticidad", "Revisiones", "Estado", "Prioridad"];
-    const rows = list.map((e) => {
+    const rows = rowsOnScreen.map((e) => {
         const c = getEventCriticality(e);
         return [
             e.poste?.name ?? "",
@@ -124,7 +133,7 @@ const ReportRecorridoSec = () => {
     const [loading, setLoading] = useState(false);
     const [mapTab, setMapTab] = useState<"eventos" | "postes">("eventos");
     const [estadoFilter, setEstadoFilter] = useState<"all" | "pending" | "solved">("all");
-    const [critFilter, setCritFilter] = useState<"all" | "criticas" | "altas" | "medias" | "bajas" | "sin">("all");
+    const [critFilter, setCritFilter] = useState<CriticalityBand | "all">("all");
     const [routePath, setRoutePath] = useState<[number, number][]>([]);
 
     const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
@@ -227,15 +236,7 @@ const ReportRecorridoSec = () => {
     const filteredList = list.filter((e) => {
         if (estadoFilter === "pending" && e.state) return false;
         if (estadoFilter === "solved" && !e.state) return false;
-        if (critFilter !== "all") {
-            const c = getEventCriticality(e);
-            if (critFilter === "sin" && c != null) return false;
-            if (critFilter === "criticas" && (c == null || c > 3)) return false;
-            if (critFilter === "altas" && (c == null || c < 4 || c > 5)) return false;
-            if (critFilter === "medias" && (c == null || c < 6 || c > 7)) return false;
-            if (critFilter === "bajas" && (c == null || c < 8)) return false;
-        }
-        return true;
+        return matchesCriticalityBand(getEventCriticality(e), critFilter);
     });
 
     // ─── Render ───────────────────────────────────────────────────────────────
@@ -560,14 +561,7 @@ const ReportRecorridoSec = () => {
                                 <CardTitle>Eventos del Tramo</CardTitle>
                                 <div className="flex items-center gap-2 flex-wrap">
                                     <SegmentedControl
-                                        options={[
-                                            { value: "all", label: "Todas" },
-                                            { value: "criticas", label: "Críticas" },
-                                            { value: "altas", label: "Altas" },
-                                            { value: "medias", label: "Medias" },
-                                            { value: "bajas", label: "Bajas" },
-                                            { value: "sin", label: "Sin clasif." },
-                                        ]}
+                                        options={CRITICALITY_BAND_OPTIONS}
                                         value={critFilter}
                                         onValueChange={setCritFilter}
                                         size="sm"
@@ -583,7 +577,14 @@ const ReportRecorridoSec = () => {
                                         onValueChange={setEstadoFilter}
                                         ariaLabel="Filtro de estado de eventos"
                                     />
-                                    <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={() => exportCsv(list, ciudadA.name, ciudadB.name)}>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8 gap-1.5 text-xs"
+                                        disabled={filteredList.length === 0}
+                                        title={`Descargar ${filteredList.length} ${filteredList.length === 1 ? "fila" : "filas"}`}
+                                        onClick={() => exportCsv(filteredList, ciudadA.name, ciudadB.name)}
+                                    >
                                         <DownloadIcon className="h-3.5 w-3.5" />
                                         CSV
                                     </Button>

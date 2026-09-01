@@ -19,7 +19,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, relative } from "node:path";
 
-import { CRITICALITY_LEVELS, getCriticalityMeta, UNCLASSIFIED_META } from "./criticality";
+import {
+  CRITICALITY_BANDS, CRITICALITY_BAND_OPTIONS, CRITICALITY_LEVELS,
+  getCriticalityMeta, matchesCriticalityBand, UNCLASSIFIED_META,
+} from "./criticality";
 
 const SRC = join(__dirname, "..");
 
@@ -92,5 +95,60 @@ describe("getCriticalityMeta", () => {
       // background, which is the reason the file carries both.
       expect(meta.textClass).toMatch(/dark:/);
     }
+  });
+});
+
+// ─── Bandas ───────────────────────────────────────────────────────────────────
+//
+// The bands are the second way the scale used to fork. The screens each wrote
+// the ranges out by hand — `c <= 3` on one, `c >= 4 && c <= 5` on another — so
+// "críticas" was not guaranteed to mean the same rows twice. They are now one
+// list, and `value` is also the literal the API accepts as a filter, which is
+// the part these tests are really guarding: a rename here without the matching
+// rename in `evento.controller.ts` silently returns everything.
+
+describe("las bandas de gravedad", () => {
+  it("cubren los nueve niveles sin huecos ni solapes", () => {
+    const covered = CRITICALITY_BANDS
+      .flatMap((b) => (b.range ? Array.from({ length: b.range[1] - b.range[0] + 1 }, (_, i) => b.range[0] + i) : []))
+      .sort((a, b) => a - b);
+
+    expect(covered).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(new Set(covered).size).toBe(9);
+  });
+
+  it("clasifica cada nivel en una sola banda", () => {
+    for (const { level } of CRITICALITY_LEVELS) {
+      const hits = CRITICALITY_BANDS.filter((b) => matchesCriticalityBand(level, b.value));
+      expect(hits.map((b) => b.value), `nivel ${level}`).toHaveLength(1);
+    }
+  });
+
+  it("«sin clasificar» es la ausencia de nivel, no un rango", () => {
+    expect(matchesCriticalityBand(null, "sin")).toBe(true);
+    expect(matchesCriticalityBand(undefined, "sin")).toBe(true);
+    for (const { level } of CRITICALITY_LEVELS) {
+      expect(matchesCriticalityBand(level, "sin"), `nivel ${level}`).toBe(false);
+    }
+  });
+
+  it("«todas» incluye también lo que no tiene nivel", () => {
+    expect(matchesCriticalityBand(null, "all")).toBe(true);
+    expect(matchesCriticalityBand(1, "all")).toBe(true);
+  });
+
+  it("los valores son los que entiende la API", () => {
+    // Mirrored by CRITICALITY_BANDS in api/src/controllers/evento.controller.ts
+    // and asserted there by evento.list.test.ts. Renaming one side alone turns
+    // the filter into a no-op: the server drops a band it does not know, and
+    // the screen keeps showing every row under a label that promises fewer.
+    expect(CRITICALITY_BANDS.map((b) => b.value))
+      .toEqual(["criticas", "altas", "medias", "bajas", "sin"]);
+  });
+
+  it("el selector empieza por «Todas» y no repite ningún valor", () => {
+    expect(CRITICALITY_BAND_OPTIONS[0].value).toBe("all");
+    const values = CRITICALITY_BAND_OPTIONS.map((o) => o.value);
+    expect(new Set(values).size).toBe(values.length);
   });
 });

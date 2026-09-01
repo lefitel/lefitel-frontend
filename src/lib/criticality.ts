@@ -51,3 +51,48 @@ export function getEventCriticality(event: {
   if (levels.length === 0) return null;
   return Math.min(...levels);
 }
+
+/**
+ * The bands the screens group the nine levels into, defined once.
+ *
+ * Every screen that filters by severity was writing these ranges out again —
+ * `c >= 4 && c <= 5` here, `<= 3` there — which is how the same word came to
+ * cover different rows on different screens. `value` is also the literal the
+ * API expects as a filter (`evento.controller.ts` holds the matching map, and
+ * `evento.list.test.ts` pins it), so the two sides of the wire cannot drift
+ * apart without a test going red.
+ *
+ * `range: null` is "sin clasificar", which is the absence of a level rather
+ * than a range of them — a distinction the SQL has to make too.
+ */
+export const CRITICALITY_BANDS = [
+  { value: "criticas", label: "Críticas", range: [1, 3] },
+  { value: "altas", label: "Altas", range: [4, 5] },
+  { value: "medias", label: "Medias", range: [6, 7] },
+  { value: "bajas", label: "Bajas", range: [8, 9] },
+  { value: "sin", label: "Sin clasif.", range: null },
+] as const satisfies ReadonlyArray<{
+  value: string;
+  label: string;
+  range: readonly [number, number] | null;
+}>;
+
+export type CriticalityBand = (typeof CRITICALITY_BANDS)[number]["value"];
+
+/** Options for a `SegmentedControl`, with "todas" in front. */
+export const CRITICALITY_BAND_OPTIONS = [
+  { value: "all" as const, label: "Todas" },
+  ...CRITICALITY_BANDS.map((b) => ({ value: b.value, label: b.label })),
+];
+
+/** Whether a level falls in a band. `"all"` accepts everything, unclassified included. */
+export function matchesCriticalityBand(
+  level: number | null | undefined,
+  band: CriticalityBand | "all",
+): boolean {
+  if (band === "all") return true;
+  const found = CRITICALITY_BANDS.find((b) => b.value === band);
+  if (!found) return true;
+  if (found.range === null) return level == null;
+  return level != null && level >= found.range[0] && level <= found.range[1];
+}
