@@ -120,12 +120,12 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
         let imagePath = usuario?.image ?? "";
         if (imageFile) {
             const result = await uploadImage(imageFile);
-            if (result === "500") {
-                toast.error("Error al subir la imagen");
+            if (!result.ok) {
+                toast.error(result.message);
                 setSaving(false);
                 return;
             }
-            imagePath = result;
+            imagePath = result.path;
         }
 
         if (isEditing) {

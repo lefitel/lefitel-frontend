@@ -325,17 +325,21 @@ const PerfilPage = () => {
    * anybody's photo and nobody could change their own without the Seguridad
    * permission that screen sits behind.
    *
-   * `uploadImage` answers the string `"500"` instead of throwing, which is why
-   * this compares against it rather than catching: a failed upload that got
-   * saved would set `image` to `"500"` and every avatar in the application
-   * would start asking the server for a file called 500.
+   * `uploadImage` used to answer the string `"500"` for every failure, and the
+   * warning that stood here was about what a caller who forgot to compare
+   * against it would save: `image` set to `"500"`, and every avatar in the
+   * application asking the server for a file called 500. That shape is gone —
+   * a failure is now `{ ok: false }` and cannot be mistaken for a path — and
+   * the message it carries is the server's own, so "la imagen supera el máximo
+   * de 5 MB" reaches the person instead of being flattened into "no se pudo".
    */
   const cambiarFoto = async (file: File): Promise<boolean> => {
-    const path = await uploadImage(file);
-    if (!path || path === "500") {
-      toast.error("No se pudo subir la imagen.");
+    const subida = await uploadImage(file);
+    if (!subida.ok) {
+      toast.error(subida.message);
       return false;
     }
+    const path = subida.path;
     const payload: UsuarioInterface = { ...base(), image: path };
     if (await editUsuario(payload) !== 200) {
       toast.error("No se pudo guardar la foto.");

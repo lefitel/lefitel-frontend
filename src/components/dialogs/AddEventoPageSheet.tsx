@@ -97,11 +97,12 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
 
         setSaving(true);
         try {
-            const uploadResult = await uploadImage(imageFile!);
-            if (uploadResult === "500") {
-                toast.error("No se pudo subir la imagen");
+            const subida = await uploadImage(imageFile!);
+            if (!subida.ok) {
+                toast.error(subida.message);
                 return;
             }
+            const uploadResult = subida.path;
 
             const eventoResult = await createEvento(
                 {

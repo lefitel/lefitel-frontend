@@ -182,7 +182,10 @@ beforeEach(() => {
   getEvento_usuario.mockResolvedValue([]);
   endSession.mockResolvedValue({ status: 200, message: null });
   logoutAllSessions.mockResolvedValue({ status: 200, message: null, cerradas: 0 });
-  uploadImage.mockResolvedValue("/uploads/una-foto.jpg");
+  // `{ ok, path }` and not a bare string: a failed upload used to come back as
+  // the literal "500", which shared its type with a real path and could be
+  // saved as one. See `api/Upload.api.ts`.
+  uploadImage.mockResolvedValue({ ok: true, path: "/uploads/una-foto.jpg" });
   editUsuario.mockResolvedValue(200);
   // As the API really answers it: JSON, so `birthday` is a string and not a
   // `Date`. The screen slices the first ten characters off it to feed the date

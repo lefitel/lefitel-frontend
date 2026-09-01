@@ -69,8 +69,8 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
       let imagePath = ciudad?.image ?? "";
       if (imageFile) {
         const r = await uploadImage(imageFile);
-        if (r === "500") { toast.error("Error al subir la imagen"); return; }
-        imagePath = r;
+        if (!r.ok) { toast.error(r.message); return; }
+        imagePath = r.path;
       }
 
       if (isEditing) {

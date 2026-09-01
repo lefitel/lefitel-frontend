@@ -44,13 +44,13 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
     try {
       let imagePath = "";
       if (imageFile) {
-        const uploadResult = await uploadImage(imageFile);
-        if (uploadResult === "500") {
-          toast.error("No se pudo subir la imagen");
+        const subida = await uploadImage(imageFile);
+        if (!subida.ok) {
+          toast.error(subida.message);
           setSaving(false);
           return;
         }
-        imagePath = uploadResult;
+        imagePath = subida.path;
       }
 
       const status = await resolverEvento(

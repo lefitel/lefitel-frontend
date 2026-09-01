@@ -142,8 +142,8 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
         let imagePath = evento.image;
         if (imageFile) {
           const r = await uploadImage(imageFile);
-          if (r === "500") { toast.error("No se pudo subir la imagen"); return; }
-          imagePath = r;
+          if (!r.ok) { toast.error(r.message); return; }
+          imagePath = r.path;
         }
         const result = await editEvento(
           { ...evento, description, priority, image: imagePath, id_usuario: evento.id_usuario ?? sesion.usuario.id ?? 0, obs_ids: selectedObs }
@@ -151,8 +151,9 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
         if (result.status !== 200) { toast.error("No se pudo guardar el evento"); return; }
         toast.success("Evento actualizado");
       } else {
-        const uploadResult = await uploadImage(imageFile!);
-        if (uploadResult === "500") { toast.error("No se pudo subir la imagen"); return; }
+        const subida = await uploadImage(imageFile!);
+        if (!subida.ok) { toast.error(subida.message); return; }
+        const uploadResult = subida.path;
         const result = await createEvento(
           {
             description,

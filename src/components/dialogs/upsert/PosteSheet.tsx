@@ -180,9 +180,9 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       let payload = { ...data, adss_ids: adssSelected };
 
       if (imageFile) {
-        const imageUrl = await uploadImage(imageFile);
-        if (!imageUrl || imageUrl === "500") { toast.error("No se pudo subir la imagen"); return; }
-        payload = { ...payload, image: imageUrl };
+        const subida = await uploadImage(imageFile);
+        if (!subida.ok) { toast.error(subida.message); return; }
+        payload = { ...payload, image: subida.path };
       }
 
       if (isEditing) {

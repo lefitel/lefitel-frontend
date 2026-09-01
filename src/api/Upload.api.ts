@@ -4,7 +4,42 @@ import { urlApi, urlUpload } from "./url";
 
 const MAX_MB = 4;
 
-export const uploadImage = async (data: File): Promise<string> => {
+/**
+ * What came back from an upload attempt.
+ *
+ * This used to be a bare `string`, with the literal `"500"` standing in for
+ * every failure. Two things were wrong with that, and both are why the shape
+ * changed rather than the message.
+ *
+ * The sentinel shared its type with the answer. Every caller had to remember to
+ * compare against it, and `PerfilPage` carries the note about what happens when
+ * one forgets: the failed upload gets saved, `image` becomes `"500"`, and every
+ * avatar in the application starts asking the server for a file called 500.
+ *
+ * And it threw away what the server said. The API now answers 413 with "la
+ * imagen supera el máximo de 5 MB" where it used to answer 500 with nothing
+ * usable — but a caller that only ever sees `"500"` cannot pass that on, so a
+ * technician in the field is told "no se pudo subir la imagen" for a photograph
+ * they could simply have retaken smaller. The message is the whole point of the
+ * server-side fix; this is what lets it reach a person.
+ */
+export type UploadResult =
+  | { ok: true; path: string }
+  | { ok: false; message: string };
+
+/** What the server said, or something true when it did not answer at all. */
+function motivo(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    const dicho = error.response?.data?.message;
+    if (typeof dicho === "string" && dicho.trim() !== "") return dicho;
+    // No response at all: the request never arrived, which is a different
+    // problem from one the server refused, and worth saying differently.
+    if (!error.response) return "No se pudo conectar con el servidor.";
+  }
+  return "No se pudo subir la imagen.";
+}
+
+export const uploadImage = async (data: File): Promise<UploadResult> => {
   try {
     let file = data;
     if (data.size > MAX_MB * 1024 * 1024) {
@@ -17,8 +52,14 @@ export const uploadImage = async (data: File): Promise<string> => {
     const formData = new FormData();
     formData.append("file", file);
     const response = await axios.post(urlApi + urlUpload, formData);
-    return response.data.path;
-  } catch {
-    return "500";
+    const path = response.data?.path;
+    if (typeof path !== "string" || path === "") {
+      // A 200 with nothing usable in it. Rare, and worth refusing here rather
+      // than letting an empty `image` reach a row.
+      return { ok: false, message: "El servidor no devolvió la imagen guardada." };
+    }
+    return { ok: true, path };
+  } catch (error) {
+    return { ok: false, message: motivo(error) };
   }
 };
