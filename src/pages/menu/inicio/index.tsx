@@ -38,7 +38,7 @@ const InicioPage = () => {
             <ArrowUpRightIcon className="h-3 w-3 opacity-50" />
           </Button>
           {can(rol, "eventos", "crear") && (
-            <Button onClick={() => setOpenAddEvento(true)} className="gap-2 bg-primary hover:bg-primary/90 text-white">
+            <Button onClick={() => setOpenAddEvento(true)} className="gap-2">
               <PlusIcon className="h-4 w-4" />
               <span>Registrar Evento</span>
             </Button>

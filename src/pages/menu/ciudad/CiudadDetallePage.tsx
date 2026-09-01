@@ -489,7 +489,7 @@ function CiudadPopup({
           <div className="border-t border-border/60 -mx-1 mb-2.5" />
           <Button
             size="sm"
-            className="w-full h-7 text-xs bg-primary hover:bg-primary/90 text-white"
+            className="w-full h-7 text-xs"
             onClick={onEditar}
           >
             Editar ciudad
@@ -542,7 +542,7 @@ function PostePopup({
       <div className="border-t border-border/60 -mx-1 mb-2.5" />
       <Button
         size="sm"
-        className="w-full h-7 text-xs bg-primary hover:bg-primary/90 text-white"
+        className="w-full h-7 text-xs"
         onClick={onVer}
       >
         Ver detalle

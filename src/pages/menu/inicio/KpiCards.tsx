@@ -129,13 +129,13 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
 
                 {/* Hero card — Pendientes totales con desglose y tasa global */}
                 <Card
-                  className="shadow-md border-0 transition-all hover:shadow-lg relative overflow-hidden py-0 animate-in fade-in duration-500"
-                  style={{ background: "linear-gradient(135deg, color-mix(in srgb, var(--primary) 75%, black) 0%, var(--primary) 100%)" }}
+                  className="elevation-raised border-0 transition-[filter,box-shadow] hover:brightness-[1.06] relative overflow-hidden py-0 animate-in fade-in duration-500"
+                  style={{ backgroundImage: "var(--gradient-primary)" }}
                 >
                   <CardContent className="p-3 sm:p-5 space-y-2">
                     <div className="flex items-center justify-between gap-1">
                       {loading ? <Skeleton className="h-4 w-48 bg-white/20" /> : (
-                        <p className="text-xs sm:text-sm text-white/60 font-medium leading-tight">Pendientes Totales</p>
+                        <p className="text-xs sm:text-sm text-white/85 font-medium leading-tight">Pendientes Totales</p>
                       )}
                       <div className="p-1.5 sm:p-2 bg-white/10 rounded-full shrink-0">
                         <AlertTriangleIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-white" />
@@ -146,7 +146,7 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                         <span className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
                           <AnimatedNumber value={kpis?.pendGlobal ?? 0} />
                         </span>
-                        <span className="text-sm font-semibold text-white/70">
+                        <span className="text-sm font-semibold text-white/85">
                           <AnimatedNumber value={pctResueltosGlobal} format={(n) => `${n}%`} /> resueltos
                         </span>
                       </div>
@@ -157,7 +157,7 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                       </div>
                     )}
                     {loading ? <Skeleton className="h-4 w-40 bg-white/20" /> : (
-                      <p className="text-xs text-white/60">
+                      <p className="text-xs text-white/85">
                         <AnimatedNumber value={kpis?.pendGlobal ?? 0} /> sin resolver · <AnimatedNumber value={eventosResueltos} /> resueltos
                       </p>
                     )}

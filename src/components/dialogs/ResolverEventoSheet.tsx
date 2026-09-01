@@ -127,7 +127,6 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
           <Button
             onClick={handleSave}
             disabled={saving}
-            className="bg-primary hover:bg-primary/90 text-white"
           >
             {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Marcar como resuelto"}
           </Button>

@@ -199,7 +199,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
           <Button variant="outline" onClick={handleClose} disabled={saving}>
             Cancelar
           </Button>
-          <Button onClick={handleSave} disabled={saving} className="bg-primary hover:bg-primary/90 text-white">
+          <Button onClick={handleSave} disabled={saving}>
             {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : isEditing ? "Guardar" : "Crear ciudad"}
           </Button>
         </SheetFooter>

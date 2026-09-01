@@ -418,7 +418,6 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
               <Button
                 onClick={handleSave}
                 disabled={saving || loading}
-                className="bg-primary hover:bg-primary/90 text-white"
               >
                 {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : isEditing ? "Guardar" : "Crear evento"}
               </Button>

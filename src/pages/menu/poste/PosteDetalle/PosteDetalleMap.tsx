@@ -237,7 +237,7 @@ function CiudadPopup({
           Ver ciudad
         </Button>
         {canEdit && (
-          <Button size="sm" className="flex-1 h-7 text-xs bg-primary hover:bg-primary/90 text-white" onClick={onEditar}>
+          <Button size="sm" className="flex-1 h-7 text-xs" onClick={onEditar}>
             Editar
           </Button>
         )}
@@ -332,7 +332,7 @@ function PostePopup({
           </Button>
         )}
         {canEdit && (
-          <Button size="sm" className={`${isActual ? "w-full" : "flex-1"} h-7 text-xs bg-primary hover:bg-primary/90 text-white`} onClick={onEditar}>
+          <Button size="sm" className={`${isActual ? "w-full" : "flex-1"} h-7 text-xs`} onClick={onEditar}>
             Editar
           </Button>
         )}

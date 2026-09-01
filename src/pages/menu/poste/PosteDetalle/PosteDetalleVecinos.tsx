@@ -58,7 +58,7 @@ export default function PosteDetalleVecinos({ loading, postes, posteActualId, on
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    isActual ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+                    isActual ? "bg-primary-fill text-primary-foreground" : "bg-muted text-muted-foreground"
                   }`}>
                     {i + 1}
                   </span>

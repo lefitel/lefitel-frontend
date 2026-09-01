@@ -57,7 +57,7 @@ export default function PosteDetalleHeader({
         <div className="flex items-center gap-2 shrink-0">
           {canCreateEvento && (
             <Button
-              className="gap-1.5 bg-primary hover:bg-primary/90 text-white"
+              className="gap-1.5"
               onClick={onNuevoEvento}
               disabled={loading || !poste}
             >

@@ -5,21 +5,21 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[filter,box-shadow,background-color,color] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 active:translate-y-px",
   {
     variants: {
       variant: {
         default:
-          "bg-primary text-primary-foreground shadow hover:bg-primary/90",
+          "bg-[image:var(--gradient-primary)] text-primary-foreground elevation-raised hover:brightness-[1.07] active:brightness-95",
         destructive:
-          "bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90",
+          "bg-[image:var(--gradient-destructive)] text-destructive-foreground elevation-raised hover:brightness-[1.07] active:brightness-95",
         outline:
-          "border border-input bg-background shadow-sm hover:bg-accent hover:text-accent-foreground",
+          "border border-input bg-[image:var(--gradient-surface)] elevation-surface hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
         secondary:
-          "bg-secondary text-secondary-foreground shadow-sm hover:bg-secondary/80",
+          "bg-[image:var(--gradient-secondary)] text-secondary-foreground elevation-surface hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        outlineGray: "border border-input bg-background shadow-sm hover:bg-muted hover:text-foreground",
+        outlineGray: "border border-input bg-[image:var(--gradient-surface)] elevation-surface hover:bg-none hover:bg-muted hover:text-foreground",
       },
       size: {
         default: "h-9 px-4 py-2",

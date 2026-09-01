@@ -465,7 +465,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
               Cancelar
             </Button>
             {(!isEditing || canEdit) && (
-              <Button onClick={handleGuardar} disabled={saving || loadingData} className="bg-primary hover:bg-primary/90 text-white">
+              <Button onClick={handleGuardar} disabled={saving || loadingData}>
                 {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
               </Button>
             )}
