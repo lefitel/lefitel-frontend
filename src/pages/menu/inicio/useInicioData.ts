@@ -34,7 +34,13 @@ export interface InicioData {
   mapTab: MapTab;
   setMapTab: (t: MapTab) => void;
   kpis: KpiData | null;
-  chartData: { label: string; pending: number; solved: number }[];
+  /**
+   * Dos flujos por tramo de tiempo: cuántas averías ENTRARON, por su propia
+   * fecha, y cuántas se repararon (SALIERON), por la fecha de su solución.
+   * Ninguna de las dos mira el estado actual del evento: si lo hicieran,
+   * uno cerrado desaparecería del mes en que entró.
+   */
+  chartData: { label: string; entraron: number; salieron: number }[];
   xAxisLabel: string;
   showTrend: boolean;
   urgentEvents: DashboardEvento[];
@@ -51,6 +57,22 @@ export interface InicioData {
 const getSolDate = (e: DashboardEvento): Date | null => {
   const d = e.solucions?.[0]?.date;
   return d ? new Date(d) : null;
+};
+
+/** Los meses naturales que van de `desde` a `hasta`, ambos incluidos. */
+const mesesEntre = (desde: Date, hasta: Date): { label: string; month: number; year: number }[] => {
+  const out: { label: string; month: number; year: number }[] = [];
+  let cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
+  const fin = new Date(hasta.getFullYear(), hasta.getMonth(), 1);
+  while (cursor <= fin) {
+    out.push({
+      label: `${MONTH_NAMES[cursor.getMonth()]} '${String(cursor.getFullYear()).slice(2)}`,
+      month: cursor.getMonth(),
+      year: cursor.getFullYear(),
+    });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return out;
 };
 
 export function useInicioData(): InicioData {
@@ -164,86 +186,94 @@ export function useInicioData(): InicioData {
     };
   }, [listEventos, listPostes, bounds, period]);
 
+  // ── Actividad: dos flujos, una sola regla ──────────────────────────────────
+  //
+  // ENTRARON se cuenta por `evento.date` y SALIERON por la fecha de la solución,
+  // y ninguna de las dos mira `state`. Antes las entradas se contaban dentro de
+  // un `if (!e.state)`, así que un evento cerrado desaparecía del tramo en que
+  // había entrado: en 2026, enero recibió 196 averías y el gráfico dibujaba 160.
+  //
+  // Y la regla estaba escrita ocho veces, no siempre igual — en unas vistas las
+  // salidas colgaban del `else` de esa condición y en otras se contaban aparte,
+  // de modo que el mismo evento podía salir resuelto en una vista y pendiente en
+  // otra. Escribirla una sola vez es lo que impide que vuelvan a separarse.
   const chartData = useMemo(() => {
     if (!listEventos) return [];
+
+    /** Averías nacidas en [desde, hasta). Su estado de hoy no cambia cuándo entró. */
+    const entraronEntre = (desde: number, hasta: number) =>
+      listEventos.filter((e) => {
+        const t = new Date(e.date).getTime();
+        return !isNaN(t) && t >= desde && t < hasta;
+      }).length;
+
+    /** Reparaciones hechas en [desde, hasta), por la fecha de la solución. */
+    const salieronEntre = (desde: number, hasta: number) =>
+      listEventos.filter((e) => {
+        const d = getSolDate(e);
+        return !!d && d.getTime() >= desde && d.getTime() < hasta;
+      }).length;
+
+    const tramo = (label: string, desde: number, hasta: number) => ({
+      label,
+      entraron: entraronEntre(desde, hasta),
+      salieron: salieronEntre(desde, hasta),
+    });
+
+    /** Un mes natural completo, de su día 1 al día 1 del siguiente. */
+    const tramoMes = (label: string, year: number, month: number) =>
+      tramo(label, new Date(year, month, 1).getTime(), new Date(year, month + 1, 1).getTime());
+
+    const tramoDia = (day: Date) => {
+      const inicio = new Date(day);
+      inicio.setHours(0, 0, 0, 0);
+      const ms = inicio.getTime();
+      return tramo(`${inicio.getDate()}/${inicio.getMonth() + 1}`, ms, ms + 86_400_000);
+    };
+
     if (period === "fortnight") {
       return Array.from({ length: 15 }, (_, i) => {
         const day = new Date(bounds.start);
         day.setDate(day.getDate() + i);
-        const dayStart = day.getTime();
-        const dayEnd = dayStart + 86_400_000;
-        let pending = 0, solved = 0;
-        listEventos.forEach((e) => {
-          if (!e.state) {
-            const t = new Date(e.date).getTime();
-            if (t >= dayStart && t < dayEnd) pending++;
-          } else {
-            const d = getSolDate(e);
-            if (d && d.getTime() >= dayStart && d.getTime() < dayEnd) solved++;
-          }
-        });
-        return { label: `${day.getDate()}/${day.getMonth() + 1}`, pending, solved };
+        return tramoDia(day);
       });
     }
+
     if (period === "month") {
       const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
       return Array.from({ length: daysInMonth }, (_, i) => {
-        const day = i + 1;
-        let pending = 0, solved = 0;
-        listEventos.forEach((e) => {
-          if (!e.state) {
-            const d = new Date(e.date);
-            if (d.getDate() === day && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) pending++;
-          } else {
-            const d = getSolDate(e);
-            if (d && d.getDate() === day && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) solved++;
-          }
-        });
-        return { label: day.toString(), pending, solved };
+        const day = new Date(now.getFullYear(), now.getMonth(), i + 1);
+        const ms = day.getTime();
+        return tramo((i + 1).toString(), ms, ms + 86_400_000);
       });
     }
+
     if (period === "quarter") {
       return [0, 1, 2].map((i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - 2 + i, 1);
-        const month = d.getMonth(), year = d.getFullYear();
-        return {
-          label: MONTH_NAMES[month],
-          pending: listEventos.filter((e) => { const dd = new Date(e.date); return !e.state && dd.getMonth() === month && dd.getFullYear() === year; }).length,
-          solved: listEventos.filter((e) => { const dd = getSolDate(e); return !!dd && dd.getMonth() === month && dd.getFullYear() === year; }).length,
-        };
+        return tramoMes(MONTH_NAMES[d.getMonth()], d.getFullYear(), d.getMonth());
       });
     }
+
     if (period === "year") {
-      return Array.from({ length: 12 }, (_, m) => ({
-        label: MONTH_NAMES[m],
-        pending: listEventos.filter((e) => { const d = new Date(e.date); return !e.state && d.getMonth() === m && d.getFullYear() === now.getFullYear(); }).length,
-        solved: listEventos.filter((e) => { const d = getSolDate(e); return !!d && d.getMonth() === m && d.getFullYear() === now.getFullYear(); }).length,
-      }));
+      return Array.from({ length: 12 }, (_, m) =>
+        tramoMes(MONTH_NAMES[m], now.getFullYear(), m)
+      );
     }
+
     if (period === "custom") {
       const diffDays = Math.ceil((customRange.end.getTime() - customRange.start.getTime()) / 86_400_000);
+
       if (diffDays <= 90) {
-        // daily
         return Array.from({ length: diffDays + 1 }, (_, i) => {
           const day = new Date(customRange.start);
           day.setDate(day.getDate() + i);
-          const dayStart = day.getTime();
-          const dayEnd = dayStart + 86_400_000;
-          let pending = 0, solved = 0;
-          listEventos.forEach((e) => {
-            if (!e.state) {
-              const t = new Date(e.date).getTime();
-              if (t >= dayStart && t < dayEnd) pending++;
-            } else {
-              const d = getSolDate(e);
-              if (d && d.getTime() >= dayStart && d.getTime() < dayEnd) solved++;
-            }
-          });
-          return { label: `${day.getDate()}/${day.getMonth() + 1}`, pending, solved };
+          return tramoDia(day);
         });
       }
+
       if (diffDays <= 365) {
-        // weekly — always ≥ 13 points for ranges > 90 days
+        // Semanal — siempre ≥ 13 puntos para rangos de más de 90 días.
         const weeks = Math.ceil((diffDays + 1) / 7);
         return Array.from({ length: weeks }, (_, i) => {
           const weekStart = new Date(customRange.start);
@@ -251,49 +281,22 @@ export function useInicioData(): InicioData {
           weekStart.setHours(0, 0, 0, 0);
           const ws = weekStart.getTime();
           const we = Math.min(ws + 7 * 86_400_000, customRange.end.getTime() + 86_400_000);
-          let pending = 0, solved = 0;
-          listEventos.forEach((e) => {
-            if (!e.state) {
-              const t = new Date(e.date).getTime();
-              if (t >= ws && t < we) pending++;
-            } else {
-              const d = getSolDate(e);
-              if (d && d.getTime() >= ws && d.getTime() < we) solved++;
-            }
-          });
-          return { label: `${weekStart.getDate()}/${weekStart.getMonth() + 1}`, pending, solved };
+          return tramo(`${weekStart.getDate()}/${weekStart.getMonth() + 1}`, ws, we);
         });
       }
-      // monthly for ranges > 1 year
-      const months: { label: string; month: number; year: number }[] = [];
-      let cursor = new Date(customRange.start.getFullYear(), customRange.start.getMonth(), 1);
-      const endCursor = new Date(customRange.end.getFullYear(), customRange.end.getMonth(), 1);
-      while (cursor <= endCursor) {
-        months.push({ label: `${MONTH_NAMES[cursor.getMonth()]} '${String(cursor.getFullYear()).slice(2)}`, month: cursor.getMonth(), year: cursor.getFullYear() });
-        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-      }
-      return months.map(({ label, month, year }) => ({
-        label,
-        pending: listEventos.filter((e) => { const d = new Date(e.date); return !e.state && d.getMonth() === month && d.getFullYear() === year; }).length,
-        solved: listEventos.filter((e) => { const d = getSolDate(e); return !!d && d.getMonth() === month && d.getFullYear() === year; }).length,
-      }));
+
+      return mesesEntre(customRange.start, customRange.end).map(({ label, month, year }) =>
+        tramoMes(label, year, month)
+      );
     }
-    // "all"
+
+    // "all" — desde la avería más antigua que no sea anterior al sistema.
     const systemStart = new Date(2020, 0, 1).getTime();
     const allMs = listEventos.map((e) => new Date(e.date).getTime()).filter((ms) => !isNaN(ms) && ms >= systemStart);
     const earliest = allMs.length > 0 ? new Date(Math.min(...allMs)) : new Date(2020, 0, 1);
-    const months: { label: string; month: number; year: number }[] = [];
-    let cursor = new Date(earliest.getFullYear(), earliest.getMonth(), 1);
-    const endCursor = new Date(bounds.end.getFullYear(), bounds.end.getMonth(), 1);
-    while (cursor <= endCursor) {
-      months.push({ label: `${MONTH_NAMES[cursor.getMonth()]} '${String(cursor.getFullYear()).slice(2)}`, month: cursor.getMonth(), year: cursor.getFullYear() });
-      cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-    }
-    return months.map(({ label, month, year }) => ({
-      label,
-      pending: listEventos.filter((e) => { const d = new Date(e.date); return !e.state && d.getMonth() === month && d.getFullYear() === year; }).length,
-      solved: listEventos.filter((e) => { const d = getSolDate(e); return !!d && d.getMonth() === month && d.getFullYear() === year; }).length,
-    }));
+    return mesesEntre(earliest, bounds.end).map(({ label, month, year }) =>
+      tramoMes(label, year, month)
+    );
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listEventos, period, bounds]);
 

@@ -13,7 +13,7 @@
 // and their difference could go negative.
 
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { PropsWithChildren } from "react";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
 import type { SesionInterface } from "../../../interfaces/interfaces";
@@ -143,6 +143,107 @@ describe("useInicioData", () => {
       const k = result.current.kpis!;
       expect(k.postesConEventos).toBe(1);
       expect(k.postesConEventos).toBeLessThanOrEqual(k.postesTotal);
+    });
+  });
+
+  // ── El gráfico de Actividad ────────────────────────────────────────────────
+  //
+  // Las dos barras contaban poblaciones distintas: `pending` se agrupaba por la
+  // fecha del evento y `solved` por la de su solución. Un evento de enero
+  // cerrado en marzo desaparecía de enero y reaparecía en marzo, así que la
+  // barra de enero no era "lo que entró en enero" ni "lo que sigue abierto de
+  // enero": era la resta de las dos cosas. Medido sobre la base real, 627 de
+  // 937 eventos cerrados (el 67%) cierran en un mes distinto al de su alta.
+  //
+  // En febrero de 2026 entraron 15 eventos y el gráfico dibujaba 8 + 33.
+  //
+  // Ahora son dos flujos: cuántas averías entraron y cuántas se repararon, cada
+  // una en su fecha y sin mirar el estado actual del evento. Eso es lo que hace
+  // que el modo Balance signifique algo.
+  describe("el gráfico de actividad", () => {
+    const ESTE_ANIO = new Date().getFullYear();
+
+    /** Un evento nacido en `mes`, reparado en `mesCierre` si se indica. */
+    function eventoDeMes(id: number, mes: number, mesCierre?: number): DashboardEvento {
+      const cerrado = mesCierre !== undefined;
+      return {
+        ...evento(id, 10),
+        state: cerrado,
+        date: new Date(ESTE_ANIO, mes, 10) as unknown as Date,
+        solucions: cerrado
+          ? [{ date: new Date(ESTE_ANIO, mesCierre, 10) } as unknown as never]
+          : [],
+      };
+    }
+
+    it("un evento cerrado sigue contando en el mes en que entró", async () => {
+      // Entra en enero, se repara en marzo. Enero no puede perderlo.
+      getDashboard.mockResolvedValue({ eventos: [eventoDeMes(1, 0, 2)], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("year"));
+      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      // período por defecto y el test leía otra vista.
+      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+
+      expect(result.current.chartData[0].entraron).toBe(1);
+    });
+
+    it("la reparación cuenta en el mes en que se reparó", async () => {
+      getDashboard.mockResolvedValue({ eventos: [eventoDeMes(1, 0, 2)], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("year"));
+      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      // período por defecto y el test leía otra vista.
+      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+
+      expect(result.current.chartData[2].salieron).toBe(1);
+      // Y no se cuenta como salida en el mes en que entró.
+      expect(result.current.chartData[0].salieron).toBe(0);
+    });
+
+    it("las entradas del mes son todas, no solo las que siguen abiertas", async () => {
+      // Tres entran en enero; dos se reparan en marzo. Enero entraron = 3.
+      getDashboard.mockResolvedValue({
+        eventos: [eventoDeMes(1, 0, 2), eventoDeMes(2, 0, 2), eventoDeMes(3, 0)],
+        postes: [poste(10)],
+      });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("year"));
+      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      // período por defecto y el test leía otra vista.
+      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+
+      expect(result.current.chartData[0].entraron).toBe(3);
+      expect(result.current.chartData[2].salieron).toBe(2);
+    });
+
+    it("cuenta igual en las vistas por día que en las vistas por mes", async () => {
+      // La regla estaba escrita de dos formas: unas vistas contaban las salidas
+      // dentro del `else` de "si no está resuelto", otras las contaban aparte.
+      // Un evento cerrado, en las primeras, no podía contar como entrada nunca.
+      const hoy = new Date();
+      const cerradoHoy = {
+        ...evento(1, 10),
+        state: true,
+        date: hoy as unknown as Date,
+        solucions: [{ date: hoy } as unknown as never],
+      };
+      getDashboard.mockResolvedValue({ eventos: [cerradoHoy], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("fortnight"));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(15));
+
+      const ultimo = result.current.chartData[result.current.chartData.length - 1];
+      expect(ultimo.entraron).toBe(1);
+      expect(ultimo.salieron).toBe(1);
     });
   });
 });

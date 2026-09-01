@@ -18,9 +18,9 @@ import { Period } from "./types";
 type ChartType = "area" | "composed" | "bar" | "balance";
 
 const chartConfig = {
-  pending: { label: "Pendientes", color: "var(--chart-1)" },
-  solved:  { label: "Solucionados", color: "var(--primary)" },
-  net:     { label: "Balance", color: "var(--primary)" },
+  entraron: { label: "Entraron", color: "var(--chart-1)" },
+  salieron: { label: "Se repararon", color: "var(--primary)" },
+  net:      { label: "Balance", color: "var(--primary)" },
 } satisfies ChartConfig;
 
 const CHART_TYPES: { type: ChartType; icon: typeof AreaChartIcon; label: string }[] = [
@@ -33,7 +33,7 @@ const CHART_TYPES: { type: ChartType; icon: typeof AreaChartIcon; label: string 
 const SHORT_PERIODS: Period[] = ["fortnight", "month"];
 
 interface ActivityChartProps {
-  chartData: { label: string; pending: number; solved: number }[];
+  chartData: { label: string; entraron: number; salieron: number }[];
   loading: boolean;
   xAxisLabel: string;
   period: Period;
@@ -44,7 +44,7 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
   const showDots = SHORT_PERIODS.includes(period);
 
   const netData = useMemo(
-    () => chartData.map(d => ({ ...d, net: d.solved - d.pending })),
+    () => chartData.map(d => ({ ...d, net: d.salieron - d.entraron })),
     [chartData]
   );
 
@@ -74,18 +74,21 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
                   <TooltipContent side="bottom" className="max-w-sm">
                     {isBalance ? (
                       <span className="block text-left leading-relaxed normal-case">
-                        <strong className="font-semibold">Balance por período:</strong> solucionados − pendientes.
-                        <span className="block mt-1 text-emerald-500 font-medium">Verde — se resolvió más de lo que entró.</span>
-                        <span className="block text-rose-500 font-medium">Rojo — el backlog creció.</span>
+                        <strong className="font-semibold">Balance del tramo:</strong> reparadas − entradas.
+                        <span className="block mt-1 text-emerald-500 font-medium">Verde — se reparó más de lo que entró: la cola de averías bajó.</span>
+                        <span className="block text-rose-500 font-medium">Rojo — entró más de lo que se reparó: la cola creció.</span>
                       </span>
                     ) : (
                       <span className="block text-left leading-relaxed normal-case">
-                        Eventos <strong className="font-semibold">creados</strong> en el período, agrupados por su estado actual:
+                        Dos cuentas independientes, cada una en su propia fecha:
                         <span className="block mt-1">
-                          <strong className="font-semibold">Pendientes</strong> — sin resolver al día de hoy.
+                          <strong className="font-semibold">Entraron</strong> — averías registradas en ese tramo, estén hoy reparadas o no.
                         </span>
                         <span className="block">
-                          <strong className="font-semibold">Solucionados</strong> — ya resueltos.
+                          <strong className="font-semibold">Se repararon</strong> — reparaciones hechas en ese tramo, sin importar cuándo apareció la avería.
+                        </span>
+                        <span className="block mt-1 text-muted-foreground">
+                          Una avería de enero reparada en marzo cuenta en enero y en marzo, cada vez en su columna.
                         </span>
                       </span>
                     )}
@@ -113,11 +116,11 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
                 <>
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: "var(--chart-1)" }} />
-                    Pendientes
+                    Entraron
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="inline-block w-2 h-2 rounded-full bg-primary" />
-                    Solucionados
+                    Se repararon
                   </span>
                 </>
               )}
@@ -150,21 +153,21 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
             {chartType === "area" ? (
               <RechartsAreaChart accessibilityLayer data={chartData} margin={{ left: 0, right: 12, top: 12 }}>
                 <defs>
-                  <linearGradient id="grad-pending" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="var(--color-pending)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="var(--color-pending)" stopOpacity={0} />
+                  <linearGradient id="grad-entraron" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="var(--color-entraron)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--color-entraron)" stopOpacity={0} />
                   </linearGradient>
-                  <linearGradient id="grad-solved" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%"  stopColor="var(--color-solved)" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="var(--color-solved)" stopOpacity={0} />
+                  <linearGradient id="grad-salieron" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%"  stopColor="var(--color-salieron)" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="var(--color-salieron)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 {commonAxisProps.grid}
                 {commonAxisProps.xAxis}
                 {commonAxisProps.yAxis}
                 {commonAxisProps.tooltip}
-                <Area dataKey="pending" type="monotone" stroke="var(--color-pending)" strokeWidth={2} fill="url(#grad-pending)" dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
-                <Area dataKey="solved"  type="monotone" stroke="var(--color-solved)"  strokeWidth={2} fill="url(#grad-solved)"  dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
+                <Area dataKey="entraron" type="monotone" stroke="var(--color-entraron)" strokeWidth={2} fill="url(#grad-entraron)" dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
+                <Area dataKey="salieron"  type="monotone" stroke="var(--color-salieron)"  strokeWidth={2} fill="url(#grad-salieron)"  dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
               </RechartsAreaChart>
             ) : chartType === "composed" ? (
               <ComposedChart accessibilityLayer data={chartData} margin={{ left: 0, right: 12, top: 12 }} barCategoryGap="35%">
@@ -172,8 +175,8 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
                 {commonAxisProps.xAxis}
                 {commonAxisProps.yAxis}
                 {commonAxisProps.tooltip}
-                <Bar dataKey="pending" fill="var(--color-pending)" radius={[3, 3, 0, 0]} opacity={0.85} />
-                <Line dataKey="solved" type="monotone" stroke="var(--color-solved)" strokeWidth={2} dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
+                <Bar dataKey="entraron" fill="var(--color-entraron)" radius={[3, 3, 0, 0]} opacity={0.85} />
+                <Line dataKey="salieron" type="monotone" stroke="var(--color-salieron)" strokeWidth={2} dot={showDots ? { r: 2.5 } : false} activeDot={{ r: 4 }} />
               </ComposedChart>
             ) : chartType === "bar" ? (
               <RechartsBarChart accessibilityLayer data={chartData} margin={{ left: 0, right: 12, top: 12 }} barCategoryGap="30%">
@@ -181,8 +184,8 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
                 {commonAxisProps.xAxis}
                 {commonAxisProps.yAxis}
                 {commonAxisProps.tooltip}
-                <Bar dataKey="pending" stackId="stack" fill="var(--color-pending)" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="solved"  stackId="stack" fill="var(--color-solved)"  radius={[3, 3, 0, 0]} />
+                <Bar dataKey="entraron" stackId="stack" fill="var(--color-entraron)" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="salieron"  stackId="stack" fill="var(--color-salieron)"  radius={[3, 3, 0, 0]} />
               </RechartsBarChart>
             ) : (
               <RechartsBarChart accessibilityLayer data={netData} margin={{ left: 0, right: 12, top: 12 }} barCategoryGap="30%">

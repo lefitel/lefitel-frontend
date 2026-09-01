@@ -53,10 +53,22 @@ export interface TiempoTramoRow {
   ciudadBId: number | null;
   ciudadAName: string;
   ciudadBName: string;
+  /** Eventos que entran en el promedio, ya sin los descartados. */
   count: number;
   avgDias: number;
   minDias: number;
   maxDias: number;
+  /** Visitas de media que costó cerrar cada evento del tramo. */
+  avgVisitas: number;
+}
+
+export interface TiemposResumen {
+  tramos: TiempoTramoRow[];
+  /**
+   * Eventos dejados fuera por tener la reparación fechada antes que la avería.
+   * Se informan en vez de contarse como cero días, que es lo que hacían antes.
+   */
+  descartados: number;
 }
 
 export const getEstadoRed = (
@@ -77,7 +89,7 @@ export const getObsFrecuencia = (
 
 export const getTiemposResumen = (
   filtro: { fechaInicial: Date; fechaFinal: Date }
-): Promise<TiempoTramoRow[]> => {
+): Promise<TiemposResumen> => {
   return axios
     .put(urlApi + urlReporte + "tiempos-resumen", filtro)
     .then((r) => r.data);

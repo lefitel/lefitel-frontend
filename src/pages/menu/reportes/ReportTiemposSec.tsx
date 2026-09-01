@@ -10,8 +10,20 @@ import { Label } from "../../../components/ui/label";
 import { ChevronRightIcon, Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
 
-const diasColor = (d: number) =>
-  d <= 1 ? "text-green-600" : d <= 7 ? "text-amber-600" : "text-red-600";
+// Bandas fijadas por Isaias sobre la cifra real: la mediana de la red es de 31
+// días. Con las viejas (1 y 7) todo salía rojo y el color dejaba de informar.
+export const diasColor = (d: number) =>
+  d <= 15 ? "text-green-600" : d <= 45 ? "text-amber-600" : "text-red-600";
+
+/**
+ * Aviso de los eventos que quedaron fuera del promedio. Un panel que descarta
+ * filas en silencio miente por omisión, así que dice cuántas y por qué.
+ */
+export const textoDescartados = (n: number): string | null => {
+  if (n <= 0) return null;
+  const plural = n === 1 ? "evento quedó" : "eventos quedaron";
+  return `${n} ${plural} fuera del promedio: su reparación está fechada antes que la avería, así que no se puede saber cuánto tardó.`;
+};
 
 const ReportTiemposSec = () => {
   const navigate = useNavigate();
@@ -20,6 +32,7 @@ const ReportTiemposSec = () => {
   const [tramos, setTramos]           = useState<TiempoTramoRow[]>([]);
   const [loading, setLoading]         = useState(false);
   const [generated, setGenerated]     = useState(false);
+  const [descartados, setDescartados] = useState(0);
 
   const handleGenerar = async () => {
     if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
@@ -29,10 +42,11 @@ const ReportTiemposSec = () => {
     setLoading(true);
     try {
       const data = await getTiemposResumen({ fechaInicial: inicio, fechaFinal: fin });
-      setTramos(data);
+      setTramos(data.tramos);
+      setDescartados(data.descartados);
       setGenerated(true);
-      if (data.length === 0) toast.warning("No hay eventos resueltos en el período");
-      else toast.success(`${data.length} tramos con eventos resueltos`);
+      if (data.tramos.length === 0) toast.warning("No hay eventos reparados en el período");
+      else toast.success(`${data.tramos.length} tramos con eventos reparados`);
     } catch {
       toast.error("Error al generar el reporte");
     } finally {
@@ -49,9 +63,9 @@ const ReportTiemposSec = () => {
     <div className="space-y-6">
       <Card className="shadow-sm border-muted/60">
         <CardHeader className="border-b border-border/40 pb-4">
-          <CardTitle>Tiempos de Resolución</CardTitle>
+          <CardTitle>Tiempos de Reparación</CardTitle>
           <CardDescription>
-            Promedio de días que tardó en resolverse cada evento, agrupado por tramo. Solo considera eventos resueltos con revisión en el período. Verde ≤1d, ámbar ≤7d, rojo &gt;7d.
+            Días que pasaron desde que ocurrió cada avería hasta que se reparó, en promedio por tramo. Entran los eventos <strong>reparados</strong> dentro del período elegido. Verde ≤15d, ámbar ≤45d, rojo &gt;45d.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -76,14 +90,19 @@ const ReportTiemposSec = () => {
 
       {generated && !loading && (
         tramos.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No hay eventos resueltos en el período seleccionado</p>
+          <div className="py-8 text-center space-y-2">
+            <p className="text-sm text-muted-foreground">No hay eventos reparados en el período seleccionado</p>
+            {textoDescartados(descartados) && (
+              <p className="text-xs text-muted-foreground">{textoDescartados(descartados)}</p>
+            )}
+          </div>
         ) : (
           <Card className="shadow-sm border-muted/60">
             <CardHeader className="border-b border-border/40 pb-4">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <CardTitle>Promedio por tramo</CardTitle>
                 <div className="flex gap-2 flex-wrap">
-                  <Badge variant="outline">{totalEventos} eventos resueltos</Badge>
+                  <Badge variant="outline">{totalEventos} eventos reparados</Badge>
                   {avgGlobal !== null && (
                     <Badge variant="outline" className={diasColor(avgGlobal)}>
                       Promedio global: {avgGlobal}d
@@ -93,6 +112,9 @@ const ReportTiemposSec = () => {
               </div>
             </CardHeader>
             <CardContent className="p-4">
+              {textoDescartados(descartados) && (
+                <p className="text-xs text-muted-foreground mb-3">{textoDescartados(descartados)}</p>
+              )}
               <div className="rounded-lg border overflow-hidden">
                 <Table>
                   <TableHeader className="bg-muted">
@@ -102,6 +124,7 @@ const ReportTiemposSec = () => {
                       <TableHead className="text-right">Promedio</TableHead>
                       <TableHead className="text-right">Mínimo</TableHead>
                       <TableHead className="text-right">Máximo</TableHead>
+                      <TableHead className="text-right">Visitas</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -124,6 +147,7 @@ const ReportTiemposSec = () => {
                         </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">{t.minDias}d</TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">{t.maxDias}d</TableCell>
+                        <TableCell className="text-right text-xs text-muted-foreground">{t.avgVisitas}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
