@@ -323,7 +323,7 @@ const FilesPage = () => {
           <TabsTrigger value="cobertura" className="relative">
             Cobertura
             {totalBroken > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive text-white text-[10px] font-bold h-4 min-w-4 px-1">
+              <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive-fill text-white text-[10px] font-bold h-4 min-w-4 px-1">
                 {totalBroken}
               </span>
             )}
@@ -497,7 +497,7 @@ const FilesPage = () => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={clearingBroken}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-white" disabled={clearingBroken} onClick={handleClearBroken}>
+            <AlertDialogAction className="bg-destructive-fill hover:bg-destructive-fill/90 text-white" disabled={clearingBroken} onClick={handleClearBroken}>
               {clearingBroken ? "Limpiando..." : "Limpiar"}
             </AlertDialogAction>
           </AlertDialogFooter>

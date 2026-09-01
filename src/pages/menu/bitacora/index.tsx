@@ -54,7 +54,7 @@ const actionStyle = (action: string): { variant: BadgeVariant; className?: strin
 
 const SEVERITY_DOT: Record<string, string> = {
   warning:  "bg-amber-500",
-  critical: "bg-destructive",
+  critical: "bg-destructive-fill",
 };
 
 const SEVERITY_LABELS: Record<string, string> = {

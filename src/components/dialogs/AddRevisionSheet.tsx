@@ -83,7 +83,7 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
                     <div className="space-y-1.5">
                         <Label>Descripción <span className="text-destructive">*</span></Label>
                         <Textarea
-                            className={`resize-none min-h-28${errors.description ? " border-destructive" : ""}`}
+                            className="resize-none min-h-28" aria-invalid={!!errors.description}
                             placeholder="Describe la inspección realizada..."
                             value={description}
                             onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}

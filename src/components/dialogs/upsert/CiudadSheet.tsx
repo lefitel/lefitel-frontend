@@ -119,7 +119,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
               value={name}
               onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
               placeholder="Nombre de la ciudad"
-              className={errors.name ? "border-destructive" : ""}
+              aria-invalid={!!errors.name}
             />
             {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
           </div>

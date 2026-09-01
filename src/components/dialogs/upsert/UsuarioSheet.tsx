@@ -194,13 +194,13 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
 
                     <div className="space-y-1.5">
                         <Label htmlFor="us-name">Nombre <span className="text-destructive">*</span></Label>
-                        <Input id="us-name" value={name} onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: "" })); }} className={errors.name ? "border-destructive" : ""} />
+                        <Input id="us-name" value={name} onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: "" })); }} aria-invalid={!!errors.name} />
                         {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
                     </div>
 
                     <div className="space-y-1.5">
                         <Label htmlFor="us-lastname">Apellido <span className="text-destructive">*</span></Label>
-                        <Input id="us-lastname" value={lastname} onChange={(e) => { setLastname(e.target.value); if (errors.lastname) setErrors(p => ({ ...p, lastname: "" })); }} className={errors.lastname ? "border-destructive" : ""} />
+                        <Input id="us-lastname" value={lastname} onChange={(e) => { setLastname(e.target.value); if (errors.lastname) setErrors(p => ({ ...p, lastname: "" })); }} aria-invalid={!!errors.lastname} />
                         {errors.lastname && <p className="text-xs text-destructive mt-1">{errors.lastname}</p>}
                     </div>
 
@@ -221,7 +221,7 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                             value={isEditing ? (usuario?.user ?? "") : user}
                             onChange={!isEditing ? (e) => { setUser(e.target.value); if (errors.user) setErrors(p => ({ ...p, user: "" })); } : undefined}
                             disabled={isEditing}
-                            className={errors.user ? "border-destructive" : ""}
+                            aria-invalid={!!errors.user}
                         />
                         {errors.user && <p className="text-xs text-destructive mt-1">{errors.user}</p>}
                     </div>
@@ -230,12 +230,12 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                         <>
                             <div className="space-y-1.5">
                                 <Label htmlFor="us-pass">Contraseña <span className="text-destructive">*</span></Label>
-                                <Input id="us-pass" type="password" value={pass} onChange={(e) => { setPass(e.target.value); if (errors.pass) setErrors(p => ({ ...p, pass: "" })); }} className={errors.pass ? "border-destructive" : ""} />
+                                <Input id="us-pass" type="password" value={pass} onChange={(e) => { setPass(e.target.value); if (errors.pass) setErrors(p => ({ ...p, pass: "" })); }} aria-invalid={!!errors.pass} />
                                 {errors.pass && <p className="text-xs text-destructive mt-1">{errors.pass}</p>}
                             </div>
                             <div className="space-y-1.5">
                                 <Label htmlFor="us-confirm">Confirmar contraseña <span className="text-destructive">*</span></Label>
-                                <Input id="us-confirm" type="password" value={confirmPass} onChange={(e) => { setConfirmPass(e.target.value); if (errors.confirmPass) setErrors(p => ({ ...p, confirmPass: "" })); }} className={errors.confirmPass ? "border-destructive" : ""} />
+                                <Input id="us-confirm" type="password" value={confirmPass} onChange={(e) => { setConfirmPass(e.target.value); if (errors.confirmPass) setErrors(p => ({ ...p, confirmPass: "" })); }} aria-invalid={!!errors.confirmPass} />
                                 {errors.confirmPass && <p className="text-xs text-destructive mt-1">{errors.confirmPass}</p>}
                             </div>
                         </>

@@ -296,7 +296,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
                   <div className="space-y-1.5">
                     <Label>Descripción <span className="text-destructive">*</span></Label>
                     <Textarea
-                      className={`resize-none min-h-20${errors.description ? " border-destructive" : ""}`}
+                      className="resize-none min-h-20" aria-invalid={!!errors.description}
                       placeholder="Describe el problema encontrado..."
                       value={description}
                       onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
@@ -348,7 +348,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
                       <div className="space-y-1.5">
                         <Label>Descripción <span className="text-destructive">*</span></Label>
                         <Textarea
-                          className={`resize-none min-h-16${errors.revDesc ? " border-destructive" : ""}`}
+                          className="resize-none min-h-16" aria-invalid={!!errors.revDesc}
                           placeholder="Describe la inspección inicial..."
                           value={revDesc}
                           onChange={(e) => { setRevDesc(e.target.value); if (errors.revDesc) setErrors(p => ({ ...p, revDesc: "" })); }}

@@ -103,7 +103,7 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
           <div className="space-y-1.5">
             <Label>Descripción de la solución <span className="text-destructive">*</span></Label>
             <Textarea
-              className={`resize-none min-h-28${errors.description ? " border-destructive" : ""}`}
+              className="resize-none min-h-28" aria-invalid={!!errors.description}
               placeholder="Describe cómo se resolvió el problema..."
               value={description}
               onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}

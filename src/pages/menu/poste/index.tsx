@@ -765,7 +765,7 @@ const PostePage = () => {
                     <AlertDialogFooter>
                         <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
                         <AlertDialogAction
-                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
                             disabled={deleting}
                             onClick={() => void handleDelete()}
                         >

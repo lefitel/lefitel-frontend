@@ -678,7 +678,7 @@ const PerfilPage = () => {
             <AlertDialogCancel onClick={() => setConfirmPass(false)}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => { setConfirmPass(false); guardarPassword(); }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
             >
               Sí, cambiar
             </AlertDialogAction>
@@ -725,7 +725,7 @@ const PerfilPage = () => {
             <AlertDialogCancel onClick={() => setConfirmCerrarTodas(false)}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => { setConfirmCerrarTodas(false); cerrarTodas(); }}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
             >
               Sí, cerrar todas
             </AlertDialogAction>

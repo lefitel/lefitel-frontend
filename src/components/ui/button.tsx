@@ -14,12 +14,12 @@ const buttonVariants = cva(
         destructive:
           "bg-[image:var(--gradient-destructive)] text-destructive-foreground elevation-raised hover:brightness-[1.07] active:brightness-95",
         outline:
-          "border border-input bg-[image:var(--gradient-surface)] elevation-surface hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
+          "bg-[image:var(--gradient-surface)] elevation-control hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
         secondary:
-          "bg-[image:var(--gradient-secondary)] text-secondary-foreground elevation-surface hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
+          "bg-[image:var(--gradient-secondary)] text-secondary-foreground elevation-control hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        outlineGray: "border border-input bg-[image:var(--gradient-surface)] elevation-surface hover:bg-none hover:bg-muted hover:text-foreground",
+        outlineGray: "bg-[image:var(--gradient-surface)] elevation-control hover:bg-none hover:bg-muted hover:text-foreground",
       },
       size: {
         default: "h-9 px-4 py-2",

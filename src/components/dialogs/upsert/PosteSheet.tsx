@@ -249,7 +249,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
                 value={data.name}
                 onChange={(e) => { setData((d) => ({ ...d, name: e.target.value })); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
                 disabled={isEditing && !canEdit}
-                className={errors.name ? "border-destructive" : ""}
+                aria-invalid={!!errors.name}
               />
             )}
             {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}

@@ -57,7 +57,7 @@ export function SegmentedControl<T extends string>({
               aria-selected={isActive}
               onClick={() => onValueChange(opt.value)}
               className={cn(
-                "relative inline-flex items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 font-medium whitespace-nowrap shrink-0 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                "relative inline-flex items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 font-medium whitespace-nowrap shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 buttonHeight,
                 textClass,
                 isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -66,7 +66,7 @@ export function SegmentedControl<T extends string>({
               {isActive && (
                 <motion.span
                   layoutId={`seg-highlight-${groupId}`}
-                  className="absolute inset-0 rounded-md bg-background shadow-sm dark:border dark:border-input dark:bg-input/30 z-0"
+                  className="absolute inset-0 rounded-md bg-background shadow-sm dark:bg-card z-0"
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                 />
               )}

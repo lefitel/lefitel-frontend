@@ -159,7 +159,7 @@ function TabsTrigger({ className, value, children, onClick, ...props }: TabsTrig
       {isActive && ctx.variant === "default" && (
         <motion.span
           layoutId={`tabs-highlighter-${ctx.groupId}`}
-          className="absolute inset-0 rounded-md bg-background shadow-sm dark:border dark:border-input dark:bg-input/30 z-0"
+          className="absolute inset-0 rounded-md bg-background shadow-sm dark:bg-card z-0"
           transition={{ type: "spring", stiffness: 380, damping: 32 }}
         />
       )}

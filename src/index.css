@@ -27,7 +27,7 @@
  */
 @utility elevation-raised  { box-shadow: var(--shadow-raised); }
 @utility elevation-surface { box-shadow: var(--shadow-surface); }
-@utility elevation-sunken  { box-shadow: var(--shadow-sunken); }
+@utility elevation-control { box-shadow: var(--shadow-control); }
 
 @theme inline {
   --color-background: var(--background);
@@ -47,6 +47,7 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-primary-fill: var(--primary-fill);
+  --color-destructive-fill: var(--destructive-fill);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -286,7 +287,10 @@
     --muted-foreground: oklch(0.510 0.024 255);
     --accent: oklch(0.932 0.016 255);
     --accent-foreground: oklch(0.470 0.105 255);
-    --destructive: oklch(0.560 0.175 27);
+    /* Same split as the blue: --destructive is READ (error text, invalid
+       borders — 104 uses), --destructive-fill is PAINTED and takes white. */
+    --destructive: oklch(0.505 0.180 27);
+    --destructive-fill: oklch(0.470 0.170 27);
     --destructive-foreground: oklch(0.99 0 0);
     /* --border is decorative; --input outlines a control the user must find,
        so it carries the 3:1 the border does not need. */
@@ -315,19 +319,18 @@
     --surface-up: oklch(1 0 0);
     --surface-down: oklch(0.16 0.018 255);
     --edge-light: 0.26;
-    --fill-ring: transparent;
     --shadow-color: oklch(0.16 0.018 255);
     --shadow-strength: 0.20;
 
     /* A5: light from a point off the top-left corner. */
     --gradient-primary: radial-gradient(125% 175% at 20% -22%,
-      oklch(from var(--primary-fill) calc(l + 0.155) c h) 0%,
+      oklch(from var(--primary-fill) calc(l + 0.115) c h) 0%,
       var(--primary-fill) 46%,
-      oklch(from var(--primary-fill) calc(l - 0.080) c h) 100%);
+      oklch(from var(--primary-fill) calc(l - 0.025) c h) 100%);
     --gradient-destructive: radial-gradient(125% 175% at 20% -22%,
-      oklch(from var(--destructive) calc(l + 0.115) c h) 0%,
-      var(--destructive) 46%,
-      oklch(from var(--destructive) calc(l - 0.075) c h) 100%);
+      oklch(from var(--destructive-fill) calc(l + 0.115) c h) 0%,
+      var(--destructive-fill) 46%,
+      oklch(from var(--destructive-fill) calc(l - 0.025) c h) 100%);
     /* Surfaces travel a tenth of the distance a filled control does: enough
        to catch the light, not enough to read as a colour. */
     --gradient-surface: radial-gradient(130% 180% at 18% -25%,
@@ -345,7 +348,6 @@
     /* Hover cannot interpolate a gradient, so raised controls brighten
        instead of swapping background colour. */
     --shadow-raised:
-      inset 0 0 0 1px var(--fill-ring),
       inset 0 1px 0 oklch(1 0 0 / var(--edge-light)),
       inset 0 -1px 0 oklch(0 0 0 / 0.12),
       0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 100%), transparent),
@@ -355,10 +357,12 @@
       0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
       0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 40%), transparent),
       0 8px 20px -12px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 90%), transparent);
-    --shadow-sunken:
-      inset 0 1px 0 oklch(1 0 0 / calc(var(--edge-light) * 0.55)),
-      inset 0 0 0 1px color-mix(in oklab, var(--foreground) 9%, transparent),
-      0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 45%), transparent);
+    /* Same as --shadow-surface without the hairline ring: a card is an object
+       with an edge, a button is not, and the ring reads as a border. */
+    --shadow-control:
+      inset 0 1px 0 color-mix(in oklab, var(--surface-up) calc(var(--edge-light) * 190%), transparent),
+      0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 40%), transparent),
+      0 6px 16px -10px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 85%), transparent);
   }
   .dark {
     --chart-1: oklch(0.690 0.130 255);
@@ -383,7 +387,8 @@
     --muted-foreground: oklch(0.735 0.020 255);
     --accent: oklch(0.340 0.022 262);
     --accent-foreground: oklch(0.965 0.004 255);
-    --destructive: oklch(0.552 0.178 25);
+    --destructive: oklch(0.720 0.140 25);
+    --destructive-fill: oklch(0.470 0.170 27);
     --destructive-foreground: oklch(0.99 0 0);
     --border: oklch(0.372 0.020 262);
     --input: oklch(0.578 0.028 262);
@@ -401,8 +406,6 @@
     --surface-up: oklch(0.965 0.004 255);
     --surface-down: oklch(0 0 0);
     --edge-light: 0.16;
-    /* On a dark ground the dark fill needs an edge of the light accent. */
-    --fill-ring: color-mix(in oklab, var(--primary) 38%, transparent);
     --shadow-color: oklch(0 0 0);
     --shadow-strength: 0.45;
   }

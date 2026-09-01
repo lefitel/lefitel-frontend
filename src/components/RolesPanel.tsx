@@ -233,7 +233,7 @@ export default function RolesPanel({ onChange }: { onChange?: () => void }) {
               <Label>Nombre <span className="text-destructive">*</span></Label>
               <Input
                 value={nombre}
-                className={errorNombre ? "border-destructive" : undefined}
+                aria-invalid={!!errorNombre}
                 placeholder="Supervisor de campo"
                 onChange={(e) => { setNombre(e.target.value); if (errorNombre) setErrorNombre(""); }}
               />

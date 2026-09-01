@@ -73,7 +73,7 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
 
 const SEVERITY_DOT: Record<string, string> = {
   warning:  "bg-amber-500",
-  critical: "bg-destructive",
+  critical: "bg-destructive-fill",
 };
 
 const ENTITY_ROUTES: Partial<Record<string, (id: number) => string>> = {

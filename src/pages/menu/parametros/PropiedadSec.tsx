@@ -322,7 +322,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
                             </AlertDialogHeader>
                             <AlertDialogFooter>
                                 <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction className="bg-destructive hover:bg-destructive/90 text-white" disabled={deleting} onClick={handleDelete}>
+                                <AlertDialogAction className="bg-destructive-fill hover:bg-destructive-fill/90 text-white" disabled={deleting} onClick={handleDelete}>
                                     {deleting ? "Archivando..." : "Archivar"}
                                 </AlertDialogAction>
                             </AlertDialogFooter>
