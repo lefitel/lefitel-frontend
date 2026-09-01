@@ -4,8 +4,12 @@ import type { Col } from "../../../components/table/tableFeatures";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { EventoInterface } from "../../../interfaces/interfaces";
-import { editUserName, editUserPass, searchUsuario_user } from "../../../api/Usuario.api";
+import {
+  editUserName, editUserPass, searchUsuario_user,
+  resetMfaUsuario, desbloquearUsuario,
+} from "../../../api/Usuario.api";
 import { passwordLengthError } from "../../../lib/password";
+import { can } from "../../../lib/permissions";
 import { url } from "../../../api/url";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -17,6 +21,10 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { ImageLightbox } from "../../../components/ui/image-viewer";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../../components/ui/sheet";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import DataTable from "../../../components/table/DataTable";
 import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
 import {
@@ -25,6 +33,7 @@ import {
   ClockIcon, ZapIcon, KeyRoundIcon, AtSignIcon,
   TrendingUpIcon, AlertCircleIcon, LogInIcon, Trash2Icon,
   WrenchIcon, MapPinIcon, UserPlusIcon, MoreVerticalIcon,
+  ShieldOffIcon, LockOpenIcon,
 } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -71,6 +80,10 @@ export default function UsuarioDetallePage() {
   const [avatarLoaded, setAvatarLoaded] = useState(false);
   const [openUsername, setOpenUsername] = useState(false);
   const [openPassword, setOpenPassword] = useState(false);
+  const [openUnlock, setOpenUnlock] = useState(false);
+  const [unlocking, setUnlocking] = useState(false);
+  const [openResetMfa, setOpenResetMfa] = useState(false);
+  const [resettingMfa, setResettingMfa] = useState(false);
 
   // username form
   const [newUser, setNewUser]       = useState("");
@@ -107,6 +120,10 @@ export default function UsuarioDetallePage() {
    * the current password be typed" — see `handleSavePassword`.
    */
   const isOwnProfile = sesion.usuario.id === d.usuario?.id;
+
+  /** Whether this session may act on somebody else's account at all — the
+   * permission the server checks on both rescue routes below. */
+  const rol = sesion.usuario.id_rol;
 
   const handleSaveUsername = async () => {
     if (!newUser.trim()) return toast.warning("El nombre de usuario no puede estar vacío");
@@ -222,6 +239,58 @@ export default function UsuarioDetallePage() {
       toast.error(res.message ?? "No se pudo actualizar");
     }
     setSavingPass(false);
+  };
+
+  /**
+   * A 401 from either rescue route below is left unreported here on purpose.
+   *
+   * Both routes sit behind the server's step-up gate — see
+   * `docs/specs/2026-08-21-autenticacion-mfa-design.md` §8 — which is meant to
+   * ask for nothing heavier than a fresh confirmation good for about ten
+   * minutes. But `web` does not know that distinction yet: the response
+   * interceptor in `SesionProvider.tsx` treats *every* 401 that is not
+   * `LOGOUT_URL`'s own as a dead session, and reacts by showing "Tu sesión se
+   * cerró. Volvé a iniciar sesión." and calling `logout()` — before this
+   * handler's own `.catch` even runs. Adding a second, different message here
+   * ("hace falta confirmar de nuevo") would just contradict the one already on
+   * screen, and by the time it rendered `logout()` may already have unmounted
+   * this page. Building the real fix — a client that can tell a step-up
+   * challenge apart from an expired session — is out of scope for these two
+   * buttons; see the task's report.
+   */
+  const handleRescueError = (status: number, message: string | undefined, fallback: string) => {
+    if (status === 401) return;
+    toast.error(message ?? fallback);
+  };
+
+  const handleUnlock = async () => {
+    if (!d.usuario?.id) return;
+    setUnlocking(true);
+    const res = await desbloquearUsuario(d.usuario.id);
+    if (res.status === 200) {
+      toast.success("Cuenta desbloqueada. Ya puede volver a intentar iniciar sesión.");
+      setOpenUnlock(false);
+      d.load();
+    } else {
+      handleRescueError(res.status, res.message, "No se pudo desbloquear la cuenta");
+    }
+    setUnlocking(false);
+  };
+
+  const handleResetMfa = async () => {
+    if (!d.usuario?.id) return;
+    setResettingMfa(true);
+    const res = await resetMfaUsuario(d.usuario.id);
+    if (res.status === 200) {
+      toast.success(
+        "Ya puede entrar solo con su contraseña. Avísale: la próxima vez que inicie sesión tendrá que configurar el segundo factor de nuevo."
+      );
+      setOpenResetMfa(false);
+      d.load();
+    } else {
+      handleRescueError(res.status, res.message, "No se pudo restablecer el segundo factor");
+    }
+    setResettingMfa(false);
   };
 
   const columns = useMemo<Col<EventoInterface>[]>(() => [
@@ -352,6 +421,25 @@ export default function UsuarioDetallePage() {
             <KeyRoundIcon className="h-3.5 w-3.5" />
             Contraseña
           </Button>
+          {can(rol, "seguridad", "editar") && (
+            <Button variant="outline" className="gap-1.5"
+              disabled={d.loading || !d.usuario}
+              onClick={() => setOpenUnlock(true)}>
+              <LockOpenIcon className="h-3.5 w-3.5" />
+              Desbloquear cuenta
+            </Button>
+          )}
+          {/* Never on your own profile: resetting your own second factor is
+              refused by the server (see `resetMfaUsuario`), and a button that
+              exists only to draw a 403 is a promise this screen does not make. */}
+          {can(rol, "seguridad", "editar") && !isOwnProfile && (
+            <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive"
+              disabled={d.loading || !d.usuario}
+              onClick={() => setOpenResetMfa(true)}>
+              <ShieldOffIcon className="h-3.5 w-3.5" />
+              Restablecer 2FA
+            </Button>
+          )}
           <Button variant="outline" size="icon" className="h-8 w-8"
             disabled={d.loading || !d.usuario}
             onClick={() => setOpenEdit(true)}>
@@ -576,6 +664,49 @@ export default function UsuarioDetallePage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      {/* Confirm: desbloquear cuenta */}
+      <AlertDialog open={openUnlock} onOpenChange={(v) => { if (!v) setOpenUnlock(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Desbloquear la cuenta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{d.usuario?.name} {d.usuario?.lastname}</strong> podrá volver a intentar
+              iniciar sesión de inmediato.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={unlocking}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={unlocking} onClick={handleUnlock}>
+              {unlocking ? "Desbloqueando..." : "Desbloquear"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm: restablecer segundo factor */}
+      <AlertDialog open={openResetMfa} onOpenChange={(v) => { if (!v) setOpenResetMfa(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Restablecer el segundo factor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{d.usuario?.name} {d.usuario?.lastname}</strong> podrá entrar solo con su
+              contraseña de inmediato, y tendrá que configurar el segundo factor otra vez la
+              próxima vez que inicie sesión.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={resettingMfa}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive-fill hover:bg-destructive-fill/90 text-white"
+              disabled={resettingMfa}
+              onClick={handleResetMfa}
+            >
+              {resettingMfa ? "Restableciendo..." : "Restablecer"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

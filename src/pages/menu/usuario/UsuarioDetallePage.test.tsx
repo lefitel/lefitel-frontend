@@ -52,26 +52,29 @@ const usuario: UsuarioInterface = {
 const editUserName = vi.fn();
 const editUserPass = vi.fn();
 const searchUsuario_user = vi.fn();
+const resetMfaUsuario = vi.fn();
+const desbloquearUsuario = vi.fn();
 const load = vi.fn();
 
 /**
- * `can` answers yes to everything, and this screen does not ask it any more.
+ * `can` defaults to yes, and controllable per test through `canMock`.
  *
- * Both halves matter. The screen used to decide whether to *show* the current
- * password box by asking `can(rol, "seguridad", "editar")`, which meant anybody
- * who could manage accounts had no box to type it in — on their own account
- * included — and the change went out with no password on it. That is the hole
- * the server closed, so the box is drawn from ownership now and this module is
- * not imported here at all.
+ * The password box does not ask it at all any more — see the note at
+ * `handleSavePassword`. It used to be drawn from `can(rol, "seguridad",
+ * "editar")`, which meant anybody who could manage accounts had no box to type
+ * their own current password in, and the change went out with none on it. The
+ * default-true value here is what makes the password tests below *fail* if
+ * that question ever comes back: re-introduce it and `can` still answers true,
+ * so the box would disappear and the test looking for it could not find it.
  *
- * The mock stays because it is what makes the password tests below *fail* if the
- * old question ever comes back: re-introduce `isAdmin` and `can` answers true,
- * the box disappears, and the test looking for it cannot find it. Left real
- * except for `can`, since `interfaces.ts` reaches into this module for the rest.
+ * The two rescue buttons (`Desbloquear cuenta`, `Restablecer 2FA`) are the
+ * opposite case: they exist *because* of `seguridad.editar`, unrelated to
+ * ownership, so their tests override `canMock` to see both answers.
  */
+const canMock = vi.fn(() => true);
 vi.mock("../../../lib/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../lib/permissions")>()),
-  can: () => true,
+  can: () => canMock(),
 }));
 
 vi.mock("../../../api/Login.api", () => ({
@@ -97,6 +100,8 @@ vi.mock("../../../api/Usuario.api", () => ({
   editUserName: (...args: unknown[]) => editUserName(...args),
   editUserPass: (...args: unknown[]) => editUserPass(...args),
   searchUsuario_user: (...args: unknown[]) => searchUsuario_user(...args),
+  resetMfaUsuario: (...args: unknown[]) => resetMfaUsuario(...args),
+  desbloquearUsuario: (...args: unknown[]) => desbloquearUsuario(...args),
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
@@ -178,11 +183,18 @@ const enviadoPass = () => editUserPass.mock.calls[0][0] as UsuarioInterface & { 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // `vi.clearAllMocks()` clears calls, not the implementation set on
+  // `canMock` above — it is not a `vi.fn()` created fresh each test, so its
+  // default return value survives. Restated here anyway rather than relied on,
+  // since a test further down does change it with `mockReturnValueOnce`.
+  canMock.mockReturnValue(true);
   // "Not found" is what a free username looks like through this API: the screen
   // treats a resolved search as "taken" and a rejection as "available".
   searchUsuario_user.mockRejectedValue(new Error("no existe"));
   editUserName.mockResolvedValue({ status: 200 });
   editUserPass.mockResolvedValue({ status: 200 });
+  resetMfaUsuario.mockResolvedValue({ status: 200 });
+  desbloquearUsuario.mockResolvedValue({ status: 200 });
 });
 
 describe("changing your own username", () => {
@@ -388,5 +400,178 @@ describe("renaming somebody else's account", () => {
     await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
     expect(enviado().user).toBe("isalas");
     expect(enviado().oldPass).toBeUndefined();
+  });
+});
+
+/**
+ * The rescue buttons from `docs/specs/2026-08-21-autenticacion-mfa-design.md`
+ * §8 — the "vía de escape" a lost second factor or a locked-out password
+ * leaves nobody able to fix without a browser, until these two.
+ */
+describe("resetting somebody's second factor", () => {
+  it("never appears on your own profile, permission or no permission", async () => {
+    // Decision Isaias already made: the server refuses `:id === req.user.id`
+    // outright, so a button that only exists to draw that 403 is a promise
+    // this screen does not keep. `canMock` defaults to true (see the mock
+    // above), so this is specifically the ownership rule and not a stand-in
+    // for "no permission".
+    render(<Harness quien={YO} />);
+    expect(screen.queryByRole("button", { name: /^restablecer 2fa$/i })).not.toBeInTheDocument();
+  });
+
+  it("appears on somebody else's profile when the session holds seguridad.editar", () => {
+    render(<Harness quien={OTRA_PERSONA} />);
+    expect(screen.getByRole("button", { name: /^restablecer 2fa$/i })).toBeInTheDocument();
+  });
+
+  it("does not appear on somebody else's profile without seguridad.editar", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={OTRA_PERSONA} />);
+    expect(screen.queryByRole("button", { name: /^restablecer 2fa$/i })).not.toBeInTheDocument();
+  });
+
+  it("asks for confirmation naming the person, and sends nothing before it is pressed", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^restablecer 2fa$/i }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(`${usuario.name} ${usuario.lastname}`);
+    expect(resetMfaUsuario).not.toHaveBeenCalled();
+  });
+
+  it("cancelling leaves the account untouched", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^restablecer 2fa$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(resetMfaUsuario).not.toHaveBeenCalled();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("confirming resets the account being viewed and says what changes for the person, not what was done", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^restablecer 2fa$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^restablecer$/i }));
+
+    // The account being viewed, from the fixture — `quien` on `<Harness>`
+    // only changes who is *looking*, never whose profile `d.usuario` is.
+    await waitFor(() => expect(resetMfaUsuario).toHaveBeenCalledWith(usuario.id));
+    const { toast } = await import("sonner");
+    // Not "se restableció el segundo factor": what somebody on the phone with
+    // this person needs to relay — that the password alone gets them in now,
+    // and that they will be asked to set the factor up again.
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/sol[oó] con su contrase[ñn]a/i));
+    expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/configurar el segundo factor/i));
+  });
+
+  it("reports the server's own refusal on 403 or 404 instead of a success, and does not reload", async () => {
+    resetMfaUsuario.mockResolvedValue({ status: 403, message: "No puedes restablecer tu propio segundo factor." });
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^restablecer 2fa$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^restablecer$/i }));
+
+    await waitFor(() => expect(resetMfaUsuario).toHaveBeenCalledTimes(1));
+    const { toast } = await import("sonner");
+    expect(toast.error).toHaveBeenCalledWith("No puedes restablecer tu propio segundo factor.");
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(load).not.toHaveBeenCalled();
+  });
+
+  it("stays quiet on a 401 instead of contradicting the session-expiry toast the app already shows", async () => {
+    // `web`'s global axios interceptor (`SesionProvider.tsx`) treats any 401
+    // that is not the logout request's own as a dead session: it shows "Tu
+    // sesión se cerró." and calls `logout()` before this screen's own promise
+    // chain even resolves. A second, different message from here ("hace falta
+    // confirmar de nuevo") would only contradict that one — see the comment on
+    // `handleRescueError` in `UsuarioDetallePage.tsx`. This is the test that
+    // fails if that silence is accidentally replaced with a toast.
+    resetMfaUsuario.mockResolvedValue({ status: 401, message: "Reautenticación requerida" });
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^restablecer 2fa$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^restablecer$/i }));
+
+    await waitFor(() => expect(resetMfaUsuario).toHaveBeenCalledTimes(1));
+    const { toast } = await import("sonner");
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("unlocking an account", () => {
+  it("appears even on your own profile — no ownership rule applies here", () => {
+    // Unlike the 2FA reset, the server draws no `:id === req.user.id` line for
+    // this route, and being locked out is incompatible with having this page
+    // open in the first place. Pinned so nobody carries the other button's
+    // self-hiding rule over here without a reason to.
+    render(<Harness quien={YO} />);
+    expect(screen.getByRole("button", { name: /^desbloquear cuenta$/i })).toBeInTheDocument();
+  });
+
+  it("does not appear without seguridad.editar", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={OTRA_PERSONA} />);
+    expect(screen.queryByRole("button", { name: /^desbloquear cuenta$/i })).not.toBeInTheDocument();
+  });
+
+  it("asks for confirmation naming the person before unlocking anything", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^desbloquear cuenta$/i }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(`${usuario.name} ${usuario.lastname}`);
+    expect(desbloquearUsuario).not.toHaveBeenCalled();
+  });
+
+  it("cancelling leaves the account untouched", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^desbloquear cuenta$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(desbloquearUsuario).not.toHaveBeenCalled();
+  });
+
+  it("confirming unlocks the account being viewed", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^desbloquear cuenta$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^desbloquear$/i }));
+
+    await waitFor(() => expect(desbloquearUsuario).toHaveBeenCalledWith(usuario.id));
+    const { toast } = await import("sonner");
+    expect(toast.success).toHaveBeenCalled();
+  });
+
+  it("reports the server's own refusal on 403 or 404 instead of a success", async () => {
+    desbloquearUsuario.mockResolvedValue({ status: 404 });
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("button", { name: /^desbloquear cuenta$/i }));
+    await screen.findByRole("alertdialog");
+    await user.click(screen.getByRole("button", { name: /^desbloquear$/i }));
+
+    await waitFor(() => expect(desbloquearUsuario).toHaveBeenCalledTimes(1));
+    const { toast } = await import("sonner");
+    expect(toast.error).toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });

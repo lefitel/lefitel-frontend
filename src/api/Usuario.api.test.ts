@@ -33,7 +33,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { editUserName, editUserPass } from "./Usuario.api";
+import { editUserName, editUserPass, resetMfaUsuario, desbloquearUsuario } from "./Usuario.api";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
 afterEach(() => {
@@ -231,5 +231,109 @@ describe("editUserPass", () => {
     vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
 
     expect(await editUserPass({ ...cuenta(YO), oldPass: "la-mia" })).toEqual({ status: 200 });
+  });
+});
+
+/**
+ * The rescue routes from `docs/specs/2026-08-21-autenticacion-mfa-design.md`
+ * §8, in the same shape as `editUserName`/`editUserPass` above: `{ status,
+ * message? }`, so `UsuarioDetallePage.tsx` has one convention to branch on
+ * instead of two. Same reason for testing at this level too — a screen test
+ * that mocks this module wholesale would never notice a wrong method, a wrong
+ * path, or a swallowed status.
+ */
+describe("resetMfaUsuario", () => {
+  it("posts to the mfa/reset route for the account named", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: {} });
+
+    await resetMfaUsuario(7);
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/\/usuario\/7\/mfa\/reset$/);
+  });
+
+  it("addresses the right account and not a neighbouring one", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: {} });
+
+    await resetMfaUsuario(99);
+
+    expect(post.mock.calls[0][0]).toMatch(/\/usuario\/99\/mfa\/reset$/);
+    expect(post.mock.calls[0][0]).not.toMatch(/\/usuario\/7\//);
+  });
+
+  it("reports the server's own refusal instead of a success", async () => {
+    for (const respuesta of [
+      { status: 403, message: "No puedes restablecer tu propio segundo factor." },
+      { status: 404, message: "Usuario no encontrado." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await resetMfaUsuario(7), String(respuesta.status)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await resetMfaUsuario(7)).toEqual({ status: 500, message: "Error desconocido" });
+  });
+
+  it("reports a success with no message at all", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: {} });
+
+    expect(await resetMfaUsuario(7)).toEqual({ status: 200 });
+  });
+});
+
+describe("desbloquearUsuario", () => {
+  it("patches the desbloquear route for the account named", async () => {
+    const patch = vi.spyOn(axios, "patch").mockResolvedValue({ status: 200, data: {} });
+
+    await desbloquearUsuario(7);
+
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(patch.mock.calls[0][0]).toMatch(/\/usuario\/7\/desbloquear$/);
+  });
+
+  it("addresses the right account and not a neighbouring one", async () => {
+    const patch = vi.spyOn(axios, "patch").mockResolvedValue({ status: 200, data: {} });
+
+    await desbloquearUsuario(99);
+
+    expect(patch.mock.calls[0][0]).toMatch(/\/usuario\/99\/desbloquear$/);
+    expect(patch.mock.calls[0][0]).not.toMatch(/\/usuario\/7\//);
+  });
+
+  it("reports the server's own refusal instead of a success", async () => {
+    for (const respuesta of [
+      { status: 403, message: "No tienes permiso para esta acción." },
+      { status: 404, message: "Usuario no encontrado." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "patch").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await desbloquearUsuario(7), String(respuesta.status)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "patch").mockRejectedValue(new Error("network down"));
+
+    expect(await desbloquearUsuario(7)).toEqual({ status: 500, message: "Error desconocido" });
+  });
+
+  it("reports a success with no message at all", async () => {
+    vi.spyOn(axios, "patch").mockResolvedValue({ status: 200, data: {} });
+
+    expect(await desbloquearUsuario(7)).toEqual({ status: 200 });
   });
 });
