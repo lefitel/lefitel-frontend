@@ -4,6 +4,8 @@ import {
   MAX_COLUMNS,
   MAX_SORTS,
   addColumn,
+  columnHeader,
+  columnKind,
   columnLimitReached,
   filterLimitReached,
   maxColumns,
@@ -796,5 +798,59 @@ describe("a filter value the server would refuse", () => {
     const said = validateConfig(config, evento, { maxFilterValue: 50 }).join(" ");
     expect(said).toMatch(/demasiado largo/);
     expect(said).toContain("50");
+  });
+});
+
+describe("the header a column will come back with", () => {
+  // Read by the skeleton drawn while a report runs, so the table it stands in
+  // for has the headers the answer will carry. They have to be the server's
+  // words: two spellings of the same summary would show as the header
+  // rewriting itself the moment the rows land.
+  it("uses the catalog's name for a plain field", () => {
+    expect(columnHeader(evento, { path: "description" })).toBe("Descripción");
+  });
+
+  it("puts the summary after it, lower case, the way the server does", () => {
+    expect(columnHeader(evento, { path: "date", agg: "max" })).toBe("Fecha del evento (máximo)");
+    expect(columnHeader(evento, { path: "date", agg: "min" })).toBe("Fecha del evento (mínimo)");
+  });
+
+  it("prefers the name the author typed", () => {
+    expect(columnHeader(evento, { path: "date", agg: "max", label: "Última visita" }))
+      .toBe("Última visita");
+    // Whitespace is not a name: the server trims it and falls back, and a
+    // header of three spaces would be an unnamed column here and a named one
+    // there.
+    expect(columnHeader(evento, { path: "description", label: "   " })).toBe("Descripción");
+  });
+
+  it("does not say 'conteo' about something already counted", () => {
+    // "Nº de revisiones (conteo)" states the same fact twice. The server drops
+    // the suffix for an aggregate-only relation and so does this.
+    expect(columnHeader(evento, { path: "revisiones", agg: "count" })).toBe("Nº de revisiones");
+  });
+
+  it("falls back to the path when the catalog has never heard of it", () => {
+    // A saved report whose field this role cannot see. Better a dotted path
+    // for the half second the skeleton lasts than an empty header.
+    expect(columnHeader(evento, { path: "usuario.name" })).toBe("usuario.name");
+  });
+});
+
+describe("which side of the cell a value lands on", () => {
+  it("counts, sums and averages are numbers whatever they were applied to", () => {
+    expect(columnKind(evento, { path: "description", agg: "count" })).toBe("number");
+    expect(columnKind(evento, { path: "date", agg: "avg" })).toBe("number");
+  });
+
+  it("the smallest and the largest of a date are still dates", () => {
+    // Not academic: a wrong answer here puts the skeleton's bars against one
+    // edge and the rows that replace them against the other.
+    expect(columnKind(evento, { path: "date", agg: "max" })).toBe("date");
+  });
+
+  it("keeps the field's own type when nothing is summarised", () => {
+    expect(columnKind(evento, { path: "description" })).toBe("string");
+    expect(columnKind(evento, { path: "image" })).toBe("image");
   });
 });

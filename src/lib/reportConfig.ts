@@ -7,6 +7,7 @@ import type {
   AggFn,
   CatalogField,
   CatalogRoot,
+  ColumnSpec,
   FilterCondition,
   FilterGroup,
   Operator,
@@ -73,6 +74,65 @@ export const isForeignTotal = (root: CatalogRoot | undefined, path: string): boo
   (root?.aggregateOnly ?? []).some(
     (a) => a.path.includes(".") && (a.path === path || path.startsWith(`${a.path}.`)),
   );
+
+/**
+ * How each summary is named, in the one place everything that names one reads.
+ *
+ * The server keeps the same five words in `constraints.ts` and builds the
+ * result's headers out of them — `${field.label} (${AGG_LABEL[agg]})`, lower
+ * case inside the parentheses. `columnHeader` below reproduces that, so the
+ * table drawn while a report is running carries the headers the report will
+ * come back with. Two spellings of "máximo" would read as a word rewriting
+ * itself under the reader the moment the rows land.
+ */
+export const AGG_LABEL: Record<AggFn, string> = {
+  count: "Conteo",
+  sum: "Suma",
+  avg: "Promedio",
+  min: "Mínimo",
+  max: "Máximo",
+};
+
+/** The catalog's own name for a path, with no rename and no summary applied. */
+export const fieldLabel = (root: CatalogRoot | undefined, path: string): string => {
+  const field = findField(root, path);
+  if (field) return field.label;
+  const relation = (root?.aggregateOnly ?? []).find((a) => a.path === path);
+  return relation ? `Nº de ${relation.label.toLowerCase()}` : path;
+};
+
+/**
+ * The header this column will have in the result.
+ *
+ * Mirrors what the server puts in `columns[].label`: the author's own name when
+ * they typed one, otherwise the catalog's name with the summary after it. A
+ * counted relation takes no suffix — it is already a total, and "Nº de
+ * revisiones (conteo)" says the same thing twice.
+ */
+export const columnHeader = (root: CatalogRoot | undefined, column: ColumnSpec): string => {
+  const renamed = column.label?.trim();
+  if (renamed) return renamed;
+  const base = fieldLabel(root, column.path);
+  if (!column.agg) return base;
+  const counted = (root?.aggregateOnly ?? []).some((a) => a.path === column.path);
+  return counted ? base : `${base} (${AGG_LABEL[column.agg].toLowerCase()})`;
+};
+
+/**
+ * What type the result's column will hold, which is not always the field's own.
+ *
+ * Only needed to align a cell: counting, adding and averaging give a number
+ * whatever they were applied to, while the smallest and the largest of a date
+ * are still dates. Getting it wrong is visible — the skeleton would lay its
+ * bars against one edge and the rows arrive against the other.
+ */
+export const columnKind = (
+  root: CatalogRoot | undefined,
+  column: ColumnSpec,
+): CatalogField["kind"] => {
+  if (column.agg === "count" || column.agg === "sum" || column.agg === "avg") return "number";
+  return findField(root, column.path)?.kind ?? "number";
+};
 
 /** Sensible starting operator for each type, so a new filter is usable immediately. */
 export const defaultOperator = (kind: CatalogField["kind"]): Operator => {

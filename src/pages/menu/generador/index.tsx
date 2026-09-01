@@ -38,6 +38,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
+import { Skeleton } from "../../../components/ui/skeleton";
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 
@@ -46,6 +47,7 @@ import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
 import PreviewTable from "./PreviewTable";
 import SavedReports from "./SavedReports";
+import { PageSkeleton, ResultSkeleton } from "./Skeletons";
 
 const GeneradorPage = () => {
   const { sesion } = useContext(SesionContext);
@@ -92,6 +94,16 @@ const GeneradorPage = () => {
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [savedTotal, setSavedTotal] = useState(0);
   const [savedFailed, setSavedFailed] = useState(false);
+  /**
+   * Whether a page of saved reports is in flight.
+   *
+   * Starts true: this and the catalog are both asked for on mount, and the
+   * catalog is a fixed structure while this one joins `usuarios` and reads the
+   * database, so the catalog usually wins. The page would then render with an
+   * empty list and the panel would state, in the reader's first second on the
+   * screen, that they had never saved a report.
+   */
+  const [loadingSaved, setLoadingSaved] = useState(true);
   // Read by `loadSaved` to know where the next page starts, so the loader stays
   // identity-stable and does not re-run on every append.
   const savedRef = useRef<SavedReport[]>(saved);
@@ -205,6 +217,7 @@ const GeneradorPage = () => {
    */
   const loadSaved = useCallback((append = false) => {
     const offset = append ? savedRef.current.length : 0;
+    setLoadingSaved(true);
     return getReportesGuardados({ offset })
       .then((page) => {
         // Guarded rather than trusted: a response that is not the shape this
@@ -221,7 +234,11 @@ const GeneradorPage = () => {
         // about the user's data made out of a failed request.
         setSavedFailed(true);
         toast.error(mensajeDeError(error, "No se pudieron cargar los reportes guardados"));
-      });
+      })
+      // In `finally`, so a failure releases it too: a skeleton that outlives the
+      // request it belongs to is a panel that waits forever, and it would hide
+      // the very error state below that says the list could not be read.
+      .finally(() => setLoadingSaved(false));
   }, []);
 
   const refreshSaved = useCallback(() => loadSaved(false), [loadSaved]);
@@ -702,14 +719,11 @@ const GeneradorPage = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  if (loadingCatalog) {
-    return (
-      <div className="flex items-center justify-center py-24 text-muted-foreground">
-        <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
-        Cargando campos disponibles…
-      </div>
-    );
-  }
+  // The page that is coming, not a spinner in an empty one. What used to happen
+  // here was a centred spinner and then, in one frame, a two-column layout with
+  // five cards in it: nothing on screen during the wait had anything to do with
+  // what arrived, so the whole thing read as a jump rather than as a load.
+  if (loadingCatalog) return <PageSkeleton />;
 
   if (catalogError || !catalog) {
     return (
@@ -768,6 +782,7 @@ const GeneradorPage = () => {
                 onDelete={mayArchive ? handleDelete : undefined}
                 failed={savedFailed}
                 onRetry={refreshSaved}
+                loading={loadingSaved}
               />
             </CardContent>
           </Card>
@@ -1018,11 +1033,26 @@ const GeneradorPage = () => {
                       </button>
                     </div>
                   )}
-                  {/* How big the answer is, before asking for it. */}
-                  {estimate !== null && problems.length === 0 && (
-                    <span className="self-center text-xs tabular-nums text-muted-foreground">
-                      {estimate.toLocaleString("es-BO")} fila{estimate === 1 ? "" : "s"}
-                    </span>
+                  {/*
+                    How big the answer is, before asking for it.
+
+                    The space is held whether or not there is a number in it.
+                    The count is cleared and asked again on every keystroke of a
+                    filter value, and with the chip appearing and disappearing
+                    the four controls to its right slid left and back on each
+                    letter typed — the most frequent movement on the page, right
+                    under the button being aimed at.
+                  */}
+                  {problems.length === 0 && (
+                    // A div, not a span: the placeholder below is one, and a
+                    // block element inside a span is invalid markup.
+                    <div className="w-20 self-center text-right text-xs tabular-nums text-muted-foreground">
+                      {estimate !== null ? (
+                        `${estimate.toLocaleString("es-BO")} fila${estimate === 1 ? "" : "s"}`
+                      ) : (
+                        <Skeleton className="ml-auto h-3 w-14" aria-hidden="true" />
+                      )}
+                    </div>
                   )}
 
                   <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
@@ -1092,6 +1122,18 @@ const GeneradorPage = () => {
                   // being edited: the wording has to describe the result shown.
                   hasFilters={(resultConfig?.filters?.conditions?.length ?? 0) > 0}
                 />
+              ) : running ? (
+                /*
+                  The first run, when there is no previous table to keep.
+                  Underneath this used to sit the invitation below — so for the
+                  whole of the first query the screen answered "elija las
+                  columnas y pulse Generar" to somebody who had just chosen the
+                  columns and pressed Generar.
+
+                  It is drawn from `config.columns`, which is what was sent, so
+                  the headers are already the report's own.
+                */
+                <ResultSkeleton columns={config.columns} root={root} />
               ) : (
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   Elija las columnas en el panel de configuración y pulse <strong>Generar</strong> para verlo aquí.

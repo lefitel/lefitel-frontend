@@ -76,7 +76,22 @@ const PreviewTable = ({ result, onPage, sort, onToggleSort, loading, hasFilters 
 
   return (
     <div className="space-y-3">
-      <div className="overflow-x-auto rounded-lg border">
+      {/*
+        Dimmed and inert while the next answer travels, never replaced by a
+        skeleton. These rows are real: somebody asked for them, they are on
+        screen, and they are still true until the new ones land. Swapping them
+        for grey bars would take away what the reader has — including the row
+        they were in the middle of reading — in exchange for nothing.
+
+        Only the opacity moves, and only that: it is not a layout property, so
+        nothing on the page shifts while it fades.
+      */}
+      <div
+        aria-busy={loading || undefined}
+        className={`overflow-x-auto rounded-lg border transition-opacity duration-200 ${
+          loading ? "pointer-events-none opacity-60" : "opacity-100"
+        }`}
+      >
         <Table>
           <TableHeader className="bg-muted">
             <TableRow>

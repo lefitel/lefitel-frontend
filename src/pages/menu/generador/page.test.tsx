@@ -97,11 +97,32 @@ const catalog: Catalog = {
   ],
 };
 
+/**
+ * What the server calls each column of the fixture above, and what type it
+ * gives it. Written out by hand rather than computed from the catalog: this is
+ * the other side of the contract, and a fake that derives its answer from the
+ * same function the page uses would agree with the page by construction.
+ *
+ * This used to be `c.label ?? c.path`, so every header in these tests read
+ * "description" — a shape no server ever sends. Nothing noticed until a test
+ * compared a header the page draws against a header the server sends.
+ */
+const SERVER_COLUMN: Record<string, { label: string; kind: ReportResult["columns"][number]["kind"] }> = {
+  description: { label: "Descripción", kind: "string" },
+  state: { label: "Resuelto", kind: "boolean" },
+  name: { label: "Nº de poste", kind: "string" },
+  revisiones: { label: "Nº de revisiones", kind: "number" },
+};
+
 const resultFor = (config: ReportConfig, over: Partial<ReportResult> = {}): ReportResult => ({
   // The server sends the path and the summary with each column now, so the
   // table can sort by its own headers; the fake answers the same shape.
   columns: config.columns.map((c, i) => ({
-    key: `c${i}`, label: c.label ?? c.path, kind: "string" as const, path: c.path, agg: c.agg,
+    key: `c${i}`,
+    label: c.label?.trim() || SERVER_COLUMN[c.path]?.label || c.path,
+    kind: SERVER_COLUMN[c.path]?.kind ?? "string",
+    path: c.path,
+    agg: c.agg,
   })),
   rows: [{ c0: "fila" }],
   total: 1,
@@ -129,9 +150,17 @@ const renderPage = () =>
     </SesionContext.Provider>,
   );
 
-/** Waits until the catalog has loaded and the builder is on screen. */
+/**
+ * Waits until the catalog has loaded and the builder is on screen.
+ *
+ * Anchored on the Generar button rather than on the word "Columnas". The
+ * skeleton drawn while the catalog loads carries the four card titles — they
+ * are fixed strings, so hiding them behind grey bars would be pretending not
+ * to know them — and "Columnas" therefore stopped telling these seventy tests
+ * apart from a page that has not loaded yet. Only the real page has a button.
+ */
 const ready = async () => {
-  await waitFor(() => expect(screen.getByText("Columnas")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByRole("button", { name: "Generar" })).toBeInTheDocument());
 };
 
 const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
@@ -876,5 +905,129 @@ describe("when the saved list cannot be read", () => {
     await user.click(screen.getByRole("button", { name: "Reintentar" }));
 
     expect(await screen.findByText(/Todavía no hay reportes guardados/)).toBeInTheDocument();
+  });
+});
+
+describe("what the screen shows while it waits", () => {
+  /** A promise that never settles, so a request can be caught mid-flight. */
+  const pending = <T,>() => new Promise<T>(() => {});
+
+  it("draws the page that is coming instead of a spinner in an empty one", async () => {
+    // What used to be here was a centred spinner and then, in one frame, a
+    // two-column layout with five cards in it. Nothing on screen during the
+    // wait had anything to do with what arrived.
+    api.getCatalogo.mockReturnValue(pending());
+    renderPage();
+
+    // The heading and the four card titles are written into this page, not
+    // fetched, so they are already readable while the fields travel.
+    expect(await screen.findByRole("heading", { name: "Generador de reportes" })).toBeInTheDocument();
+    for (const title of ["Reportes guardados", "Nivel de detalle", "Columnas", "Filtros", "Resultado"]) {
+      expect(screen.getByText(title)).toBeInTheDocument();
+    }
+    // And it is announced as busy, not just drawn as busy.
+    expect(screen.getByRole("status")).toHaveAttribute("aria-busy", "true");
+  });
+
+  it("does not tell the reader they have no saved reports while the list is loading", async () => {
+    // The two requests leave together and the catalog usually wins: it is a
+    // fixed structure, the list joins usuarios and reads the database. So the
+    // panel rendered with an empty array and stated, as a fact about somebody
+    // who may have forty of them, that they had never saved one.
+    api.getReportesGuardados.mockReturnValue(pending());
+    renderPage();
+    await ready();
+
+    expect(screen.queryByText(/Todavía no hay reportes guardados/)).not.toBeInTheDocument();
+    // Nor is it the failure state, which is a different claim again.
+    expect(screen.queryByText(/No se pudieron cargar sus reportes guardados/)).not.toBeInTheDocument();
+  });
+
+  it("says there are none once the answer is actually in", async () => {
+    // The skeleton must not outlive its request, or the panel waits forever.
+    renderPage();
+    await ready();
+    expect(await screen.findByText(/Todavía no hay reportes guardados/)).toBeInTheDocument();
+  });
+
+  it("releases the skeleton when the list fails, so the error can be seen", async () => {
+    api.getReportesGuardados.mockRejectedValue(new Error("500"));
+    renderPage();
+    await ready();
+    expect(await screen.findByText(/No se pudieron cargar sus reportes guardados/)).toBeInTheDocument();
+  });
+
+  it("draws the table it is asking for, not the invitation to build one", async () => {
+    // The first run had no previous table to keep, so underneath sat the empty
+    // state: for the whole of the first query the screen answered "elija las
+    // columnas y pulse Generar" to somebody who had just done both.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    api.runReporte.mockReturnValue(pending());
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    expect(screen.queryByText(/Elija las columnas en el panel de configuración/)).not.toBeInTheDocument();
+    // The headers are the report's own, taken from the configuration that was
+    // just sent, so nothing in the header row moves when the rows land.
+    expect(screen.getByRole("columnheader", { name: "Descripción" })).toBeInTheDocument();
+  });
+
+  it("hands the result a header row identical to the one it drew", async () => {
+    // The claim the whole skeleton rests on: the columns do not move when the
+    // rows land. It is also the failure mode that makes people say skeletons
+    // feel worse than a spinner — a placeholder of the wrong shape causes a
+    // bigger jump than the empty box it replaced. Without a browser here this
+    // is what can be pinned: same count, same words, same order.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+
+    // Held open and released by hand, so the same run can be looked at twice:
+    // pressing Generar again would do nothing while the first one is out.
+    let release: (r: ReportResult) => void = () => {};
+    let asked: ReportConfig | null = null;
+    api.runReporte.mockImplementation((config: ReportConfig) => {
+      asked = config;
+      return new Promise<ReportResult>((resolve) => { release = resolve; });
+    });
+
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    const waiting = screen.getAllByRole("columnheader").map((h) => h.textContent);
+
+    release(resultFor(asked as unknown as ReportConfig));
+    await waitFor(() => expect(screen.getByText("fila")).toBeInTheDocument());
+    const arrived = screen.getAllByRole("columnheader").map((h) => h.textContent);
+
+    expect(waiting).toEqual(["Descripción", "Resuelto"]);
+    expect(arrived).toEqual(waiting);
+  });
+
+  it("keeps the rows that are already on screen while the next page travels", async () => {
+    // Deliberately not a skeleton. These rows are real, somebody asked for
+    // them, and they stay true until the new ones land; replacing them with
+    // grey bars takes away the row the reader was in the middle of.
+    const user = userEvent.setup();
+    api.runReporte.mockResolvedValue({
+      columns: [{ key: "c0", label: "Descripción", kind: "string", path: "description" }],
+      rows: [{ c0: "un evento concreto" }],
+      total: 250, limit: 100, offset: 0,
+    });
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    expect(await screen.findByText("un evento concreto")).toBeInTheDocument();
+
+    api.runReporte.mockReturnValue(pending());
+    await user.click(screen.getByRole("button", { name: /Siguiente/ }));
+
+    expect(screen.getByText("un evento concreto")).toBeInTheDocument();
   });
 });

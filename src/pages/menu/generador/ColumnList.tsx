@@ -10,16 +10,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { findField, isSummary } from "../../../lib/reportConfig";
+import { AGG_LABEL, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
 import { cn } from "../../../lib/utils";
-
-const AGG_LABEL: Record<AggFn, string> = {
-  count: "Conteo",
-  sum: "Suma",
-  avg: "Promedio",
-  min: "Mínimo",
-  max: "Máximo",
-};
 
 interface RowProps {
   column: ColumnSpec;
@@ -213,7 +205,7 @@ const ColumnList = ({
         const field = findField(root, column.path);
         const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
         const relation = root?.aggregateOnly.find((a) => column.path === a.path);
-        const label = field?.label ?? (relation ? `Nº de ${relation.label.toLowerCase()}` : column.path);
+        const label = fieldLabel(root, column.path);
         const group = field?.group ?? relation?.group ?? "Resumen";
 
         return (

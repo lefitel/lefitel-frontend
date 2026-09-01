@@ -1,4 +1,4 @@
-import { CopyIcon, StarIcon, Trash2Icon, UsersIcon, LockIcon } from "lucide-react";
+import { CopyIcon, Loader2Icon, StarIcon, Trash2Icon, UsersIcon, LockIcon } from "lucide-react";
 import type { SavedReport } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
 import {
@@ -8,6 +8,7 @@ import {
 } from "../../../components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { cn } from "../../../lib/utils";
+import { SavedListSkeleton } from "./Skeletons";
 
 interface Props {
   reports: SavedReport[];
@@ -51,6 +52,11 @@ const SavedReports = ({
   onDelete, loading, failed, onRetry,
 }: Props) => {
   const missing = Math.max(0, (total ?? reports.length) - reports.length);
+  // Before either of the two sentences below, because both of them state
+  // something about the reader's data that a request still in flight has not
+  // established yet. "Todavía no hay reportes guardados" was showing for as
+  // long as the list took to arrive.
+  if (reports.length === 0 && loading) return <SavedListSkeleton />;
   if (reports.length === 0 && failed) {
     return (
       <div className="rounded-md border border-dashed px-3 py-6 text-center">
@@ -177,8 +183,15 @@ const SavedReports = ({
           <span>
             Mostrando {reports.length} reportes de {total}.
           </span>
+          {/*
+            A spinner in the button, not a skeleton row underneath it: this is
+            somebody pressing something, and every other button on this page
+            that waits — Generar, Guardar, Exportar — answers the same way.
+            Disabling it on its own left the press with no acknowledgement.
+          */}
           {onLoadMore && (
             <Button variant="ghost" size="sm" className="h-7" onClick={onLoadMore} disabled={loading}>
+              {loading && <Loader2Icon className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
               Cargar más
             </Button>
           )}
