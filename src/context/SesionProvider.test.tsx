@@ -413,6 +413,42 @@ describe("a role that changes mid-session", () => {
     expect(comprobarToken).toHaveBeenCalledTimes(1);
   });
 
+  it("does not keep `autenticado` from the previous answer when the refresh lands `parcial` — hallazgo E-4/F11's fourth entry", async () => {
+    // The shared-laptop race this reproduces: this tab belongs to A (rol 1),
+    // genuinely logged in. B logs in on a second tab of the same browser, and
+    // B's account has a factor registered — so B's login opens a `parcial`
+    // session and carries its own `x-osefi-role` header. The very next
+    // response this tab's axios instance sees (any of them; the header rides
+    // on every response) reads as a role change and fires this refresh, and
+    // by the time it answers, the cookie in this browser names B's
+    // still-unproven session. This used to keep `prev.autenticado` (`true`,
+    // A's own) while adopting B's `estado: "parcial"` and B's own name and
+    // photo — exactly the shape `LoginPage.tsx` and this file's own startup
+    // effect both exist to prevent, just reached a third way.
+    render(
+      <SesionProvider>
+        <Establecer id_rol={1} permisos={permisosCon("generador", "ver")} />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(1, "generador", "ver")).toBe(true));
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
+    comprobarToken.mockClear();
+    comprobarToken.mockResolvedValueOnce({
+      status: 200,
+      usuario: { id: 9, id_rol: 2, user: "b" },
+      estado: "parcial",
+      // `permisos` withheld: `GET /auth/me` never sends it for `parcial`.
+    });
+
+    act(() => {
+      onResponse!(respuestaNuestra(2));
+    });
+
+    await waitFor(() => expect(latest?.sesion.estado).toBe("parcial"));
+    expect(latest?.sesion.autenticado).toBe(false);
+  });
+
   it("avisa una sola vez, aunque otra respuesta llegue justo cuando el cerrojo se suelta", async () => {
     // La ventana que quedaba entre las dos mitades del arreglo anterior. El
     // `finally` que suelta el cerrojo corre en la cadena de microtareas de la

@@ -599,13 +599,29 @@ export const SesionProvider = ({ children }: props) => {
                   ...prev,
                   usuario: res.usuario as UsuarioInterface,
                   permisos: res.permisos,
-                  // Kept in step with the rest of this answer for the same
-                  // reason `permisos` is: this session is already
-                  // `autenticado`, so `estado` can only move to `onboarding`
-                  // or `completa` from here, never back to `parcial` — but
-                  // stale is still wrong, and this refresh is already
-                  // fetching the current value.
                   estado: res.estado,
+                  /**
+                   * Hallazgo E-4/F11's fourth entry — not `prev.autenticado`.
+                   * This comment used to claim `estado` "can only move to
+                   * `onboarding` or `completa` from here, never back to
+                   * `parcial`", on the premise that an already-`autenticado`
+                   * session cannot un-authenticate itself mid-flight. That
+                   * premise is false on a shared machine: this refresh reacts
+                   * to `ROLE_HEADER` on *any* response our API answers, and
+                   * `x-osefi-role` rides on the login response too. So the
+                   * shape is A (rol 1) with this tab open, B (rol 2, with a
+                   * factor) logging in on a second tab of the same browser —
+                   * the cookie this tab's next request carries is now B's,
+                   * freshly `parcial`. Keeping `prev.autenticado` here left
+                   * A's tab at `autenticado: true` + `estado: "parcial"` +
+                   * B's own name and photo, which is exactly the shape the
+                   * two guards in `LoginPage.tsx` and this file's own startup
+                   * effect exist to prevent — just reached a third way in.
+                   * Same expression as both of those, off the answer this
+                   * `setSesion` is already committing, so this cannot land on
+                   * a different verdict than they would for the same `res`.
+                   */
+                  autenticado: res.estado !== "parcial",
                 }));
                 toast.info("Sus permisos cambiaron. La pantalla se actualizó.");
               })

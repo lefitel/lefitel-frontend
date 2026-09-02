@@ -9,6 +9,7 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import RecoveryCodesSection from "./RecoveryCodesSection";
 
 const generateRecoveryCodes = vi.fn();
@@ -157,8 +158,20 @@ describe("la hoja de códigos, mostrada una sola vez", () => {
     expect(texto).toContain(CODIGOS[0].match(/.{1,4}/g)!.join("-"));
   });
 
+  it("warns that the copied codes sit in the Windows clipboard history — hallazgo E-13/F15", async () => {
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    await revelar(user);
+
+    await user.click(screen.getByRole("button", { name: /copiar todos/i }));
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles/i)),
+    );
+  });
+
   it("opens a print window with the codes when 'Imprimir' is pressed", async () => {
-    const ventana = { document: { write: vi.fn(), close: vi.fn() }, focus: vi.fn(), print: vi.fn() };
+    const ventana = { document: { write: vi.fn(), close: vi.fn() }, focus: vi.fn(), print: vi.fn(), close: vi.fn() };
     vi.spyOn(window, "open").mockReturnValue(ventana as unknown as Window);
     const user = userEvent.setup();
     await revelar(user);
@@ -168,6 +181,33 @@ describe("la hoja de códigos, mostrada una sola vez", () => {
     expect(ventana.document.write).toHaveBeenCalledTimes(1);
     expect(ventana.document.write.mock.calls[0][0]).toContain(CODIGOS[0].match(/.{1,4}/g)!.join("-"));
     expect(ventana.print).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes the print window once the dialog is dismissed, instead of leaving the ten codes on an orphan window — hallazgo E-13/F15", async () => {
+    const ventana = {
+      document: { write: vi.fn(), close: vi.fn() },
+      focus: vi.fn(),
+      print: vi.fn(),
+      close: vi.fn(),
+      onafterprint: null as (() => void) | null,
+    };
+    vi.spyOn(window, "open").mockReturnValue(ventana as unknown as Window);
+    const user = userEvent.setup();
+    await revelar(user);
+
+    await user.click(screen.getByRole("button", { name: /imprimir/i }));
+
+    // Not closed the instant `print()` returns — that used to be the trap:
+    // `print()`'s blocking behaviour while the native dialog is open is not
+    // guaranteed the same way on every browser, so a bare `close()` right
+    // after it can tear the window down before the dialog even paints.
+    expect(ventana.close).not.toHaveBeenCalled();
+
+    // The signal this waits on instead: fires once the dialog is dismissed,
+    // printed or cancelled either way.
+    ventana.onafterprint?.();
+
+    expect(ventana.close).toHaveBeenCalledTimes(1);
   });
 
   it("does not close on Escape — the only way out is the explicit button", async () => {

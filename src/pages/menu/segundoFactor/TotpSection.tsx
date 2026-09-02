@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,8 @@ import {
   describeStepUpError,
   CODIGO_STEP_UP,
 } from "../../../api/Mfa.api";
+import { comprobarToken } from "../../../api/Login.api";
+import { SesionContext } from "../../../context/SesionContext";
 import { renderTotpQr } from "./totpQr";
 
 /**
@@ -77,8 +79,24 @@ type Banner409 = "correo" | "factor" | null;
  * password is asked once, at the start of a registration attempt, and
  * reused for the `confirm` that follows moments later rather than asked
  * twice for one continuous action.
+ *
+ * **`SesionContext` is read here now, for exactly one write.** Hallazgo
+ * E-3/F12: `confirmTotp`'s 200 promotes the session on the server —
+ * `totp.controller.ts`'s own comment on that handler spells out why a
+ * confirmed-but-not-promoted session is worse than not confirming at all —
+ * and this component used to stop at a toast, leaving `SesionContext` (and
+ * therefore the sidebar and `HomeRoute`) holding the *old* `estado`. Day 15,
+ * that meant: verify, get told "listo", press "Inicio", and land right back
+ * on the day-15 redirect with the same expired-grace toast, because
+ * `HomeRoute` reads `sesion.estado` and nothing here had told it to change —
+ * fixed only by a manual reload nothing on screen suggests. `comprobarToken`
+ * + `setSesion` below is the exact pair `pages/login/SegundoFactorPage.tsx`
+ * already uses for the same reason, and reads no `estado` guessed from this
+ * response's own body: `/auth/me` is the one authority for that shape, same
+ * as everywhere else in this codebase that touches it.
  */
 const TotpSection = () => {
+  const { setSesion } = useContext(SesionContext);
   // ── Quitar ───────────────────────────────────────────────────────────────
   const [bajaAbierta, setBajaAbierta] = useState(false);
   const [passwordBaja, setPasswordBaja] = useState("");
@@ -223,6 +241,17 @@ const TotpSection = () => {
           "Tu segundo factor quedó configurado. Genera tus códigos de recuperación más abajo antes de terminar.",
         );
         cancelarAlta();
+        // Hallazgo E-3/F12 — see this component's own docstring. The server
+        // already promoted the session; this is what tells this browser.
+        const yo = await comprobarToken();
+        if (yo.status === 200 && yo.usuario) {
+          setSesion({
+            usuario: yo.usuario,
+            permisos: yo.permisos,
+            estado: yo.estado,
+            autenticado: yo.estado !== "parcial",
+          });
+        }
       } else if (res.code === CODIGO_STEP_UP) {
         // Rare: the password no longer holds — most likely it was changed in
         // another tab mid-attempt. Sent back to the password step rather
@@ -245,7 +274,14 @@ const TotpSection = () => {
     if (!secreto) return;
     try {
       await navigator.clipboard.writeText(secreto);
-      toast.success("Código copiado.");
+      // Hallazgo E-13/F15: this secret is the second factor itself, and it
+      // just went into a system clipboard that Windows 11 keeps a 25-entry
+      // history of (Win+V) — synced to the Microsoft account when that sync
+      // is on. There is no way to mark a clipboard write "sensitive" from a
+      // browser, so the only lever left is saying so.
+      toast.success(
+        "Código copiado. Bórralo del historial del portapapeles (Win+V) apenas termines de pegarlo.",
+      );
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo manualmente.");
     }
@@ -405,7 +441,15 @@ const TotpSection = () => {
                   inputMode="numeric"
                   autoComplete="one-time-code"
                   value={codigo}
-                  onChange={(e) => setCodigo(e.target.value)}
+                  // Hallazgo E-12/F14: Google Authenticator and Authy both
+                  // display the code as "123 456", with a space in the
+                  // middle. Pasting that verbatim into a bare `maxLength={6}`
+                  // field truncates to "123 45" — six characters, none of
+                  // them the code — and the person reads "código incorrecto"
+                  // while looking at a correct one. Same sanitizer
+                  // `pages/login/SegundoFactorPage.tsx` already uses for the
+                  // same paste.
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
                   className="font-mono tracking-widest w-32"
                   placeholder="000000"
                   maxLength={6}

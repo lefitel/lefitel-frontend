@@ -7,11 +7,14 @@
 // test asserting both sections merely *exist* would stay green if that order
 // were reversed; only a test that reads the DOM's own order catches it.
 
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import TotpSection from "./TotpSection";
+import { SesionContext, type contextProps } from "../../../context/SesionContext";
+import { usuarioExample } from "../../../data/example";
+import { sinPermisos } from "../../../lib/permissions";
 
 const setupTotp = vi.fn();
 const confirmTotp = vi.fn();
@@ -27,9 +30,41 @@ vi.mock("../../../api/Mfa.api", async (importOriginal) => {
   };
 });
 
+// Hallazgo E-3/F12: `TotpSection` now asks `/auth/me` after a successful
+// `confirmTotp`, to re-derive the session. Defaulted to the same anonymous,
+// no-op answer `SesionProvider.test.tsx` defaults it to, so every test in
+// this file that does not care about the refresh gets a harmless 401 rather
+// than crashing on an unmocked `vi.fn()` return value.
+const comprobarToken = vi.fn();
+vi.mock("../../../api/Login.api", () => ({
+  comprobarToken: (...args: unknown[]) => comprobarToken(...args),
+}));
+
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
+
+/** The `setSesion` every test can assert against, without each one having to
+ *  build its own `SesionContext.Provider`. */
+const setSesion = vi.fn();
+
+function renderTotp() {
+  const value: contextProps = {
+    sesion: { usuario: usuarioExample, autenticado: true, estado: "onboarding" },
+    setSesion,
+    loading: false,
+    logout: vi.fn(),
+  };
+  return render(
+    <SesionContext.Provider value={value}>
+      <TotpSection />
+    </SesionContext.Provider>,
+  );
+}
+
+beforeEach(() => {
+  comprobarToken.mockResolvedValue({ status: 401, usuario: null });
+});
 
 // `qrcode`'s SVG renderer is pure JS and safe to run for real under Vitest —
 // see `totpQr.test.ts` — but it is async and irrelevant to every test here
@@ -49,7 +84,7 @@ const SECRETO = "JBSWY3DPEHPK3PXP";
 
 describe("layout", () => {
   it("shows the remove-factor action before the add-factor action", () => {
-    render(<TotpSection />);
+    renderTotp();
 
     const quitar = screen.getByRole("heading", { name: /quitar tu factor actual/i });
     const anadir = screen.getByRole("heading", { name: /configurar un nuevo factor/i });
@@ -61,7 +96,7 @@ describe("layout", () => {
   });
 
   it("names apps people already know, because half of an MFA rollout's support calls are 'which app do I install'", () => {
-    render(<TotpSection />);
+    renderTotp();
 
     expect(screen.getByText(/google authenticator/i)).toBeInTheDocument();
   });
@@ -70,7 +105,7 @@ describe("layout", () => {
 describe("quitar el factor", () => {
   it("asks for the password before letting the confirm dialog open", async () => {
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
@@ -81,7 +116,7 @@ describe("quitar el factor", () => {
 
   it("says, before deleting, that the account may fall back to password-only entry", async () => {
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -96,7 +131,7 @@ describe("quitar el factor", () => {
   it("deletes with the typed password once the dialog is confirmed", async () => {
     deleteTotp.mockResolvedValue({ status: 200, message: "Factor de autenticación eliminado." });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -113,7 +148,7 @@ describe("quitar el factor", () => {
   it("reads a 404 (nothing registered) as news, not as a red error", async () => {
     deleteTotp.mockResolvedValue({ status: 404, message: "No tienes ningún factor de autenticación registrado." });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -134,7 +169,7 @@ describe("quitar el factor", () => {
       motivo: "sin-factor-reciente",
     });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -150,7 +185,7 @@ describe("añadir un factor nuevo", () => {
   it("asks for the password, then shows the QR and the plain-text secret", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -169,7 +204,7 @@ describe("añadir un factor nuevo", () => {
     // being swapped out.
     const writeText = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -181,11 +216,33 @@ describe("añadir un factor nuevo", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SECRETO));
   });
 
+  it("warns that the copied secret sits in the Windows clipboard history — hallazgo E-13/F15", async () => {
+    // Nothing on this side can stop Win+V from keeping it, or Microsoft
+    // account sync from carrying it further — the only lever left is saying
+    // so, since a TOTP secret in that history is equivalent to no second
+    // factor at all.
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText(SECRETO);
+
+    await user.click(screen.getByRole("button", { name: /copiar código/i }));
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles/i)),
+    );
+  });
+
   it("confirms with the same password already typed for setup — never asks for it twice in one attempt", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     confirmTotp.mockResolvedValue({ status: 200, message: "Segundo factor configurado correctamente." });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -201,6 +258,59 @@ describe("añadir un factor nuevo", () => {
     await waitFor(() => expect(confirmTotp).toHaveBeenCalledWith("123456", "la-mia"));
   });
 
+  it("refreshes SesionContext from /auth/me right after a successful confirm — hallazgo E-3/F12", async () => {
+    // Without this, `sesion.estado` in context stays `"onboarding"` after the
+    // server already promoted the session: `HomeRoute` reads that stale
+    // value on the very next "Inicio" click and sends the person right back
+    // to this screen with the same expired-grace toast, the sidebar still
+    // missing its permissions. Fixed only by a manual reload nothing on
+    // screen suggests.
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    confirmTotp.mockResolvedValue({ status: 200, message: "Segundo factor configurado correctamente." });
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { ...usuarioExample, user: "ada" },
+      permisos: sinPermisos(),
+      estado: "completa",
+    });
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText(SECRETO);
+    await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(setSesion).toHaveBeenCalledWith({
+      usuario: { ...usuarioExample, user: "ada" },
+      permisos: sinPermisos(),
+      estado: "completa",
+      autenticado: true,
+    }));
+  });
+
+  it("tolerates a paste with the space Google Authenticator and Authy put in the middle of the code — hallazgo E-12/F14", async () => {
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    confirmTotp.mockResolvedValue({ status: 200, message: "ok" });
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText(SECRETO);
+
+    // "123 456", the way both apps display it. A bare `maxLength={6}` with no
+    // sanitizer truncates this to "123 45" — six characters, none of them
+    // the code.
+    await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123 456");
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(confirmTotp).toHaveBeenCalledWith("123456", "la-mia"));
+  });
+
   it("keeps the QR on screen and shows an inline error on a wrong code, so the person can just retry", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     confirmTotp.mockResolvedValue({
@@ -208,7 +318,7 @@ describe("añadir un factor nuevo", () => {
       message: "El código no es válido. Comprueba la hora de tu dispositivo e inténtalo de nuevo.",
     });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -235,7 +345,7 @@ describe("añadir un factor nuevo", () => {
       secreto: null,
     });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -256,7 +366,7 @@ describe("añadir un factor nuevo", () => {
       secreto: null,
     });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
@@ -268,7 +378,7 @@ describe("añadir un factor nuevo", () => {
   it("cancelling the QR step discards the attempt without calling the server again", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     const user = userEvent.setup();
-    render(<TotpSection />);
+    renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");

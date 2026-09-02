@@ -13,8 +13,17 @@ import RecoveryCodesSection from "./RecoveryCodesSection";
  * `onboarding`, building it on a hook that 403s in exactly that state was
  * never an option; see `docs/plans/2026-09-01-factores-mfa.md`, Task 19 Step
  * 1. Both sections below talk to `/api/auth/totp/*` and
- * `/api/auth/recovery-codes` only, through `Mfa.api.ts` — nothing here reads
- * `sesion.usuario` from context or asks for anything else about the account.
+ * `/api/auth/recovery-codes` only, through `Mfa.api.ts` — neither reads
+ * `sesion.usuario` from context or asks `usePerfilData`'s endpoint for
+ * anything about the account.
+ *
+ * **One exception, added for hallazgo E-3/F12, and it is safe under the same
+ * rule.** `TotpSection` calls `comprobarToken()` — `/api/auth/me`, not
+ * `/api/usuario/:id` — after a successful `confirmTotp`, to re-derive the
+ * session `HomeRoute` and the sidebar read from. `/api/auth/me` is on the
+ * same `/api/auth/*` allow-list this docstring already leans on, open to
+ * `onboarding` (and to the `parcial` session this screen never sees), so it
+ * carries none of `usePerfilData`'s 403 risk.
  *
  * **One screen, not two, even though the plan writes Tasks 19 and 20 as
  * separate units.** Recovery codes are the rescue for exactly the TOTP

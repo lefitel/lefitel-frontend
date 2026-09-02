@@ -21,9 +21,11 @@ import type { SesionInterface } from "../../interfaces/interfaces";
 
 const verifySecondFactor = vi.fn();
 const comprobarToken = vi.fn();
+const abandonPartialSession = vi.fn();
 vi.mock("../../api/Login.api", () => ({
   verifySecondFactor: (...args: unknown[]) => verifySecondFactor(...args),
   comprobarToken: (...args: unknown[]) => comprobarToken(...args),
+  abandonPartialSession: (...args: unknown[]) => abandonPartialSession(...args),
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() },
@@ -100,7 +102,10 @@ describe("entering the app code", () => {
     await user.type(screen.getByLabelText(/código de seis dígitos/i), "123456");
     await user.click(screen.getByRole("button", { name: /verificar/i }));
 
-    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456"));
+    // `false`: the "recordar este equipo" checkbox is unticked by default —
+    // hallazgo E-7/F16 requires that, since it grants thirty days without a
+    // second factor and must never be assumed.
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456", false));
     // The response `POST /auth/mfa/verify` gives back is not trusted for the
     // session shape — `comprobarToken` is what this screen actually reads,
     // same rule `LoginPage.tsx` follows for the login body itself.
@@ -160,6 +165,70 @@ describe("entering the app code", () => {
   });
 });
 
+describe("hallazgo D-3/E-4/F11 — the third entry of the MFA loop", () => {
+  it("does not read a still-parcial /auth/me answer as a finished login", async () => {
+    // The race this reproduces: the code was genuinely accepted (`verify`
+    // returns 200), but by the time `comprobarToken()` lands, the cookie
+    // this tab holds names a *different*, still-unproven session — another
+    // login in another tab, or a `logout-all` elsewhere. Reading `estado`
+    // unconditionally as `autenticado: true` used to send the very next
+    // request into `authenticate`'s 401-outside-the-allow-list branch, which
+    // the interceptor answers by calling `logout()` — "tu sesión se cerró"
+    // for a code the server just accepted.
+    verifySecondFactor.mockResolvedValue({ status: 200, message: "ok" });
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { ...usuarioExample, user: "otra-cuenta" },
+      estado: "parcial",
+    });
+
+    const user = userEvent.setup();
+    const sesiones: SesionInterface[] = [];
+    render(<Harness onSesion={(s) => sesiones.push(s)} />);
+
+    await user.type(screen.getByLabelText(/código de seis dígitos/i), "123456");
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    await waitFor(() => expect(sesiones.length).toBeGreaterThan(0));
+    expect(sesiones.at(-1)!.autenticado).toBe(false);
+    expect(sesiones.at(-1)!.estado).toBe("parcial");
+    // Never sent into the app shell on this answer.
+    expect(screen.queryByText("pantalla-app")).not.toBeInTheDocument();
+    const { toast } = await import("sonner");
+    expect(toast.error).toHaveBeenCalledWith(
+      "Tu sesión cambió mientras verificabas el código. Volvé a intentarlo.",
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+describe("hallazgo E-7/F16 — «recordar este equipo»", () => {
+  it("is unticked by default", () => {
+    render(<Harness onSesion={() => {}} />);
+
+    expect(screen.getByRole("checkbox")).not.toBeChecked();
+  });
+
+  it("sends `recordar: true` only once ticked by hand", async () => {
+    verifySecondFactor.mockResolvedValue({ status: 200, message: "ok" });
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: usuarioExample,
+      permisos: sinPermisos(),
+      estado: "completa",
+    });
+
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.click(screen.getByRole("checkbox"));
+    await user.type(screen.getByLabelText(/código de seis dígitos/i), "123456");
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456", true));
+  });
+});
+
 describe("the recovery-code tab — hallazgo A5/D4: visible, not hidden behind a link", () => {
   it("is reachable as plainly as the app-code tab, with no disclosure to open first", () => {
     render(<Harness onSesion={() => {}} />);
@@ -186,12 +255,12 @@ describe("the recovery-code tab — hallazgo A5/D4: visible, not hidden behind a
     await user.type(screen.getByLabelText(/^código de recuperación$/i), "ABCD-2345-WXYZ");
     await user.click(screen.getByRole("button", { name: /verificar/i }));
 
-    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("ABCD-2345-WXYZ"));
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("ABCD-2345-WXYZ", false));
   });
 });
 
 describe("cancelling", () => {
-  it("resets the session to anonymous and goes back to /login, without calling the server", async () => {
+  it("resets the session to anonymous and goes back to /login, without verifying a code", async () => {
     const user = userEvent.setup();
     const sesiones: SesionInterface[] = [];
     render(<Harness onSesion={(s) => sesiones.push(s)} />);
@@ -201,5 +270,20 @@ describe("cancelling", () => {
     expect(await screen.findByText("pantalla-login")).toBeInTheDocument();
     expect(sesiones.at(-1)).toEqual({ usuario: usuarioExample, autenticado: false });
     expect(verifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it("ends the parcial session on the server too — hallazgo E-10/F13, the shared-laptop gap", async () => {
+    // `SesionProvider.tsx`'s own `logout()` never reaches the server for a
+    // `parcial` session (`hasSessionRef` reads `sesion.autenticado`, which is
+    // `false` here by `SesionInterface`'s own contract), so this is the one
+    // caller that has to reach `POST /api/auth/logout` directly. Without it
+    // the row — and its cookie, good for up to seven days — outlives the tab,
+    // reachable by the next person who opens the same machine.
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /cancelar y volver a iniciar sesión/i }));
+
+    await waitFor(() => expect(abandonPartialSession).toHaveBeenCalledTimes(1));
   });
 });

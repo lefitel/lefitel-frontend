@@ -357,12 +357,21 @@ export const comprobarToken = (): Promise<{
  * consistent number of steps. Kept general (`message` shown verbatim,
  * whatever it says) rather than written around a sentence that does not
  * exist today, so this needs no change the day that decision is revisited.
+ *
+ * **`recordar` — hallazgo E-7/F16.** `api/src/config/security.ts`'s
+ * `REMEMBER_DEVICE_FIELD` and `mfa.controller.ts`'s `verify` handler have
+ * read this field since the arc that built them; nothing on this side ever
+ * sent it, so `dispositivo_recordado` could never gain a row. `undefined`
+ * when the caller does not pass it, which `JSON.stringify` drops from the
+ * body entirely — the same as never asking — so this stays a no-op for every
+ * caller that predates the checkbox in `pages/login/SegundoFactorPage.tsx`.
  */
 export const verifySecondFactor = (
-  codigo: string
+  codigo: string,
+  recordar?: boolean,
 ): Promise<{ status: number; message: string | null }> =>
   axios
-    .post(urlApi + "auth/mfa/verify", { codigo })
+    .post(urlApi + "auth/mfa/verify", { codigo, recordar })
     .then((response) => ({
       status: response.status,
       message: (response.data?.message as string | undefined) ?? null,
@@ -470,3 +479,36 @@ export const logoutAllSessions = (): Promise<{
       message: e.response?.data?.message ?? "No se pudieron cerrar las sesiones.",
       cerradas: 0,
     }));
+
+/**
+ * `POST /api/auth/logout` — end the session behind whatever cookie this
+ * browser is currently holding, proven or not.
+ *
+ * **Not `SesionProvider.tsx`'s own `logout()`.** That one only reaches the
+ * server when `hasSessionRef` is already `true`, and that ref is derived from
+ * `sesion.autenticado` — which `SesionInterface` deliberately keeps `false`
+ * for a `parcial` session (a password typed, a factor still unproven). So the
+ * one screen that ever holds a `parcial` session, `pages/login/
+ * SegundoFactorPage.tsx`, could never reach the server through the context's
+ * own `logout()` no matter how it called it.
+ *
+ * The server opened this exact route to `parcial` on purpose —
+ * `api/src/auth/sessionState.ts`'s `PARCIAL` allow-list carries `/api/auth/
+ * logout` (never `/logout-all`, which would also end that account's other,
+ * genuinely open sessions elsewhere) — with the reasoning spelled out there:
+ * abandoning the session in hand is the one thing anybody must always be able
+ * to do. Hallazgo E-10/F13 is this gap: "Cancelar y volver a iniciar sesión"
+ * used to reset only this tab's own state and leave the row — and the cookie,
+ * good for up to seven days — alive for whoever opens the same machine next.
+ *
+ * Fire-and-forget by design, unlike `revokeOnServer` in `SesionProvider.tsx`:
+ * there is no unsaved work behind this screen for a failed revoke to put at
+ * risk, so a second UI surface reporting that failure back would be
+ * answering a question nobody watching this screen is asking. The person is
+ * on their way to `/login` regardless of whether this request lands.
+ */
+export const abandonPartialSession = (): Promise<void> =>
+  axios
+    .post(`${urlApi}auth/logout`)
+    .then(() => undefined)
+    .catch(() => undefined);

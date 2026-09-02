@@ -6,11 +6,12 @@ import { Loader2, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
 import { useTheme } from "../../components/theme-provider";
 import { SesionContext } from "../../context/SesionContext";
 import { usuarioExample } from "../../data/example";
-import { comprobarToken, verifySecondFactor } from "../../api/Login.api";
+import { abandonPartialSession, comprobarToken, verifySecondFactor } from "../../api/Login.api";
 
 import logo from "../../assets/images/logo.png";
 
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -59,6 +60,16 @@ const SegundoFactorPage = () => {
   const [modo, setModo] = useState<"totp" | "recuperacion">("totp");
   const [codigo, setCodigo] = useState("");
   const [loading, setLoading] = useState(false);
+  /**
+   * "Recordar este equipo" — hallazgo E-7/F16. Off by default and only ever
+   * turned on by hand: this is a credential that skips the second factor for
+   * thirty days, which is a choice, not something the screen may assume on
+   * anybody's behalf. See `verifySecondFactor`'s own comment in `Login.api.ts`
+   * for the field it rides on, and `api/src/config/security.ts`'s
+   * `REMEMBER_DEVICE_FIELD` for the server half that has been reading it
+   * since before this checkbox existed to send it.
+   */
+  const [recordar, setRecordar] = useState(false);
 
   const verificar = async () => {
     const valor = codigo.trim();
@@ -70,7 +81,7 @@ const SegundoFactorPage = () => {
 
     setLoading(true);
     try {
-      const respuesta = await verifySecondFactor(valor);
+      const respuesta = await verifySecondFactor(valor, recordar);
       if (respuesta.status !== 200) {
         toast.error(respuesta.message ?? "No se pudo verificar el código.");
         return;
@@ -92,12 +103,35 @@ const SegundoFactorPage = () => {
         return;
       }
 
+      /**
+       * Hallazgo D-3/E-4/F11 — the THIRD entry of the same loop
+       * `LoginPage.tsx` and `SesionProvider.tsx`'s startup effect both
+       * already guard: `estado === "parcial"` must never read as
+       * `autenticado`, even on the one screen whose entire job is finishing a
+       * `parcial` session. `confirmTotp` on the server deliberately ignores
+       * `promoverSesion`'s return and promotes whatever session the request's
+       * *own* cookie names — so a login racing in from another tab, or a
+       * `logout-all` from another device, can leave this exact request with a
+       * 200 whose session was never the one that got promoted. Reading that
+       * unconditionally as `autenticado: true` used to send the next request
+       * straight into `authenticate`'s 401 (a `parcial` session outside its
+       * own allow-list), which the interceptor reads as "session closed" and
+       * answers with `logout()` — the code was right, the server accepted
+       * it, and the screen told the person the opposite.
+       */
+      const autenticado = yo.estado !== "parcial";
       setSesion({
         usuario: yo.usuario,
         permisos: yo.permisos,
         estado: yo.estado,
-        autenticado: true,
+        autenticado,
       });
+
+      if (!autenticado) {
+        toast.error("Tu sesión cambió mientras verificabas el código. Volvé a intentarlo.");
+        return;
+      }
+
       navigate(from, { replace: true });
       toast.success("Bienvenido");
     } catch {
@@ -108,15 +142,23 @@ const SegundoFactorPage = () => {
   };
 
   /**
-   * Abandons this login attempt without touching the server: the parcial
-   * session's cookie is left to expire or to be rotated out by whatever
-   * login happens next (`issueSession`'s `rotateOut` revokes the row a
-   * fresh login's cookie names, on the server, regardless). Resetting the
-   * local session back to the same anonymous placeholder `logout()` uses is
-   * what actually unblocks `/login` again — see `PublicRoutes`, which sends
-   * any `estado === "parcial"` session straight back here otherwise.
+   * Abandons this login attempt.
+   *
+   * Hallazgo E-10/F13: this used to only reset the local placeholder and
+   * navigate, leaving the `parcial` session's row — and its up-to-seven-day
+   * cookie — alive on whatever machine this is. `SesionProvider.tsx`'s own
+   * `logout()` cannot fix that: it only calls the server when
+   * `sesion.autenticado` is already `true`, which a `parcial` session is not,
+   * by `SesionInterface`'s own contract. `abandonPartialSession` is the
+   * route the server opened for exactly this case — see its own comment in
+   * `Login.api.ts` — so this is the one caller that reaches it.
+   *
+   * Fire-and-forget: the local reset and the navigation below happen either
+   * way, the same as they always did, so a slow or failed revoke never keeps
+   * anybody stuck on this screen.
    */
   const volver = () => {
+    abandonPartialSession();
     setSesion({ usuario: usuarioExample, autenticado: false });
     navigate("/login", { replace: true });
   };
@@ -199,6 +241,21 @@ const SegundoFactorPage = () => {
             </div>
           </TabsContent>
         </Tabs>
+
+        <label
+          htmlFor="recordar-equipo"
+          className="mb-5 flex items-start gap-2.5 cursor-pointer select-none"
+        >
+          <Checkbox
+            id="recordar-equipo"
+            checked={recordar}
+            onCheckedChange={(v) => setRecordar(v === true)}
+            className="mt-0.5"
+          />
+          <span className="text-xs text-muted-foreground leading-snug">
+            No volver a pedirme el código en este equipo durante 30 días.
+          </span>
+        </label>
 
         <Button
           className="h-12 w-full rounded-xl text-sm font-bold uppercase tracking-widest transition-all hover:shadow-lg hover:shadow-primary/20 group"

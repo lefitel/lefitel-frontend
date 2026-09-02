@@ -115,7 +115,14 @@ const RecoveryCodesSection = () => {
     if (!codigos) return;
     try {
       await navigator.clipboard.writeText(codigos.map(formatearCodigo).join("\n"));
-      toast.success("Códigos copiados.");
+      // Hallazgo E-13/F15: these ten codes just went into a system clipboard
+      // Windows 11 keeps a 25-entry history of (Win+V), synced to the
+      // Microsoft account when that sync is on — a browser has no way to
+      // mark a clipboard write "sensitive", so the only lever left is
+      // saying so.
+      toast.success(
+        "Códigos copiados. Bórralos del historial del portapapeles (Win+V) apenas termines de guardarlos.",
+      );
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto manualmente.");
     }
@@ -138,6 +145,16 @@ const RecoveryCodesSection = () => {
         `</body></html>`,
     );
     ventana.document.close();
+    // Hallazgo E-13/F15: this window used to never close, left sitting on
+    // screen with the ten codes in the clear until somebody closed it by
+    // hand. `close()` right after `print()` is not used here on purpose —
+    // `print()`'s blocking behaviour while the native dialog is open is not
+    // guaranteed the same way across browsers, and closing too early would
+    // tear the window down before that dialog even paints. `afterprint`
+    // fires once the dialog is dismissed either way (printed or cancelled),
+    // on every desktop browser that can print a popup at all, so it is the
+    // one signal this can wait on without guessing at timing.
+    ventana.onafterprint = () => ventana.close();
     ventana.focus();
     ventana.print();
   };
