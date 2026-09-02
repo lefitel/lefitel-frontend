@@ -30,6 +30,9 @@ import {
   verifyEmailToken,
   forgotPassword,
   resetPassword,
+  verifySecondFactor,
+  esRechazoStepUp,
+  CODIGO_STEP_UP,
 } from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
 import type { UsuarioInterface } from "../interfaces/interfaces";
@@ -95,6 +98,123 @@ describe("comprobarToken", () => {
 
     expect(res.status).toBe(500);
     expect(res.usuario).toBeNull();
+  });
+
+  // Plan 4B. `estado` is the field that lets a caller tell a finished login
+  // apart from one still owing a factor — see the two callers this exists
+  // for: `SesionProvider.tsx`'s startup effect and `LoginPage.tsx`'s second
+  // call. Mapped the same way `permisos` already is: straight off the body,
+  // present or not exactly as the server sent it.
+  it("maps `estado` off the body — the field the MFA loop's fix reads", async () => {
+    vi.spyOn(axios, "get").mockResolvedValue({
+      status: 200,
+      data: { usuario: usuarioDelServidor, permisos: permisosDelServidor, estado: "completa" },
+    });
+
+    const res = await comprobarToken();
+
+    expect(res.estado).toBe("completa");
+  });
+
+  it("maps a `parcial` estado the same way — this is the answer that must never be read as 'logged in'", async () => {
+    vi.spyOn(axios, "get").mockResolvedValue({
+      status: 200,
+      // A `parcial`/`onboarding` answer never carries `permisos` at all — see
+      // `GET /auth/me`'s own comment — so this fixture leaves it out rather
+      // than setting it to `undefined` by hand.
+      data: { usuario: usuarioDelServidor, estado: "parcial" },
+    });
+
+    const res = await comprobarToken();
+
+    expect(res.estado).toBe("parcial");
+    expect(res.permisos).toBeUndefined();
+  });
+});
+
+describe("verifySecondFactor", () => {
+  it("posts to POST /api/auth/mfa/verify with the code under `codigo`", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Segundo factor verificado." },
+    });
+
+    await verifySecondFactor("123456");
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/mfa\/verify$/);
+    // The same field name `totp.controller.ts`'s `confirmTotp` reads
+    // (`codigo`), and nothing else riding alongside it: this endpoint takes
+    // either a TOTP code or a recovery code under the one field, and it is
+    // the server's job to tell them apart, not this wrapper's.
+    expect(post.mock.calls[0][1]).toEqual({ codigo: "123456" });
+  });
+
+  it("accepts a recovery code exactly the same way, under the same field", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Segundo factor verificado." },
+    });
+
+    await verifySecondFactor("ABCD-2345-WXYZ");
+
+    expect(post.mock.calls[0][1]).toEqual({ codigo: "ABCD-2345-WXYZ" });
+  });
+
+  it("reports a 200 with the server's own confirmation", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { message: "Segundo factor verificado." } });
+
+    expect(await verifySecondFactor("123456")).toEqual({ status: 200, message: "Segundo factor verificado." });
+  });
+
+  it("keeps the real status and message on failure, whatever the server actually says", async () => {
+    for (const respuesta of [
+      { status: 400, message: "Código incorrecto o ya utilizado." },
+      { status: 401, message: "Tu sesión ya no es válida." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        })
+      );
+
+      expect(await verifySecondFactor("123456"), JSON.stringify(respuesta)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await verifySecondFactor("123456")).toEqual({
+      status: 500,
+      message: "No se pudo verificar el código.",
+    });
+  });
+});
+
+describe("esRechazoStepUp", () => {
+  // Hallazgo A13: the CSRF guard's 403 and the step-up gate's 403 are
+  // indistinguishable by status, and the CSRF guard's also clears the
+  // session cookie. This is the one function anything reacting to either has
+  // to go through — discriminating any other way is the regression this
+  // guards against.
+  it("is true for a 403 carrying the step-up code", () => {
+    expect(esRechazoStepUp(403, CODIGO_STEP_UP)).toBe(true);
+  });
+
+  it("is false for the CSRF guard's 403, which carries no code at all", () => {
+    // `PETICION_NO_VERIFICABLE`'s body is `{ message }` only — see
+    // `api/src/middleware/csrf.ts`'s `refuse()`.
+    expect(esRechazoStepUp(403, undefined)).toBe(false);
+  });
+
+  it("is false for any other status, even one that somehow carried the same code", () => {
+    expect(esRechazoStepUp(401, CODIGO_STEP_UP)).toBe(false);
+  });
+
+  it("is false for a 403 whose code is merely similarly-shaped", () => {
+    expect(esRechazoStepUp(403, "step-up-required")).toBe(false);
   });
 });
 

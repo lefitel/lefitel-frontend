@@ -8,7 +8,7 @@ import { useTheme } from "../components/theme-provider";
 import { SesionContext } from "../context/SesionContext";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
-import { loginUsuario } from "../api/Login.api";
+import { loginUsuario, comprobarToken } from "../api/Login.api";
 
 import logo from "../assets/images/logo.png";
 
@@ -74,24 +74,65 @@ const LoginPage = () => {
     setLoading(true);
     try {
       const responde = await loginUsuario({ ...login, user });
-      if (responde.status !== 500) {
-        // No `localStorage.setItem` here any more: the credential is the
-        // cookie the login response already set, which this page cannot see
-        // and does not need to — the next reload asks the server, it does
-        // not read anything back out of the browser's storage.
-        //
-        // `responde.usuario` is cast below, and a cast accepts any shape: it
-        // would happily let `autenticado` come through as `undefined` from a
-        // response that never had that field to begin with. Setting it
-        // explicitly here is what actually turns the login into a session —
-        // without it the gate in App.tsx never sees `true` and nobody can
-        // get past the login screen.
-        setSesion({ ...(responde.usuario as SesionInterface), autenticado: true });
-        navigate(from, { replace: true });
-        toast.success("Bienvenido");
-      } else {
-        toast.error(responde.message);
+      if (responde.status === 500) {
+        return toast.error(responde.message);
       }
+
+      // No `localStorage.setItem` here any more: the credential is the
+      // cookie the login response already set, which this page cannot see
+      // and does not need to — the next reload asks the server, it does
+      // not read anything back out of the browser's storage.
+      //
+      // `responde.usuario` is cast below, and a cast accepts any shape: it
+      // would happily let `autenticado` come through as `undefined` from a
+      // response that never had that field to begin with. `permisos`,
+      // decided next, is what actually turns the login into a session — see
+      // the comment below for why the field on the response, not a boolean
+      // this file makes up, is what decides that.
+      const sesionInicial = responde.usuario as SesionInterface;
+
+      if (sesionInicial.permisos) {
+        // A `completa` session: `auth.controller.ts`'s `login` only sends
+        // `permisos` for one, and it never sends `estado` at all (its own
+        // comment: publishing the state of a session on a request that has
+        // not even set a cookie yet on a wrong password would give it away
+        // for free). Nothing changes here for anybody today — every account
+        // opens `completa` until one registers a factor.
+        setSesion({ ...sesionInicial, estado: "completa", autenticado: true });
+        navigate(from, { replace: true });
+        return toast.success("Bienvenido");
+      }
+
+      /**
+       * `permisos` missing means this login opened `parcial` or
+       * `onboarding` — which one, the login body cannot say (see above), so
+       * `GET /auth/me` is asked, on the cookie this login just set.
+       *
+       * 🔴 Hallazgo A10/D4: this is one of the MFA loop's two entries.
+       * `SesionProvider.tsx`'s own startup call to `comprobarToken` is the
+       * other, fixed the same way — a `parcial` answer must never be read as
+       * "logged in" on either path, or the fix on one leaves the loop alive
+       * on the other.
+       */
+      const yo = await comprobarToken();
+      if (yo.status !== 200 || !yo.usuario) {
+        return toast.error("No se pudo completar el inicio de sesión. Intentalo de nuevo.");
+      }
+
+      if (yo.estado === "parcial") {
+        // A factor is registered and unproven this session. `autenticado`
+        // stays `false` — see `SesionInterface` — so `App.tsx`'s
+        // `SegundoFactorRoute` is what actually renders next, not this file
+        // navigating into the shell it cannot reach yet.
+        return navigate("/segundo-factor", { replace: true, state: { from } });
+      }
+
+      // `onboarding`: no factor is registered, so there is nothing left to
+      // prove before entering — `App.tsx`'s `HomeRoute` is what routes it
+      // onward from `/app/home` once inside.
+      setSesion({ usuario: yo.usuario, permisos: yo.permisos, estado: yo.estado, autenticado: true });
+      navigate(from, { replace: true });
+      toast.success("Bienvenido");
     } catch {
       toast.error("No se pudo conectar con el servidor.");
     } finally {

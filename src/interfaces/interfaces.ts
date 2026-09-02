@@ -1,21 +1,63 @@
 import type { Permisos } from "../lib/permissions";
 
+/**
+ * The three doors a session can be behind, mirroring the server's own
+ * `EstadoSesion` (`api/src/interfaces/index.ts`). Declared here rather than
+ * imported — the two repositories do not share code — so this is the one
+ * place `web` names the three strings; a fourth added on the server without
+ * a matching update here is a silent gap, not a compile error, so keep this
+ * list in step with the server's by hand.
+ *
+ * - `parcial`: the password was right and a factor is registered, but this
+ *   session has not proven it yet. Not "logged in" — see `SesionInterface`'s
+ *   own `autenticado` for why the two are deliberately different questions.
+ * - `onboarding`: no factor is registered and the fourteen-day grace period
+ *   is over. Inside the shell (unlike `parcial`, which cannot even load an
+ *   image — see `puedeVerArchivosEstaticos` server-side), but `permisos` is
+ *   withheld, same as `parcial`.
+ * - `completa`: everything, same as before this state existed at all.
+ */
+export type EstadoSesion = "parcial" | "onboarding" | "completa";
+
 export interface SesionInterface {
   usuario: UsuarioInterface;
   /**
-   * Whether the server has confirmed there is a session. This is not "do we
-   * have user data" — `usuario` always holds *some* shape, even the empty
-   * placeholder before login — it is the server's word on it. With the
-   * session cookie, the browser cannot tell on its own; this is what the
-   * route gate in `App.tsx` reads instead of the old `token !== ""` check.
+   * Whether the server has confirmed there is a session **that has finished
+   * logging in**. This is not "do we have user data" — `usuario` always
+   * holds *some* shape, even the empty placeholder before login — it is the
+   * server's word on it. With the session cookie, the browser cannot tell on
+   * its own; this is what the route gate in `App.tsx` reads instead of the
+   * old `token !== ""` check.
+   *
+   * **Deliberately `false` for a `parcial` session.** A password alone opens
+   * one, and letting it read as `autenticado` is hallazgo A10/D4's loop: the
+   * shell has no way to ask for the second factor, and `parcial` cannot even
+   * load the images in it (`puedeVerArchivosEstaticos` opens only for
+   * `onboarding` and `completa`). `estado` below is what tells the two
+   * "nobody logged in" and "somebody logged in but owes a factor" apart —
+   * both leave this `false`.
    */
   autenticado: boolean;
   /**
    * What this session may do, as the server says. Optional because the shape is
    * also used for the empty session before anybody logs in; absent means the
    * same as all-denied.
+   *
+   * Also absent for a live `parcial` or `onboarding` session — the server
+   * withholds the whole matrix from a session that has not finished logging
+   * in (`GET /auth/me`'s own comment on the same rule) — so an absent
+   * `permisos` on an `autenticado` session must be read as `onboarding`, not
+   * as "the server has not answered yet". `estado` is what tells those two
+   * apart; do not infer one from the other.
    */
   permisos?: Permisos;
+  /**
+   * Which of the three states this session is in, as `GET /auth/me` (and,
+   * from the second call it makes, `LoginPage.tsx`) says. Absent only for the
+   * placeholder session before anybody has asked the server anything —
+   * real answers always carry one of the three strings above.
+   */
+  estado?: EstadoSesion;
 }
 export interface ReporteInterface {
   TramoInicial: number | null;

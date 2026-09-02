@@ -14,6 +14,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { toast } from "sonner";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { SesionContext, type contextProps } from "./context/SesionContext";
 import type { SesionInterface } from "./interfaces/interfaces";
@@ -25,6 +26,7 @@ import { HomeRoute } from "./App";
 // also makes "did it render the dashboard" a positive assertion rather than an
 // absence.
 vi.mock("./pages/menu/inicio", () => ({ default: () => <div>PANEL</div> }));
+vi.mock("sonner", () => ({ toast: { warning: vi.fn() } }));
 
 const ROL = 9;
 
@@ -51,7 +53,23 @@ function renderAt() {
   );
 }
 
-beforeEach(() => { olvidarPermisos(); });
+beforeEach(() => { olvidarPermisos(); vi.clearAllMocks(); });
+
+/** Same session, `onboarding`: no factor registered, the grace period is over. */
+const sesionOnboarding = { ...sesion, estado: "onboarding" } as unknown as SesionInterface;
+
+function renderOnboardingAt() {
+  return render(
+    <SesionContext.Provider value={{ sesion: sesionOnboarding } as unknown as contextProps}>
+      <MemoryRouter initialEntries={["/app/home"]}>
+        <Routes>
+          <Route path="/app/home" element={<HomeRoute />} />
+          <Route path="/app/segundo-factor" element={<div>PANTALLA DE SEGUNDO FACTOR</div>} />
+        </Routes>
+      </MemoryRouter>
+    </SesionContext.Provider>,
+  );
+}
 
 describe("HomeRoute", () => {
   it("shows the dashboard to a role that may see incidents", () => {
@@ -115,6 +133,47 @@ describe("HomeRoute", () => {
     // once `loading` is false.
     renderAt();
 
+    expect(screen.queryByText("PANEL")).not.toBeInTheDocument();
+  });
+
+  // Hallazgo A11 (plan 4B, Task 22). Before this, `onboarding` fell into
+  // exactly the same "nothing granted" shape the test above covers —
+  // `permisos` is withheld from that state on purpose — and landed on
+  // `SinAccesoPage`, which tells a real, correctly-logged-in person to go
+  // find an administrator who cannot fix what is actually wrong.
+  it("sends an onboarding session to configure its factor, not to the access wall", () => {
+    setPermisos(ROL, sinPermisos());
+
+    renderOnboardingAt();
+
+    expect(screen.getByText("PANTALLA DE SEGUNDO FACTOR")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /no tiene acceso/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("PANEL")).not.toBeInTheDocument();
+  });
+
+  it("says what happened and what to do, rather than redirecting in silence", () => {
+    renderOnboardingAt();
+
+    expect(toast.warning).toHaveBeenCalledTimes(1);
+    const [mensaje] = vi.mocked(toast.warning).mock.calls[0];
+    expect(mensaje).toMatch(/segundo factor/i);
+    // "Qué hay que hacer", no solo "qué pasó": una fecha vencida sin una
+    // instrucción es la misma frase inútil que este arreglo existe para
+    // reemplazar.
+    expect(mensaje).toMatch(/configura/i);
+  });
+
+  it("checks eventos.ver before onboarding would even matter — onboarding never even gets asked", () => {
+    // `estadoInicialDeSesion`, server-side: an account with any factor opens
+    // `parcial`, never `onboarding` — so `onboarding` implies no factor at
+    // all, which the permission matrix has nothing to say about. This pins
+    // that the redirect happens whether or not `permisos` was ever set,
+    // rather than depending on `can()` failing to notice a real grant.
+    setPermisos(ROL, matrizCon("eventos", "postes"));
+
+    renderOnboardingAt();
+
+    expect(screen.getByText("PANTALLA DE SEGUNDO FACTOR")).toBeInTheDocument();
     expect(screen.queryByText("PANEL")).not.toBeInTheDocument();
   });
 });

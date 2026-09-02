@@ -599,6 +599,13 @@ export const SesionProvider = ({ children }: props) => {
                   ...prev,
                   usuario: res.usuario as UsuarioInterface,
                   permisos: res.permisos,
+                  // Kept in step with the rest of this answer for the same
+                  // reason `permisos` is: this session is already
+                  // `autenticado`, so `estado` can only move to `onboarding`
+                  // or `completa` from here, never back to `parcial` — but
+                  // stale is still wrong, and this refresh is already
+                  // fetching the current value.
+                  estado: res.estado,
                 }));
                 toast.info("Sus permisos cambiaron. La pantalla se actualizó.");
               })
@@ -728,7 +735,27 @@ export const SesionProvider = ({ children }: props) => {
           setSesion({
             usuario: res.usuario,
             permisos: res.permisos,
-            autenticado: true,
+            estado: res.estado,
+            /**
+             * `res.estado !== "parcial"`, not `true`. Hallazgo A10/D4: this
+             * call is one of the MFA loop's two entries — a `parcial`
+             * session (a password typed, a factor registered, nothing
+             * proven this session) answers 200 here exactly like a finished
+             * login does, on every single reload. Reading any 200 as
+             * "logged in", the way this line used to, sends that session
+             * straight into the shell, which then cannot even load an
+             * image for it (`puedeVerArchivosEstaticos` opens only for
+             * `onboarding` and `completa`) and has nowhere to ask for the
+             * code. The other entry is `LoginPage.tsx`'s own call to this
+             * same function, guarded the same way — fixing one and not the
+             * other leaves the loop alive on whichever path was missed.
+             *
+             * `onboarding` stays `true`: that account has no factor to
+             * prove, so there is nothing this session owes before entering
+             * — see `App.tsx`'s `HomeRoute` for where it is sent once
+             * inside.
+             */
+            autenticado: res.estado !== "parcial",
           });
         }
       })

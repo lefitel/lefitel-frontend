@@ -1,6 +1,7 @@
 import axios from "axios";
 import { urlApi } from "./url";
 import { SesionActivaInterface, SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
+import type { EstadoSesion } from "../interfaces/interfaces";
 import type { Permisos } from "../lib/permissions";
 
 /**
@@ -299,10 +300,25 @@ export const resetPassword = (
     }));
 };
 
+/**
+ * `estado` is mapped straight off `response.data.estado` — plan 4B's addition
+ * to this body, next to `usuario` and `permisos`. Every real 200 carries one
+ * of the three `EstadoSesion` strings; it is optional here only because a
+ * mock or a stub answer built before this field existed still has to type-check.
+ *
+ * Two callers read this: `SesionProvider.tsx`'s startup effect, and
+ * `LoginPage.tsx`'s own second call once a login comes back with no
+ * `permisos` (see that file for why the login body cannot say `estado`
+ * itself). Both turn `estado === "parcial"` into "not logged in yet" rather
+ * than trusting the 200 alone — hallazgo A10/D4's loop has exactly these two
+ * entries, and this is the one field that lets either of them tell a
+ * finished login from one still owing a factor.
+ */
 export const comprobarToken = (): Promise<{
   status: number;
   usuario: UsuarioInterface | null;
   permisos?: Permisos;
+  estado?: EstadoSesion;
 }> => {
   return axios
     .get(`${urlApi}auth/me`)
@@ -310,12 +326,76 @@ export const comprobarToken = (): Promise<{
       status: response.status,
       usuario: response.data.usuario as UsuarioInterface,
       permisos: response.data.permisos as Permisos | undefined,
+      estado: response.data.estado as EstadoSesion | undefined,
     }))
     .catch((e) => ({
       status: e.response?.status ?? 500,
       usuario: null,
     }));
 };
+
+/**
+ * `POST /auth/mfa/verify` — prove the second factor a `parcial` session still
+ * owes, with either a six-digit TOTP code or a recovery code. The server
+ * tells the two apart by shape (plan 4B, Task 7/11); this wrapper sends
+ * whatever the person typed under the same `codigo` field
+ * `api/src/controllers/totp.controller.ts`'s `confirmTotp` already uses, so
+ * there is one name for "the code" across both endpoints rather than two.
+ *
+ * Real status and message kept on failure, same reasoning as
+ * `sendVerificationEmail` above: a session the server just destroyed for five
+ * wrong attempts (see the spec's rate-limit table) and a merely wrong code
+ * are two different sentences arriving on the same endpoint, and the screen
+ * has to show whichever one actually came back rather than one written here
+ * that guesses.
+ *
+ * **No third sentence for a diagnosed clock skew, checked against
+ * `api/src/controllers/mfa.controller.ts` as it actually ships.** The plan's
+ * Task 7 Step 4 reads as though there would be one; what got built instead
+ * logs `MFA_CLOCK_SKEW_DETECTED` to the bitácora only — the response is the
+ * same `CODIGO_MFA_INVALIDO` whether the code was garbage or off by a
+ * consistent number of steps. Kept general (`message` shown verbatim,
+ * whatever it says) rather than written around a sentence that does not
+ * exist today, so this needs no change the day that decision is revisited.
+ */
+export const verifySecondFactor = (
+  codigo: string
+): Promise<{ status: number; message: string | null }> =>
+  axios
+    .post(urlApi + "auth/mfa/verify", { codigo })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo verificar el código.",
+    }));
+
+/**
+ * The `code` a step-up refusal carries — `api/src/middleware/requireStepUp.ts`'s
+ * `CODIGO_STEP_UP`. A wire-format constant, like `ROLE_HEADER` and
+ * `SESSION_EXPIRES_HEADER` in `SesionProvider.tsx`: a name shared between two
+ * repositories deployed separately, not a shared import.
+ */
+export const CODIGO_STEP_UP = "STEP_UP_REQUIRED";
+
+/**
+ * Whether a 403 is the step-up gate asking for a fresher credential, and
+ * **not** the CSRF guard's refusal for the exact same status — hallazgo A13.
+ * The two cannot be told apart by status, and the CSRF guard's refusal also
+ * clears the session cookie, so confusing them is not merely imprecise: it is
+ * the difference between "type your password again" and "you no longer have
+ * any session to type it into". `code` is the only field that tells them
+ * apart, and it is what any future reaction to `STEP_UP_REQUIRED` — the
+ * password dialog of plan 4B's Task 21 — has to branch on, never on status
+ * alone or on `sesion.estado`.
+ *
+ * Takes the status and the body's `code` separately rather than a whole axios
+ * error, so the same check reads a real response and a test fixture alike.
+ */
+export const esRechazoStepUp = (status: number, code: unknown): boolean =>
+  status === 403 && code === CODIGO_STEP_UP;
 
 /**
  * `GET /api/auth/sessions` — the devices this account is logged in on.

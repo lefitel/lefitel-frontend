@@ -596,6 +596,52 @@ describe("el arranque de sesión", () => {
     expect(toast.warning).not.toHaveBeenCalled();
   });
 
+  it("no confirma como autenticada una sesión parcial, ni siquiera con un 200 — hallazgo A10/D4", async () => {
+    // La otra de las dos entradas al bucle: `LoginPage.tsx` es la primera,
+    // cubierta en `LoginPage.test.tsx`; esta es la que se dispara en cada
+    // recarga de página, porque este mismo efecto es el que decide si hay
+    // sesión al arrancar. `/auth/me` contesta 200 en `parcial` igual que en
+    // cualquier otro estado — leer ese 200 como "hay sesión" sin mirar
+    // `estado` es exactamente el defecto que este test fija.
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { id: 7, id_rol: 3 },
+      estado: "parcial",
+    });
+
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+
+    await waitFor(() => expect(latest?.loading).toBe(false));
+    expect(latest?.sesion.autenticado).toBe(false);
+    // No es "sin sesión": `estado` sigue diciendo que hay una fila viva a
+    // medio probar, que es lo que `App.tsx`'s `SegundoFactorRoute` necesita
+    // para mandar para allá en vez de al formulario de usuario y contraseña.
+    expect(latest?.sesion.estado).toBe("parcial");
+  });
+
+  it("sí confirma como autenticada una sesión onboarding — no hay factor que probar", async () => {
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { id: 7, id_rol: 3 },
+      estado: "onboarding",
+      // Ausente a propósito: `GET /auth/me` no manda `permisos` fuera de
+      // `completa` — ver su propio comentario.
+    });
+
+    render(
+      <SesionProvider>
+        <Sonda />
+      </SesionProvider>,
+    );
+
+    await waitFor(() => expect(latest?.sesion.autenticado).toBe(true));
+    expect(latest?.sesion.estado).toBe("onboarding");
+  });
+
   it("no hace una segunda pregunta para averiguar el vencimiento", async () => {
     // Había un efecto aparte que, en cuanto había sesión, pedía otra vez
     // `/auth/me` solo para saber cuándo vencía. Sobra desde que el vencimiento
@@ -1167,6 +1213,40 @@ describe("logout", () => {
       await onError!({
         response: { status: 403 },
         config: { url: `${url}/api/reporte` },
+      }).catch(() => undefined);
+    });
+
+    expect(latest?.sesion.autenticado).toBe(true);
+    expect(post).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("leaves the session alone on the step-up gate's 403 too, exactly like the CSRF guard's — hallazgo A13", async () => {
+    // The two are indistinguishable by status — both 403 — and the CSRF
+    // guard's refusal additionally clears the session cookie
+    // (`api/src/middleware/csrf.ts`'s `refuse()`). This interceptor already
+    // does the right thing for both today, because it does not look at 403
+    // at all; this test is what keeps it that way — a future change here
+    // that discriminates by `sesion.estado` instead of the response's `code`
+    // (see `esRechazoStepUp` in `Login.api.ts`) would turn this exact
+    // response into an expulsion.
+    const post = vi.spyOn(axios, "post").mockResolvedValue({});
+
+    render(
+      <SesionProvider>
+        <Establecer id_rol={3} permisos={permisosCon("generador", "ver")} />
+        <Sonda />
+      </SesionProvider>,
+    );
+    await waitFor(() => expect(can(3, "generador", "ver")).toBe(true));
+
+    await act(async () => {
+      await onError!({
+        response: {
+          status: 403,
+          data: { message: "Termina de configurar tu acceso.", code: "STEP_UP_REQUIRED", motivo: "sin-factor-reciente" },
+        },
+        config: { url: `${url}/api/auth/totp/setup` },
       }).catch(() => undefined);
     });
 

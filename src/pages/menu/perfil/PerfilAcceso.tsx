@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  FingerprintIcon, KeyIcon, MailCheckIcon, MailIcon, MailWarningIcon, ShieldIcon,
+  FingerprintIcon, KeyIcon, MailCheckIcon, MailIcon, MailWarningIcon, ShieldIcon, SmartphoneIcon,
 } from "lucide-react";
 import { ReadRow, EditorBlock, EditorField } from "./perfilRows";
 import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
@@ -269,6 +269,40 @@ export default function PerfilAcceso({
               )}
             </ReadRow>
           )}
+
+          {/*
+            Not a fourth editor — `/app/segundo-factor` is its own screen,
+            built to keep working for a session `PerfilPage` itself cannot
+            (see that screen's own comment on `usePerfilData` 403ing on an
+            `onboarding` session). This row is only ever a door to it, so it
+            carries no `abierto`/`onAbrir` state of its own.
+
+            A plain `<a>`, not `<Link>`: `PerfilPage.test.tsx` renders this
+            tree with no `<Router>` around it, and `react-router-dom`'s
+            `Link` throws the moment it mounts outside one — measured, it
+            took 22 of that file's 24 tests down. Both routes live under the
+            same `BrowserRouter` in the real app regardless, so this only
+            costs a full navigation instead of a client-side one, for a
+            settings link nobody clicks often.
+          */}
+          <ReadRow
+            label="Segundo factor"
+            accion={
+              <Button variant="outline" size="sm" asChild>
+                {/* Not bare "Configurar" — `PerfilPage.tsx` and `PerfilPanel.tsx`
+                    both already use that exact word for the recovery email,
+                    and three buttons with the same accessible name on one
+                    page is a trap for anybody using a screen reader, not
+                    only for a future `getByRole` query. */}
+                <a href="/app/segundo-factor">Configurar segundo factor</a>
+              </Button>
+            }
+          >
+            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+              <SmartphoneIcon className="h-3.5 w-3.5" />
+              Aplicación de autenticación y códigos de recuperación
+            </span>
+          </ReadRow>
 
         </div>
       </CardContent>

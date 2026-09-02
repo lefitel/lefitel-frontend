@@ -1,11 +1,12 @@
 import { Route, Routes, BrowserRouter, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
+import { toast } from "sonner";
 import LandingPage from "./pages/LandingPage";
 import { firstModuleScreen, visibleMenuItems } from "./components/menuItems";
 import { can, type Modulo } from "./lib/permissions";
 import LoadingPage from "./pages/LoadingPage";
 import { SesionContext } from "./context/SesionContext";
 import { SesionProvider } from "./context/SesionProvider";
-import { useContext } from "react";
+import { useContext, useEffect } from "react";
 import InicioPage from "./pages/menu/inicio";
 import PostePage from "./pages/menu/poste";
 import PosteDetallePage from "./pages/menu/poste/PosteDetalle";
@@ -20,12 +21,19 @@ import SeguridadPage from "./pages/menu/SeguridadPage";
 import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
 import PerfilPage from "./pages/menu/perfil/PerfilPage";
+// Aliased: this app has two different screens both named `SegundoFactorPage`
+// today — this one configures a factor from inside the shell (Tasks 19/20,
+// somebody else's in this same plan), `./pages/login/SegundoFactorPage`
+// below proves one during login (Task 18, mine). Different files, different
+// routes (`/app/segundo-factor` vs `/segundo-factor`), same class name.
+import ConfigurarSegundoFactorPage from "./pages/menu/segundoFactor/SegundoFactorPage";
 import NovedadesPage from "./pages/menu/NovedadesPage";
 import SinAccesoPage from "./pages/menu/SinAccesoPage";
 import BitacoraPage from "./pages/menu/bitacora";
 import { TooltipProvider } from "./components/ui/tooltip";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import SegundoFactorPage from "./pages/login/SegundoFactorPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import { Toaster } from "@/components/ui/sonner";
@@ -44,7 +52,35 @@ export const PublicRoutes = () => {
   const { sesion, loading } = useContext(SesionContext);
 
   if (loading) return <LoadingPage />;
+  /**
+   * A `parcial` session belongs on `/segundo-factor`, never on the bare
+   * credentials form. Without this, reloading the tab mid-verification — the
+   * MFA loop's second entry, hallazgo A10/D4 — lands back on `/login` with
+   * the password box empty, asking somebody to retype what the server
+   * already accepted, instead of the one screen that can finish the job with
+   * the cookie it already has.
+   */
+  if (sesion.estado === "parcial") return <Navigate to="/segundo-factor" replace />;
   return sesion.autenticado ? <Navigate to="/app/home" replace /> : <Outlet />;
+};
+
+/**
+ * Guards `/segundo-factor`: only a session that is genuinely `parcial` may
+ * render the screen behind it.
+ *
+ * Three ways in, and each says where else to go instead of rendering nothing:
+ * already fully in (`autenticado`) has nothing left to prove, and no session
+ * at all (`estado` unset) has nothing to verify — both are sent away rather
+ * than shown a code field with no session behind it to check the code
+ * against. Only `estado === "parcial"` renders the `<Outlet />`.
+ */
+export const SegundoFactorRoute = () => {
+  const { sesion, loading } = useContext(SesionContext);
+
+  if (loading) return <LoadingPage />;
+  if (sesion.autenticado) return <Navigate to="/app/home" replace />;
+  if (sesion.estado !== "parcial") return <Navigate to="/login" replace />;
+  return <Outlet />;
 };
 
 /**
@@ -82,8 +118,10 @@ const ModuleRoute = ({ modulo }: { modulo: Modulo }) => {
  * Gating it turned this route into the dead end the comment above describes,
  * one step further along: the redirect lands, the page mounts, the request comes
  * back 403, and the screen reports a network failure for a refusal that is
- * permanent. Three outcomes, and they are not the same conversation:
+ * permanent. Four outcomes now, and they are not the same conversation:
  *
+ *   - the fourteen-day grace period ran out and nothing was ever registered
+ *     (`onboarding`) → the screen that lets them fix that, not a wall;
  *   - may see incidents → the dashboard, as before;
  *   - may see something else → go there, rather than sit on a screen that
  *     cannot load while the sidebar lists screens that can;
@@ -92,15 +130,62 @@ const ModuleRoute = ({ modulo }: { modulo: Modulo }) => {
  * Decided from the permission matrix the session already carries, not from a
  * 403: the answer is known before the request, and asking anyway would mean a
  * wasted round trip and a spinner before the bad news.
+ *
+ * **The `onboarding` branch, hallazgo A11.** `permisos` is withheld from that
+ * state on purpose (`GET /auth/me`'s own comment), so `can()` answers `false`
+ * for every module and this route used to fall straight through to
+ * `SinAccesoPage` — a screen that tells a real person, correctly logged in,
+ * that "el rol asignado a tu cuenta no tiene ningún módulo habilitado" and to
+ * go bother an administrator. That is a false sentence for this account: the
+ * role may have every module granted, and there is nothing an administrator
+ * could change that would fix it. The one thing that would is the account's
+ * own second factor, which it never registered, and `/app/segundo-factor` is
+ * where that happens — checked *before* the permission question below rather
+ * than after: asking `can()` anything about an account `permisos` was never
+ * sent to is a question with no honest answer.
+ *
+ * **Not `/app/perfil`.** That was this task's first guess, and
+ * `pages/menu/segundoFactor/SegundoFactorPage.tsx`'s own header comment is
+ * why it is wrong: `PerfilPage` is built on `usePerfilData`, whose very first
+ * request is `GET /api/usuario/:id`, which `onboarding` gets a 403 from
+ * (`sessionState.ts` opens only `/api/auth/*` for that state). The screen
+ * that actually works for `onboarding` talks to nothing but `/api/auth/totp/*`
+ * and `/api/auth/recovery-codes`, lives at its own route with no `ModuleRoute`
+ * in front of it, and `PerfilAcceso.tsx`'s own "Configurar segundo factor"
+ * button already links to this same path — this redirect and that button
+ * deliberately agree on where it lives.
  */
 export const HomeRoute = () => {
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
+  const enOnboarding = sesion.estado === "onboarding";
+
+  useEffect(() => {
+    if (enOnboarding) {
+      toast.warning(MENSAJE_ONBOARDING_VENCIDO, { id: TOAST_ONBOARDING_ID });
+    }
+  }, [enOnboarding]);
+
+  if (enOnboarding) return <Navigate to="/app/segundo-factor" replace />;
+
   if (can(rol, "eventos", "ver")) return <InicioPage />;
   const elsewhere = firstModuleScreen(rol);
   if (elsewhere) return <Navigate to={elsewhere.path} replace />;
   return <SinAccesoPage />;
 };
+
+/**
+ * What happened, and what to do about it — hallazgo A11's whole point. Not
+ * "onboarding" or a status code: those describe the system, not the two
+ * things a nervous person needs, which are why they landed here and what
+ * makes it stop happening.
+ */
+const MENSAJE_ONBOARDING_VENCIDO =
+  "Se venció el plazo de dos semanas para configurar tu segundo factor de acceso. " +
+  "Configuralo ahora: hasta que lo hagas, no vas a poder abrir los módulos del sistema.";
+
+/** Stable so the toast replaces itself instead of stacking on every visit to `/app/home`. */
+const TOAST_ONBOARDING_ID = "mfa-onboarding-vencido";
 
 const App = () => {
   return (
@@ -117,10 +202,20 @@ const App = () => {
 
                   {/* Belongs to no module: anyone with a session. Their own
                       profile is theirs, the home page is where every redirect
-                      lands, and the release notes are the same for everyone. */}
-                  <Route path="home"      element={<HomeRoute />} />
-                  <Route path="perfil"    element={<PerfilPage />} />
-                  <Route path="novedades" element={<NovedadesPage />} />
+                      lands, and the release notes are the same for everyone.
+
+                      `segundo-factor` belongs here for the same reason: an
+                      `onboarding` session — no factor registered, the grace
+                      period over — has to be able to reach it, and
+                      `ModuleRoute` answers every question it asks from a
+                      permission matrix that state is never sent (see
+                      `HomeRoute` below). `PerfilAcceso.tsx`'s own "Configurar
+                      segundo factor" button already links to this exact
+                      path. */}
+                  <Route path="home"           element={<HomeRoute />} />
+                  <Route path="perfil"         element={<PerfilPage />} />
+                  <Route path="segundo-factor" element={<ConfigurarSegundoFactorPage />} />
+                  <Route path="novedades"      element={<NovedadesPage />} />
 
                   <Route element={<ModuleRoute modulo="postes" />}>
                     <Route path="postes"        element={<PostePage />} />
@@ -167,6 +262,15 @@ const App = () => {
               <Route element={<PublicRoutes />}>
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/olvide-contrasena" element={<ForgotPasswordPage />} />
+              </Route>
+
+              {/* Its own guard, not `PublicRoutes`: that one sends anybody
+                  `autenticado` to `/app/home`, and a `parcial` session is
+                  deliberately never `autenticado` — see `SesionInterface`.
+                  `SegundoFactorRoute` is the one place that knows a `parcial`
+                  session belongs here and nowhere else public. */}
+              <Route element={<SegundoFactorRoute />}>
+                <Route path="/segundo-factor" element={<SegundoFactorPage />} />
               </Route>
 
               {/* Deliberately NOT inside `PublicRoutes`, unlike the two above.
