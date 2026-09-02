@@ -371,7 +371,7 @@ export const verifySecondFactor = (
   recordar?: boolean,
 ): Promise<{ status: number; message: string | null }> =>
   axios
-    .post(urlApi + "auth/mfa/verify", { codigo, recordar })
+    .post(urlApi + "auth/mfa/verify", { codigo, recordar }, { timeout: TIMEOUT_CONFIRMACION_MS })
     .then((response) => ({
       status: response.status,
       message: (response.data?.message as string | undefined) ?? null,
@@ -381,30 +381,12 @@ export const verifySecondFactor = (
       message: e.response?.data?.message ?? "No se pudo verificar el código.",
     }));
 
-/**
- * The `code` a step-up refusal carries — `api/src/middleware/requireStepUp.ts`'s
- * `CODIGO_STEP_UP`. A wire-format constant, like `ROLE_HEADER` and
- * `SESSION_EXPIRES_HEADER` in `SesionProvider.tsx`: a name shared between two
- * repositories deployed separately, not a shared import.
- */
-export const CODIGO_STEP_UP = "STEP_UP_REQUIRED";
+// `CODIGO_STEP_UP` y `esRechazoStepUp` vivían aquí y también en `Mfa.api.ts`.
+// Ahora viven una sola vez en `stepUp.ts`; se reexportan porque la pantalla de
+// login y `SesionProvider` ya los importan desde este fichero.
+export { CODIGO_STEP_UP, esRechazoStepUp } from "./stepUp";
+import { TIMEOUT_CONFIRMACION_MS } from "./stepUp";
 
-/**
- * Whether a 403 is the step-up gate asking for a fresher credential, and
- * **not** the CSRF guard's refusal for the exact same status — hallazgo A13.
- * The two cannot be told apart by status, and the CSRF guard's refusal also
- * clears the session cookie, so confusing them is not merely imprecise: it is
- * the difference between "type your password again" and "you no longer have
- * any session to type it into". `code` is the only field that tells them
- * apart, and it is what any future reaction to `STEP_UP_REQUIRED` — the
- * password dialog of plan 4B's Task 21 — has to branch on, never on status
- * alone or on `sesion.estado`.
- *
- * Takes the status and the body's `code` separately rather than a whole axios
- * error, so the same check reads a real response and a test fixture alike.
- */
-export const esRechazoStepUp = (status: number, code: unknown): boolean =>
-  status === 403 && code === CODIGO_STEP_UP;
 
 /**
  * `GET /api/auth/sessions` — the devices this account is logged in on.
@@ -444,7 +426,9 @@ export const endSession = (
   id: string
 ): Promise<{ status: number; message: string | null }> =>
   axios
-    .delete(`${urlApi}auth/sessions/${id}`)
+    // Mismo motivo que `archiveRol` y `deleteUsuario`: sin `data` no hay
+    // cuerpo donde el interceptor de step-up pueda meter la contraseña.
+    .delete(`${urlApi}auth/sessions/${id}`, { data: {} })
     .then((r) => ({ status: r.status, message: r.data?.message ?? null }))
     .catch((e) => ({
       status: e.response?.status ?? 500,

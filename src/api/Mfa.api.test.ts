@@ -125,6 +125,51 @@ describe("confirmTotp", () => {
     expect(res.code).toBeUndefined();
     expect(res.message).toMatch(/código no es válido/);
   });
+
+  it("returns the ten fresh recovery codes when confirming this factor is what minted them (2026-09-02)", async () => {
+    // `totp.controller.ts`'s `confirmTotp` now issues the account's first ten
+    // recovery codes in this same response when nothing was outstanding —
+    // see that function's own comment for the decision. `codigos` is how
+    // this client learns whether that happened.
+    const codigos = Array.from({ length: 10 }, (_, i) => `CODIGO${i}`);
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Segundo factor configurado correctamente.", codigos },
+    });
+
+    const res = await confirmTotp("123456", "la-mia");
+
+    expect(res.status).toBe(200);
+    expect(res.codigos).toEqual(codigos);
+    expect(res.codigos).toHaveLength(10);
+  });
+
+  it("answers codigos: null when the account already had an outstanding sheet — nothing was minted", async () => {
+    // The server's own "only the first factor" rule: it sends `codigos: null`
+    // rather than omitting the field, precisely so this is distinguishable
+    // from "the field does not exist yet" without guessing.
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Segundo factor configurado correctamente.", codigos: null },
+    });
+
+    const res = await confirmTotp("123456", "la-mia");
+
+    expect(res.status).toBe(200);
+    expect(res.codigos).toBeNull();
+  });
+
+  it("never carries codigos on a failure", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(
+      Object.assign(new Error("403"), {
+        response: { status: 403, data: { message: "x", code: CODIGO_STEP_UP, motivo: "sin-factor-reciente" } },
+      }),
+    );
+
+    const res = await confirmTotp("123456", "la-mia");
+
+    expect(res.codigos).toBeNull();
+  });
 });
 
 describe("deleteTotp", () => {

@@ -15,8 +15,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CopyIcon, KeyIcon, PrinterIcon } from "lucide-react";
+import { KeyIcon } from "lucide-react";
 import { EditorBlock, EditorField } from "../perfil/perfilRows";
+import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
 import {
   generateRecoveryCodes,
   getRecoveryCodesRemaining,
@@ -29,12 +30,6 @@ import {
  *  reaches the day somebody actually needs one. */
 const UMBRAL_BAJO = 2;
 
-/** Groups of four, the same width `codigo_recuperacion.prefijo` cuts at —
- *  purely a display choice, since `recoveryCodeStore.ts`'s own `normalizar`
- *  strips whatever separators a person re-types, dashes included. */
-function formatearCodigo(codigo: string): string {
-  return codigo.match(/.{1,4}/g)?.join("-") ?? codigo;
-}
 
 /**
  * Recovery codes — Task 20 of the 4B plan.
@@ -111,53 +106,6 @@ const RecoveryCodesSection = () => {
   // ── La hoja con los diez códigos, mostrada una sola vez ─────────────────
   const cerrarRevelacion = () => setCodigos(null);
 
-  const copiarTodos = async () => {
-    if (!codigos) return;
-    try {
-      await navigator.clipboard.writeText(codigos.map(formatearCodigo).join("\n"));
-      // Hallazgo E-13/F15: these ten codes just went into a system clipboard
-      // Windows 11 keeps a 25-entry history of (Win+V), synced to the
-      // Microsoft account when that sync is on — a browser has no way to
-      // mark a clipboard write "sensitive", so the only lever left is
-      // saying so.
-      toast.success(
-        "Códigos copiados. Bórralos del historial del portapapeles (Win+V) apenas termines de guardarlos.",
-      );
-    } catch {
-      toast.error("No se pudo copiar. Selecciona el texto manualmente.");
-    }
-  };
-
-  const imprimir = () => {
-    if (!codigos) return;
-    const ventana = window.open("", "_blank", "width=480,height=640");
-    if (!ventana) {
-      toast.error("El navegador bloqueó la ventana de impresión. Permite ventanas emergentes e inténtalo de nuevo.");
-      return;
-    }
-    const filas = codigos.map((c) => `<li>${formatearCodigo(c)}</li>`).join("");
-    ventana.document.write(
-      `<html><head><title>Códigos de recuperación</title></head>` +
-        `<body style="font-family: sans-serif;">` +
-        `<h1 style="font-size: 18px;">Códigos de recuperación</h1>` +
-        `<p style="font-size: 12px;">Cada código sirve una sola vez. Guarda esta hoja en un lugar seguro.</p>` +
-        `<ol style="font-family: monospace; font-size: 16px; line-height: 1.8;">${filas}</ol>` +
-        `</body></html>`,
-    );
-    ventana.document.close();
-    // Hallazgo E-13/F15: this window used to never close, left sitting on
-    // screen with the ten codes in the clear until somebody closed it by
-    // hand. `close()` right after `print()` is not used here on purpose —
-    // `print()`'s blocking behaviour while the native dialog is open is not
-    // guaranteed the same way across browsers, and closing too early would
-    // tear the window down before that dialog even paints. `afterprint`
-    // fires once the dialog is dismissed either way (printed or cancelled),
-    // on every desktop browser that can print a popup at all, so it is the
-    // one signal this can wait on without guessing at timing.
-    ventana.onafterprint = () => ventana.close();
-    ventana.focus();
-    ventana.print();
-  };
 
   const badge = () => {
     if (cargando || restantes === null) return <Skeleton className="h-5 w-24 inline-block" />;
@@ -254,39 +202,16 @@ const RecoveryCodesSection = () => {
       {/* La hoja de códigos. Sin AlertDialogCancel y sin cierre por Escape:
           la única salida es el botón, después de leer la advertencia de
           arriba. */}
-      <AlertDialog open={codigos !== null}>
-        <AlertDialogContent size="lg" onEscapeKeyDown={(e) => e.preventDefault()}>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Tus códigos de recuperación</AlertDialogTitle>
-            <AlertDialogDescription asChild>
-              <p className="text-amber-600 dark:text-amber-500 font-medium">
-                Esta es la única vez que vas a ver estos códigos. Guárdalos ahora — cópialos o
-                imprímelos — antes de cerrar esta ventana.
-              </p>
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <ul className="grid grid-cols-2 gap-2 font-mono text-sm bg-muted/50 rounded-lg p-4">
-            {(codigos ?? []).map((c) => (
-              <li key={c}>{formatearCodigo(c)}</li>
-            ))}
-          </ul>
-
-          <AlertDialogFooter className="sm:justify-between">
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={copiarTodos} className="gap-2">
-                <CopyIcon className="h-3.5 w-3.5" />
-                Copiar todos
-              </Button>
-              <Button variant="outline" size="sm" onClick={imprimir} className="gap-2">
-                <PrinterIcon className="h-3.5 w-3.5" />
-                Imprimir
-              </Button>
-            </div>
-            <AlertDialogAction onClick={cerrarRevelacion}>Ya los guardé, cerrar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* La misma hoja que enseña `TotpSection` al confirmar el primer
+          factor. Una sola copia: cuando esto vivía aquí duplicado, cada
+          arreglo —el aviso del portapapeles de Windows, la ventana de
+          impresión que no se cerraba sola— había que hacerlo dos veces, y la
+          segunda es la que se olvida. */}
+      <RecoveryCodesRevealDialog
+        codigos={codigos}
+        onAcknowledge={cerrarRevelacion}
+        contexto="Cada código sirve una sola vez. Cuando se te acaben, genera un juego nuevo desde esta misma pantalla."
+      />
     </Card>
   );
 };

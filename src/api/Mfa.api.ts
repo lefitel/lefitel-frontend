@@ -1,5 +1,15 @@
 import axios from "axios";
 import { urlApi } from "./url";
+import {
+  STEP_UP_PASSWORD_FIELD,
+  CODIGO_STEP_UP,
+  describeStepUpError,
+  TIMEOUT_CONFIRMACION_MS,
+  type MotivoStepUp,
+} from "./stepUp";
+
+export { CODIGO_STEP_UP, describeStepUpError };
+export type { MotivoStepUp };
 
 /**
  * The field every step-up-gated route reads the caller's current password
@@ -25,63 +35,14 @@ import { urlApi } from "./url";
  * both the `setup` and the immediate `confirm` that follows it, rather than
  * asking twice for one continuous action the person chose to start.
  */
-const STEP_UP_PASSWORD_FIELD = "stepup_password";
-
-/**
- * `requireStepUp`'s own discriminator, exported by the server beside `code`
- * so a client can act on *which* remedy applies instead of matching the
- * Spanish sentence. Mirrors
- * `MOTIVO_ESTADO_INCOMPLETO` / `MOTIVO_SIN_FACTOR_RECIENTE` /
- * `MOTIVO_CONTRASENA_INCORRECTA` / `MOTIVO_CONTRASENA_REQUERIDA` in
- * `api/src/middleware/requireStepUp.ts`.
- */
-export type MotivoStepUp =
-  | "estado-incompleto"
-  | "sin-factor-reciente"
-  | "contraseña-incorrecta"
-  | "contraseña-requerida";
-
-/** `CODIGO_STEP_UP` in `requireStepUp.ts` — the `code` a 403 from that gate
- *  always carries, whichever of the four `motivo`s comes with it. */
-export const CODIGO_STEP_UP = "STEP_UP_REQUIRED";
-
-/**
- * Four distinct sentences for four distinct remedies — deliberately **not**
- * a pass-through of the server's own `message`.
- *
- * `requireStepUp.ts` answers `sin-factor-reciente` and `contraseña-incorrecta`
- * with the exact same generic sentence server-side (`MENSAJE`, in that file):
- * "Esta operación necesita que confirmes tu identidad." That is the right
- * call *there* — the server does not want to hint at which comparison it just
- * ran — but showing that same sentence for both on this screen would accuse
- * somebody of mistyping a password they never typed, in the one case where
- * the account has nothing fresh to prove and no password was ever compared.
- * The dispatch brief for this task names this exactly: "Son cuatro frases
- * distintas en pantalla; juntarlas acusa a alguien de teclear mal una
- * contraseña que nunca tecleó." So this table, not `response.message`, is
- * what `TotpSection.tsx` and `RecoveryCodesSection.tsx` read a 403 through.
- */
-const MOTIVO_MENSAJE: Record<MotivoStepUp, string> = {
-  "estado-incompleto": "Termina de configurar tu segundo factor antes de realizar esta operación.",
-  "sin-factor-reciente":
-    "Antes de continuar, prueba tu segundo factor actual (o usa un código de recuperación) para confirmar que eres tú.",
-  "contraseña-incorrecta": "Esa contraseña no es correcta. Inténtalo de nuevo.",
-  "contraseña-requerida": "Escribe tu contraseña actual para continuar.",
-};
-
-/**
- * Turn a step-up refusal into the one sentence this screen shows for it.
- *
- * `motivo` wins whenever it is one of the four known values — see
- * `MOTIVO_MENSAJE` above for why the server's own `message` is not trusted
- * for this. Anything else (no `motivo` at all, or a fifth value a future
- * server version might add) falls back to whatever the server actually said,
- * so an unrecognised refusal still shows something rather than nothing.
- */
-export function describeStepUpError(motivo: string | undefined, fallbackMessage: string | null): string {
-  if (motivo && motivo in MOTIVO_MENSAJE) return MOTIVO_MENSAJE[motivo as MotivoStepUp];
-  return fallbackMessage || "Ocurrió un error en el servidor.";
-}
+// El contrato del step-up vive ahora en `stepUp.ts`, una sola vez. Estaba
+// duplicado entre este fichero y `Login.api.ts`, y el interceptor del plan 4D
+// es un tercer consumidor: tres copias de una constante compartida con otro
+// repositorio es como acaban diciendo cosas distintas.
+//
+// Se reexportan `CODIGO_STEP_UP`, `MotivoStepUp` y `describeStepUpError`
+// porque las pantallas del segundo factor ya importan esos nombres de aquí, y
+// mover el fichero de origen no debería obligarlas a cambiar su import.
 
 /** The shape every one of this file's calls can fail with, on top of
  *  whatever it succeeds with: a step-up refusal (`code`/`motivo`), a rate
@@ -139,18 +100,46 @@ export const setupTotp = (stepupPassword: string): Promise<SetupTotpResult> =>
     }))
     .catch((e) => ({ ...respuestaDeError(e), otpauth: null, secreto: null }));
 
+export interface ConfirmTotpResult extends RespuestaMfa {
+  /**
+   * The account's first ten recovery codes, in clear — `null` on any
+   * non-200, and **also** `null` on a 200 where the account already had an
+   * outstanding, unspent sheet. `api/src/controllers/totp.controller.ts`'s
+   * `confirmTotp` sends `codigos: null` explicitly rather than omitting the
+   * field in that second case, precisely so this is "nothing was minted",
+   * distinguishable from "the field does not exist yet" — see that
+   * function's own comment on why regenerating there would have silently
+   * invalidated a sheet already sitting in a drawer.
+   *
+   * Shown exactly once, the same rule `GenerarCodigosResult.codigos` below
+   * documents for the standalone regenerate-codes endpoint: there is no
+   * request anywhere that hands these back a second time, so a component
+   * reading this field is the only place in the whole app that ever sees
+   * them.
+   */
+  codigos: string[] | null;
+}
+
 /**
  * `POST /auth/totp/confirm` — prove the secret `setupTotp` just handed out.
  *
  * Also behind `requireStepUp({ exigeContrasena: true })` — see this file's
  * header comment on `STEP_UP_PASSWORD_FIELD` for why the same password used
  * for `setupTotp` is the one to send here too, rather than asking again.
+ *
+ * **Confirming now also, sometimes, issues the account's first ten recovery
+ * codes** (Isaias, 2026-09-02) — see `ConfirmTotpResult.codigos` above and
+ * `totp.controller.ts`'s own comment on `confirmTotp` for the full decision.
  */
-export const confirmTotp = (codigo: string, stepupPassword: string): Promise<RespuestaMfa> =>
+export const confirmTotp = (codigo: string, stepupPassword: string): Promise<ConfirmTotpResult> =>
   axios
     .post(`${urlApi}auth/totp/confirm`, { codigo, [STEP_UP_PASSWORD_FIELD]: stepupPassword })
-    .then((r) => ({ status: r.status, message: (r.data?.message as string | undefined) ?? null }))
-    .catch(respuestaDeError);
+    .then((r) => ({
+      status: r.status,
+      message: (r.data?.message as string | undefined) ?? null,
+      codigos: (r.data?.codigos as string[] | undefined) ?? null,
+    }))
+    .catch((e) => ({ ...respuestaDeError(e), codigos: null }));
 
 /**
  * `DELETE /auth/totp` — remove the caller's own TOTP factor, confirmed or
@@ -215,3 +204,37 @@ export const getRecoveryCodesRemaining = (): Promise<{ status: number; restantes
     .get(`${urlApi}auth/recovery-codes`)
     .then((r) => ({ status: r.status, restantes: (r.data?.restantes as number | undefined) ?? null }))
     .catch((e) => ({ status: (e as { response?: { status?: number } }).response?.status ?? 500, restantes: null }));
+
+/**
+ * `POST /auth/stepup` — volver a acreditar una sesión **ya completa** cuya
+ * ventana de diez minutos ha vencido.
+ *
+ * 🔴 **No es lo mismo que `verifySecondFactor`, y elegir mal deja a alguien
+ * atascado.** Aquélla (`POST /auth/mfa/verify`, en `Login.api.ts`) es la que
+ * *levanta* una sesión a medias. Ésta sólo sirve cuando la sesión ya está
+ * completa: el servidor filtra por ese estado, así que llamarla desde una
+ * sesión a medias no falla con un mensaje útil — **carga un intento fallido
+ * contra el bloqueo de la cuenta**, con el código correcto tecleado. Quién
+ * llama a cuál lo decide `StepUpDialog` mirando el estado de la sesión.
+ *
+ * Acepta un solo campo, `codigo`: seis dígitos se leen como TOTP y cualquier
+ * otra cosa como código de recuperación. La distinción la hace el servidor.
+ *
+ * `intentosRestantes` es lo que evita que alguien se quede fuera del ERP sin
+ * haber leído un aviso: el mensaje de error es el mismo para un código mal
+ * tecleado, uno ya usado y una cuenta bloqueada.
+ */
+export const probarStepUp = (
+  codigo: string,
+): Promise<{ status: number; message: string | null; intentosRestantes?: number }> =>
+  axios
+    .post(urlApi + "auth/stepup", { codigo }, { timeout: TIMEOUT_CONFIRMACION_MS })
+    .then((response) => ({
+      status: response.status,
+      message: (response.data?.message as string | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo confirmar tu identidad.",
+      intentosRestantes: e.response?.data?.intentosRestantes as number | undefined,
+    }));

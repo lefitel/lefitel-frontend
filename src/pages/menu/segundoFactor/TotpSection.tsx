@@ -25,6 +25,7 @@ import {
 import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { renderTotpQr } from "./totpQr";
+import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
 
 /**
  * The exact text of the two 409s `POST /auth/totp/setup` can answer with —
@@ -94,6 +95,15 @@ type Banner409 = "correo" | "factor" | null;
  * already uses for the same reason, and reads no `estado` guessed from this
  * response's own body: `/auth/me` is the one authority for that shape, same
  * as everywhere else in this codebase that touches it.
+ *
+ * **Confirming can also hand back the account's first ten recovery codes**
+ * (Isaias, 2026-09-02): `Mfa.api.ts`'s `confirmTotp` now carries a `codigos`
+ * field, non-`null` exactly when the server decided nothing was already
+ * outstanding to invalidate — see `totp.controller.ts`'s own comment on that
+ * decision. When it is non-`null`, `RecoveryCodesRevealDialog` shows them
+ * right here, with a mandatory acknowledgement, instead of the old toast
+ * that only ever *suggested* a trip to `RecoveryCodesSection.tsx` — a trip
+ * nothing forced anyone to actually take.
  */
 const TotpSection = () => {
   const { setSesion } = useContext(SesionContext);
@@ -159,6 +169,10 @@ const TotpSection = () => {
   const [codigo, setCodigo] = useState("");
   const [enviandoConfirm, setEnviandoConfirm] = useState(false);
   const [errorConfirm, setErrorConfirm] = useState<string | null>(null);
+  // `null` = nothing to show. Set the instant `confirmTotp` hands back a
+  // non-null `codigos`, and cleared only by the dialog's own mandatory
+  // acknowledgement — see this component's own docstring.
+  const [codigosRecuperacion, setCodigosRecuperacion] = useState<string[] | null>(null);
 
   // Renders the QR the moment a fresh otpauth:// URI lands, and clears it the
   // moment the attempt is abandoned. `vigente` rather than an
@@ -237,9 +251,7 @@ const TotpSection = () => {
     try {
       const res = await confirmTotp(codigo.trim(), passwordAlta);
       if (res.status === 200) {
-        toast.success(
-          "Tu segundo factor quedó configurado. Genera tus códigos de recuperación más abajo antes de terminar.",
-        );
+        toast.success("Tu segundo factor quedó configurado correctamente.");
         cancelarAlta();
         // Hallazgo E-3/F12 — see this component's own docstring. The server
         // already promoted the session; this is what tells this browser.
@@ -251,6 +263,13 @@ const TotpSection = () => {
             estado: yo.estado,
             autenticado: yo.estado !== "parcial",
           });
+        }
+        // Isaias, 2026-09-02: only non-null when the server decided this
+        // confirmation is what should mint the account's first ten recovery
+        // codes — see this component's own docstring. `null` means an
+        // outstanding sheet already existed, so there is nothing to reveal.
+        if (res.codigos) {
+          setCodigosRecuperacion(res.codigos);
         }
       } else if (res.code === CODIGO_STEP_UP) {
         // Rare: the password no longer holds — most likely it was changed in
@@ -492,6 +511,15 @@ const TotpSection = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Isaias, 2026-09-02: the account's first ten recovery codes, shown
+          the instant confirming this factor is what minted them. See this
+          component's own docstring and `RecoveryCodesRevealDialog`'s. */}
+      <RecoveryCodesRevealDialog
+        codigos={codigosRecuperacion}
+        onAcknowledge={() => setCodigosRecuperacion(null)}
+        contexto="Tu segundo factor ya está activo. Estos diez códigos son tu única forma de entrar si alguna vez pierdes el acceso a tu aplicación de autenticación."
+      />
     </Card>
   );
 };

@@ -102,7 +102,15 @@ export const editUserPass = (
  */
 export const resetMfaUsuario = (id: number): Promise<{ status: number; message?: string }> => {
   return axios
-    .post(urlApi + urlUsuario + id + "/mfa/reset")
+    // `{}` y no nada. Medido contra el axios de este repo: `axios.post(url)`
+    // sin segundo argumento deja `Content-Type: application/x-www-form-urlencoded`
+    // escrito en la configuración, y el servidor sólo monta `express.json()`.
+    // Así que cuando el interceptor de step-up reenvía esta petición con la
+    // contraseña dentro, sale como formulario, Express no lo parsea, y la
+    // respuesta vuelve a ser «falta la contraseña» — con la contraseña
+    // correcta, indefinidamente. Un objeto vacío fija el tipo en JSON desde la
+    // primera petición y cierra el bucle en origen.
+    .post(urlApi + urlUsuario + id + "/mfa/reset", {})
     .then((response) => ({ status: response.status }))
     .catch((e) => {
       const msg = e.response?.data?.message || "Error desconocido";
@@ -118,7 +126,8 @@ export const resetMfaUsuario = (id: number): Promise<{ status: number; message?:
  */
 export const desbloquearUsuario = (id: number): Promise<{ status: number; message?: string }> => {
   return axios
-    .patch(urlApi + urlUsuario + id + "/desbloquear")
+    // Mismo motivo que `resetMfaUsuario` — ver su comentario.
+    .patch(urlApi + urlUsuario + id + "/desbloquear", {})
     .then((response) => ({ status: response.status }))
     .catch((e) => {
       const msg = e.response?.data?.message || "Error desconocido";
@@ -128,7 +137,12 @@ export const desbloquearUsuario = (id: number): Promise<{ status: number; messag
 
 export const deleteUsuario = (id: number): Promise<number> => {
   return axios
-    .delete(urlApi + urlUsuario + id)
+    // `{ data: {} }` porque `axios.delete(url)` descarta el cuerpo, y sin
+    // cuerpo el interceptor de step-up no tiene dónde poner la contraseña.
+    // Precedente que lo valida: `deleteTotp` en `Mfa.api.ts` ya manda así su
+    // `stepup_password` contra una ruta que la exige, y funciona — Express
+    // parsea el cuerpo de un DELETE con `Content-Type: application/json`.
+    .delete(urlApi + urlUsuario + id, { data: {} })
     .then((response) => response.status)
     .catch(() => 400);
 };

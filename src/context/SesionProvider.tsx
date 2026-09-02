@@ -4,7 +4,9 @@ import { toast } from "sonner";
 import { SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import { usuarioExample } from "../data/example";
 import { comprobarToken } from "../api/Login.api";
-import { url, urlApi } from "../api/url";
+import { urlApi } from "../api/url";
+import { esNuestraApi } from "../api/esNuestraApi";
+import { cancelarStepUpEnCurso } from "../api/stepUpInterceptor";
 import { SesionContext } from "./SesionContext";
 import { olvidarPermisos, setPermisos } from "../lib/permissions";
 
@@ -369,6 +371,17 @@ export const SesionProvider = ({ children }: props) => {
     hasSessionRef.current = false;
     clearTimers();
     olvidarPermisos();
+    /**
+     * 🔴 Corta la ventana del step-up y todo lo que estuviera esperándola.
+     *
+     * Sin esta línea, una sesión que muere mientras alguien teclea su
+     * contraseña deja las peticiones encoladas **ni resueltas ni rechazadas**:
+     * sus `await` no vuelven nunca y los indicadores de carga giran para
+     * siempre en pantallas que ya nadie está mirando. Va antes de `setSesion`
+     * a propósito — después, el árbol ya se está desmontando y el `useEffect`
+     * de limpieza de la ventana correría en un orden que no controlamos.
+     */
+    cancelarStepUpEnCurso();
     setSesion({ usuario: usuarioExample, autenticado: false });
   }, []);
 
@@ -495,41 +508,11 @@ export const SesionProvider = ({ children }: props) => {
   // abajo, para por qué eso no es un problema — y el del efecto de arranque
   // para la otra mitad de la misma explicación.
   useEffect(() => {
-    /**
-     * Only our own API may move this session.
-     *
-     * The interceptor is global, so it sees every request the app makes —
-     * including the image fetches the exporters perform against paths stored in
-     * the database. A crafted `image` value such as ".attacker.tld/x.jpg"
-     * concatenated onto the API host produces a request to a host the attacker
-     * owns, and that host controls its own response headers *and* its own
-     * CORS, so it can hand this page any `x-osefi-role` or any deadline it
-     * likes. Unguarded, that buys it a false "your permissions changed" notice
-     * and a refetch on demand — and a countdown pointed wherever it wants,
-     * since a stranger answering a request never touched our session row.
-     *
-     * A relative `url` is resolved the way axios itself resolved it: against
-     * `baseURL` when the request had one, and only against the page otherwise.
-     * Resolving unconditionally against `window.location` was a live trap —
-     * the day somebody sets a `baseURL` (there is no `axios.create` in this
-     * repository today, so nobody has), every request's `url` becomes the bare
-     * path, every path resolves to the *frontend's* origin, and this guard
-     * quietly stops matching: role detection and the countdown both go away
-     * with no test able to notice, since the tests build absolute URLs. Taking
-     * the base from the request keeps the guard honest either way. It cannot
-     * be turned against us, because `baseURL` is set by this application and
-     * `url` is the half that can come out of the database — and an absolute
-     * `url` ignores the base it is resolved against, so a stranger's host
-     * still resolves to a stranger's origin.
-     */
-    const isOurApi = (config: { url?: string; baseURL?: string } | undefined): boolean => {
-      if (!config?.url) return false;
-      try {
-        return new URL(config.url, config.baseURL || window.location.href).origin === new URL(url).origin;
-      } catch {
-        return false;
-      }
-    };
+    // `esNuestraApi` vivía aquí. Se mudó a `api/http.ts` cuando apareció el
+    // segundo interceptor global —el del step-up— que necesita la misma
+    // pregunta: dos copias es como una se queda sin el arreglo de la otra. El
+    // porqué completo está en su comentario allí.
+    const isOurApi = esNuestraApi;
 
     const interceptor = axios.interceptors.response.use(
       (response) => {

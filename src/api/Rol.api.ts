@@ -51,7 +51,11 @@ export interface ArchiveRolResult {
  */
 export const archiveRol = (id: number): Promise<ArchiveRolResult> => {
   return axios
-    .delete(urlApi + urlRol + id)
+    // `{ data: {} }`, no `delete(url)` a secas: axios descarta el cuerpo de un
+    // DELETE que no lo lleve en `config.data`, y el interceptor de step-up
+    // necesita un sitio donde poner la contraseña al reenviar. Ver el
+    // comentario de `deleteUsuario` en `Usuario.api.ts`.
+    .delete(urlApi + urlRol + id, { data: {} })
     .then((response) => ({ status: response.status }))
     .catch((error: unknown) => {
       const res = (error as { response?: { status?: number; data?: { message?: string; cuentas?: number } } })?.response;

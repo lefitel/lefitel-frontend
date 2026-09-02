@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import axios from "axios";
 import { useContext, useEffect } from "react";
 import { SesionProvider } from "./SesionProvider";
+import * as interceptor from "../api/stepUpInterceptor";
 import { SesionContext, type contextProps } from "./SesionContext";
 import { can, olvidarPermisos, sinPermisos, type Permisos } from "../lib/permissions";
 import { url, urlApi } from "../api/url";
@@ -1660,5 +1661,26 @@ describe("la cuenta atrás, que sigue lo que dice el servidor", () => {
     expect(toast.warning).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(latest?.sesion.autenticado).toBe(true);
+  });
+});
+
+describe("cerrar sesión y la ventana del step-up", () => {
+  it("corta la ventana y lo que estuviera esperándola", () => {
+    // 🔴 Sin esto, una sesión que muere mientras alguien teclea su contraseña
+    // desmonta la ventana y deja las peticiones encoladas **ni resueltas ni
+    // rechazadas**: sus `await` no vuelven nunca y los indicadores de carga
+    // giran para siempre en pantallas que ya nadie mira.
+    const cancelar = vi.spyOn(interceptor, "cancelarStepUpEnCurso");
+
+    const { getByText } = render(
+      <SesionProvider>
+        <Establecer id_rol={1} permisos={sinPermisos()} />
+        <Salir />
+      </SesionProvider>,
+    );
+
+    fireEvent.click(getByText("salir"));
+
+    expect(cancelar).toHaveBeenCalled();
   });
 });

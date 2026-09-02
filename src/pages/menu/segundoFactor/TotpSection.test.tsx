@@ -392,3 +392,95 @@ describe("añadir un factor nuevo", () => {
     expect(confirmTotp).not.toHaveBeenCalled();
   });
 });
+
+describe("códigos de recuperación al confirmar (Isaias, 2026-09-02)", () => {
+  // Same shape `RecoveryCodesSection.test.tsx` seeds its own fixture with:
+  // 26 characters each, the canonical length `recoveryCodeStore.ts` mints.
+  const CODIGOS = Array.from({ length: 10 }, (_, i) => `CODE${i}ABCDEFGHJKMNPQRSTUV`.slice(0, 26));
+
+  async function llegarAlPasoDeCodigo(user: ReturnType<typeof userEvent.setup>) {
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await user.click(screen.getByRole("button", { name: "Continuar" }));
+    await screen.findByText(SECRETO);
+    await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
+  }
+
+  it("shows the ten fresh codes on this same screen when confirming is what minted them", async () => {
+    // Before this decision, confirming only ever printed a toast suggesting
+    // a trip to a different screen. Now the ten codes `confirmTotp` returns
+    // land right here, using the same reveal presentation
+    // `RecoveryCodesSection.tsx` already uses for its own regenerate flow.
+    confirmTotp.mockResolvedValue({
+      status: 200,
+      message: "Segundo factor configurado correctamente.",
+      codigos: CODIGOS,
+    });
+    const user = userEvent.setup();
+    renderTotp();
+    await llegarAlPasoDeCodigo(user);
+
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText(/tus códigos de recuperación/i)).toBeInTheDocument();
+    // All ten land on screen, formatted — not the raw 26-character string.
+    for (const codigo of CODIGOS) {
+      expect(screen.getByText(codigo.match(/.{1,4}/g)!.join("-"))).toBeInTheDocument();
+    }
+    expect(screen.getByText(/única vez que vas a ver estos códigos/i)).toBeInTheDocument();
+  });
+
+  it("shows no codes dialog when the account already had an outstanding sheet (codigos: null)", async () => {
+    // The "only the first factor" rule, from the server's own side of this
+    // decision: `codigos: null` means nothing was minted, so there is
+    // nothing for this screen to reveal.
+    confirmTotp.mockResolvedValue({
+      status: 200,
+      message: "Segundo factor configurado correctamente.",
+      codigos: null,
+    });
+    const user = userEvent.setup();
+    renderTotp();
+    await llegarAlPasoDeCodigo(user);
+
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument();
+  });
+
+  it("does not close the codes on Escape — the acknowledgement button is the only way out", async () => {
+    confirmTotp.mockResolvedValue({
+      status: 200,
+      message: "Segundo factor configurado correctamente.",
+      codigos: CODIGOS,
+    });
+    const user = userEvent.setup();
+    renderTotp();
+    await llegarAlPasoDeCodigo(user);
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByText(/tus códigos de recuperación/i);
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.getByText(/tus códigos de recuperación/i)).toBeInTheDocument();
+  });
+
+  it("requires clicking the mandatory acknowledgement before the codes disappear", async () => {
+    confirmTotp.mockResolvedValue({
+      status: 200,
+      message: "Segundo factor configurado correctamente.",
+      codigos: CODIGOS,
+    });
+    const user = userEvent.setup();
+    renderTotp();
+    await llegarAlPasoDeCodigo(user);
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+    await screen.findByText(/tus códigos de recuperación/i);
+
+    await user.click(screen.getByRole("button", { name: "Ya los guardé, cerrar" }));
+
+    await waitFor(() => expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument());
+  });
+});

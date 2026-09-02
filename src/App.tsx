@@ -37,6 +37,7 @@ import SegundoFactorPage from "./pages/login/SegundoFactorPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
 import { Toaster } from "@/components/ui/sonner";
+import { StepUpDialog } from "./components/dialogs/StepUpDialog";
 import { UpdatePrompt } from "./components/UpdatePrompt";
 import { ThemeProvider as ShadcnThemeProvider } from "@/components/theme-provider";
 
@@ -293,6 +294,11 @@ const App = () => {
               <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>
           </BrowserRouter>
+          {/* Fuera de <Routes> a propósito: si viviera dentro, una sesión que
+              caduca mientras alguien teclea su contraseña desmontaría la
+              ventana en mitad de la frase y dejaría colgadas las peticiones
+              que esperaban su respuesta. */}
+          <StepUpDialog />
           <Toaster position="top-right" richColors closeButton />
           <UpdatePrompt />
         </TooltipProvider>

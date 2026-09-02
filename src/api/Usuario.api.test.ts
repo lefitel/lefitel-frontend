@@ -33,7 +33,7 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { editUserName, editUserPass, resetMfaUsuario, desbloquearUsuario } from "./Usuario.api";
+import { editUserName, editUserPass, resetMfaUsuario, desbloquearUsuario, deleteUsuario } from "./Usuario.api";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
 afterEach(() => {
@@ -335,5 +335,85 @@ describe("desbloquearUsuario", () => {
     vi.spyOn(axios, "patch").mockResolvedValue({ status: 200, data: {} });
 
     expect(await desbloquearUsuario(7)).toEqual({ status: 200 });
+  });
+});
+
+/**
+ * 🔴 El bucle infinito que estas cinco llamadas tenían, y la única prueba que
+ * lo ve venir.
+ *
+ * `axios.post(url)` sin segundo argumento deja
+ * `Content-Type: application/x-www-form-urlencoded` escrito en la
+ * configuración de la petición. `api/src/app.ts` monta **sólo**
+ * `express.json()`. Así que cuando el interceptor de step-up reenvía la
+ * petición con la contraseña dentro, sale como formulario, Express no lo
+ * parsea, `req.body` queda vacío y el servidor responde «falta la contraseña»
+ * otra vez — con la contraseña correcta, para siempre, escribiendo una línea
+ * de bitácora por vuelta.
+ *
+ * Y `axios.delete(url)` sin `data` no manda cuerpo ninguno, así que no hay
+ * dónde poner la contraseña al reenviar.
+ *
+ * Ninguna de las dos cosas la ve un typecheck, ni un test que sólo mire la
+ * URL. Éste ejercita el axios de verdad con un adaptador falso, así que lo que
+ * comprueba es la cabecera y el cuerpo que **saldrían por el cable**.
+ */
+describe("las cinco llamadas que el interceptor de step-up tiene que poder reenviar", () => {
+  /** Captura la configuración final: cabeceras resueltas y cuerpo ya serializado. */
+  function capturar() {
+    const visto: { ct?: unknown; data?: unknown }[] = [];
+    const anterior = axios.defaults.adapter;
+    axios.defaults.adapter = (config) => {
+      visto.push({
+        ct: config.headers?.["Content-Type"] ?? config.headers?.["content-type"],
+        data: config.data,
+      });
+      return Promise.resolve({
+        data: {},
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      });
+    };
+    return { visto, restaurar: () => { axios.defaults.adapter = anterior; } };
+  }
+
+  it("resetMfaUsuario sale como JSON, no como formulario", async () => {
+    const { visto, restaurar } = capturar();
+    try {
+      await resetMfaUsuario(7);
+    } finally {
+      restaurar();
+    }
+
+    expect(visto).toHaveLength(1);
+    expect(String(visto[0].ct)).toContain("application/json");
+    expect(String(visto[0].ct)).not.toContain("x-www-form-urlencoded");
+  });
+
+  it("desbloquearUsuario sale como JSON, no como formulario", async () => {
+    const { visto, restaurar } = capturar();
+    try {
+      await desbloquearUsuario(7);
+    } finally {
+      restaurar();
+    }
+
+    expect(String(visto[0].ct)).toContain("application/json");
+    expect(String(visto[0].ct)).not.toContain("x-www-form-urlencoded");
+  });
+
+  it("deleteUsuario lleva un cuerpo donde quepa la contraseña", async () => {
+    const { visto, restaurar } = capturar();
+    try {
+      await deleteUsuario(7);
+    } finally {
+      restaurar();
+    }
+
+    // Sin `{ data: {} }` esto es `undefined` y no hay nada que ampliar.
+    expect(visto[0].data).toBeDefined();
+    expect(String(visto[0].ct)).toContain("application/json");
   });
 });

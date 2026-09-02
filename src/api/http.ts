@@ -23,6 +23,7 @@
 // there, for exactly that reason.
 
 import axios from "axios";
+import { instalarInterceptorStepUp } from "./stepUpInterceptor";
 
 /**
  * The header every write carries, so the server can tell a request from this
@@ -85,3 +86,15 @@ axios.defaults.withCredentials = true;
 for (const method of WRITE_METHODS) {
   axios.defaults.headers[method][CLIENT_HEADER] = CLIENT_HEADER_VALUE;
 }
+
+
+// El interceptor del step-up, registrado a nivel de módulo desde aquí — no
+// dentro de un efecto de React. El porqué está en su propio fichero: en un
+// efecto, `React.StrictMode` invierte el orden de registro en desarrollo y no
+// en producción, así que probarlo con `npm run dev` no dice nada de lo que
+// hará desplegado.
+//
+// Se instala aquí y no en `main.tsx` porque este módulo ya es el único punto
+// donde se configura cómo habla la aplicación con la API, y `http.test.ts` ya
+// vigila que `main.tsx` lo importe.
+instalarInterceptorStepUp();
