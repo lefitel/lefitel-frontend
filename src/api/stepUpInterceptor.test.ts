@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import axios, { AxiosHeaders } from "axios";
 import type { AxiosError } from "axios";
 import {
+  RUTAS_EXCLUIDAS,
   instalarInterceptorStepUp,
   registrarResolvedorStepUp,
   cancelarStepUpEnCurso,
@@ -134,7 +135,12 @@ describe("qué NO abre la ventana", () => {
     const resolvedor = vi.fn();
     registrarResolvedorStepUp(resolvedor);
 
-    for (const ruta of ["/auth/stepup", "/auth/mfa/verify", "/auth/logout"]) {
+    // Recorre la lista real, no una copia: con una copia a mano, añadir una
+    // ruta al módulo y olvidar la prueba dejaba todo verde, y al revés igual.
+    // Y la ruta de la llave se afirma por su nombre, porque un bucle sobre la
+    // lista no nota que falte de la lista.
+    expect(RUTAS_EXCLUIDAS).toContain("/auth/webauthn/login");
+    for (const ruta of RUTAS_EXCLUIDAS) {
       const err = rechazo(PASO, { ruta: `${url}/api${ruta}` });
       await expect(alFallar(err)).rejects.toBe(err);
     }
@@ -174,7 +180,7 @@ describe("qué NO abre la ventana", () => {
 
 describe("cuando se acabó el plazo sin configurar nada", () => {
   // 🔴 Es una negativa distinta, de `authenticate` y no de la puerta, y llega a
-  // quince de las diecinueve rutas. No abre ventana **y no puede**: aquí no hay
+  // la mayoría de las rutas protegidas. No abre ventana **y no puede**: aquí no hay
   // nada que teclear, el único remedio es registrar un factor, así que una
   // ventana pidiendo una contraseña que el servidor no va a mirar giraría para
   // siempre.
@@ -342,6 +348,97 @@ describe("la ceremonia", () => {
     expect(recibida.signal).toBeInstanceOf(AbortSignal);
   });
 
+  // 🔴 La petición se reconstruye campo a campo, así que lo que el servidor
+  // manda y esta función no nombra **no llega a la ventana**. Con `metodos`
+  // perdido, la ventana vuelve a dibujar el campo de seis dígitos a quien
+  // sólo tiene huella, que es el encierro que la tarea 8 existe para cerrar.
+  it("le pasa también con qué puede probarse la persona", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "x" });
+    registrarResolvedorStepUp(resolvedor);
+
+    await alFallar(
+      rechazo({
+        code: CODIGO_STEP_UP,
+        motivo: "sin-factor-reciente",
+        metodos: ["passkey", "codigo"],
+      }),
+    );
+    restaurar();
+
+    expect(resolvedor).toHaveBeenCalledWith(
+      expect.objectContaining({ metodos: ["passkey", "codigo"] }),
+    );
+  });
+
+  // 🔴 Lista vacía y campo ausente NO son lo mismo, y esta es la única prueba
+  // que lo sujeta a este lado. Ausente es un servidor viejo: se pinta lo de
+  // siempre. Vacía es el servidor diciendo que la cuenta no puede probarse con
+  // nada —tiene factor, por eso rechaza, pero ninguno le sirve ahora—, y ahí
+  // «lo de siempre» es un formulario sin salida. La simplificación obvia
+  // (`datos?.metodos?.length ? … : undefined`) las funde en una sola y no
+  // rompe nada más: por eso hace falta afirmarlo.
+  it("conserva la lista vacía como lista vacía, no como ausente", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "x" });
+    registrarResolvedorStepUp(resolvedor);
+
+    await alFallar(
+      rechazo({ code: CODIGO_STEP_UP, motivo: "sin-factor-reciente", metodos: [] }),
+    );
+    restaurar();
+
+    const recibida = resolvedor.mock.calls[0][0] as { metodos?: unknown };
+    expect(recibida.metodos).toEqual([]);
+    expect(recibida.metodos).not.toBeUndefined();
+  });
+
+  // El tipo declarado no es una comprobación: `datos` es JSON sin validar. Un
+  // objeto colado en la lista revienta a React al pintarlo, y la ventana es lo
+  // único que puede resolver la ceremonia — si revienta, las peticiones que
+  // esperan se quedan colgadas para siempre.
+  it("tira lo que no sea una cadena en vez de pasárselo a la ventana", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "x" });
+    registrarResolvedorStepUp(resolvedor);
+
+    await alFallar(
+      rechazo({
+        code: CODIGO_STEP_UP,
+        motivo: "sin-factor-reciente",
+        metodos: ["passkey", { malo: 1 }, null, 7] as unknown as string[],
+      }),
+    );
+    restaurar();
+
+    expect(resolvedor).toHaveBeenCalledWith(
+      expect.objectContaining({ metodos: ["passkey"] }),
+    );
+  });
+
+  // Un servidor anterior no manda el campo, y uno futuro podría mandar
+  // cualquier cosa. Ninguna de las dos puede dejar la ventana sin abrir.
+  it("no se rompe si el campo no viene, o viene con una forma que no es una lista", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "x" });
+    registrarResolvedorStepUp(resolvedor);
+
+    await alFallar(rechazo({ code: CODIGO_STEP_UP, motivo: "sin-factor-reciente" }));
+    await alFallar(
+      rechazo({
+        code: CODIGO_STEP_UP,
+        motivo: "sin-factor-reciente",
+        metodos: "passkey" as unknown as string[],
+      }),
+    );
+    restaurar();
+
+    expect(resolvedor).toHaveBeenCalledTimes(2);
+    for (const llamada of resolvedor.mock.calls) {
+      expect((llamada[0] as { metodos?: unknown }).metodos).toBeUndefined();
+    }
+  });
+
   // 🔴 La prueba que justifica toda la cola.
   it("abre UNA sola ventana aunque fallen tres peticiones a la vez", async () => {
     const { restaurar } = capturarReenvios();
@@ -490,7 +587,7 @@ describe("qué sale por el cable", () => {
     //
     // Lo que pasa de verdad: una lista, un `FormData`, un `Blob` o una cadena
     // que no sea JSON **se sustituyen** por `{stepup_password}`. Ninguna de las
-    // diecinueve rutas protegidas manda hoy un cuerpo así —la única llamada con
+    // rutas protegidas manda hoy un cuerpo así —la única llamada con
     // `FormData` de toda la aplicación va a una ruta sin puerta—, pero este
     // fichero existe para cubrir «las rutas que se añadan después», y para ésas
     // esto falla en silencio en vez de a gritos.
@@ -502,5 +599,67 @@ describe("qué sale por el cable", () => {
     inyectarPassword(config, "la-mia");
 
     expect(config.data).toEqual({ stepup_password: "la-mia" });
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Plan 4C, Tarea 11 — la contraseña que ya venía en la petición.
+ *
+ * Las secciones del segundo factor piden la contraseña en su propio
+ * formulario y la mandan en las dos peticiones de un registro. Si la ventana
+ * se abriera para corregir la primera, la segunda saldría con la vieja: 403
+ * otra vez, segunda ventana, y con las llaves un reto de dos minutos
+ * caducando. El rechazo se le devuelve a la sección, que tiene el campo.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("la contraseña que ya venía en la petición", () => {
+  const CONTRASENA_INCORRECTA = { code: CODIGO_STEP_UP, motivo: "contraseña-incorrecta", message: "x" };
+
+  it("no abre la ventana cuando la petición ya traía su contraseña y era ella la incorrecta", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "otra" });
+    registrarResolvedorStepUp(resolvedor);
+    const err = rechazo(CONTRASENA_INCORRECTA, {
+      ruta: `${url}/api/auth/webauthn/register/options`,
+      data: JSON.stringify({ stepup_password: "la-que-tecleo-mal" }),
+    });
+
+    try {
+      await expect(alFallar(err)).rejects.toBe(err);
+    } finally {
+      restaurar();
+    }
+    expect(resolvedor).not.toHaveBeenCalled();
+  });
+
+  // La misma negativa sin contraseña en la petición es una carencia de
+  // verdad: nadie más que la ventana puede cubrirla.
+  it("sí la abre cuando la petición no traía ninguna", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "otra" });
+    registrarResolvedorStepUp(resolvedor);
+
+    try {
+      await alFallar(rechazo(CONTRASENA_INCORRECTA, { data: JSON.stringify({ name: "x" }) }));
+    } finally {
+      restaurar();
+    }
+    expect(resolvedor).toHaveBeenCalledTimes(1);
+  });
+
+  // Y si la contraseña incorrecta la puso este interceptor en un reintento,
+  // quien tiene que volver a pedirla es la ventana, no la pantalla.
+  it("sí la abre en un reintento, aunque el cuerpo lleve contraseña: la puso el interceptor", async () => {
+    const { restaurar } = capturarReenvios();
+    const resolvedor = vi.fn().mockResolvedValue({ password: "otra" });
+    registrarResolvedorStepUp(resolvedor);
+    const err = rechazo(CONTRASENA_INCORRECTA, { data: JSON.stringify({ stepup_password: "mal" }) });
+    (err.config as { __stepUpIntentos?: number }).__stepUpIntentos = 1;
+
+    try {
+      await alFallar(err);
+    } finally {
+      restaurar();
+    }
+    expect(resolvedor).toHaveBeenCalledTimes(1);
   });
 });

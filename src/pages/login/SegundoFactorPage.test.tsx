@@ -31,6 +31,18 @@ vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() },
 }));
 
+// La ceremonia con el navegador, detrás de un mock: `jsdom` no tiene WebAuthn,
+// así que con el módulo real el botón no se pintaría nunca y una prueba
+// negativa pasaría por eso, no por lo que afirma. `soporta` arranca en `false`
+// —lo que el resto de este fichero siempre vio— y sólo las pruebas de la llave
+// lo encienden.
+const probarPasskey = vi.fn();
+let soporta = false;
+vi.mock("../../api/passkeyCeremony", () => ({
+  probarPasskey: (...args: unknown[]) => probarPasskey(...args),
+  soportaPasskeys: () => soporta,
+}));
+
 function Harness({
   onSesion,
   initialEntries = ["/segundo-factor"],
@@ -72,6 +84,7 @@ function Harness({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  soporta = false;
 });
 
 describe("entering the app code", () => {
@@ -196,7 +209,7 @@ describe("hallazgo D-3/E-4/F11 — the third entry of the MFA loop", () => {
     expect(screen.queryByText("pantalla-app")).not.toBeInTheDocument();
     const { toast } = await import("sonner");
     expect(toast.error).toHaveBeenCalledWith(
-      "Tu sesión cambió mientras verificabas el código. Volvé a intentarlo.",
+      "Tu sesión cambió mientras verificabas tu identidad. Volvé a intentarlo.",
     );
     expect(toast.success).not.toHaveBeenCalled();
   });
@@ -285,5 +298,114 @@ describe("cancelling", () => {
     await user.click(screen.getByRole("button", { name: /cancelar y volver a iniciar sesión/i }));
 
     await waitFor(() => expect(abandonPartialSession).toHaveBeenCalledTimes(1));
+  });
+});
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Plan 4C, Tarea 11 — la tercera vía: la llave de acceso.
+ *
+ * 🔴 Sin ella, la fase 1 enviaba una llave con la que no se podía entrar: esta
+ * pantalla sólo tenía las dos pestañas de código, y quien sólo tuviera llave
+ * quemaba un código de recuperación por login hasta quedarse fuera.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("entering with the passkey", () => {
+  it("draws the button only where the browser can run a ceremony", () => {
+    render(<Harness onSesion={() => {}} />);
+    expect(screen.queryByRole("button", { name: /llave de acceso/i })).not.toBeInTheDocument();
+  });
+
+  it("runs the ceremony and opens the session from /auth/me, like a code would", async () => {
+    soporta = true;
+    probarPasskey.mockResolvedValue({ ok: true });
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { ...usuarioExample, user: "ada" },
+      permisos: sinPermisos(),
+      estado: "completa",
+    });
+
+    const user = userEvent.setup();
+    const sesiones: SesionInterface[] = [];
+    render(<Harness onSesion={(s) => sesiones.push(s)} />);
+
+    await user.click(screen.getByRole("button", { name: /entrar con mi llave de acceso/i }));
+
+    await waitFor(() => expect(probarPasskey).toHaveBeenCalledTimes(1));
+    // No se canjea ningún código por costumbre: eso cargaría un intento
+    // fallido contra el bloqueo de la cuenta.
+    expect(verifySecondFactor).not.toHaveBeenCalled();
+    // Y la sesión se lee de la misma autoridad que con el código.
+    expect(comprobarToken).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(sesiones.length).toBeGreaterThan(0));
+    expect(sesiones[0].estado).toBe("completa");
+    expect(await screen.findByText("pantalla-app")).toBeInTheDocument();
+  });
+
+  // Cerró el diálogo del sistema. No es un error del servidor y no se enseña
+  // como tal: la pantalla se queda donde está, con las pestañas disponibles.
+  it("says nothing when the person cancels the system dialog", async () => {
+    soporta = true;
+    probarPasskey.mockResolvedValue({ ok: false, cancelado: true });
+
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /entrar con mi llave de acceso/i }));
+
+    await waitFor(() => expect(probarPasskey).toHaveBeenCalled());
+    const { toast } = await import("sonner");
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(comprobarToken).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /entrar con mi llave de acceso/i })).toBeEnabled();
+  });
+
+  // El guardián D-3/E-4/F11 es compartido, y la frase que enseña también:
+  // a quien entró con la huella no se le puede hablar de un código que no
+  // tecleó — y, si sólo tiene llave, que no puede producir.
+  it("does not read a still-parcial /auth/me as a finished login on the passkey path, and says so without mentioning a code", async () => {
+    soporta = true;
+    probarPasskey.mockResolvedValue({ ok: true });
+    comprobarToken.mockResolvedValue({
+      status: 200,
+      usuario: { ...usuarioExample, user: "ada" },
+      permisos: sinPermisos(),
+      estado: "parcial",
+    });
+
+    const user = userEvent.setup();
+    const sesiones: SesionInterface[] = [];
+    render(<Harness onSesion={(s) => sesiones.push(s)} />);
+
+    await user.click(screen.getByRole("button", { name: /entrar con mi llave de acceso/i }));
+
+    await waitFor(() => expect(sesiones.length).toBeGreaterThan(0));
+    expect(sesiones.at(-1)!.autenticado).toBe(false);
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    const frase = (toast.error as unknown as { mock: { calls: string[][] } }).mock.calls[0][0];
+    expect(frase).not.toMatch(/código/i);
+    expect(screen.queryByText("pantalla-app")).not.toBeInTheDocument();
+  });
+
+  it("shows the server's own sentence when the key is refused", async () => {
+    soporta = true;
+    probarPasskey.mockResolvedValue({
+      ok: false,
+      cancelado: false,
+      status: 429,
+      message: "Demasiados intentos con la llave. Espere unos minutos.",
+    });
+
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.click(screen.getByRole("button", { name: /entrar con mi llave de acceso/i }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Demasiados intentos con la llave. Espere unos minutos."),
+    );
+    expect(comprobarToken).not.toHaveBeenCalled();
   });
 });

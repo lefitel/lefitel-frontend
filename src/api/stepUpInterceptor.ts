@@ -1,8 +1,8 @@
 // Lo que pasa cuando el servidor dice «antes de esto, demuéstrame que eres tú».
 //
-// El servidor pide esa prueba en diecinueve sitios. Antes de este fichero el
+// El servidor pide esa prueba en una veintena de sitios. Antes de este fichero el
 // cliente sabía contestar en cuatro, y sólo porque esas cuatro pantallas
-// llevaban su propio campo de contraseña. En los quince restantes la operación
+// llevaban su propio campo de contraseña. En el resto la operación
 // simplemente fallaba: dos de ellas siempre, y las trece demás en el instante
 // en que su dueño registrara un segundo factor.
 //
@@ -33,7 +33,12 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { esNuestraApi } from "./esNuestraApi";
 import { toast } from "sonner";
-import { STEP_UP_PASSWORD_FIELD, CODIGO_STEP_UP, MOTIVO_ESTADO_INCOMPLETO } from "./stepUp";
+import {
+  STEP_UP_PASSWORD_FIELD,
+  CODIGO_STEP_UP,
+  MOTIVO_ESTADO_INCOMPLETO,
+  MOTIVO_CONTRASENA_INCORRECTA,
+} from "./stepUp";
 import type { RechazoStepUp } from "./stepUp";
 
 /**
@@ -56,6 +61,23 @@ export interface PeticionStepUp {
   exigeContrasena: boolean;
   /** Cuántos intentos quedan antes de bloquear la cuenta, si el servidor lo dijo. */
   intentosRestantes?: number;
+  /**
+   * Con qué puede la persona cubrir un `sin-factor-reciente`: `passkey`,
+   * `totp`, `codigo`, en el orden en que conviene ofrecerlos.
+   *
+   * 🔴 **Se copia campo a campo, y por eso está aquí.** Todo lo que el
+   * servidor mande y no se nombre en esta interfaz se pierde al reconstruir
+   * la petición más abajo: llega al interceptor y no llega a la ventana. Sin
+   * esta línea, el aviso del servidor existe y no lo lee nadie.
+   *
+   * 🔴 **Ausente y vacío no significan lo mismo, y la diferencia se conserva
+   * aquí a propósito.** `undefined` es un servidor anterior que no manda el
+   * campo: la ventana pinta lo de siempre. `[]` es el servidor diciendo que
+   * esta cuenta **no puede probarse con nada** —tiene un factor, por eso la
+   * puerta rechaza, pero ninguno le sirve ahora mismo—, y ahí lo de siempre
+   * es un formulario contra el que teclear sin salida.
+   */
+  metodos?: string[];
   /** Lo que el servidor contestó, por si el motivo no es de los conocidos. */
   mensaje: string | null;
   /**
@@ -66,6 +88,22 @@ export interface PeticionStepUp {
    */
   signal: AbortSignal;
 }
+
+/**
+ * La lista de métodos tal y como se puede confiar en ella.
+ *
+ * 🔴 **El tipo declarado no es una comprobación.** `datos` es JSON sin
+ * validar: `metodos` está tipado `string[]` y en ejecución es `unknown[]`, así
+ * que `[{}]` pasaría un `Array.isArray` y llegaría a la ventana, donde React
+ * lanza al intentar pintar un objeto como hijo. Y la ventana es lo **único**
+ * que puede resolver la ceremonia: si revienta al abrirse, las peticiones que
+ * esperan quedan colgadas de una promesa que ya no resuelve nadie.
+ *
+ * Devuelve `undefined` —«no lo sé»— cuando no hay lista, y conserva la lista
+ * vacía como lista vacía, que significa otra cosa: ver `RechazoStepUp`.
+ */
+const metodosDe = (valor: unknown): string[] | undefined =>
+  Array.isArray(valor) ? valor.filter((v): v is string => typeof v === "string") : undefined;
 
 /**
  * `null` significa que la persona canceló. No es un error del servidor y no
@@ -123,8 +161,24 @@ let abortoCeremonia: AbortController | null = null;
  * recursión evidente. `/auth/logout` por el mismo motivo por el que el
  * interceptor de sesión ya lo excluye — es la barrera que aguanta aunque todo
  * lo demás falle.
+ *
+ * `/auth/webauthn/login` cubre `/options` y `/verify` (la comparación es por
+ * inclusión): es la tercera puerta con la que la ventana resuelve, desde el
+ * plan 4C. Hoy ninguna de las dos puede emitir un 403 con `code` —no llevan
+ * `requireStepUp`—, así que el bloqueo que evitaría no es alcanzable; está
+ * aquí porque la lista es lo que sobrevive a que alguien monte una puerta ahí
+ * más adelante. **No** van `/auth/webauthn/register` ni `/credentials`: esas
+ * sí necesitan la ceremonia.
+ *
+ * Exportada para que su prueba recorra **esta** lista y no una copia a mano,
+ * que es como una ruta faltó aquí sin que nada se pusiera rojo.
  */
-const RUTAS_EXCLUIDAS = ["/auth/stepup", "/auth/mfa/verify", "/auth/logout"];
+export const RUTAS_EXCLUIDAS = [
+  "/auth/stepup",
+  "/auth/mfa/verify",
+  "/auth/logout",
+  "/auth/webauthn/login",
+];
 
 /**
  * Cuerpos que caducan, y que por eso no se reenvían.
@@ -181,14 +235,28 @@ const coincide = (config: { url?: string } | undefined, rutas: string[]): boolea
  * función que alguien escriba mañana sin haber leído nada de esto.
  */
 export function inyectarPassword(config: ConfigConIntentos, password: string): void {
+  const cuerpo = cuerpoDe(config);
+  cuerpo[STEP_UP_PASSWORD_FIELD] = password;
+  config.data = cuerpo;
+  config.headers.set("Content-Type", "application/json");
+}
+
+/**
+ * El cuerpo de una petición como objeto plano, o `{}` si no lo era. Copia,
+ * nunca la referencia: quien lo pida lo va a modificar.
+ */
+function cuerpoDe(config: ConfigConIntentos): Record<string, unknown> {
   let cuerpo: Record<string, unknown> = {};
   if (typeof config.data === "string" && config.data !== "") {
     try {
       const parseado: unknown = JSON.parse(config.data);
       // 🔴 Un cuerpo que no es un objeto —una lista, un `FormData`, una cadena
       // que no sea JSON— **se pierde**: se sustituye por `{stepup_password}`.
-      // Ninguna de las diecinueve rutas manda hoy algo así (la única llamada
-      // con `FormData` de la aplicación va a una ruta sin puerta), pero este
+      // Ninguna ruta con puerta manda hoy algo así —verificado llamada a
+      // llamada para las once de permisos, roles y usuarios en la Tarea 10 del
+      // plan 4C: todas mandan un objeto plano, y los `DELETE`/`PATCH` ya
+      // llevan `{ data: {} }` o `{}` con el motivo escrito al lado; la única
+      // llamada con `FormData` de la aplicación va a una ruta sin puerta—, pero este
       // fichero existe también para las rutas que vengan después, y para ésas
       // esto falla en silencio. Documentado a propósito en vez de disimulado
       // con un comentario que diga que se conserva, que es lo que decía antes.
@@ -201,11 +269,17 @@ export function inyectarPassword(config: ConfigConIntentos, password: string): v
   } else if (config.data && typeof config.data === "object") {
     cuerpo = { ...(config.data as Record<string, unknown>) };
   }
-
-  cuerpo[STEP_UP_PASSWORD_FIELD] = password;
-  config.data = cuerpo;
-  config.headers.set("Content-Type", "application/json");
+  return cuerpo;
 }
+
+/**
+ * Si la petición salió **ya** con una contraseña puesta por quien la hizo —
+ * las secciones del segundo factor la piden en su propio formulario y la
+ * mandan en sus dos o tres peticiones — y no una que este interceptor
+ * inyectó en un reintento.
+ */
+const traiaContrasena = (config: ConfigConIntentos): boolean =>
+  (config.__stepUpIntentos ?? 0) === 0 && STEP_UP_PASSWORD_FIELD in cuerpoDe(config);
 
 /**
  * Quita la contraseña del cuerpo de una configuración, dejando el resto.
@@ -298,7 +372,7 @@ export function cancelarStepUpEnCurso(): void {
  *
  * Se corresponde con `CODIGO_FACTOR_PENDIENTE` en
  * `api/src/auth/sessionState.ts`. La responde `authenticate`, no la puerta del
- * step-up, y llega a quince de las diecinueve rutas protegidas.
+ * step-up, y llega a toda ruta protegida que no esté en la lista de `onboarding`.
  */
 const CODIGO_FACTOR_PENDIENTE = "FACTOR_PENDIENTE";
 
@@ -375,6 +449,28 @@ export function instalarInterceptorStepUp(): number {
         return Promise.reject(error);
       }
 
+      /**
+       * 🔴 **Una petición que ya traía su contraseña y recibe «contraseña
+       * incorrecta» es de quien la mandó**, no de esta ventana. Las secciones
+       * del segundo factor piden la contraseña en su propio formulario y la
+       * mandan en las dos peticiones de un registro (`setup` + `confirm`,
+       * `options` + `verify`). Si la ventana se abriera aquí, corregiría la
+       * **primera** petición y la segunda saldría con la contraseña vieja del
+       * formulario: 403 otra vez, segunda ventana, y —con las llaves— un reto
+       * de dos minutos caducando mientras la persona teclea. Devolverle el
+       * rechazo a la sección es lo que le deja pintar «esa contraseña no es
+       * correcta» junto al campo donde se tecleó, antes de que ninguna
+       * ceremonia empiece.
+       *
+       * Sólo en el primer intento: si la contraseña que falló la inyectó este
+       * interceptor en un reintento, la ventana sí es quien tiene que volver a
+       * pedirla. Y sólo con ese motivo: «sin factor reciente» y «contraseña
+       * requerida» siguen siendo carencias que sólo la ventana puede cubrir.
+       */
+      if (datos?.motivo === MOTIVO_CONTRASENA_INCORRECTA && traiaContrasena(config)) {
+        return Promise.reject(error);
+      }
+
       // 🔴 `estado-incompleto` no se reintenta jamás. No hay nada que teclear:
       // el único remedio es registrar un segundo factor, algo que ninguna
       // ventana puede obtener. Reintentar aquí es un bucle infinito
@@ -390,6 +486,7 @@ export function instalarInterceptorStepUp(): number {
         motivo: datos?.motivo ?? "",
         exigeContrasena: datos?.exigeContrasena === true,
         intentosRestantes: datos?.intentosRestantes,
+        metodos: metodosDe(datos?.metodos),
         mensaje: datos?.message ?? null,
       });
 

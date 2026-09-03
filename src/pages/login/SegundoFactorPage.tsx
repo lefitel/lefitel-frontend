@@ -1,12 +1,13 @@
 import { useContext, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Loader2, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
+import { KeyRoundIcon, Loader2, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
 
 import { useTheme } from "../../components/theme-provider";
 import { SesionContext } from "../../context/SesionContext";
 import { usuarioExample } from "../../data/example";
 import { abandonPartialSession, comprobarToken, verifySecondFactor } from "../../api/Login.api";
+import { probarPasskey, soportaPasskeys } from "../../api/passkeyCeremony";
 
 import logo from "../../assets/images/logo.png";
 
@@ -30,10 +31,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * is a bundled asset served from this app's own origin, never a stored
  * photograph fetched through the API.
  *
- * **Two visible ways in, never one hidden behind the other.** Hallazgo
+ * **Three visible ways in, never one hidden behind the other.** Hallazgo
  * A5/D4's own instruction: whoever arrives here with a lost phone is exactly
  * the person who needs the recovery code, so it is its own tab next to the
  * app code, not a link reading "¿problemas?" that has to be found first.
+ *
+ * 🔴 **The passkey button is the third, and without it phase 1 of plan 4C
+ * ships a key nobody can log in with.** This screen used to offer only the
+ * two code tabs. An account whose only factor is a passkey opens `parcial`
+ * on every login, lands here, and can produce neither a six-digit code nor —
+ * after ten logins — a recovery code: it would burn one of its ten sheets
+ * per login and then be locked out for good. `/api/auth/webauthn/login` is
+ * on the `PARCIAL` allow-list precisely so this button can call it. It is
+ * drawn only where the browser can run a ceremony, and it ignores "recordar
+ * este equipo": the server mints no remembered-device cookie on a passkey
+ * login (a decided asymmetry — a key is already one gesture).
  *
  * **No clock-skew note is written on this side, and — verified against
  * `api/src/controllers/mfa.controller.ts` as actually built — none arrives
@@ -70,23 +82,18 @@ const SegundoFactorPage = () => {
    * since before this checkbox existed to send it.
    */
   const [recordar, setRecordar] = useState(false);
+  // Una sola vez: es una propiedad del navegador, no cambia durante la vida
+  // de la página.
+  const [soportaLlave] = useState(() => soportaPasskeys());
+  const [probandoLlave, setProbandoLlave] = useState(false);
 
-  const verificar = async () => {
-    const valor = codigo.trim();
-    if (!valor) {
-      return toast.warning(
-        modo === "totp" ? "Ingresá el código de tu aplicación." : "Ingresá tu código de recuperación."
-      );
-    }
-
-    setLoading(true);
-    try {
-      const respuesta = await verifySecondFactor(valor, recordar);
-      if (respuesta.status !== 200) {
-        toast.error(respuesta.message ?? "No se pudo verificar el código.");
-        return;
-      }
-
+  /**
+   * Lo que pasa después de que el servidor haya aceptado un factor, sea cual
+   * sea: volver a leer la sesión de `/auth/me`, escribirla en el contexto, y
+   * entrar. Compartido por el código y por la llave, que es la única razón de
+   * que sea una función aparte.
+   */
+  const abrirSesion = async () => {
       /**
        * The endpoint that proves the factor does not say who this session
        * belongs to now — `/auth/me` does, the same authority `LoginPage.tsx`
@@ -98,7 +105,8 @@ const SegundoFactorPage = () => {
        */
       const yo = await comprobarToken();
       if (yo.status !== 200 || !yo.usuario) {
-        toast.error("El código se aceptó, pero no se pudo abrir tu sesión. Volvé a iniciar sesión.");
+        // Neutro a propósito: esta función la comparten el código y la llave.
+        toast.error("La verificación se aceptó, pero no se pudo abrir tu sesión. Volvé a iniciar sesión.");
         navigate("/login", { replace: true });
         return;
       }
@@ -128,16 +136,56 @@ const SegundoFactorPage = () => {
       });
 
       if (!autenticado) {
-        toast.error("Tu sesión cambió mientras verificabas el código. Volvé a intentarlo.");
+        toast.error("Tu sesión cambió mientras verificabas tu identidad. Volvé a intentarlo.");
         return;
       }
 
       navigate(from, { replace: true });
       toast.success("Bienvenido");
+  };
+
+  const verificar = async () => {
+    const valor = codigo.trim();
+    if (!valor) {
+      return toast.warning(
+        modo === "totp" ? "Ingresá el código de tu aplicación." : "Ingresá tu código de recuperación."
+      );
+    }
+
+    setLoading(true);
+    try {
+      const respuesta = await verifySecondFactor(valor, recordar);
+      if (respuesta.status !== 200) {
+        toast.error(respuesta.message ?? "No se pudo verificar el código.");
+        return;
+      }
+
+      await abrirSesion();
     } catch {
       toast.error("No se pudo conectar con el servidor.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Entrar con la llave. Desde el clic y sin nada en medio antes de la
+   * ceremonia: Safari exige activación reciente para el diálogo del sistema.
+   * Cancelar ese diálogo no es un error y no se enseña como tal.
+   */
+  const entrarConLlave = async () => {
+    setProbandoLlave(true);
+    try {
+      const resultado = await probarPasskey();
+      if (!resultado.ok) {
+        if (!resultado.cancelado) toast.error(resultado.message);
+        return;
+      }
+      await abrirSesion();
+    } catch {
+      toast.error("No se pudo conectar con el servidor.");
+    } finally {
+      setProbandoLlave(false);
     }
   };
 
@@ -190,6 +238,33 @@ const SegundoFactorPage = () => {
             Tu cuenta tiene un segundo factor configurado. Confirmalo para terminar de entrar.
           </p>
         </div>
+
+        {soportaLlave && (
+          <div className="mb-6 space-y-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 w-full rounded-xl text-sm font-bold uppercase tracking-widest"
+              onClick={entrarConLlave}
+              disabled={probandoLlave || loading}
+              aria-busy={probandoLlave}
+            >
+              {probandoLlave ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <KeyRoundIcon className="mr-2 h-4 w-4" />
+                  Entrar con mi llave de acceso
+                </>
+              )}
+            </Button>
+            <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
+              <div className="h-px flex-1 bg-border" />
+              o con un código
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          </div>
+        )}
 
         <Tabs value={modo} onValueChange={(v) => { setModo(v as "totp" | "recuperacion"); setCodigo(""); }}>
           <TabsList className="w-full mb-5">
@@ -253,13 +328,14 @@ const SegundoFactorPage = () => {
             className="mt-0.5"
           />
           <span className="text-xs text-muted-foreground leading-snug">
-            No volver a pedirme el código en este equipo durante 30 días.
+            No volver a pedirme el código en este equipo durante 30 días. Sólo al entrar con un
+            código: la llave ya cuenta como segundo factor y no lo necesita.
           </span>
         </label>
 
         <Button
           className="h-12 w-full rounded-xl text-sm font-bold uppercase tracking-widest transition-all hover:shadow-lg hover:shadow-primary/20 group"
-          disabled={loading}
+          disabled={loading || probandoLlave}
           onClick={verificar}
         >
           {loading ? (

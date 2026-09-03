@@ -8,15 +8,20 @@ import SegundoFactorPage from "./SegundoFactorPage";
 // inside TotpSection). What is left to pin here is that the page assembles
 // both and says what the screen is for, so both sections are stubbed rather
 // than exercised again.
+vi.mock("./PasskeysSection", () => ({ default: () => <div data-testid="passkeys-section-stub" /> }));
 vi.mock("./TotpSection", () => ({ default: () => <div data-testid="totp-section-stub" /> }));
 vi.mock("./RecoveryCodesSection", () => ({ default: () => <div data-testid="recovery-codes-section-stub" /> }));
 
 describe("SegundoFactorPage", () => {
-  it("renders both sections, TOTP before recovery codes", () => {
+  it("renders the three sections: passkeys first, then TOTP, then recovery codes", () => {
     render(<SegundoFactorPage />);
 
+    const llaves = screen.getByTestId("passkeys-section-stub");
     const totp = screen.getByTestId("totp-section-stub");
     const codigos = screen.getByTestId("recovery-codes-section-stub");
+    // Passkeys first because they are the recommended method — the plan says
+    // so by name, and a DOM-order assertion is what keeps it from drifting.
+    expect(llaves.compareDocumentPosition(totp) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(totp.compareDocumentPosition(codigos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

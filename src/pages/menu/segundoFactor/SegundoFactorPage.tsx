@@ -1,4 +1,5 @@
 import { ShieldCheckIcon } from "lucide-react";
+import PasskeysSection from "./PasskeysSection";
 import TotpSection from "./TotpSection";
 import RecoveryCodesSection from "./RecoveryCodesSection";
 
@@ -34,11 +35,17 @@ import RecoveryCodesSection from "./RecoveryCodesSection";
  * one visit. The total surface built is the same either way; this is a
  * layout decision, not a scope change.
  *
- * **Reached today only by typing `/app/segundo-factor`.** Making the day-15
- * redirect and the `/app/perfil` link land here is the rest of this plan's
- * Group 6 (Tasks 21 and 22) — see this task's own report for why that
- * wiring belongs to whoever owns `HomeRoute` and `PerfilAcceso.tsx`'s
- * routing changes, not to this screen itself.
+ * ~~Reached today only by typing `/app/segundo-factor`.~~ Not any more:
+ * `App.tsx` redirects an `onboarding` session here on day 15, and
+ * `PerfilAcceso.tsx` links to it. The sentence stood for a while after both
+ * were wired; it is struck rather than deleted so nobody re-derives it.
+ *
+ * **Three sections since plan 4C, and the passkeys go first** because they
+ * are the recommended method: one gesture, nothing to type, and a key only
+ * signs for the domain it was created on, so a fake page cannot ask for it.
+ * `PasskeysSection` talks to `/api/auth/webauthn/*` only — on the same
+ * `/api/auth/*` allow-list this docstring already leans on — so it carries
+ * none of `usePerfilData`'s 403 risk either.
  */
 const SegundoFactorPage = () => {
   return (
@@ -48,10 +55,11 @@ const SegundoFactorPage = () => {
         <h1 className="text-xl font-semibold">Segundo factor</h1>
       </div>
       <p className="text-sm text-muted-foreground -mt-4">
-        Un código de tu teléfono, además de tu contraseña, para que una contraseña filtrada no baste
-        para entrar a tu cuenta.
+        Tu huella, tu cara o un código de tu teléfono, además de tu contraseña, para que una
+        contraseña filtrada no baste para entrar a tu cuenta.
       </p>
 
+      <PasskeysSection />
       <TotpSection />
       <RecoveryCodesSection />
     </div>

@@ -51,9 +51,10 @@ export type MotivoStepUp =
 /**
  * El cuerpo entero de un 403 de la puerta.
  *
- * Los dos últimos campos los añadió el plan 4D y son **opcionales a
- * propósito**: un servidor anterior no los manda, y todo lo que los lea tiene
- * que seguir funcionando sin ellos.
+ * Los tres últimos campos son **opcionales a propósito** —`exigeContrasena` e
+ * `intentosRestantes` los añadió el plan 4D, `metodos` el 4C—: un servidor
+ * anterior no los manda, y todo lo que los lea tiene que seguir funcionando
+ * sin ellos.
  */
 export interface RechazoStepUp {
   message?: string;
@@ -78,6 +79,35 @@ export interface RechazoStepUp {
    * mensaje de error es idéntico al de un código simplemente mal escrito.
    */
   intentosRestantes?: number;
+  /**
+   * Sólo en `sin-factor-reciente`: cómo puede esta cuenta cubrirlo, en el
+   * orden en que conviene ofrecerlo.
+   *
+   * Sin esto la ventana no puede saber si dibujar el botón de la huella o el
+   * campo de seis dígitos, y equivocarse no es cosmético: a quien sólo tiene
+   * passkey se le pediría un código que no existe, y cinco intentos bloquean
+   * la cuenta detrás de esta misma puerta.
+   *
+   * Los valores se corresponden con `MetodoReautenticacion` en
+   * `api/src/auth/factorInventory.ts`: `passkey`, `totp`, `codigo`.
+   *
+   * 🔴 **«Método», no «factor», y la palabra está elegida.** Un código de
+   * recuperación **no** es un segundo factor —el servidor se niega a que
+   * cuente como tal— pero sí es algo que esta ventana acepta. Llamar
+   * «factores» a una lista que lo incluye desharía esa regla en el cable.
+   *
+   * 🔴 **Se lee como lista abierta, nunca con un `switch` exhaustivo.** El
+   * servidor se despliega aparte y puede aprender un cuarto método antes que
+   * esta pantalla; un valor que no se reconozca se ignora y se sigue pintando
+   * el resto. Por eso el tipo es `string[]`.
+   *
+   * Opcional como los dos anteriores y por el mismo motivo: un servidor
+   * anterior no lo manda. **Ausente** significa «no lo sé», y lo que lo lea
+   * tiene que seguir funcionando —enseñando lo de siempre— sin él. **Vacío no
+   * es lo mismo:** es el servidor diciendo que esta cuenta no puede probarse
+   * con nada, que es el único caso en el que «lo de siempre» está mal.
+   */
+  metodos?: string[];
 }
 
 /**
@@ -127,6 +157,44 @@ const MOTIVO_MENSAJE: Record<MotivoStepUp, string> = {
  * servidor— cae en lo que el servidor haya dicho, para que un rechazo que no
  * reconocemos enseñe algo en vez de nada.
  */
+/**
+ * La frase de un `sin-factor-reciente` cuando el servidor dijo **con qué** se
+ * puede cubrir — plan 4C, Tarea 8. `null` cuando no lo dijo (servidor
+ * anterior), y entonces la ventana cae en `describeStepUpError`, que promete
+ * un código de recuperación a todo el mundo: con `metodos` delante, esa
+ * promesa sólo se hace a quien de verdad tiene uno sin gastar.
+ *
+ * Lista vacía: la cuenta tiene un factor —por eso la puerta rechaza— y ninguno
+ * le sirve ahora mismo (un TOTP que este servidor no puede leer, sin llave y
+ * sin códigos). Pintarle el formulario de siempre es dejarla tecleando contra
+ * un 503; aquí la frase dice a quién avisar.
+ *
+ * No edita `MOTIVO_MENSAJE`: `TotpSection` y `RecoveryCodesSection` usan esa
+ * tabla para avisos que no son la ventana y no tienen `metodos` que mirar.
+ */
+export function describeMetodos(metodos: string[] | undefined): string | null {
+  if (!metodos) return null;
+  if (metodos.length === 0) {
+    return "Tu cuenta tiene un segundo factor que ahora mismo no se puede comprobar. Avisa a un administrador para que lo restablezca.";
+  }
+  const llave = metodos.includes("passkey");
+  const codigo = metodos.includes("totp");
+  const recuperacion = metodos.includes("codigo");
+  const partes: string[] = [];
+  if (llave) partes.push("usa tu llave de acceso");
+  if (codigo) partes.push("escribe el código de tu aplicación");
+  if (!llave && !codigo && recuperacion) partes.push("escribe uno de tus códigos de recuperación");
+  // Ninguno de los que llegaron es de los que esta pantalla sabe dibujar: el
+  // servidor aprendió un método antes que la aplicación. Operativamente es
+  // como la lista vacía —no hay nada que pintar— y la frase dice por qué.
+  if (partes.length === 0) {
+    return "Tu cuenta usa un método de verificación que esta versión de la aplicación aún no conoce. Recarga la página; si sigue pasando, avisa a un administrador.";
+  }
+  const accion = partes.length === 1 ? partes[0] : `${partes[0]} o ${partes[1]}`;
+  const extra = recuperacion && (llave || codigo) ? " También sirve un código de recuperación." : "";
+  return `Antes de continuar, ${accion} para confirmar que eres tú.${extra}`;
+}
+
 export function describeStepUpError(
   motivo: string | undefined,
   fallbackMessage: string | null,

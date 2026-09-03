@@ -57,7 +57,9 @@ export interface RespuestaMfa {
   motivo?: MotivoStepUp;
 }
 
-function respuestaDeError(e: unknown): RespuestaMfa {
+// Exportada desde el plan 4C: `Webauthn.api.ts` pliega sus errores con la
+// misma forma, y una segunda copia es como dos ficheros acaban discrepando.
+export function respuestaDeError(e: unknown): RespuestaMfa {
   const err = e as { response?: { status?: number; data?: { message?: string; code?: string; motivo?: string } } };
   return {
     status: err.response?.status ?? 500,
