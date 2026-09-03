@@ -8,6 +8,8 @@ import type {
 import { urlApi } from "./url";
 import { STEP_UP_PASSWORD_FIELD, TIMEOUT_CONFIRMACION_MS } from "./stepUp";
 import { respuestaDeError, type RespuestaMfa } from "./Mfa.api";
+import type { SesionInterface } from "../interfaces/interfaces";
+import type { Permisos } from "../lib/permissions";
 
 /**
  * Las llaves de acceso (passkeys) — plan 4C, fase 1. Sólo HTTP: la ceremonia
@@ -108,6 +110,117 @@ export const loginVerify = (respuesta: AuthenticationResponseJSON): Promise<Resp
     .post(`${urlApi}auth/webauthn/login/verify`, { respuesta }, { timeout: TIMEOUT_CONFIRMACION_MS })
     .then((r) => ({ status: r.status, message: (r.data?.message as string | undefined) ?? null }))
     .catch(respuestaDeError);
+
+/**
+ * `POST /auth/webauthn/passwordless/options` — el reto para entrar **sin
+ * contraseña y sin sesión** (plan 4C, fase 2).
+ *
+ * No manda nada en el cuerpo, y el servidor no lee nada: no hay usuario que
+ * nombrar, porque preguntar «¿tiene llave esta cuenta?» sería un oráculo que
+ * dice a quién hacerle phishing de contraseña. Las opciones vuelven con
+ * `allowCredentials` vacío y el navegador ofrece las llaves que tenga.
+ *
+ * Sin cookie no hay interceptor de sesión que reaccione, y el de step-up
+ * excluye esta ruta por nombre. Lo que sí puede venir es un 429 del cubo por
+ * dirección — «Demasiados intentos con la llave desde esta red» — o un 403
+ * de la puerta de origen; los dos llegan con su frase y sin `code`.
+ */
+export const passwordlessOptions = (): Promise<LoginOptionsResult> =>
+  axios
+    .post(`${urlApi}auth/webauthn/passwordless/options`, {}, { timeout: TIMEOUT_CONFIRMACION_MS })
+    .then((r) => ({
+      status: r.status,
+      message: null,
+      opciones: (r.data as PublicKeyCredentialRequestOptionsJSON | undefined) ?? null,
+    }))
+    .catch((e) => ({ ...respuestaDeError(e), opciones: null }));
+
+/**
+ * Lo que devuelve `passwordlessVerify`: **la misma forma que `loginUsuario`**
+ * en `Login.api.ts`, porque un login por llave que sale bien tiene que aterrizar
+ * en la misma pantalla que uno por contraseña, y `LoginPage.tsx` ya sabe leer
+ * esta forma — `usuario` con `permisos` es una sesión entera; sin `permisos`,
+ * hay que preguntarle a `/auth/me`.
+ *
+ * Una diferencia, y es a propósito: aquí `status` es el **real**, no el 500
+ * al que `loginUsuario` pliega todo fallo. Esta puerta contesta 400 con una
+ * frase única para cualquier rechazo, 429 desde el cubo por dirección, 503 si
+ * no pudo abrir la sesión y 403 desde la puerta de origen; la pantalla no
+ * distingue entre ellos más que por la frase, pero un número plegado a mano
+ * es lo que hizo que otra pantalla acertara «por accidente» durante meses.
+ */
+export interface PasswordlessVerifyResult {
+  status: number;
+  message: string | null;
+  usuario: SesionInterface | null;
+}
+
+/**
+ * `POST /auth/webauthn/passwordless/verify` — canjear la aserción por una
+ * sesión. El 200 trae `{ usuario, permisos, message }`, el mismo cuerpo que
+ * `POST /auth/login` para una sesión completa, y la cookie viene puesta.
+ */
+/**
+ * Cuánto se espera al canje antes de rendirse. Tres veces el tope de las
+ * ceremonias con sesión, y el motivo de que no sea infinito ni de veinte
+ * segundos: el servidor abre la sesión y pone la cookie **antes** de
+ * contestar, así que un canje cortado a los veinte segundos en una conexión
+ * de campo dejaría a la persona dentro leyendo «no se pudo conectar». Pero
+ * sin tope ninguno, un enlace colgado deja las **dos** puertas del login
+ * deshabilitadas —el botón de la llave, el de la contraseña y la tecla
+ * Enter— durante los minutos que el navegador tarde en rendirse solo, con un
+ * spinner por toda explicación. Sesenta segundos, y la frase de abajo dice lo
+ * que de verdad puede haber pasado.
+ */
+export const TIMEOUT_CANJE_MS = 60_000;
+
+export const MENSAJE_CANJE_SIN_RESPUESTA =
+  "El servidor tardó demasiado en contestar. Puede que la sesión se haya abierto igual: recargá la página antes de volver a intentarlo.";
+
+export const passwordlessVerify = (
+  respuesta: AuthenticationResponseJSON,
+): Promise<PasswordlessVerifyResult> =>
+  axios
+    .post(`${urlApi}auth/webauthn/passwordless/verify`, { respuesta }, { timeout: TIMEOUT_CANJE_MS })
+    .then((r) => {
+      // Sin persona en el cuerpo no hay sesión que abrir, y la pantalla no debe
+      // recibir una vacía que la mande a «sin acceso» con la cabecera en
+      // blanco. `loginUsuario` llega al mismo `null` por otro camino (su
+      // destructuración revienta y el `catch` lo pliega); aquí se dice.
+      const persona = r.data?.usuario as (SesionInterface["usuario"] & { token?: unknown }) | undefined;
+      if (!persona) {
+        return { status: r.status, message: (r.data?.message as string | undefined) ?? null, usuario: null };
+      }
+      // Misma limpieza que `loginUsuario`: nada pone un `token` en este cuerpo,
+      // y se quita igual, porque es lo único que se interpone entre un campo
+      // futuro y el objeto de sesión que lee toda la aplicación.
+      const { token: _jwt, ...usuario } = persona;
+      return {
+        status: r.status,
+        message: (r.data?.message as string | undefined) ?? null,
+        usuario: {
+          usuario,
+          permisos: r.data?.permisos as Permisos | undefined,
+          // `false` a propósito, como en `loginUsuario`: este envoltorio sólo
+          // transporta lo que dijo el servidor; quien decide «autenticado» es
+          // `LoginPage.tsx`, en un solo sitio.
+          autenticado: false,
+        },
+      };
+    })
+    .catch((e) => {
+      const error = e as { code?: string; response?: { status?: number; data?: { message?: string } } };
+      const sinRespuesta = !error.response;
+      return {
+        status: error.response?.status ?? 500,
+        message:
+          error.response?.data?.message ??
+          (sinRespuesta && error.code === "ECONNABORTED"
+            ? MENSAJE_CANJE_SIN_RESPUESTA
+            : "No se pudo conectar con el servidor."),
+        usuario: null,
+      };
+    });
 
 export interface Credencial {
   id: number;

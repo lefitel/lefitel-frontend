@@ -16,7 +16,7 @@ import {
 import { KeyRoundIcon, Loader2Icon, PlusIcon, Trash2Icon } from "lucide-react";
 import { EditorBlock, EditorField } from "../perfil/perfilRows";
 import { deleteCredential, listCredentials, type Credencial } from "../../../api/Webauthn.api";
-import { registrarPasskey, soportaPasskeys } from "../../../api/passkeyCeremony";
+import { cancelarCeremonia, registrarPasskey, soportaPasskeys } from "../../../api/passkeyCeremony";
 import { describeStepUpError, CODIGO_STEP_UP } from "../../../api/Mfa.api";
 import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
@@ -65,6 +65,11 @@ const PasskeysSection = () => {
   // Una sola vez: es una propiedad del navegador, no cambia durante la vida
   // de la página.
   const [soportado] = useState(() => soportaPasskeys());
+
+  // Salir de la pantalla con el diálogo del sistema abierto lo deja huérfano
+  // sobre la pantalla siguiente — aquí, la del login, si la sesión caduca a
+  // mitad del registro. El mismo cierre que las otras tres pantallas de llave.
+  useEffect(() => () => cancelarCeremonia(), []);
 
   // ── La lista ─────────────────────────────────────────────────────────────
   const [llaves, setLlaves] = useState<Credencial[] | null>(null);

@@ -23,9 +23,11 @@ vi.mock("../../../api/Webauthn.api", () => ({
 // soporte se fuerza a `true` salvo en la prueba que lo apaga a propósito.
 const registrarPasskey = vi.fn();
 let soporta = true;
+const cancelarCeremonia = vi.fn();
 vi.mock("../../../api/passkeyCeremony", () => ({
   registrarPasskey: (...a: unknown[]) => registrarPasskey(...a),
   soportaPasskeys: () => soporta,
+  cancelarCeremonia: (...a: unknown[]) => cancelarCeremonia(...a),
 }));
 
 const comprobarToken = vi.fn();
@@ -80,6 +82,19 @@ beforeEach(() => {
     usuario: usuarioExample,
     permisos: sinPermisos(),
     estado: "completa",
+  });
+});
+
+describe("al irse", () => {
+  // La cuarta pantalla de llave, y la única que puede dejar de verdad un
+  // diálogo del sistema huérfano en producción: la sesión caduca a mitad del
+  // registro, el 401 saca a la persona al login, y el diálogo se queda encima.
+  it("cancela una ceremonia aún abierta al desmontar, y no antes", () => {
+    cancelarCeremonia.mockClear();
+    const { unmount } = montar();
+    expect(cancelarCeremonia).not.toHaveBeenCalled();
+    unmount();
+    expect(cancelarCeremonia).toHaveBeenCalledTimes(1);
   });
 });
 

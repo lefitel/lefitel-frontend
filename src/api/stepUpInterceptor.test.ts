@@ -140,6 +140,9 @@ describe("qué NO abre la ventana", () => {
     // Y la ruta de la llave se afirma por su nombre, porque un bucle sobre la
     // lista no nota que falte de la lista.
     expect(RUTAS_EXCLUIDAS).toContain("/auth/webauthn/login");
+    // Y la del login sin contraseña (fase 2), por lo mismo: quien la llama no
+    // tiene sesión, y una ventana que pidiera algo giraría sobre nada.
+    expect(RUTAS_EXCLUIDAS).toContain("/auth/webauthn/passwordless");
     for (const ruta of RUTAS_EXCLUIDAS) {
       const err = rechazo(PASO, { ruta: `${url}/api${ruta}` });
       await expect(alFallar(err)).rejects.toBe(err);

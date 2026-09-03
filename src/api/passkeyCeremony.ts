@@ -35,9 +35,12 @@ import {
   WebAuthnAbortService,
 } from "@simplewebauthn/browser";
 import type { MotivoStepUp } from "./stepUp";
+import type { SesionInterface } from "../interfaces/interfaces";
 import {
   loginOptions,
   loginVerify,
+  passwordlessOptions,
+  passwordlessVerify,
   registerOptions,
   registerVerify,
 } from "./Webauthn.api";
@@ -187,4 +190,60 @@ export async function registrarPasskey(
     };
   }
   return { ok: true, codigos: canje.codigos };
+}
+
+export type ResultadoEntrada =
+  /** Dentro: la cookie ya está puesta y `sesion` es lo que dijo el servidor,
+   *  con la forma que `LoginPage.tsx` ya sabe abrir. */
+  | { ok: true; sesion: SesionInterface }
+  | { ok: false; cancelado: true }
+  | { ok: false; cancelado: false; status: number; message: string };
+
+/**
+ * Entrar con una llave y nada más — plan 4C, fase 2. Opciones → diálogo del
+ * sistema → canje, sin sesión detrás: es la única ceremonia de este fichero
+ * que se hace desde fuera. `entrarSinContrasena` y no «entrar con llave»,
+ * porque el segundo paso del login ya llama así a lo suyo, que es otra cosa:
+ * terminar un login que la contraseña empezó.
+ *
+ * **Desde un clic, nunca desde un efecto, y con las opciones como primera
+ * petición después del clic.** Safari exige activación reciente para abrir
+ * el diálogo y la caduca en segundos; una petición de más por delante y el
+ * diálogo llega como `NotAllowedError`, indistinguible de cancelar.
+ *
+ * Cancelar el diálogo, o que nuestro propio abort lo cierre, es silencio: la
+ * pantalla se queda como estaba. Cualquier otro fallo trae la frase del
+ * servidor — la única que hay para todos los rechazos de esta puerta — o la
+ * de conexión, y `status` real para quien quiera distinguir un 503.
+ */
+export async function entrarSinContrasena(): Promise<ResultadoEntrada> {
+  const opts = await passwordlessOptions();
+  if (opts.status !== 200 || !opts.opciones) {
+    return {
+      ok: false,
+      cancelado: false,
+      status: opts.status,
+      message: opts.message ?? "No se pudo preparar la llave.",
+    };
+  }
+
+  let respuesta;
+  try {
+    respuesta = await startAuthentication({ optionsJSON: opts.opciones });
+  } catch (err) {
+    const fallo = clasificar(err, "No se pudo usar la llave en este dispositivo.");
+    if (fallo.cancelado) return { ok: false, cancelado: true };
+    return { ok: false, cancelado: false, status: 0, message: fallo.message };
+  }
+
+  const canje = await passwordlessVerify(respuesta);
+  if (canje.status !== 200 || !canje.usuario) {
+    return {
+      ok: false,
+      cancelado: false,
+      status: canje.status,
+      message: canje.message ?? "No se pudo iniciar sesión con esa llave.",
+    };
+  }
+  return { ok: true, sesion: canje.usuario };
 }

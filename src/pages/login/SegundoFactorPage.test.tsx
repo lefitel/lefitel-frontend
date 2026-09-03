@@ -37,10 +37,12 @@ vi.mock("sonner", () => ({
 // —lo que el resto de este fichero siempre vio— y sólo las pruebas de la llave
 // lo encienden.
 const probarPasskey = vi.fn();
+const cancelarCeremonia = vi.fn();
 let soporta = false;
 vi.mock("../../api/passkeyCeremony", () => ({
   probarPasskey: (...args: unknown[]) => probarPasskey(...args),
   soportaPasskeys: () => soporta,
+  cancelarCeremonia: (...args: unknown[]) => cancelarCeremonia(...args),
 }));
 
 function Harness({
@@ -310,6 +312,19 @@ describe("cancelling", () => {
  * quemaba un código de recuperación por login hasta quedarse fuera.
  * ───────────────────────────────────────────────────────────────────────── */
 describe("entering with the passkey", () => {
+  // Leaving the screen with the system dialog open would leave it orphaned:
+  // the library aborts from a module singleton, and this is the one place a
+  // late answer could try to open a session over a screen that is gone. The
+  // same cleanup `LoginPage.tsx` runs, so the two key screens behave alike.
+  it("cancels a ceremony still open when the screen goes away, and not before", () => {
+    soporta = true;
+    cancelarCeremonia.mockClear();
+    const { unmount } = render(<Harness onSesion={() => {}} />);
+    expect(cancelarCeremonia).not.toHaveBeenCalled();
+    unmount();
+    expect(cancelarCeremonia).toHaveBeenCalledTimes(1);
+  });
+
   it("draws the button only where the browser can run a ceremony", () => {
     render(<Harness onSesion={() => {}} />);
     expect(screen.queryByRole("button", { name: /llave de acceso/i })).not.toBeInTheDocument();

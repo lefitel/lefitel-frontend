@@ -170,6 +170,14 @@ let abortoCeremonia: AbortController | null = null;
  * más adelante. **No** van `/auth/webauthn/register` ni `/credentials`: esas
  * sí necesitan la ceremonia.
  *
+ * `/auth/webauthn/passwordless` es el login sin contraseña (plan 4C, fase 2):
+ * lo llama quien **no tiene sesión**, así que ninguna ventana de step-up puede
+ * resolverle nada — no hay contraseña que reinyectar ni factor que reprobar
+ * sobre una sesión que no existe. Un 403 suyo es la puerta de origen del
+ * servidor, sin `code`, y ya no abriría la ventana; está aquí por el mismo
+ * motivo que `/auth/webauthn/login`: la lista es lo que sobrevive a que
+ * alguien monte una puerta ahí más adelante.
+ *
  * Exportada para que su prueba recorra **esta** lista y no una copia a mano,
  * que es como una ruta faltó aquí sin que nada se pusiera rojo.
  */
@@ -178,6 +186,7 @@ export const RUTAS_EXCLUIDAS = [
   "/auth/mfa/verify",
   "/auth/logout",
   "/auth/webauthn/login",
+  "/auth/webauthn/passwordless",
 ];
 
 /**

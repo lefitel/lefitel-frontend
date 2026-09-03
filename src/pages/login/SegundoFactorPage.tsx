@@ -1,4 +1,4 @@
-import { useContext, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
 import { KeyRoundIcon, Loader2, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
@@ -7,7 +7,7 @@ import { useTheme } from "../../components/theme-provider";
 import { SesionContext } from "../../context/SesionContext";
 import { usuarioExample } from "../../data/example";
 import { abandonPartialSession, comprobarToken, verifySecondFactor } from "../../api/Login.api";
-import { probarPasskey, soportaPasskeys } from "../../api/passkeyCeremony";
+import { cancelarCeremonia, probarPasskey, soportaPasskeys } from "../../api/passkeyCeremony";
 
 import logo from "../../assets/images/logo.png";
 
@@ -86,6 +86,11 @@ const SegundoFactorPage = () => {
   // de la página.
   const [soportaLlave] = useState(() => soportaPasskeys());
   const [probandoLlave, setProbandoLlave] = useState(false);
+
+  // Salir de la pantalla con el diálogo del sistema abierto lo deja huérfano;
+  // el mismo cierre que `LoginPage.tsx`, para que las dos pantallas de llave
+  // se comporten igual.
+  useEffect(() => () => cancelarCeremonia(), []);
 
   /**
    * Lo que pasa después de que el servidor haya aceptado un factor, sea cual

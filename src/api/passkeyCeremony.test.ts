@@ -33,16 +33,21 @@ const loginOptions = vi.fn();
 const loginVerify = vi.fn();
 const registerOptions = vi.fn();
 const registerVerify = vi.fn();
+const passwordlessOptions = vi.fn();
+const passwordlessVerify = vi.fn();
 vi.mock("./Webauthn.api", () => ({
   loginOptions: (...a: unknown[]) => loginOptions(...a),
   loginVerify: (...a: unknown[]) => loginVerify(...a),
   registerOptions: (...a: unknown[]) => registerOptions(...a),
   registerVerify: (...a: unknown[]) => registerVerify(...a),
+  passwordlessOptions: (...a: unknown[]) => passwordlessOptions(...a),
+  passwordlessVerify: (...a: unknown[]) => passwordlessVerify(...a),
 }));
 
-const { probarPasskey, registrarPasskey, soportaPasskeys, cancelarCeremonia } = await import(
-  "./passkeyCeremony"
-);
+const { probarPasskey, registrarPasskey, entrarSinContrasena, soportaPasskeys, cancelarCeremonia } =
+  await import("./passkeyCeremony");
+
+const SESION = { usuario: { user: "ada" }, permisos: {}, autenticado: false };
 
 const OPCIONES = { challenge: "reto" };
 const ASERCION = { id: "cred", rawId: "cred", type: "public-key", response: {} };
@@ -56,6 +61,8 @@ beforeEach(() => {
   registerOptions.mockResolvedValue({ status: 200, message: null, opciones: OPCIONES });
   startRegistration.mockResolvedValue(ASERCION);
   registerVerify.mockResolvedValue({ status: 201, message: "Llave registrada.", codigos: null });
+  passwordlessOptions.mockResolvedValue({ status: 200, message: null, opciones: OPCIONES });
+  passwordlessVerify.mockResolvedValue({ status: 200, message: "Login exitoso", usuario: SESION });
 });
 
 describe("probarPasskey", () => {
@@ -179,5 +186,80 @@ describe("soporte y cancelación", () => {
   it("cancelar delega en el servicio de aborto de la librería", () => {
     cancelarCeremonia();
     expect(cancelCeremony).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("entrarSinContrasena — plan 4C, fase 2", () => {
+  it("pide las opciones anónimas, abre el diálogo con ellas, canjea, y devuelve la sesión", async () => {
+    const r = await entrarSinContrasena();
+
+    expect(r).toEqual({ ok: true, sesion: SESION });
+    expect(passwordlessOptions).toHaveBeenCalledTimes(1);
+    expect(startAuthentication).toHaveBeenCalledWith({ optionsJSON: OPCIONES });
+    expect(passwordlessVerify).toHaveBeenCalledWith(ASERCION);
+    // Y no toca las puertas con sesión: no hay sesión.
+    expect(loginOptions).not.toHaveBeenCalled();
+    expect(loginVerify).not.toHaveBeenCalled();
+  });
+
+  it("las opciones van primero y sin nada en medio después del clic", async () => {
+    await entrarSinContrasena();
+    expect(passwordlessOptions.mock.invocationCallOrder[0]).toBeLessThan(
+      startAuthentication.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("no abre el diálogo si el servidor no dio opciones, y devuelve su frase y su estado", async () => {
+    passwordlessOptions.mockResolvedValue({
+      status: 429,
+      message: "Demasiados intentos con la llave desde esta red. Espere unos minutos.",
+      opciones: null,
+    });
+
+    const r = await entrarSinContrasena();
+
+    expect(r).toEqual({
+      ok: false,
+      cancelado: false,
+      status: 429,
+      message: "Demasiados intentos con la llave desde esta red. Espere unos minutos.",
+    });
+    expect(startAuthentication).not.toHaveBeenCalled();
+  });
+
+  it("trata NotAllowedError y AbortError como cancelado, sin frase", async () => {
+    for (const nombre of ["NotAllowedError", "AbortError"]) {
+      startAuthentication.mockRejectedValue(new WebAuthnErrorFalso(nombre, "X"));
+      const r = await entrarSinContrasena();
+      expect(r, nombre).toEqual({ ok: false, cancelado: true });
+      expect(passwordlessVerify, nombre).not.toHaveBeenCalled();
+    }
+  });
+
+  it("devuelve la frase única del servidor con su estado real cuando el canje se rechaza", async () => {
+    passwordlessVerify.mockResolvedValue({
+      status: 400,
+      message: "No se pudo iniciar sesión con esa llave. Inténtalo otra vez.",
+      usuario: null,
+    });
+
+    const r = await entrarSinContrasena();
+
+    expect(r).toEqual({
+      ok: false,
+      cancelado: false,
+      status: 400,
+      message: "No se pudo iniciar sesión con esa llave. Inténtalo otra vez.",
+    });
+  });
+
+  it("no da por abierta una sesión que el cuerpo no trae, aunque el estado sea 200", async () => {
+    // Un proxy que devuelva 200 con otro cuerpo no puede convertirse en
+    // `abrirSesion(null)`: se estrecha por `usuario`, no sólo por el estado.
+    passwordlessVerify.mockResolvedValue({ status: 200, message: null, usuario: null });
+
+    const r = await entrarSinContrasena();
+
+    expect(r).toMatchObject({ ok: false, cancelado: false, status: 200 });
   });
 });
