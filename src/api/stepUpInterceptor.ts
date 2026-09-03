@@ -178,12 +178,21 @@ let abortoCeremonia: AbortController | null = null;
  * motivo que `/auth/webauthn/login`: la lista es lo que sobrevive a que
  * alguien monte una puerta ahí más adelante.
  *
+ * `/auth/mfa/email-code` (plan 4E) es la cuarta puerta con la que la ventana
+ * resuelve: pide el código que luego canjea en `/auth/stepup` o en
+ * `/auth/mfa/verify`. **No la cubre `/auth/mfa/verify`**: la comparación es por
+ * subcadena y `/auth/mfa/email-code` no contiene esa cadena (C29). Hoy no
+ * lleva `requireStepUp` y no puede emitir el 403 con `code`; está aquí por lo
+ * mismo que las dos anteriores — una ventana abierta desde el fallo de la
+ * puerta con la que la propia ventana resuelve es la recursión evidente.
+ *
  * Exportada para que su prueba recorra **esta** lista y no una copia a mano,
  * que es como una ruta faltó aquí sin que nada se pusiera rojo.
  */
 export const RUTAS_EXCLUIDAS = [
   "/auth/stepup",
   "/auth/mfa/verify",
+  "/auth/mfa/email-code",
   "/auth/logout",
   "/auth/webauthn/login",
   "/auth/webauthn/passwordless",

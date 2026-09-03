@@ -362,16 +362,32 @@ export const comprobarToken = (): Promise<{
  * `REMEMBER_DEVICE_FIELD` and `mfa.controller.ts`'s `verify` handler have
  * read this field since the arc that built them; nothing on this side ever
  * sent it, so `dispositivo_recordado` could never gain a row. `undefined`
- * when the caller does not pass it, which `JSON.stringify` drops from the
- * body entirely — the same as never asking — so this stays a no-op for every
- * caller that predates the checkbox in `pages/login/SegundoFactorPage.tsx`.
+ * when the caller does not pass it — and then the key is not in the body at
+ * all (`cuerpoDeCanje`), the same as never asking — so this stays a no-op for
+ * every caller that predates the checkbox in `pages/login/SegundoFactorPage.tsx`.
+ *
+ * **`metodo` — plan 4E.** Which door the code goes through. Absent, the
+ * server decides by shape, as it always did: six digits are TOTP, anything
+ * else a recovery code. The code by email is six digits too, so the email
+ * tab **must** send `"correo"`, or the server proves the code against the
+ * authenticator app, answers "wrong", and charges an attempt against the
+ * account lockout — with the right code typed. The two older tabs keep
+ * sending nothing, which is the behaviour every server version understands.
+ *
+ * **`intentosRestantes`** rides back on a 400: how many wrong codes are left
+ * before the account locks. `probarStepUp` in `Mfa.api.ts` has surfaced it
+ * since plan 4D; this one did not, and the login screen had no way to warn
+ * anybody before the fifth failure.
  */
 export const verifySecondFactor = (
   codigo: string,
   recordar?: boolean,
-): Promise<{ status: number; message: string | null }> =>
+  metodo?: MetodoSegundoFactor,
+): Promise<{ status: number; message: string | null; intentosRestantes?: number }> =>
   axios
-    .post(urlApi + "auth/mfa/verify", { codigo, recordar }, { timeout: TIMEOUT_CONFIRMACION_MS })
+    .post(urlApi + "auth/mfa/verify", cuerpoDeCanje(codigo, recordar, metodo), {
+      timeout: TIMEOUT_CONFIRMACION_MS,
+    })
     .then((response) => ({
       status: response.status,
       message: (response.data?.message as string | undefined) ?? null,
@@ -379,13 +395,15 @@ export const verifySecondFactor = (
     .catch((e) => ({
       status: e.response?.status ?? 500,
       message: e.response?.data?.message ?? "No se pudo verificar el código.",
+      intentosRestantes: e.response?.data?.intentosRestantes as number | undefined,
     }));
 
 // `CODIGO_STEP_UP` y `esRechazoStepUp` vivían aquí y también en `Mfa.api.ts`.
 // Ahora viven una sola vez en `stepUp.ts`; se reexportan porque la pantalla de
 // login y `SesionProvider` ya los importan desde este fichero.
 export { CODIGO_STEP_UP, esRechazoStepUp } from "./stepUp";
-import { TIMEOUT_CONFIRMACION_MS } from "./stepUp";
+export type { MetodoSegundoFactor } from "./stepUp";
+import { TIMEOUT_CONFIRMACION_MS, cuerpoDeCanje, type MetodoSegundoFactor } from "./stepUp";
 
 
 /**

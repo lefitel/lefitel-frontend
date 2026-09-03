@@ -12,10 +12,14 @@
 // peticiones que esperaban su respuesta —ni resueltas ni rechazadas, con los
 // indicadores de carga girando en componentes que ya no existen.
 //
-// **Tres caminos para cubrir el factor, desde el plan 4C**: el código de la
-// aplicación, un código de recuperación, y la llave de acceso (passkey). Cuál
-// se dibuja lo dice el servidor en `metodos`; sin ese campo —un servidor
-// anterior— se dibuja lo de siempre.
+// **Cuatro caminos para cubrir el factor**: el código de la aplicación, un
+// código de recuperación, la llave de acceso (plan 4C) y, desde el plan 4E, un
+// código enviado al correo verificado. Cuál se dibuja lo dice el servidor en
+// `metodos`; sin ese campo —un servidor anterior— se dibuja lo de siempre. El
+// correo y la aplicación son los dos seis cifras, así que cuando el servidor
+// ofrece ambos aparece un selector de clase, y el código del correo viaja con
+// `metodo: "correo"` — sin él, el servidor lo probaría contra la aplicación,
+// lo daría por erróneo y cargaría el bloqueo de la cuenta.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useContext } from "react";
@@ -29,8 +33,9 @@ import {
   MOTIVO_SIN_FACTOR_RECIENTE,
   describeMetodos,
   describeStepUpError,
+  type MetodoSegundoFactor,
 } from "@/api/stepUp";
-import { probarStepUp } from "@/api/Mfa.api";
+import { pedirCodigoPorCorreo, probarStepUp } from "@/api/Mfa.api";
 import { comprobarToken, verifySecondFactor } from "@/api/Login.api";
 import { cancelarCeremonia, probarPasskey, soportaPasskeys } from "@/api/passkeyCeremony";
 import {
@@ -46,12 +51,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { KeyRoundIcon, Loader2Icon, ShieldCheckIcon } from "lucide-react";
+import { KeyRoundIcon, Loader2Icon, MailIcon, ShieldCheckIcon } from "lucide-react";
 
 interface Pendiente {
   peticion: PeticionStepUp;
   resolver: (r: ResultadoStepUp | null) => void;
 }
+
+/** Las clases de código que se teclean, y cómo se llaman en el selector. */
+type ClaseCodigo = "totp" | "correo" | "codigo";
+const NOMBRE_DE_CLASE: Record<ClaseCodigo, string> = {
+  totp: "Aplicación",
+  correo: "Correo",
+  codigo: "Recuperación",
+};
 
 export const StepUpDialog = () => {
   const { sesion, setSesion } = useContext(SesionContext);
@@ -74,6 +87,17 @@ export const StepUpDialog = () => {
   const [factorProbado, setFactorProbado] = useState(false);
   const [probandoLlave, setProbandoLlave] = useState(false);
   const [errorLlave, setErrorLlave] = useState<string | null>(null);
+  /**
+   * La clase de código elegida cuando el servidor ofrece más de una que se
+   * teclea igual (plan 4E), y lo del correo: a dónde fue, cuánto falta para
+   * poder pedir otro, si hay uno en vuelo y qué dijo el servidor si no salió.
+   * `null` en `clase` es «la primera que se ofrezca».
+   */
+  const [clase, setClase] = useState<ClaseCodigo | null>(null);
+  const [enviadoA, setEnviadoA] = useState<string | null>(null);
+  const [espera, setEspera] = useState(0);
+  const [pidiendoCodigo, setPidiendoCodigo] = useState(false);
+  const [errorCorreo, setErrorCorreo] = useState<string | null>(null);
   /**
    * Lo que el servidor dijo que queda, y **de qué contador habla**.
    *
@@ -111,6 +135,14 @@ export const StepUpDialog = () => {
     estadoRef.current = sesion?.estado;
   }, [sesion?.estado]);
 
+  // Un tic por segundo mientras corre la espera del correo; el número lo puso
+  // el servidor y aquí sólo se descuenta.
+  useEffect(() => {
+    if (espera <= 0) return;
+    const t = setTimeout(() => setEspera((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [espera]);
+
   useEffect(() => {
     registrarResolvedorStepUp(
       (peticion) =>
@@ -120,6 +152,10 @@ export const StepUpDialog = () => {
           setError(null);
           setFactorProbado(false);
           setErrorLlave(null);
+          setClase(null);
+          setEnviadoA(null);
+          setEspera(0);
+          setErrorCorreo(null);
           // El contador que llega con el rechazo habla del cupo de la
           // contraseña: es `requireStepUp` quien lo cuenta, y sólo lo pone al
           // rechazar una contraseña equivocada.
@@ -221,7 +257,10 @@ export const StepUpDialog = () => {
   const ofreceLlave = servidorOfreceLlave && soportaPasskeys();
   const ofreceTotp = pideFactor && (metodos === undefined || metodos.includes("totp"));
   const ofreceRecuperacion = pideFactor && (metodos === undefined || metodos.includes("codigo"));
-  const ofreceCodigo = ofreceTotp || ofreceRecuperacion;
+  // Plan 4E: sólo si el servidor lo lista. Sin `metodos` (servidor anterior)
+  // no hay correo que ofrecer, porque ese servidor no sabe canjearlo.
+  const ofreceCorreo = pideFactor && metodos !== undefined && metodos.includes("correo");
+  const ofreceCodigo = ofreceTotp || ofreceRecuperacion || ofreceCorreo;
   // Vacía, o llena de métodos que esta versión no conoce: en los dos casos no
   // hay nada que pintar, y `describeMetodos` da la frase de cada uno.
   const sinMetodos = pideFactor && metodos !== undefined && !servidorOfreceLlave && !ofreceCodigo;
@@ -230,7 +269,26 @@ export const StepUpDialog = () => {
   // código de recuperación; sin TOTP —un secreto que este servidor no puede
   // leer, y códigos sin gastar— lo único que cabe es el código de recuperación,
   // y llamarlo «de tu aplicación» manda a la persona a la aplicación equivocada.
-  const etiquetaCodigo = ofreceTotp ? "Código de tu aplicación" : "Código de recuperación";
+  /**
+   * Las clases de código que se pueden teclear, en el orden en que se
+   * ofrecen. La aplicación y la recuperación comparten campo como siempre —el
+   * servidor las distingue por la forma—, así que «recuperación» sólo es una
+   * clase propia cuando no hay aplicación. El correo son seis cifras como la
+   * aplicación, y por eso es una clase aparte que viaja con `metodo`.
+   */
+  const clases: ClaseCodigo[] = [
+    ...(ofreceTotp ? (["totp"] as const) : []),
+    ...(ofreceCorreo ? (["correo"] as const) : []),
+    ...(!ofreceTotp && ofreceRecuperacion ? (["codigo"] as const) : []),
+  ];
+  const claseActiva: ClaseCodigo | null =
+    clase !== null && clases.includes(clase) ? clase : (clases[0] ?? null);
+  const etiquetaCodigo =
+    claseActiva === "correo"
+      ? "Código recibido por correo"
+      : claseActiva === "totp"
+        ? "Código de tu aplicación"
+        : "Código de recuperación";
 
   const usarLlave = async () => {
     setProbandoLlave(true);
@@ -262,6 +320,30 @@ export const StepUpDialog = () => {
     }
   };
 
+  /**
+   * Pedir el código al correo. Sólo desde el botón (S4): cada envío gasta
+   * cuota, y la ventana se abre también por una operación que luego se
+   * cancela. El 200 trae la dirección enmascarada y el cooldown; el 429, los
+   * segundos que faltan, que son los que cuenta el botón; el 503, que ningún
+   * proveedor pudo enviarlo — el código anterior, si lo hay, sigue vivo.
+   */
+  const pedirCodigo = async () => {
+    setPidiendoCodigo(true);
+    setErrorCorreo(null);
+    try {
+      const r = await pedirCodigoPorCorreo();
+      if (r.status === 200) {
+        setEnviadoA(r.enviado_a);
+        setEspera(r.reintento_en_s ?? 0);
+        return;
+      }
+      if (r.status === 429 && r.reintento_en_s) setEspera(r.reintento_en_s);
+      setErrorCorreo(r.message ?? "No se pudo enviar el código.");
+    } finally {
+      setPidiendoCodigo(false);
+    }
+  };
+
   const confirmar = async () => {
     setEnviando(true);
     setError(null);
@@ -281,9 +363,13 @@ export const StepUpDialog = () => {
          * los tres estados, y ya se canjeó al pulsar el botón.
          */
         const completa = estadoRef.current === "completa";
+        // Sólo el correo nombra su puerta: la aplicación y la recuperación se
+        // distinguen por la forma, como siempre, y así un servidor anterior
+        // sigue entendiendo lo que se le manda.
+        const metodo: MetodoSegundoFactor | undefined = claseActiva === "correo" ? "correo" : undefined;
         const res = completa
-          ? await probarStepUp(codigo)
-          : await verifySecondFactor(codigo);
+          ? await probarStepUp(codigo, metodo)
+          : await verifySecondFactor(codigo, undefined, metodo);
         if (res.status !== 200) {
           setError(res.message ?? "No se pudo confirmar tu identidad.");
           // Éste sí es el del bloqueo de la cuenta: lo cuenta el canje del
@@ -364,22 +450,79 @@ export const StepUpDialog = () => {
           )}
 
           {ofreceCodigo && !factorProbado && (
-            <div className="space-y-1.5">
-              <Label htmlFor="stepup-codigo">{etiquetaCodigo}</Label>
-              <Input
-                id="stepup-codigo"
-                autoFocus={!ofreceLlave}
-                inputMode={ofreceTotp ? "numeric" : "text"}
-                autoComplete={ofreceTotp ? "one-time-code" : "off"}
-                placeholder={ofreceTotp ? "123456" : undefined}
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-              />
-              {ofreceTotp && ofreceRecuperacion && (
-                <p className="text-xs text-muted-foreground">
-                  También sirve uno de tus códigos de recuperación.
-                </p>
+            <div className="space-y-2">
+              {/* El selector, sólo cuando hay dos clases que se teclean igual:
+                  hoy, siempre que el correo acompaña a otra. */}
+              {clases.length >= 2 && (
+                <div role="radiogroup" aria-label="Con qué código" className="flex gap-1.5">
+                  {clases.map((c) => (
+                    <Button
+                      key={c}
+                      type="button"
+                      role="radio"
+                      aria-checked={c === claseActiva}
+                      size="sm"
+                      variant={c === claseActiva ? "default" : "outline"}
+                      onClick={() => {
+                        setClase(c);
+                        setCodigo("");
+                        setError(null);
+                      }}
+                    >
+                      {NOMBRE_DE_CLASE[c]}
+                    </Button>
+                  ))}
+                </div>
               )}
+
+              {claseActiva === "correo" && (
+                <div className="space-y-1.5">
+                  <p className="text-xs text-muted-foreground">
+                    {enviadoA ? (
+                      <>
+                        Enviamos un código de seis cifras a <span className="font-mono">{enviadoA}</span>. Vale
+                        diez minutos.
+                      </>
+                    ) : (
+                      "Te enviaremos un código de seis cifras a tu correo verificado. Vale diez minutos."
+                    )}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => void pedirCodigo()}
+                    disabled={pidiendoCodigo || espera > 0}
+                    aria-busy={pidiendoCodigo}
+                  >
+                    {pidiendoCodigo ? (
+                      <Loader2Icon className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                    ) : (
+                      <MailIcon className="mr-2 h-4 w-4" aria-hidden />
+                    )}
+                    {espera > 0 ? `Reenviar en ${espera} s` : enviadoA ? "Reenviar código" : "Enviar código"}
+                  </Button>
+                  {errorCorreo && <p className="text-sm text-destructive">{errorCorreo}</p>}
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="stepup-codigo">{etiquetaCodigo}</Label>
+                <Input
+                  id="stepup-codigo"
+                  autoFocus={!ofreceLlave}
+                  inputMode={claseActiva === "codigo" ? "text" : "numeric"}
+                  autoComplete={claseActiva === "codigo" ? "off" : "one-time-code"}
+                  placeholder={claseActiva === "codigo" ? undefined : "123456"}
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value)}
+                />
+                {claseActiva === "totp" && ofreceRecuperacion && (
+                  <p className="text-xs text-muted-foreground">
+                    También sirve uno de tus códigos de recuperación.
+                  </p>
+                )}
+              </div>
             </div>
           )}
 

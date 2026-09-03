@@ -48,9 +48,9 @@ vi.mock("sonner", () => ({
  *  build its own `SesionContext.Provider`. */
 const setSesion = vi.fn();
 
-function renderTotp() {
+function renderTotp(usuario = usuarioExample) {
   const value: contextProps = {
-    sesion: { usuario: usuarioExample, autenticado: true, estado: "onboarding" },
+    sesion: { usuario, autenticado: true, estado: "onboarding" },
     setSesion,
     loading: false,
     logout: vi.fn(),
@@ -126,6 +126,20 @@ describe("quitar el factor", () => {
       screen.getByText(/a partir de ahora volverás a entrar solo con tu contraseña/i),
     ).toBeInTheDocument();
     expect(screen.getByText(/los códigos de recuperación no cuentan como un factor/i)).toBeInTheDocument();
+  });
+
+  // Plan 4E: with a verified address the account does not fall back to the
+  // password alone, and saying so would be false.
+  it("says instead that the verified email stays as the second factor, when there is one", async () => {
+    const user = userEvent.setup();
+    renderTotp({ ...usuarioExample, email: "isaias@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" });
+
+    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
+
+    expect(screen.getByText(/tu correo verificado sigue siendo tu segundo factor/i)).toBeInTheDocument();
+    expect(screen.queryByText(/volverás a entrar solo con tu contraseña/i)).not.toBeInTheDocument();
   });
 
   it("deletes with the typed password once the dialog is confirmed", async () => {

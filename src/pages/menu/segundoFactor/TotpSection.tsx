@@ -106,7 +106,7 @@ type Banner409 = "correo" | "factor" | null;
  * nothing forced anyone to actually take.
  */
 const TotpSection = () => {
-  const { setSesion } = useContext(SesionContext);
+  const { sesion, setSesion } = useContext(SesionContext);
   // ── Quitar ───────────────────────────────────────────────────────────────
   const [bajaAbierta, setBajaAbierta] = useState(false);
   const [passwordBaja, setPasswordBaja] = useState("");
@@ -495,9 +495,12 @@ const TotpSection = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Quitar tu segundo factor?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se eliminará la aplicación de autenticación registrada en esta cuenta. Si no tienes
-              ningún otro factor, a partir de ahora volverás a entrar solo con tu contraseña — los
-              códigos de recuperación no cuentan como un factor y no evitan esto.
+              {/* Plan 4E: a verified address is a full factor, so an account
+                  with one does not fall back to the password alone — and
+                  telling it so would be false. */}
+              {sesion?.usuario?.email_verified_at
+                ? "Se eliminará la aplicación de autenticación registrada en esta cuenta. Tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él. Los códigos de recuperación no cuentan como un factor."
+                : "Se eliminará la aplicación de autenticación registrada en esta cuenta. Si no tienes ningún otro factor, a partir de ahora volverás a entrar solo con tu contraseña — los códigos de recuperación no cuentan como un factor y no evitan esto."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

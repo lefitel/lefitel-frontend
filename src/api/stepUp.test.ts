@@ -33,6 +33,31 @@ describe("describeMetodos", () => {
     expect(frase.indexOf("llave")).toBeLessThan(frase.indexOf("código de tu aplicación"));
   });
 
+  // Plan 4E: el correo verificado es un método más, no la rama «no lo conozco».
+  it("con sólo el correo, pide un código al correo y no promete otra cosa", () => {
+    const frase = describeMetodos(["correo"]) ?? "";
+    expect(frase).toContain("pide un código a tu correo");
+    expect(frase).not.toContain("llave");
+    expect(frase).not.toContain("aplicación");
+    expect(frase).not.toContain("recuperación");
+    expect(frase).not.toContain("Recarga");
+  });
+
+  it("con la aplicación y el correo, nombra las dos en ese orden", () => {
+    const frase = describeMetodos(["totp", "correo"]) ?? "";
+    expect(frase.indexOf("código de tu aplicación")).toBeLessThan(frase.indexOf("código a tu correo"));
+    expect(frase).toMatch(/aplicación o pide/);
+  });
+
+  it("con tres métodos, los separa con comas y cierra con «o»", () => {
+    const frase = describeMetodos(["passkey", "totp", "correo"]) ?? "";
+    expect(frase).toContain("usa tu llave de acceso, escribe el código de tu aplicación o pide un código a tu correo");
+  });
+
+  it("con el correo y códigos de recuperación, promete también el de recuperación", () => {
+    expect(describeMetodos(["correo", "codigo"])).toContain("También sirve un código de recuperación");
+  });
+
   // «Código» es lo que se acepta, no un factor: sólo se nombra cuando el
   // servidor dice que queda alguno sin gastar.
   it("sólo promete un código de recuperación cuando queda alguno", () => {

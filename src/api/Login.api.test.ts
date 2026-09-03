@@ -146,8 +146,11 @@ describe("verifySecondFactor", () => {
     // The same field name `totp.controller.ts`'s `confirmTotp` reads
     // (`codigo`), and nothing else riding alongside it: this endpoint takes
     // either a TOTP code or a recovery code under the one field, and it is
-    // the server's job to tell them apart, not this wrapper's.
-    expect(post.mock.calls[0][1]).toEqual({ codigo: "123456" });
+    // the server's job to tell them apart, not this wrapper's. `toStrictEqual`
+    // because `toEqual` ignores keys set to `undefined`: it would stay green
+    // with a `metodo: undefined` riding along, and with a `metodo: "correo"`
+    // that a mock happened to drop.
+    expect(post.mock.calls[0][1]).toStrictEqual({ codigo: "123456" });
   });
 
   it("accepts a recovery code exactly the same way, under the same field", async () => {
@@ -158,7 +161,32 @@ describe("verifySecondFactor", () => {
 
     await verifySecondFactor("ABCD-2345-WXYZ");
 
-    expect(post.mock.calls[0][1]).toEqual({ codigo: "ABCD-2345-WXYZ" });
+    expect(post.mock.calls[0][1]).toStrictEqual({ codigo: "ABCD-2345-WXYZ" });
+  });
+
+  // Plan 4E. Six digits from the email look exactly like six digits from the
+  // app; `metodo` is the only thing that keeps the server from proving the
+  // email code against the app and charging the lockout for it.
+  it("sends `metodo: \"correo\"` alongside the code and the checkbox for the email tab", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { message: "ok" } });
+
+    await verifySecondFactor("123456", true, "correo");
+
+    expect(post.mock.calls[0][1]).toStrictEqual({ codigo: "123456", recordar: true, metodo: "correo" });
+  });
+
+  it("surfaces `intentosRestantes` from a 400, so the screen can warn before the account locks", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(
+      Object.assign(new Error("400"), {
+        response: { status: 400, data: { message: "Código incorrecto o ya utilizado.", intentosRestantes: 2 } },
+      }),
+    );
+
+    expect(await verifySecondFactor("000000", false, "correo")).toEqual({
+      status: 400,
+      message: "Código incorrecto o ya utilizado.",
+      intentosRestantes: 2,
+    });
   });
 
   it("reports a 200 with the server's own confirmation", async () => {

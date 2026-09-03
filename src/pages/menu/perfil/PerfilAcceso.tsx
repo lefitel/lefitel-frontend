@@ -209,7 +209,7 @@ export default function PerfilAcceso({
               <EditorField
                 id="email"
                 label="Dirección de correo"
-                ayuda="Se usa únicamente para recuperar tu cuenta si olvidas tu contraseña."
+                ayuda="Sirve para recuperar tu cuenta si olvidas la contraseña y, una vez verificado, es también tu segundo factor: podrás entrar con un código enviado aquí."
               >
                 <Input
                   id="email"

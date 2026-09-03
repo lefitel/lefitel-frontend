@@ -14,6 +14,8 @@ interface Casilla {
   hecho: boolean;
   critico?: boolean;
   onArreglar?: () => void;
+  /** One line under a done item, for the item whose being done changes how you log in. */
+  nota?: string;
 }
 
 interface Props {
@@ -172,6 +174,9 @@ export default function PerfilPanel({
       hecho: emailVerificado,
       critico: true,
       onArreglar: onConfigurarCorreo,
+      // Plan 4E: a verified address is a full second factor, on par with the
+      // app and the key — said here, where the item turns green.
+      nota: "Es también tu segundo factor: puedes entrar con un código enviado ahí. Guarda códigos de recuperación por si pierdes el acceso al correo.",
     },
   ];
 
@@ -204,7 +209,8 @@ export default function PerfilPanel({
 
           <ul className="m-0 p-0 list-none space-y-2.5">
             {casillas.map((c) => (
-              <li key={c.label} className="flex items-center gap-2.5 text-sm">
+              <li key={c.label} className="text-sm">
+                <div className="flex items-center gap-2.5">
                 <span
                   className={`h-[18px] w-[18px] rounded-full flex items-center justify-center shrink-0 ${
                     c.hecho ? "bg-green-500/10 text-green-600"
@@ -228,6 +234,10 @@ export default function PerfilPanel({
                   >
                     Configurar
                   </button>
+                )}
+                </div>
+                {c.hecho && c.nota && (
+                  <p className="m-0 mt-1 pl-7 text-xs text-muted-foreground">{c.nota}</p>
                 )}
               </li>
             ))}

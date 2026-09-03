@@ -143,6 +143,9 @@ describe("qué NO abre la ventana", () => {
     // Y la del login sin contraseña (fase 2), por lo mismo: quien la llama no
     // tiene sesión, y una ventana que pidiera algo giraría sobre nada.
     expect(RUTAS_EXCLUIDAS).toContain("/auth/webauthn/passwordless");
+    // Y la del código por correo (plan 4E), por su nombre: `/auth/mfa/verify`
+    // no la cubre, porque la comparación es por subcadena.
+    expect(RUTAS_EXCLUIDAS).toContain("/auth/mfa/email-code");
     for (const ruta of RUTAS_EXCLUIDAS) {
       const err = rechazo(PASO, { ruta: `${url}/api${ruta}` });
       await expect(alFallar(err)).rejects.toBe(err);

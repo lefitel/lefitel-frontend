@@ -1,12 +1,13 @@
 import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useLocation, useNavigate } from "react-router-dom";
-import { KeyRoundIcon, Loader2, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
+import { KeyRoundIcon, Loader2, MailIcon, ShieldCheckIcon, SunIcon, MoonIcon } from "lucide-react";
 
 import { useTheme } from "../../components/theme-provider";
 import { SesionContext } from "../../context/SesionContext";
 import { usuarioExample } from "../../data/example";
 import { abandonPartialSession, comprobarToken, verifySecondFactor } from "../../api/Login.api";
+import { pedirCodigoPorCorreo } from "../../api/Mfa.api";
 import { cancelarCeremonia, probarPasskey, soportaPasskeys } from "../../api/passkeyCeremony";
 
 import logo from "../../assets/images/logo.png";
@@ -16,6 +17,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+/** The three code tabs. The passkey is a button above them, not a tab. */
+type Modo = "totp" | "correo" | "recuperacion";
 
 /**
  * The second step of a login for an account that already has a factor
@@ -47,6 +51,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  * este equipo": the server mints no remembered-device cookie on a passkey
  * login (a decided asymmetry — a key is already one gesture).
  *
+ * **The email code is the fourth way in (plan 4E), and it is a tab like the
+ * other two — never sent on its own.** A verified address is a full second
+ * factor since 4E, so the person who lost the phone types here the six
+ * digits they got by mail, with `metodo: "correo"` so the server does not
+ * prove them against the app. Nothing is sent when the screen mounts or when
+ * the tab opens (S4 of the design's pre-audit): every send spends the mail
+ * quota, and a tab is opened out of curiosity too. One button asks for the
+ * code, and the wait drawn on it is always the server's number — the cooldown
+ * of a 200, the seconds left of a 429 — never one chosen here.
+ *
  * **No clock-skew note is written on this side, and — verified against
  * `api/src/controllers/mfa.controller.ts` as actually built — none arrives
  * from the server today either.** The plan's Task 7 Step 4 reads as a promise
@@ -64,14 +78,29 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
  */
 const SegundoFactorPage = () => {
   const { resolvedTheme, setTheme } = useTheme();
-  const { setSesion } = useContext(SesionContext);
+  const { sesion, setSesion } = useContext(SesionContext);
   const navigate = useNavigate();
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from || "/app/home";
 
-  const [modo, setModo] = useState<"totp" | "recuperacion">("totp");
+  const [modo, setModo] = useState<Modo>("totp");
   const [codigo, setCodigo] = useState("");
   const [loading, setLoading] = useState(false);
+  /**
+   * The email tab (plan 4E): where the code went (masked by the server), how
+   * many seconds until another may be asked for, and whether one is in
+   * flight. `espera` is always what the server said — never a number chosen
+   * here.
+   */
+  const [enviadoA, setEnviadoA] = useState<string | null>(null);
+  const [espera, setEspera] = useState(0);
+  const [pidiendoCodigo, setPidiendoCodigo] = useState(false);
+  /** What the server said is left before the account locks, after a wrong code. */
+  const [restantes, setRestantes] = useState<number | null>(null);
+  // The address a code would go to, as `/auth/me` gave it to this parcial
+  // session: masked by the server (hallazgo C16), and only when verified — a
+  // saved-but-unverified address is not where any code will go.
+  const direccion = sesion?.usuario?.email_verified_at ? (sesion.usuario.email ?? null) : null;
   /**
    * "Recordar este equipo" — hallazgo E-7/F16. Off by default and only ever
    * turned on by hand: this is a credential that skips the second factor for
@@ -91,6 +120,14 @@ const SegundoFactorPage = () => {
   // el mismo cierre que `LoginPage.tsx`, para que las dos pantallas de llave
   // se comporten igual.
   useEffect(() => () => cancelarCeremonia(), []);
+
+  // One tick per second while a wait is running; the server's number counts
+  // down here and nowhere else.
+  useEffect(() => {
+    if (espera <= 0) return;
+    const t = setTimeout(() => setEspera((s) => s - 1), 1000);
+    return () => clearTimeout(t);
+  }, [espera]);
 
   /**
    * Lo que pasa después de que el servidor haya aceptado un factor, sea cual
@@ -153,15 +190,27 @@ const SegundoFactorPage = () => {
     const valor = codigo.trim();
     if (!valor) {
       return toast.warning(
-        modo === "totp" ? "Ingresá el código de tu aplicación." : "Ingresá tu código de recuperación."
+        modo === "totp"
+          ? "Ingresá el código de tu aplicación."
+          : modo === "correo"
+            ? "Ingresá el código que recibiste por correo."
+            : "Ingresá tu código de recuperación."
       );
     }
 
     setLoading(true);
     try {
-      const respuesta = await verifySecondFactor(valor, recordar);
+      // The email tab names its door: six digits from the mail look exactly
+      // like six digits from the app, and without `metodo` the server would
+      // prove them against the app and charge the lockout for it. The other
+      // two tabs send nothing, which every server version understands.
+      const respuesta =
+        modo === "correo"
+          ? await verifySecondFactor(valor, recordar, "correo")
+          : await verifySecondFactor(valor, recordar);
       if (respuesta.status !== 200) {
         toast.error(respuesta.message ?? "No se pudo verificar el código.");
+        setRestantes(typeof respuesta.intentosRestantes === "number" ? respuesta.intentosRestantes : null);
         return;
       }
 
@@ -170,6 +219,32 @@ const SegundoFactorPage = () => {
       toast.error("No se pudo conectar con el servidor.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /**
+   * Ask the server to mail a code. Only from the button — see the header.
+   * A 200 carries the masked address and the cooldown; a 429 the seconds
+   * left, which is what the button counts down; a 503 means no provider
+   * could send it, and the previous code, if any, is still good; a 400 that
+   * the account has no verified address. Each is the server's own sentence.
+   */
+  const pedirCodigo = async () => {
+    setPidiendoCodigo(true);
+    try {
+      const r = await pedirCodigoPorCorreo();
+      if (r.status === 200) {
+        setEnviadoA(r.enviado_a);
+        setEspera(r.reintento_en_s ?? 0);
+        toast.success(r.enviado_a ? `Código enviado a ${r.enviado_a}.` : "Código enviado.");
+        return;
+      }
+      if (r.status === 429 && r.reintento_en_s) setEspera(r.reintento_en_s);
+      toast.error(r.message ?? "No se pudo enviar el código.");
+    } catch {
+      toast.error("No se pudo conectar con el servidor.");
+    } finally {
+      setPidiendoCodigo(false);
     }
   };
 
@@ -271,9 +346,10 @@ const SegundoFactorPage = () => {
           </div>
         )}
 
-        <Tabs value={modo} onValueChange={(v) => { setModo(v as "totp" | "recuperacion"); setCodigo(""); }}>
+        <Tabs value={modo} onValueChange={(v) => { setModo(v as Modo); setCodigo(""); }}>
           <TabsList className="w-full mb-5">
             <TabsTrigger value="totp" className="flex-1">Código de la app</TabsTrigger>
+            <TabsTrigger value="correo" className="flex-1">Código por correo</TabsTrigger>
             <TabsTrigger value="recuperacion" className="flex-1">Código de recuperación</TabsTrigger>
           </TabsList>
 
@@ -296,6 +372,55 @@ const SegundoFactorPage = () => {
               <p className="text-xs text-muted-foreground/70">
                 Abrí tu aplicación de autenticación y escribí el código que muestra en este momento.
               </p>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="correo">
+            <div className="space-y-3 mb-5">
+              <p className="text-xs text-muted-foreground/70">
+                {enviadoA ? (
+                  <>Enviamos un código de seis cifras a <span className="font-mono">{enviadoA}</span>. Vale diez minutos.</>
+                ) : direccion ? (
+                  <>Te enviaremos un código de seis cifras a <span className="font-mono">{direccion}</span>. Vale diez minutos.</>
+                ) : (
+                  "Te enviaremos un código de seis cifras a tu correo verificado. Vale diez minutos."
+                )}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full rounded-xl text-sm font-bold uppercase tracking-widest"
+                onClick={pedirCodigo}
+                disabled={pidiendoCodigo || espera > 0 || loading}
+                aria-busy={pidiendoCodigo}
+              >
+                {pidiendoCodigo ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : espera > 0 ? (
+                  `Reenviar en ${espera} s`
+                ) : (
+                  <>
+                    <MailIcon className="mr-2 h-4 w-4" />
+                    {enviadoA ? "Reenviar código" : "Enviar código"}
+                  </>
+                )}
+              </Button>
+              <div className="space-y-2">
+                <Label htmlFor="codigo-correo" className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                  Código recibido por correo
+                </Label>
+                <Input
+                  id="codigo-correo"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="123456"
+                  className="h-12 px-4 bg-muted/40 border-muted focus-visible:ring-primary/30 focus-visible:bg-transparent text-lg tracking-[0.4em] font-mono text-center rounded-xl transition-all"
+                  value={codigo}
+                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  onKeyDown={(e) => { if (e.key === "Enter") verificar(); }}
+                />
+              </div>
             </div>
           </TabsContent>
 
@@ -352,6 +477,18 @@ const SegundoFactorPage = () => {
             </>
           )}
         </Button>
+
+        {/* The warning before the lock (plan 4E): five wrong codes lock the whole
+            account, and the error sentence is the same as for a typo. */}
+        {restantes !== null && restantes <= 2 && (
+          <p className="mt-4 text-sm text-amber-600 dark:text-amber-500" role="status">
+            {restantes === 0
+              ? "Tu cuenta ha quedado bloqueada temporalmente. Esperá unos minutos o pedile a un administrador que la desbloquee."
+              : restantes === 1
+                ? "Te queda 1 intento antes de que la cuenta se bloquee."
+                : `Te quedan ${restantes} intentos antes de que la cuenta se bloquee.`}
+          </p>
+        )}
 
         <div className="mt-10 flex justify-center">
           <button

@@ -18,11 +18,13 @@ import * as interceptor from "@/api/stepUpInterceptor";
 import type { PeticionStepUp, ResultadoStepUp } from "@/api/stepUpInterceptor";
 
 const probarStepUp = vi.fn();
+const pedirCodigoPorCorreo = vi.fn();
 const verifySecondFactor = vi.fn();
 const comprobarToken = vi.fn();
 vi.mock("@/api/Mfa.api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/Mfa.api")>()),
   probarStepUp: (...a: unknown[]) => probarStepUp(...a),
+  pedirCodigoPorCorreo: (...a: unknown[]) => pedirCodigoPorCorreo(...a),
 }));
 vi.mock("@/api/Login.api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/api/Login.api")>()),
@@ -88,6 +90,9 @@ const PIDE_FACTOR: PeticionStepUp = {
 
 beforeEach(() => {
   probarStepUp.mockReset().mockResolvedValue({ status: 200, message: "Identidad confirmada." });
+  pedirCodigoPorCorreo
+    .mockReset()
+    .mockResolvedValue({ status: 200, message: "ok", enviado_a: "i***@osefi.net", reintento_en_s: 60 });
   verifySecondFactor.mockReset().mockResolvedValue({ status: 200, message: "ok" });
   comprobarToken.mockReset().mockResolvedValue({
     status: 200,
@@ -153,7 +158,9 @@ describe("a qué puerta canjea el código", () => {
     await userEvent.type(await screen.findByLabelText("Código de tu aplicación"), "123456");
     await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
-    await waitFor(() => expect(probarStepUp).toHaveBeenCalledWith("123456"));
+    await waitFor(() => expect(probarStepUp).toHaveBeenCalled());
+    // Sin `metodos` no hay clase que nombrar: la forma decide, como siempre.
+    expect(probarStepUp.mock.calls[0]).toEqual(["123456", undefined]);
     expect(verifySecondFactor).not.toHaveBeenCalled();
   });
 
@@ -164,7 +171,8 @@ describe("a qué puerta canjea el código", () => {
     await userEvent.type(await screen.findByLabelText("Código de tu aplicación"), "123456");
     await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
-    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456"));
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalled());
+    expect(verifySecondFactor.mock.calls[0]).toEqual(["123456", undefined, undefined]);
     expect(probarStepUp).not.toHaveBeenCalled();
   });
 });
@@ -565,5 +573,158 @@ describe("el campo del código, según lo que hay detrás", () => {
     await screen.findByText(/llave comprobada/i);
 
     expect(screen.queryByText(/quedan 3 intentos/i)).not.toBeInTheDocument();
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Plan 4E — el correo como método: se ofrece sólo si el servidor lo lista, el
+ * código va con `metodo: "correo"` (seis cifras del correo son indistinguibles
+ * de seis cifras de la aplicación), y el selector aparece con dos clases.
+ * ───────────────────────────────────────────────────────────────────────── */
+const CON_CORREO: PeticionStepUp = { ...PIDE_FACTOR, metodos: ["correo"] };
+const APP_Y_CORREO: PeticionStepUp = { ...PIDE_FACTOR, metodos: ["totp", "correo"] };
+
+describe("el correo como método (plan 4E)", () => {
+  it("se ofrece sólo cuando `metodos` lo lista; sin el campo, no hay correo que ofrecer", async () => {
+    montar();
+    void pedir(PIDE_FACTOR);
+    await screen.findByLabelText("Código de tu aplicación");
+    expect(screen.queryByRole("button", { name: /enviar código/i })).not.toBeInTheDocument();
+
+    cleanup();
+    montar();
+    void pedir(CON_CORREO);
+    expect(await screen.findByRole("button", { name: /enviar código/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Código recibido por correo")).toBeInTheDocument();
+  });
+
+  it("con sólo el correo no hay selector; con la aplicación y el correo, aparece con las dos clases", async () => {
+    montar();
+    void pedir(CON_CORREO);
+    await screen.findByLabelText("Código recibido por correo");
+    expect(screen.queryByRole("radiogroup")).not.toBeInTheDocument();
+
+    cleanup();
+    montar();
+    void pedir(APP_Y_CORREO);
+    const grupo = await screen.findByRole("radiogroup", { name: /con qué código/i });
+    expect(grupo).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Aplicación" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Correo" })).toHaveAttribute("aria-checked", "false");
+    // La aplicación va primero: es la clase de siempre, y la de recuperación
+    // sigue cabiendo en su campo.
+    expect(screen.getByLabelText("Código de tu aplicación")).toBeInTheDocument();
+  });
+
+  it("con correo y recuperación (sin aplicación), el selector ofrece Correo y Recuperación, el correo primero", async () => {
+    montar();
+    void pedir({ ...PIDE_FACTOR, metodos: ["correo", "codigo"] });
+
+    await screen.findByRole("radiogroup");
+    expect(screen.getByRole("radio", { name: "Correo" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Recuperación" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Aplicación" })).not.toBeInTheDocument();
+  });
+
+  // 🔴 La prueba de la ambigüedad: seis cifras tecleadas en la clase «correo»
+  // NO pueden ir como TOTP, o el servidor las da por erróneas y carga el bloqueo.
+  it("un código tecleado en la clase correo va con `metodo: \"correo\"`, nunca como código de la aplicación", async () => {
+    montar("completa");
+    void pedir(APP_Y_CORREO);
+
+    await userEvent.click(await screen.findByRole("radio", { name: "Correo" }));
+    await userEvent.type(screen.getByLabelText("Código recibido por correo"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    await waitFor(() => expect(probarStepUp).toHaveBeenCalledWith("123456", "correo"));
+    expect(verifySecondFactor).not.toHaveBeenCalled();
+  });
+
+  it("en una sesión a medias, el código del correo va a /auth/mfa/verify con su clase", async () => {
+    montar("onboarding");
+    void pedir(CON_CORREO);
+
+    await userEvent.type(await screen.findByLabelText("Código recibido por correo"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456", undefined, "correo"));
+    expect(probarStepUp).not.toHaveBeenCalled();
+  });
+
+  it("en la clase aplicación no se nombra ninguna clase: la forma decide, como siempre", async () => {
+    montar("completa");
+    void pedir(APP_Y_CORREO);
+
+    await userEvent.type(await screen.findByLabelText("Código de tu aplicación"), "123456");
+    await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    await waitFor(() => expect(probarStepUp).toHaveBeenCalled());
+    expect(probarStepUp.mock.calls[0]).toEqual(["123456", undefined]);
+  });
+
+  it("cambiar de clase vacía el campo, para que un código no salga por la puerta equivocada", async () => {
+    montar("completa");
+    void pedir(APP_Y_CORREO);
+
+    await userEvent.type(await screen.findByLabelText("Código de tu aplicación"), "123456");
+    await userEvent.click(screen.getByRole("radio", { name: "Correo" }));
+
+    expect(screen.getByLabelText("Código recibido por correo")).toHaveValue("");
+    expect(screen.getByRole("button", { name: /confirmar/i })).toBeDisabled();
+  });
+
+  // 🔴 S4: nada se envía al abrirse la ventana. Cada envío gasta cuota, y la
+  // ventana se abre también por una operación que luego se cancela.
+  it("no pide el código al abrirse: sólo al pulsar el botón, y entonces enseña la dirección y la espera del servidor", async () => {
+    montar();
+    void pedir(CON_CORREO);
+
+    const boton = await screen.findByRole("button", { name: /enviar código/i });
+    expect(pedirCodigoPorCorreo).not.toHaveBeenCalled();
+
+    await userEvent.click(boton);
+
+    await waitFor(() => expect(pedirCodigoPorCorreo).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(/i\*\*\*@osefi\.net/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reenviar en 60 s/i })).toBeDisabled();
+  });
+
+  it("con un 429, cuenta atrás los segundos del servidor y enseña su frase", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 429,
+      message: "Espera antes de pedir otro código.",
+      enviado_a: null,
+      reintento_en_s: 540,
+    });
+    montar();
+    void pedir(CON_CORREO);
+
+    await userEvent.click(await screen.findByRole("button", { name: /enviar código/i }));
+
+    expect(await screen.findByText("Espera antes de pedir otro código.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reenviar en 540 s/i })).toBeDisabled();
+  });
+
+  it("con un 503, enseña la frase del servidor y deja el botón disponible", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 503,
+      message: "No se pudo enviar el código. Prueba otro método o inténtalo más tarde.",
+      enviado_a: null,
+      reintento_en_s: null,
+    });
+    montar();
+    void pedir(CON_CORREO);
+
+    await userEvent.click(await screen.findByRole("button", { name: /enviar código/i }));
+
+    expect(await screen.findByText(/prueba otro método/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^enviar código$/i })).toBeEnabled();
+  });
+
+  it("la frase de la ventana nombra el correo cuando el servidor lo ofrece", async () => {
+    montar();
+    void pedir(CON_CORREO);
+
+    expect(await screen.findByText(/pide un código a tu correo/i)).toBeInTheDocument();
   });
 });

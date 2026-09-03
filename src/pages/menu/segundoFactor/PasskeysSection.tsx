@@ -61,7 +61,7 @@ const fecha = (iso: string | null): string =>
  * (hallazgo E-3/F12).
  */
 const PasskeysSection = () => {
-  const { setSesion, logout } = useContext(SesionContext);
+  const { sesion, setSesion, logout } = useContext(SesionContext);
   // Una sola vez: es una propiedad del navegador, no cambia durante la vida
   // de la página.
   const [soportado] = useState(() => soportaPasskeys());
@@ -383,9 +383,12 @@ const PasskeysSection = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Quitar esta llave?</AlertDialogTitle>
             <AlertDialogDescription>
-              Dejará de servir para entrar. Si es tu último factor, se cerrarán todas tus sesiones
-              —esta incluida— y a partir de ahora entrarás sólo con tu contraseña; los códigos de
-              recuperación no cuentan como un factor y no evitan esto.
+              {/* Plan 4E: con correo verificado la última llave no deja la cuenta
+                  sin factor, y el servidor no cierra las sesiones en ese caso
+                  (`deleteCredential` sólo revoca cuando no queda ningún factor). */}
+              {sesion?.usuario?.email_verified_at
+                ? "Dejará de servir para entrar. Si es tu última llave, tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él, y tus sesiones no se cierran. Los códigos de recuperación no cuentan como un factor."
+                : "Dejará de servir para entrar. Si es tu último factor, se cerrarán todas tus sesiones —esta incluida— y a partir de ahora entrarás sólo con tu contraseña; los códigos de recuperación no cuentan como un factor y no evitan esto."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

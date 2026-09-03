@@ -89,7 +89,8 @@ export interface RechazoStepUp {
    * la cuenta detrás de esta misma puerta.
    *
    * Los valores se corresponden con `MetodoReautenticacion` en
-   * `api/src/auth/factorInventory.ts`: `passkey`, `totp`, `codigo`.
+   * `api/src/auth/factorInventory.ts`: `passkey`, `totp`, `correo` (plan 4E:
+   * un código de seis cifras enviado al correo verificado), `codigo`.
    *
    * 🔴 **«Método», no «factor», y la palabra está elegida.** Un código de
    * recuperación **no** es un segundo factor —el servidor se niega a que
@@ -150,6 +151,32 @@ const MOTIVO_MENSAJE: Record<MotivoStepUp, string> = {
 };
 
 /**
+ * Por qué puerta entra un código — `metodo` en `api/src/controllers/mfa.controller.ts`
+ * (plan 4E). Sin él, el servidor decide por la forma: seis cifras son TOTP y
+ * cualquier otra cosa un código de recuperación. El correo también son seis
+ * cifras, así que un código de correo **tiene** que ir con `metodo: "correo"`
+ * o el servidor lo probará contra la aplicación y lo dará por erróneo — y
+ * cargará un intento contra el bloqueo de la cuenta.
+ */
+export type MetodoSegundoFactor = "totp" | "codigo" | "correo";
+
+/**
+ * El cuerpo de un canje de código, sin nada de más. `JSON.stringify` ya tira
+ * un `undefined`, pero construir el objeto sin la clave es lo que deja a un
+ * test fijar la forma exacta del cable con `toStrictEqual`, en vez de
+ * confiar en el serializador para que una clave sobrante no cuente.
+ */
+export const cuerpoDeCanje = (
+  codigo: string,
+  recordar?: boolean,
+  metodo?: MetodoSegundoFactor,
+): { codigo: string; recordar?: boolean; metodo?: MetodoSegundoFactor } => ({
+  codigo,
+  ...(recordar !== undefined ? { recordar } : {}),
+  ...(metodo !== undefined ? { metodo } : {}),
+});
+
+/**
  * La frase que se enseña para un rechazo concreto.
  *
  * `motivo` manda siempre que sea uno de los cuatro conocidos. Cualquier otra
@@ -179,19 +206,24 @@ export function describeMetodos(metodos: string[] | undefined): string | null {
   }
   const llave = metodos.includes("passkey");
   const codigo = metodos.includes("totp");
+  // Plan 4E: el correo verificado es un método de pleno derecho, en el orden
+  // en que el servidor lo lista (llave, aplicación, correo, recuperación).
+  const correo = metodos.includes("correo");
   const recuperacion = metodos.includes("codigo");
   const partes: string[] = [];
   if (llave) partes.push("usa tu llave de acceso");
   if (codigo) partes.push("escribe el código de tu aplicación");
-  if (!llave && !codigo && recuperacion) partes.push("escribe uno de tus códigos de recuperación");
+  if (correo) partes.push("pide un código a tu correo");
+  if (!llave && !codigo && !correo && recuperacion) partes.push("escribe uno de tus códigos de recuperación");
   // Ninguno de los que llegaron es de los que esta pantalla sabe dibujar: el
   // servidor aprendió un método antes que la aplicación. Operativamente es
   // como la lista vacía —no hay nada que pintar— y la frase dice por qué.
   if (partes.length === 0) {
     return "Tu cuenta usa un método de verificación que esta versión de la aplicación aún no conoce. Recarga la página; si sigue pasando, avisa a un administrador.";
   }
-  const accion = partes.length === 1 ? partes[0] : `${partes[0]} o ${partes[1]}`;
-  const extra = recuperacion && (llave || codigo) ? " También sirve un código de recuperación." : "";
+  const accion =
+    partes.length === 1 ? partes[0] : `${partes.slice(0, -1).join(", ")} o ${partes[partes.length - 1]}`;
+  const extra = recuperacion && (llave || codigo || correo) ? " También sirve un código de recuperación." : "";
   return `Antes de continuar, ${accion} para confirmar que eres tú.${extra}`;
 }
 

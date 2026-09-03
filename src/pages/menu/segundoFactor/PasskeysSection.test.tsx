@@ -42,9 +42,9 @@ vi.mock("sonner", () => ({
 const setSesion = vi.fn();
 const logout = vi.fn();
 
-function montar() {
+function montar(usuario = usuarioExample) {
   const valor = {
-    sesion: { autenticado: true, usuario: usuarioExample, permisos: sinPermisos(), estado: "completa" },
+    sesion: { autenticado: true, usuario, permisos: sinPermisos(), estado: "completa" },
     setSesion,
     loading: false,
     logout,
@@ -208,6 +208,28 @@ describe("quitar", () => {
     await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /sí, quitar/i }));
   };
+
+  // Plan 4E: con correo verificado, la última llave no deja la cuenta sin
+  // factor ni cierra las sesiones, y la frase de siempre sería falsa.
+  it("con correo verificado, avisa de que el correo sigue siendo el factor y de que las sesiones no se cierran", async () => {
+    montar({ ...usuarioExample, email: "isaias@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" });
+    await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
+    await userEvent.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
+
+    expect(await screen.findByText(/tu correo verificado sigue siendo tu segundo factor/i)).toBeInTheDocument();
+    expect(screen.queryByText(/entrarás sólo con tu contraseña/i)).not.toBeInTheDocument();
+  });
+
+  it("sin correo verificado, avisa de que volverá a la contraseña sola y de que las sesiones se cierran", async () => {
+    montar();
+    await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
+    await userEvent.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+    await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
+
+    expect(await screen.findByText(/entrarás sólo con tu contraseña/i)).toBeInTheDocument();
+    expect(screen.getByText(/se cerrarán todas tus sesiones/i)).toBeInTheDocument();
+  });
 
   it("manda el id de esa llave y la contraseña", async () => {
     montar();

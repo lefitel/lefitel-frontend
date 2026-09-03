@@ -6,6 +6,8 @@ import {
   deleteTotp,
   generateRecoveryCodes,
   getRecoveryCodesRemaining,
+  probarStepUp,
+  pedirCodigoPorCorreo,
   describeStepUpError,
   CODIGO_STEP_UP,
 } from "./Mfa.api";
@@ -289,5 +291,119 @@ describe("describeStepUpError", () => {
     expect(describeStepUpError(undefined, "algo pasó")).toBe("algo pasó");
     expect(describeStepUpError("un-motivo-futuro", "algo pasó")).toBe("algo pasó");
     expect(describeStepUpError(undefined, null)).toBe("Ocurrió un error en el servidor.");
+  });
+});
+
+describe("probarStepUp", () => {
+  it("posts only the code to POST /api/auth/stepup when no class is named — the server decides by shape", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { message: "Identidad confirmada." } });
+
+    await probarStepUp("123456");
+
+    expect(post.mock.calls[0][0]).toMatch(/auth\/stepup$/);
+    // `toStrictEqual`: a `metodo: undefined` riding along would pass `toEqual`.
+    expect(post.mock.calls[0][1]).toStrictEqual({ codigo: "123456" });
+  });
+
+  // Plan 4E. Six digits from the email are indistinguishable from six digits
+  // from the app: without `metodo`, the server proves them against the app,
+  // answers "wrong" and charges the lockout.
+  it("names the class when the dialog says so", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: { message: "ok" } });
+
+    await probarStepUp("123456", "correo");
+
+    expect(post.mock.calls[0][1]).toStrictEqual({ codigo: "123456", metodo: "correo" });
+  });
+
+  it("surfaces intentosRestantes on a 400", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(
+      Object.assign(new Error("400"), {
+        response: { status: 400, data: { message: "Código incorrecto o ya utilizado.", intentosRestantes: 1 } },
+      }),
+    );
+
+    expect(await probarStepUp("000000", "correo")).toEqual({
+      status: 400,
+      message: "Código incorrecto o ya utilizado.",
+      intentosRestantes: 1,
+    });
+  });
+});
+
+describe("pedirCodigoPorCorreo (plan 4E)", () => {
+  it("posts an empty JSON body to POST /api/auth/mfa/email-code — the account and the address are the session's", async () => {
+    const post = vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Te enviamos un código.", enviado_a: "i***@osefi.net", reintento_en_s: 60 },
+    });
+
+    await pedirCodigoPorCorreo();
+
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(post.mock.calls[0][0]).toMatch(/auth\/mfa\/email-code$/);
+    // `{}` and not nothing: without a body axios leaves a form-urlencoded
+    // Content-Type behind and `express.json()` never parses it.
+    expect(post.mock.calls[0][1]).toStrictEqual({});
+    expect(post.mock.calls[0][2]).toMatchObject({ timeout: expect.any(Number) });
+  });
+
+  it("maps the 200: the masked address and the cooldown the server chose", async () => {
+    vi.spyOn(axios, "post").mockResolvedValue({
+      status: 200,
+      data: { message: "Te enviamos un código.", enviado_a: "i***@osefi.net", reintento_en_s: 60 },
+    });
+
+    expect(await pedirCodigoPorCorreo()).toEqual({
+      status: 200,
+      message: "Te enviamos un código.",
+      enviado_a: "i***@osefi.net",
+      reintento_en_s: 60,
+    });
+  });
+
+  it("keeps a 429 as a 429, with the server's own seconds to wait — the countdown must use these, not a guess", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(
+      Object.assign(new Error("429"), {
+        response: { status: 429, data: { message: "Espera antes de pedir otro código.", reintento_en_s: 540 } },
+      }),
+    );
+
+    expect(await pedirCodigoPorCorreo()).toEqual({
+      status: 429,
+      message: "Espera antes de pedir otro código.",
+      enviado_a: null,
+      reintento_en_s: 540,
+    });
+  });
+
+  it("keeps a 503 (no provider could send) and a 400 (no verified address) apart from a network failure", async () => {
+    for (const respuesta of [
+      { status: 503, message: "No se pudo enviar el código. Prueba otro método o inténtalo más tarde." },
+      { status: 400, message: "Tu cuenta no tiene un correo verificado." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "post").mockRejectedValue(
+        Object.assign(new Error(String(respuesta.status)), {
+          response: { status: respuesta.status, data: { message: respuesta.message } },
+        }),
+      );
+      expect(await pedirCodigoPorCorreo(), JSON.stringify(respuesta)).toEqual({
+        ...respuesta,
+        enviado_a: null,
+        reintento_en_s: null,
+      });
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
+
+    expect(await pedirCodigoPorCorreo()).toEqual({
+      status: 500,
+      message: "No se pudo enviar el código.",
+      enviado_a: null,
+      reintento_en_s: null,
+    });
   });
 });

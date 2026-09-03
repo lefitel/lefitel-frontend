@@ -27,6 +27,10 @@ vi.mock("../../api/Login.api", () => ({
   comprobarToken: (...args: unknown[]) => comprobarToken(...args),
   abandonPartialSession: (...args: unknown[]) => abandonPartialSession(...args),
 }));
+const pedirCodigoPorCorreo = vi.fn();
+vi.mock("../../api/Mfa.api", () => ({
+  pedirCodigoPorCorreo: (...args: unknown[]) => pedirCodigoPorCorreo(...args),
+}));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn() },
 }));
@@ -48,12 +52,14 @@ vi.mock("../../api/passkeyCeremony", () => ({
 function Harness({
   onSesion,
   initialEntries = ["/segundo-factor"],
+  usuario = usuarioExample,
 }: {
   onSesion: (s: SesionInterface) => void;
   initialEntries?: InitialEntry[];
+  usuario?: SesionInterface["usuario"];
 }) {
   const [sesion, setSesionState] = useState<SesionInterface>({
-    usuario: usuarioExample,
+    usuario,
     autenticado: false,
     estado: "parcial",
   });
@@ -252,6 +258,8 @@ describe("the recovery-code tab — hallazgo A5/D4: visible, not hidden behind a
     // discover the recovery path exists.
     expect(screen.getByRole("tab", { name: /código de la app/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /código de recuperación/i })).toBeInTheDocument();
+    // Plan 4E: the email code is the third tab, offered as plainly as the others.
+    expect(screen.getByRole("tab", { name: /código por correo/i })).toBeInTheDocument();
   });
 
   it("sends a recovery code under the same `codigo` field the app code uses", async () => {
@@ -422,5 +430,184 @@ describe("entering with the passkey", () => {
       expect(toast.error).toHaveBeenCalledWith("Demasiados intentos con la llave. Espere unos minutos."),
     );
     expect(comprobarToken).not.toHaveBeenCalled();
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Plan 4E — la cuarta vía: el código por correo.
+ *
+ * Un correo verificado es un factor completo, y esta pestaña es por donde
+ * entra quien perdió el teléfono. Dos propiedades que la preauditoría nombró:
+ * no se envía nada al montar ni al abrir la pestaña (S4), y el código va con
+ * `metodo: "correo"` porque seis cifras del correo son indistinguibles de seis
+ * cifras de la aplicación.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe("the email tab (plan 4E)", () => {
+  const CON_CORREO = { ...usuarioExample, email: "i***@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" };
+  const abrirCorreo = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByRole("tab", { name: /código por correo/i }));
+  };
+
+  beforeEach(() => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 200,
+      message: "Te enviamos un código.",
+      enviado_a: "i***@osefi.net",
+      reintento_en_s: 60,
+    });
+  });
+
+  it("shows where the code would go — the address /auth/me already masked — and a field for it", async () => {
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} usuario={CON_CORREO} />);
+    await abrirCorreo(user);
+
+    expect(screen.getByText(/i\*\*\*@osefi\.net/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/código recibido por correo/i)).toBeInTheDocument();
+  });
+
+  it("does not name an address that is saved but not verified — no code will go there", async () => {
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} usuario={{ ...CON_CORREO, email_verified_at: null }} />);
+    await abrirCorreo(user);
+
+    expect(screen.queryByText(/i\*\*\*@osefi\.net/)).not.toBeInTheDocument();
+    expect(screen.getByText(/a tu correo verificado/i)).toBeInTheDocument();
+  });
+
+  // 🔴 S4: nothing is sent on mount, nor when the tab opens. A send spends
+  // the mail quota, and a tab is opened out of curiosity too.
+  it("sends nothing when the screen mounts nor when the tab opens — only the button asks", async () => {
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} usuario={CON_CORREO} />);
+    expect(pedirCodigoPorCorreo).not.toHaveBeenCalled();
+    await abrirCorreo(user);
+    expect(pedirCodigoPorCorreo).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    await waitFor(() => expect(pedirCodigoPorCorreo).toHaveBeenCalledTimes(1));
+  });
+
+  it("after sending, shows the masked address the server answered and counts down the cooldown it chose", async () => {
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    expect(await screen.findByText(/enviamos un código/i)).toBeInTheDocument();
+    expect(screen.getByText(/i\*\*\*@osefi\.net/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reenviar en 60 s/i })).toBeDisabled();
+    const { toast } = await import("sonner");
+    expect(toast.success).toHaveBeenCalledWith("Código enviado a i***@osefi.net.");
+  });
+
+  it("frees the button when the wait is over", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({ status: 200, message: "ok", enviado_a: "i***@osefi.net", reintento_en_s: 1 });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    expect(await screen.findByRole("button", { name: /reenviar en 1 s/i })).toBeDisabled();
+    await waitFor(() => expect(screen.getByRole("button", { name: /^reenviar código$/i })).toBeEnabled(), {
+      timeout: 3000,
+    });
+  });
+
+  it("on a 429, counts down the server's own seconds and shows its sentence — never a number chosen here", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 429,
+      message: "Espera antes de pedir otro código.",
+      enviado_a: null,
+      reintento_en_s: 540,
+    });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    expect(await screen.findByRole("button", { name: /reenviar en 540 s/i })).toBeDisabled();
+    const { toast } = await import("sonner");
+    expect(toast.error).toHaveBeenCalledWith("Espera antes de pedir otro código.");
+  });
+
+  it("on a 503 (no provider could send), shows the server's sentence and leaves the button available", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 503,
+      message: "No se pudo enviar el código. Prueba otro método o inténtalo más tarde.",
+      enviado_a: null,
+      reintento_en_s: null,
+    });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("No se pudo enviar el código. Prueba otro método o inténtalo más tarde."),
+    );
+    expect(screen.getByRole("button", { name: /^enviar código$/i })).toBeEnabled();
+  });
+
+  it("on a 400 (no verified address), shows the server's sentence", async () => {
+    pedirCodigoPorCorreo.mockResolvedValue({
+      status: 400,
+      message: "Tu cuenta no tiene un correo verificado.",
+      enviado_a: null,
+      reintento_en_s: null,
+    });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.click(screen.getByRole("button", { name: /enviar código/i }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Tu cuenta no tiene un correo verificado."));
+  });
+
+  // 🔴 The ambiguity the whole `metodo` field exists for: six digits from the
+  // mail look exactly like six digits from the app.
+  it("verifies the typed code with `metodo: \"correo\"`, never as an app code", async () => {
+    verifySecondFactor.mockResolvedValue({ status: 200, message: "ok" });
+    comprobarToken.mockResolvedValue({ status: 200, usuario: usuarioExample, permisos: sinPermisos(), estado: "completa" });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+
+    await user.type(screen.getByLabelText(/código recibido por correo/i), "123456");
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    await waitFor(() => expect(verifySecondFactor).toHaveBeenCalledWith("123456", false, "correo"));
+  });
+
+  it("warns how many attempts are left when two or fewer remain, and not before", async () => {
+    verifySecondFactor.mockResolvedValue({ status: 400, message: "Código incorrecto o ya utilizado.", intentosRestantes: 3 });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+    await abrirCorreo(user);
+    await user.type(screen.getByLabelText(/código recibido por correo/i), "000000");
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.queryByText(/antes de que la cuenta se bloquee/i)).not.toBeInTheDocument();
+
+    verifySecondFactor.mockResolvedValue({ status: 400, message: "Código incorrecto o ya utilizado.", intentosRestantes: 2 });
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    expect(await screen.findByText(/te quedan 2 intentos antes de que la cuenta se bloquee/i)).toBeInTheDocument();
+  });
+
+  it("says the account is locked when nothing is left — on any code tab", async () => {
+    verifySecondFactor.mockResolvedValue({ status: 400, message: "Código incorrecto o ya utilizado.", intentosRestantes: 0 });
+    const user = userEvent.setup();
+    render(<Harness onSesion={() => {}} />);
+
+    await user.type(screen.getByLabelText(/código de seis dígitos/i), "000000");
+    await user.click(screen.getByRole("button", { name: /verificar/i }));
+
+    expect(await screen.findByText(/bloqueada temporalmente/i)).toBeInTheDocument();
   });
 });

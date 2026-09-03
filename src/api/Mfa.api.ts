@@ -3,8 +3,10 @@ import { urlApi } from "./url";
 import {
   STEP_UP_PASSWORD_FIELD,
   CODIGO_STEP_UP,
+  cuerpoDeCanje,
   describeStepUpError,
   TIMEOUT_CONFIRMACION_MS,
+  type MetodoSegundoFactor,
   type MotivoStepUp,
 } from "./stepUp";
 
@@ -219,8 +221,13 @@ export const getRecoveryCodesRemaining = (): Promise<{ status: number; restantes
  * contra el bloqueo de la cuenta**, con el código correcto tecleado. Quién
  * llama a cuál lo decide `StepUpDialog` mirando el estado de la sesión.
  *
- * Acepta un solo campo, `codigo`: seis dígitos se leen como TOTP y cualquier
- * otra cosa como código de recuperación. La distinción la hace el servidor.
+ * Acepta `codigo` y, desde el plan 4E, un `metodo` opcional. Sin él, seis
+ * dígitos se leen como TOTP y cualquier otra cosa como código de recuperación
+ * — la distinción la hace el servidor, como siempre. **El código del correo
+ * son también seis dígitos**, así que ése tiene que ir con `metodo: "correo"`
+ * o el servidor lo probará contra la aplicación, lo dará por erróneo y cargará
+ * un intento contra el bloqueo con el código correcto tecleado. Quién elige la
+ * clase es la ventana (`StepUpDialog`), con su selector.
  *
  * `intentosRestantes` es lo que evita que alguien se quede fuera del ERP sin
  * haber leído un aviso: el mensaje de error es el mismo para un código mal
@@ -228,9 +235,10 @@ export const getRecoveryCodesRemaining = (): Promise<{ status: number; restantes
  */
 export const probarStepUp = (
   codigo: string,
+  metodo?: MetodoSegundoFactor,
 ): Promise<{ status: number; message: string | null; intentosRestantes?: number }> =>
   axios
-    .post(urlApi + "auth/stepup", { codigo }, { timeout: TIMEOUT_CONFIRMACION_MS })
+    .post(urlApi + "auth/stepup", cuerpoDeCanje(codigo, undefined, metodo), { timeout: TIMEOUT_CONFIRMACION_MS })
     .then((response) => ({
       status: response.status,
       message: (response.data?.message as string | undefined) ?? null,
@@ -239,4 +247,55 @@ export const probarStepUp = (
       status: e.response?.status ?? 500,
       message: e.response?.data?.message ?? "No se pudo confirmar tu identidad.",
       intentosRestantes: e.response?.data?.intentosRestantes as number | undefined,
+    }));
+
+/** Lo que `POST /auth/mfa/email-code` contesta, en cualquiera de sus salidas. */
+export interface EnvioCodigoCorreo {
+  status: number;
+  message: string | null;
+  /** La dirección a la que fue, ya enmascarada por el servidor (`i***@osefi.net`); `null` si no salió. */
+  enviado_a: string | null;
+  /** Segundos hasta poder pedir otro: viene en el 200 (el cooldown) y en el 429 (lo que falte del tope). */
+  reintento_en_s: number | null;
+}
+
+/**
+ * `POST /auth/mfa/email-code` — pedir un código de seis cifras al correo
+ * verificado de la propia cuenta (plan 4E).
+ *
+ * Sin cuerpo: la cuenta y la dirección son las de la sesión, y una petición
+ * que pudiera nombrar otra dirección sería la puerta que §3.4 del diseño cierra.
+ * Se manda `{}` y no nada, por el motivo que `stepUpInterceptor.ts` mide: sin
+ * segundo argumento, axios deja `Content-Type: application/x-www-form-urlencoded`
+ * y el servidor sólo monta `express.json()`.
+ *
+ * 🔴 **Nunca se llama al montar una pantalla** (S4 de la preauditoría): cada
+ * envío gasta cuota del correo, y la pestaña del correo se abre también por
+ * curiosidad. Lo llama un botón, y sólo un botón.
+ *
+ * Cuatro respuestas, y la pantalla tiene que distinguirlas: 200 con la
+ * dirección enmascarada y el cooldown; 429 con `reintento_en_s` del servidor,
+ * que es el valor que manda la cuenta atrás (no uno inventado aquí); 503 —
+ * ningún proveedor pudo enviarlo, y el código anterior sigue vivo — con la
+ * frase que dice «prueba otro método»; 400 sin correo verificado. Por eso el
+ * estado se conserva y no se pliega a 500.
+ *
+ * El plazo es `TIMEOUT_CONFIRMACION_MS` (20 s): el servidor acota su propio
+ * envío a 12 s antes de contestar, así que 20 deja margen sin dejar a la
+ * persona mirando un botón que gira para siempre.
+ */
+export const pedirCodigoPorCorreo = (): Promise<EnvioCodigoCorreo> =>
+  axios
+    .post(`${urlApi}auth/mfa/email-code`, {}, { timeout: TIMEOUT_CONFIRMACION_MS })
+    .then((r) => ({
+      status: r.status,
+      message: (r.data?.message as string | undefined) ?? null,
+      enviado_a: (r.data?.enviado_a as string | undefined) ?? null,
+      reintento_en_s: (r.data?.reintento_en_s as number | undefined) ?? null,
+    }))
+    .catch((e) => ({
+      status: e.response?.status ?? 500,
+      message: e.response?.data?.message ?? "No se pudo enviar el código.",
+      enviado_a: null,
+      reintento_en_s: (e.response?.data?.reintento_en_s as number | undefined) ?? null,
     }));
