@@ -103,9 +103,11 @@ describe("when a new build gets applied", () => {
 
     await cambiarDePantalla();
 
-    // `true` is what makes the waiting worker take over and the page reload;
-    // called without it the update is registered and never applied, which looks
-    // identical here unless the argument is read.
+    // The call is what matters; the argument is intent. vite-plugin-pwa 1.3
+    // ignores it — its `updateServiceWorker` forwards `skipWaiting` either way,
+    // and the reload comes from the `controlling` listener the plugin registers.
+    // Pinned anyway so that a change to it is deliberate, and written down so
+    // nobody reads this line as proof that the argument does something.
     expect(actualizar).toHaveBeenCalledWith(true);
   });
 
@@ -140,9 +142,11 @@ describe("when a new build gets applied", () => {
       description: string;
       action: { label: string; onClick: () => void };
     };
-    // The warning belongs to this path and only this one: the automatic
-    // application cannot lose anything, and telling somebody it might would
-    // teach them to distrust it.
+    // The warning belongs to this path: applying now reloads the tab somebody
+    // is looking at. It is deliberately not stated as an absolute — a service
+    // worker update claims every client, so the automatic path can also reload a
+    // *second* tab that had a form open. What it cannot do is interrupt the tab
+    // that triggered it, which is the whole reason the moment is chosen.
     expect(opciones.description).toMatch(/se perderá/i);
     opciones.action.onClick();
     expect(actualizar).toHaveBeenCalledWith(true);

@@ -2,11 +2,30 @@ import axios from "axios";
 import { urlApi, urlReporte } from "./url";
 import { EventoInterface, ReporteInterface } from "../interfaces/interfaces";
 
+// `GET` with the filter in the URL, not `PUT` with it in a body — §3.1 of the
+// API standard. The six reports read and write nothing at all, and a `PUT` that
+// changes nothing misleads every cache, proxy and retry between here and the
+// server.
+//
+// Three properties of `params` this depends on, all of them asserted in
+// `reporte.api.test.ts` rather than assumed, because each one would break the
+// reports in a different and quiet way:
+//
+//   - **a `Date` is serialised as an ISO string.** The server parses it back;
+//     anything else — a locale string, `[object Object]` — is an invalid date,
+//     which it now refuses with a 400 instead of turning into a 500.
+//   - **`null` is dropped.** `TramoInicial` is `null` on four of the six, and if
+//     it travelled as the text "null" the server would refuse the whole filter.
+//   - **`false` travels as `false`, not as nothing.** `excludeOld` is the one
+//     value where the difference is invisible: dropped, the server would read
+//     its default, which happens to be the same — until the day the default
+//     changes and every client silently disagrees with it.
+
 export const getReporteGeneral = (
   filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "general", filtro)
+    .get(urlApi + urlReporte + "general", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -14,7 +33,7 @@ export const getReporteTramo = (
   filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "tramo", filtro)
+    .get(urlApi + urlReporte + "tramo", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -22,7 +41,7 @@ export const getReporteRecorrido = (
   filtro: ReporteInterface
 ): Promise<EventoInterface[]> => {
   return axios
-    .put(urlApi + urlReporte + "recorrido", filtro)
+    .get(urlApi + urlReporte + "recorrido", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -75,7 +94,7 @@ export const getEstadoRed = (
   filtro: { fechaInicial?: Date; fechaFinal?: Date }
 ): Promise<EstadoRedRow[]> => {
   return axios
-    .put(urlApi + urlReporte + "estado-red", filtro)
+    .get(urlApi + urlReporte + "estado-red", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -83,7 +102,7 @@ export const getObsFrecuencia = (
   filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<ObsFrecuenciaRow[]> => {
   return axios
-    .put(urlApi + urlReporte + "obs-frecuencia", filtro)
+    .get(urlApi + urlReporte + "obs-frecuencia", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -91,6 +110,6 @@ export const getTiemposResumen = (
   filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<TiemposResumen> => {
   return axios
-    .put(urlApi + urlReporte + "tiempos-resumen", filtro)
+    .get(urlApi + urlReporte + "tiempos-resumen", { params: filtro })
     .then((r) => r.data);
 };

@@ -23,12 +23,26 @@ import { toast } from "sonner";
  * destroys nothing because the screen was being left anyway.
  *
  * That bounds the old-build window to "until the person taps anything", without
- * ever interrupting them mid-sentence. `vite.config.ts` keeps `registerType:
+ * interrupting the tab they are typing in. `vite.config.ts` keeps `registerType:
  * "prompt"` for exactly this reason — it is the only setting that leaves the
  * timing to the application — and says so beside the setting.
  *
+ * **What it does not promise, because it cannot.** Applying an update is a
+ * property of the service worker, not of a tab: `skipWaiting` makes the new
+ * worker claim every client at once, and every open tab reloads. So a second tab
+ * left on a half-filled form loses it when *this* one changes screen. That is
+ * true of any automatic update — it is true of `autoUpdate` too, immediately and
+ * without a screen change — and an earlier version of this comment claimed the
+ * opposite. Choosing the moment shrinks the exposure to "somebody was navigating
+ * elsewhere"; it does not remove it.
+ *
  * The toast stays as an immediate way out for somebody who would rather take it
- * now, and it is the one path that can lose work, so it still says so.
+ * now, and it says what it costs.
+ *
+ * One case it deliberately does not cover: a person who spends the morning on
+ * one screen changing filters never changes `pathname`, so the update waits for
+ * them. Anchoring on the query string as well would treat setting a filter as a
+ * safe moment to reload, and it is not — that is the state they just built.
  */
 export function UpdatePrompt() {
   const {
@@ -56,7 +70,12 @@ export function UpdatePrompt() {
       return;
     }
     if (pathname !== anclaje.current) {
-      // `true` reloads once the waiting worker has taken over.
+      // The argument is passed for intent and vite-plugin-pwa 1.3 ignores it:
+      // its `updateServiceWorker` only forwards `skipWaiting` to the waiting
+      // worker, and the reload comes from the `controlling` listener the plugin
+      // registers, in every tab. Written out because the comment here used to
+      // say `true` was what reloaded, and somebody removing it would change
+      // nothing while believing they had.
       void updateServiceWorker(true);
     }
   }, [needRefresh, pathname, updateServiceWorker]);
@@ -65,7 +84,7 @@ export function UpdatePrompt() {
     if (!needRefresh) return;
 
     const id = toast("Hay una versión nueva", {
-      description: "Se aplicará sola al cambiar de pantalla. Puedes aplicarla ahora, pero se perderá lo que tengas a medio escribir.",
+      description: "Se aplicará sola al cambiar de pantalla. Si la aplicas ahora, se perderá lo que tengas a medio escribir.",
       // No timeout: a standing offer, not a notification that scrolls past
       // while the phone is in a pocket.
       duration: Infinity,

@@ -1,3 +1,19 @@
+// Set before Vite reads anything, and that ordering is the point.
+//
+// The suite is a deploy gate now, and Vercel runs the build with
+// `NODE_ENV=production`. Vitest only defaults that variable when it is unset, so
+// there it stays "production" — and Vite then resolves the browser conditions
+// and externalises Node built-ins, which stops `src/api/http.test.ts` from even
+// loading ("No such built-in module: node:"). Measured, not guessed: with the
+// variable left alone that file collects zero tests and the gate reports a
+// failure that has nothing to do with the code.
+//
+// A `test.env` entry does not cover it — that lands after the transform — and an
+// inline `NODE_ENV=test` in the npm script is not portable to Windows without a
+// new dependency. Assigning it here runs before Vite's config resolution and
+// covers every way the suite can be started.
+process.env.NODE_ENV = "test";
+
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { readFileSync } from "node:fs";
