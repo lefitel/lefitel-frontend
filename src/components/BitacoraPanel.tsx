@@ -189,13 +189,28 @@ export default function BitacoraPanel({ entity, entityId }: Props) {
   const navigate = useNavigate();
   const [entries, setEntries] = useState<BitacoraInterface[]>([]);
   const [loading, setLoading] = useState(false);
+  /**
+   * Why there is nothing to show, when there is nothing to show.
+   *
+   * This panel swallowed every failure and fell through to "Sin actividad
+   * registrada en bitácora" — a sentence that is false whenever the request was
+   * refused rather than empty. And it is refused routinely: this tab is drawn on
+   * the city, incident and pole sheets behind `postes`/`eventos`/`ciudades`,
+   * while the log it reads asks for `bitacora:ver`, which the seeded
+   * Coordinador and Cliente roles do not have. Both of them have been told, on
+   * every sheet in the system, that nothing has ever happened to it.
+   */
+  const [fallo, setFallo] = useState<"denegado" | "otro" | null>(null);
 
   useEffect(() => {
     if (!entityId) return;
     setLoading(true);
     getAllBitacora({ entity, entity_id: entityId })
-      .then((r) => setEntries(r.data))
-      .catch(() => {})
+      .then((r) => { setEntries(r.data); setFallo(null); })
+      .catch((error) => {
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        setFallo(status === 403 ? "denegado" : "otro");
+      })
       .finally(() => setLoading(false));
   }, [entity, entityId]);
 
@@ -212,6 +227,18 @@ export default function BitacoraPanel({ entity, entityId }: Props) {
           </div>
         ))}
       </div>
+    );
+  }
+
+  // Before the empty case, never merged with it: "no activity" and "we could not
+  // ask" are different statements, and only one of them is about the record.
+  if (fallo) {
+    return (
+      <p className="text-sm text-muted-foreground py-6 text-center">
+        {fallo === "denegado"
+          ? "No tiene permiso para ver la bitácora"
+          : "No se pudo cargar la bitácora"}
+      </p>
     );
   }
 

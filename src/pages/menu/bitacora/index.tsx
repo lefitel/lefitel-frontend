@@ -2,9 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
-import { getAllBitacora, BitacoraFilters } from "../../../api/Bitacora.api";
-import { getUsuario } from "../../../api/Usuario.api";
-import { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
+import { getAllBitacora, getAutoresBitacora, BitacoraFilters, AutorBitacora } from "../../../api/Bitacora.api";
+import { BitacoraInterface } from "../../../interfaces/interfaces";
+import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Combobox } from "../../../components/ui/combobox";
@@ -174,13 +174,26 @@ const mkDate = (daysAgo: number, endOfDay = false) => {
   return d;
 };
 
+/**
+ * Says what failed, unless the session is what failed.
+ *
+ * On a 401 `SesionProvider` already shows "Tu sesión se cerró" and sends the
+ * person to the login screen. Both reads on this page would fire at once behind
+ * that, and "no se pudo cargar la bitácora" would be pointing at the wrong
+ * problem — three messages for one event, two of them misleading.
+ */
+const avisar = (mensaje: string) => (error: unknown) => {
+  const status = (error as { response?: { status?: number } } | undefined)?.response?.status;
+  if (status !== 401) toast.error(mensaje);
+};
+
 const DROPDOWN_TRIGGER_CLS =
   "flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
 const BitacoraPage = () => {
   const navigate = useNavigate();
 
-  const [usuarios,  setUsuarios]  = useState<UsuarioInterface[]>([]);
+  const [autores,   setAutores]   = useState<AutorBitacora[]>([]);
   const [from,     setFrom]     = useState<Date | undefined>(() => mkDate(7));
   const [to,       setTo]       = useState<Date | undefined>(() => mkDate(0, true));
   const [entity,   setEntity]   = useState("all");
@@ -194,13 +207,25 @@ const BitacoraPage = () => {
   const [loading,  setLoading]  = useState(false);
 
   useEffect(() => {
-    getUsuario().then(setUsuarios).catch(() => {});
+    // Said out loud when it fails, instead of leaving a filter that offers
+    // "Todos" and nothing else. That silence is what this endpoint was added to
+    // end: an empty dropdown reads as "nobody has done anything here", which is
+    // a different statement from "the list could not be loaded".
+    getAutoresBitacora()
+      .then(setAutores)
+      .catch(avisar("No se pudo cargar la lista de usuarios para filtrar."));
   }, []);
 
   const usuarioOptions = useMemo(() => [
     { value: "all", label: "Todos" },
-    ...usuarios.map((u) => ({ value: String(u.id), label: `${u.name} ${u.lastname}` })),
-  ], [usuarios]);
+    // Archived accounts are in this list on purpose — they are the ones whose
+    // past work is most often what somebody is looking for — so they are marked
+    // rather than shown as if they were still staff.
+    ...autores.map((a) => ({
+      value: String(a.id),
+      label: `${a.name} ${a.lastname}${a.deletedAt ? " (archivado)" : ""}`,
+    })),
+  ], [autores]);
 
   // Refs so the stable fetch fn always reads current values
   const fromRef     = useRef(from);     fromRef.current     = from;
@@ -232,7 +257,11 @@ const BitacoraPage = () => {
       const r = await getAllBitacora(params);
       setRows(r.data);
       setTotal(r.total);
-    } catch {
+    } catch (error) {
+      // Same reasoning as the author list above: an empty table and a table that
+      // failed to load look identical, and only one of them means there is
+      // nothing to see.
+      avisar("No se pudo cargar la bitácora.")(error);
       setRows([]);
       setTotal(0);
     } finally {
