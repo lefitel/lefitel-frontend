@@ -23,10 +23,20 @@ export default defineConfig(({ mode }) => ({
     /**
      * Installable on a phone, and honest about being out of date.
      *
-     * `prompt` rather than `autoUpdate` on purpose: a field worker halfway
-     * through filling in a pole should not have the page swapped under them
-     * because a deploy landed. The new build waits, <UpdatePrompt /> offers it,
-     * and they take it when they are ready.
+     * **`prompt` is who applies the update, not whether it is applied.** It used
+     * to mean "the person decides, and may decide never" — which is what task E4
+     * of the API standard set out to end: after the deployment cut the server and
+     * the client change contract together, so a build somebody keeps for three
+     * weeks is not an old build, it is a broken one.
+     *
+     * The literal answer to that is `autoUpdate`, and it is the wrong one here:
+     * the plugin then reloads the page the moment a new build lands, which is
+     * precisely the pole form swapped out from under a field worker that this
+     * comment used to warn about. `prompt` is the only setting that lets the
+     * application choose the *moment*, so it stays — and <UpdatePrompt /> now
+     * applies the update on its own at the first screen change, where a reload
+     * costs nothing because the screen was being left anyway. The window shrinks
+     * from "until somebody taps Actualizar" to "until they tap anything".
      *
      * Nothing from the API is cached. The service worker holds the shell —
      * scripts, styles, fonts, icons — and every request for a pole or an event

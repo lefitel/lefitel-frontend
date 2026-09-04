@@ -89,7 +89,13 @@ describe("the CSRF header", () => {
     // line here stating that it was never the thing holding this together.
     expect(CLIENT_HEADER).toBe("X-Osefi-Client");
     expect(CLIENT_HEADER.toLowerCase()).toBe("x-osefi-client");
-    expect(CLIENT_HEADER_VALUE).toBe("web");
+    // The shape rather than the string: the version moves with every release, so
+    // an equality here would be a line somebody has to edit on each one — and
+    // the day they edit it wrong, nothing else notices. What must hold is what
+    // the server actually requires (a non-empty value) and what the log needs to
+    // be readable (the client's name, then its build).
+    expect(CLIENT_HEADER_VALUE).toMatch(/^web\/\d+\.\d+\.\d+/);
+    expect(CLIENT_HEADER_VALUE.trim(), "el servidor rechaza una cabecera vacía").not.toBe("");
   });
 
   it("rides on every method that writes", async () => {

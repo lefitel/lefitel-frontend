@@ -39,7 +39,24 @@ import { instalarInterceptorStepUp } from "./stepUpInterceptor";
  * and the API grants that only to this application's own origin.
  */
 export const CLIENT_HEADER = "X-Osefi-Client";
-export const CLIENT_HEADER_VALUE = "web";
+/**
+ * Which client, and which build of it.
+ *
+ * It said `"web"` flat until the API standard's E4. The server checks that this
+ * header is present and never what it says — see `CSRF_CLIENT_HEADER` in the
+ * API's `config/security.ts`, where that is a decision rather than an omission —
+ * so the version rides along for free and breaks nothing.
+ *
+ * What it buys is the question nobody could answer before: **who is still on the
+ * old build?** The API writes one log line per request; with the version in it,
+ * that is a query instead of a guess. It matters at the deployment cut, when
+ * server and client change contract together and an old client is not a slow
+ * client but a broken one.
+ *
+ * Read from `package.json` at build time through the same `__APP_VERSION__` the
+ * changelog screen uses, so the two cannot drift.
+ */
+export const CLIENT_HEADER_VALUE = `web/${__APP_VERSION__}`;
 
 /**
  * The methods the API demands the header on: the ones that change something.

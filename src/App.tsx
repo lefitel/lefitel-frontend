@@ -293,6 +293,10 @@ const App = () => {
 
               <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>
+            {/* Dentro del router y fuera de <Routes>: lee la navegación para
+                aplicar sola una versión nueva al cambiar de pantalla, y no
+                puede vivir en una ruta porque entonces sólo miraría una. */}
+            <UpdatePrompt />
           </BrowserRouter>
           {/* Fuera de <Routes> a propósito: si viviera dentro, una sesión que
               caduca mientras alguien teclea su contraseña desmontaría la
@@ -300,7 +304,6 @@ const App = () => {
               que esperaban su respuesta. */}
           <StepUpDialog />
           <Toaster position="top-right" richColors closeButton />
-          <UpdatePrompt />
         </TooltipProvider>
       </ShadcnThemeProvider>
     </SesionProvider>
