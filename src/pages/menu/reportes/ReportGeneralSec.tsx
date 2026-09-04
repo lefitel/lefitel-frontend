@@ -3,8 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
 import { getReporteGeneral } from "../../../api/reporte.api";
-import { getCiudad } from "../../../api/Ciudad.api";
-import { CiudadInterface, EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
+import {
+  estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
+} from "../../../api/opciones.api";
+import { EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
@@ -51,8 +53,11 @@ const ReportGeneralSec = () => {
   const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal, setTramoFinal] = useState<number | null>(null);
-  const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
-  const neighbors = useTramoNeighbors();
+  const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
+  const [tramos, setTramos] = useState<TramoPair[]>([]);
+  /** Why the two comboboxes are empty. See `ReportTramoSec` for the long version. */
+  const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
+  const neighbors = useTramoNeighbors(tramos);
   const [estado, setEstado] = useState<"todos" | "pendiente" | "solucionado">("todos");
   const [prioridad, setPrioridad] = useState<"todos" | "si" | "no">("todos");
   const [criticidad, setCriticidad] = useState<"todos" | "criticas" | "altas" | "medias" | "bajas" | "sin">("todos");
@@ -62,8 +67,26 @@ const ReportGeneralSec = () => {
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // The city list and the stretch pairs arrive together, which is why
+  // `useTramoNeighbors` no longer fetches. It used to request
+  // `/api/poste/tramos` on its own — a different address, so keeping it would
+  // have been two requests rather than one; what it must not become is a hook
+  // that asks *this* endpoint for the pairs, which would be the same request
+  // twice per mount, `GROUP BY` over the pole table included.
   useEffect(() => {
-    getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+    getOpcionesReporte()
+      .then((opciones) => {
+        setListCiudad(opciones.ciudad);
+        setTramos(opciones.tramos);
+        setEstadoOpciones("listas");
+      })
+      .catch((error) => {
+        const estado = estadoTrasFallo(error);
+        setEstadoOpciones(estado);
+        toast.error(estado === "denegado"
+          ? "No tiene permiso para consultar los catálogos de informes."
+          : "No se pudieron cargar los catálogos del informe.");
+      });
   }, []);
 
   useEffect(() => {
@@ -453,6 +476,18 @@ const ReportGeneralSec = () => {
               </span>
             </label>
           </div>
+          {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
+            // Said on screen and not only in a toast: this one lasts four
+            // seconds and the screen is one people leave open. Unlike Por
+            // Tramo, the report itself is still worth generating without the
+            // catalogues — only the two stretch comboboxes depend on them — so
+            // Generar stays enabled and the notice says what is missing.
+            <p className="text-sm text-destructive mt-3">
+              {estadoOpciones === "denegado"
+                ? "No tiene permiso para consultar los catálogos, así que no se puede filtrar por tramo. El resto del informe funciona."
+                : "No se pudieron cargar los catálogos, así que no se puede filtrar por tramo. Recargue la pantalla."}
+            </p>
+          )}
           <div className="flex gap-2 mt-3 justify-end">
             <Button onClick={handleGenerar} disabled={loading}>
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}

@@ -2,22 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col, Rw } from "../../../components/table/tableFeatures";
 import { getReporteTramo } from "../../../api/reporte.api";
-import { getCiudad } from "../../../api/Ciudad.api";
 import {
-  AdssInterface,
   AdssPosteInterface,
-  CiudadInterface,
   EventoInterface,
   EventoObsInterface,
-  MaterialInterface,
-  ObsInterface,
-  PropietarioInterface,
   ReporteInterface,
 } from "../../../interfaces/interfaces";
-import { getAdss } from "../../../api/Adss.api";
-import { getMaterial } from "../../../api/Material.api";
-import { getPropietario } from "../../../api/Propietario.api";
-import { getObs } from "../../../api/Obs.api";
+import {
+  estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, OpcionSimple, TramoPair,
+} from "../../../api/opciones.api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
@@ -44,22 +37,64 @@ const ReportTramoSec = () => {
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
   const [tramoInicial, setTramoInicial] = useState<number | null>(null);
   const [tramoFinal,   setTramoFinal]   = useState<number | null>(null);
-  const [listCiudad,   setListCiudad]   = useState<CiudadInterface[]>([]);
-  const neighbors = useTramoNeighbors();
+  const [listCiudad,   setListCiudad]   = useState<OpcionCiudad[]>([]);
+  const [tramos,       setTramos]       = useState<TramoPair[]>([]);
+  const neighbors = useTramoNeighbors(tramos);
   const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
   const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
   const [loading, setLoading]         = useState(false);
   const [exporting, setExporting]     = useState(false);
 
-  const [listAdss,        setListAdss]        = useState<AdssInterface[]>([]);
-  const [listMaterial,    setListMaterial]    = useState<MaterialInterface[]>([]);
-  const [listPropietario, setListPropietario] = useState<PropietarioInterface[]>([]);
-  const [listObs,         setListObs]         = useState<ObsInterface[]>([]);
-  const [metadataLoaded,  setMetadataLoaded]  = useState(false);
+  const [listAdss,        setListAdss]        = useState<OpcionSimple[]>([]);
+  const [listMaterial,    setListMaterial]    = useState<OpcionSimple[]>([]);
+  const [listPropietario, setListPropietario] = useState<OpcionSimple[]>([]);
+  const [listObs,         setListObs]         = useState<OpcionSimple[]>([]);
+  /**
+   * Why the six lists are missing, when they are — and why this screen refuses
+   * to generate without them.
+   *
+   * Four of these lists used to be fetched **inside** `handleGenerar`, in the
+   * same `try` as the report itself, so a failure there aborted the generation
+   * and the Resultados card — which is where the Export button lives — never
+   * appeared. Moving the fetch to mount quietly removes that protection: the
+   * report would generate fine while `listPropietario`, `listMaterial`,
+   * `listAdss` and `listObs` sat empty, and every column of this report is
+   * built from those four. The result is an Excel or a PDF with its header,
+   * its date range and its pole numbers, and **not one column of content** —
+   * with nothing in the file to say so, on its way to a client. So the block
+   * that used to be implicit is now written down.
+   *
+   * **Four states and not "an error or nothing", which the first version of
+   * this fix got wrong and its own audit caught.** With a nullable error,
+   * `null` means both *not back yet* and *fine*, so the whole loading window
+   * was unguarded: pick two dates, press Generar before the six blocks land —
+   * the report is a different request and can answer first — and the Resultados
+   * card appears with the Export button inside it while the four lists are
+   * still empty. The very file it was written to prevent, produced by the fix
+   * that claimed to prevent it. Nothing here may act on the catalogues until
+   * they are actually here.
+   */
+  const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
 
   useEffect(() => {
-    getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+    getOpcionesReporte()
+      .then((opciones) => {
+        setListCiudad(opciones.ciudad);
+        setTramos(opciones.tramos);
+        setListAdss(opciones.adss);
+        setListMaterial(opciones.material);
+        setListPropietario(opciones.propietario);
+        setListObs(opciones.obs);
+        setEstadoOpciones("listas");
+      })
+      .catch((error) => {
+        const estado = estadoTrasFallo(error);
+        setEstadoOpciones(estado);
+        toast.error(estado === "denegado"
+          ? "No tiene permiso para consultar los catálogos de informes."
+          : "No se pudieron cargar los catálogos del informe.");
+      });
   }, []);
 
   useEffect(() => {
@@ -70,6 +105,11 @@ const ReportTramoSec = () => {
   }, [tramoInicial, tramoFinal, neighbors]);
 
   const handleGenerar = async () => {
+    if (estadoOpciones !== "listas") return toast.error(estadoOpciones === "denegado"
+      ? "No tiene permiso para consultar los catálogos, y sin ellos el informe saldría sin columnas."
+      : estadoOpciones === "fallo"
+        ? "Los catálogos no se cargaron. Recargue la pantalla antes de generar el informe."
+        : "Los catálogos aún se están cargando.");
     if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
     if (fechaInicio > fechaFin)    return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
 
@@ -79,20 +119,6 @@ const ReportTramoSec = () => {
 
     setLoading(true);
     try {
-      if (!metadataLoaded) {
-        const [adss, material, propietario, obs] = await Promise.all([
-          getAdss(),
-          getMaterial(),
-          getPropietario(),
-          getObs(),
-        ]);
-        setListAdss(adss);
-        setListMaterial(material);
-        setListPropietario(propietario);
-        setListObs(obs);
-        setMetadataLoaded(true);
-      }
-
       let data = await getReporteTramo(filtro);
 
       if (tramoInicial && tramoFinal) {
@@ -130,6 +156,14 @@ const ReportTramoSec = () => {
 
   const handleExport = async (format: "excel" | "csv" | "pdf") => {
     if (!fechaInicio || !fechaFin) return;
+    // The second door, and the one that actually matters. Guarding Generar is
+    // not enough: `list` survives a Limpiar-less reload of nothing, and the
+    // report request can answer before the catalogues do, so the Resultados
+    // card — which is where this button lives — can be on screen with the four
+    // content lists still empty. Every column of the file comes from them.
+    if (estadoOpciones !== "listas") {
+      return toast.error("Los catálogos no están disponibles: el fichero saldría sin columnas.");
+    }
     setExporting(true);
     try {
       if (format === "excel") {
@@ -307,8 +341,18 @@ const ReportTramoSec = () => {
               </span>
             </label>
           </div>
+          {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
+            // A disabled button with nothing beside it is its own small defect:
+            // the toast that fired on mount lasts four seconds and this screen
+            // is one somebody leaves open.
+            <p className="text-sm text-destructive mt-3">
+              {estadoOpciones === "denegado"
+                ? "No tiene permiso para consultar los catálogos de informes, y sin ellos este informe saldría sin columnas."
+                : "No se pudieron cargar los catálogos, y sin ellos este informe saldría sin columnas. Recargue la pantalla."}
+            </p>
+          )}
           <div className="flex gap-2 mt-3 justify-end">
-            <Button onClick={handleGenerar} disabled={loading}>
+            <Button onClick={handleGenerar} disabled={loading || estadoOpciones !== "listas"}>
               {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheetIcon className="h-4 w-4 mr-2" />}
               Generar
             </Button>

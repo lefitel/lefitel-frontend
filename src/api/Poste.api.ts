@@ -48,15 +48,12 @@ export const getPosteByCiudad = (ciudadId: number): Promise<PosteInterface[]> =>
     .get(`${urlApi}${urlPoste}?ciudadId=${ciudadId}&export=true`)
     .then((r) => r.data as PosteInterface[]);
 
-export interface TramoPair {
-  id_ciudadA: number;
-  id_ciudadB: number;
-}
-
-export const getTramos = (): Promise<TramoPair[]> =>
-  axios
-    .get(`${urlApi}${urlPoste}tramos`)
-    .then((r) => r.data as TramoPair[]);
+// `TramoPair` and `getTramos` used to live here, calling `GET /api/poste/tramos`
+// for `useTramoNeighbors`. The pairs now travel in the `tramos` block of
+// `/api/reporte/opciones`, which the three report screens already request, so
+// the function lost its only caller and the route lost its only client — both
+// are gone. The type moved to `opciones.api.ts`, next to the response it
+// describes.
 
 export const getPosteByTramo = (
   ciudadA: number,

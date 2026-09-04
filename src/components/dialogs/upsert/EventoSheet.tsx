@@ -10,13 +10,13 @@ import { createEvento, editEvento, searchEvento } from "../../../api/Evento.api"
 import { getRevision } from "../../../api/Revision.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
 import { getEventoObs } from "../../../api/EventoObs.api";
-import { getObs } from "../../../api/Obs.api";
-import { getTipoObs } from "../../../api/TipoObs.api";
+import {
+  estadoTrasFallo, getOpcionesEvento, EstadoOpciones, OpcionObs, OpcionSimple,
+} from "../../../api/opciones.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { url } from "../../../api/url";
 import {
-  EventoInterface, ObsInterface,
-  RevisionInterface, SolucionInterface, TipoObsInterface,
+  EventoInterface, RevisionInterface, SolucionInterface,
 } from "../../../interfaces/interfaces";
 import { Button } from "../../ui/button";
 import { Label } from "../../ui/label";
@@ -64,45 +64,74 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
   const [revisions, setRevisions] = useState<RevisionInterface[]>([]);
   const [solucion, setSolucion] = useState<SolucionInterface | null>(null);
 
-  const [listObs, setListObs] = useState<ObsInterface[]>([]);
-  const [listTipoObs, setListTipoObs] = useState<TipoObsInterface[]>([]);
+  const [listObs, setListObs] = useState<OpcionObs[]>([]);
+  const [listTipoObs, setListTipoObs] = useState<OpcionSimple[]>([]);
+  /**
+   * Why the observation accordion is empty, when it is.
+   *
+   * The two lists now come from `/api/evento/opciones`, which asks for
+   * `eventos.ver`. This sheet has five mount points across four files, and
+   * three of them are outside anything that guarantees that permission: the
+   * pole list (`postes.crear` on the trigger) and both on the pole detail page
+   * (`eventos.crear` on one, `eventos.editar` on the other). All three sit
+   * behind `postes.ver`, not `eventos.ver`, so a role holding `eventos.crear`
+   * or `eventos.editar` without `eventos.ver` reaches a form the server
+   * refuses.
+   *
+   * **What that means differs between the two modes, and so does the
+   * sentence.** Creating an incident needs at least one observation, so
+   * without the lists there is nothing to do. Editing one does not:
+   * `selectedObs` comes from `getEventoObs`, a separate request about this
+   * incident which keeps working, so the description can still be corrected
+   * and saved with its observations intact. Telling that user they cannot
+   * register the incident would simply be false.
+   */
+  const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
   const [selectedObs, setSelectedObs] = useState<number[]>([]);
   const [expandedTipo, setExpandedTipo] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setLoading(true);
+    setEstadoOpciones("cargando");
 
-    if (isEditing && eventoId) {
-      Promise.all([
+    // The catalogues load **beside** the incident, not with it. They used to
+    // share one `Promise.all` in edit mode, which was harmless while they came
+    // from two ungated addresses: now a refusal on the catalogues would reject
+    // the whole batch and draw this sheet completely blank — no description, no
+    // revisions, no solution — for an incident the role is perfectly entitled
+    // to read. Two questions, two answers.
+    const opciones = getOpcionesEvento()
+      .then((o) => {
+        setListObs(o.obs);
+        setListTipoObs(o.tipoObs);
+        setEstadoOpciones("listas");
+      })
+      .catch((error) => {
+        setListObs([]);
+        setListTipoObs([]);
+        setEstadoOpciones(estadoTrasFallo(error));
+      });
+
+    const detalle = isEditing && eventoId
+      ? Promise.all([
         searchEvento(eventoId),
         getRevision(eventoId),
         getSolucion_evento(eventoId).catch(() => null),
         getEventoObs(eventoId),
-        getObs(),
-        getTipoObs(),
       ])
-        .then(([ev, revs, sol, evObs, obs, tipos]) => {
+        .then(([ev, revs, sol, evObs]) => {
           setEvento(ev);
           setDescription(ev.description);
           setPriority(ev.priority ?? false);
           setRevisions(revs);
           setSolucion(sol);
           setSelectedObs(evObs.map((eo) => eo.id_obs));
-          setListObs(obs);
-          setListTipoObs(tipos);
         })
         .catch(() => toast.error("Error al cargar el evento"))
-        .finally(() => setLoading(false));
-    } else {
-      Promise.all([getObs(), getTipoObs()])
-        .then(([obs, tipos]) => {
-          setListObs(obs);
-          setListTipoObs(tipos);
-        })
-        .catch(() => toast.error("Error al cargar las observaciones"))
-        .finally(() => setLoading(false));
-    }
+      : Promise.resolve();
+
+    Promise.all([opciones, detalle]).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventoId]);
 
@@ -184,6 +213,19 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
 
   const obsAccordion = (
     <div className="rounded-lg border border-input overflow-hidden">
+      {listTipoObs.length === 0 && (
+        <p className="px-3 py-2.5 text-sm text-muted-foreground">
+          {estadoOpciones === "denegado"
+            ? (isEditing
+              ? "No tiene permiso para consultar las observaciones, así que no puede cambiarlas. El resto del evento sí se puede editar."
+              : "No tiene permiso para consultar las observaciones, así que no puede registrar la incidencia.")
+            : estadoOpciones === "fallo"
+              ? "No se pudieron cargar las observaciones. Cierre y vuelva a abrir para reintentarlo."
+              : estadoOpciones === "cargando"
+                ? "Cargando…"
+                : "Sin observaciones configuradas."}
+        </p>
+      )}
       {listTipoObs.map((tipo) => {
         const obsForTipo = listObs.filter((o) => o.id_tipoObs === tipo.id);
         if (obsForTipo.length === 0) return null;

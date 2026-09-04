@@ -13,9 +13,8 @@ import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { deletePoste, desarchivarPoste, editPoste, exportPostes, getPoste, searchPoste } from "../../../api/Poste.api";
 import { getEvento_poste } from "../../../api/Evento.api";
-import { getMaterial } from "../../../api/Material.api";
-import { getPropietario } from "../../../api/Propietario.api";
-import { MaterialInterface, PosteInterface, PropietarioInterface } from "../../../interfaces/interfaces";
+import { estadoTrasFallo, getOpcionesPoste, EstadoOpciones, OpcionSimple } from "../../../api/opciones.api";
+import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -237,8 +236,30 @@ const PostePage = () => {
     const [unarchiveTarget, setUnarchiveTarget] = useState<PosteInterface | null>(null);
     const [unarchiving, setUnarchiving] = useState(false);
 
-    const [materialList, setMaterialList] = useState<MaterialInterface[]>([]);
-    const [propietarioList, setPropietarioList] = useState<PropietarioInterface[]>([]);
+    const [materialList, setMaterialList] = useState<OpcionSimple[]>([]);
+    const [propietarioList, setPropietarioList] = useState<OpcionSimple[]>([]);
+    /**
+     * Why the two inline dropdowns are empty, when they are — and there are
+     * three different reasons, which is why this is not a boolean.
+     *
+     * This load used to end in `.catch(() => {})` with a comment saying the
+     * dropdowns just would not populate. That was survivable while the lists
+     * came from two ungated endpoints; now they come from
+     * `/api/poste/opciones`, which asks for `postes.ver`. **This screen is
+     * itself behind `postes.ver`** — `<ModuleRoute modulo="postes">` redirects
+     * without it — so the refusal is not reachable from here; what is reachable
+     * is every other failure, and a silent catch turned any of them into a menu
+     * that opens empty with nothing to click and nothing to explain it. The
+     * refused case is handled anyway because the answer costs one branch and
+     * the screen should not have to know which gate protects it.
+     *
+     * The fourth state is not symmetry either: without `"cargando"`, a
+     * catalogue that is legitimately empty — a fresh install, everything
+     * archived — leaves the menu saying "Cargando…" for ever, which is the same
+     * class of lie this task removed from the pole sheet's "Sin ADSS
+     * registradas".
+     */
+    const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
     const [savingMaterialIds, setSavingMaterialIds] = useState<Set<number>>(new Set());
     const [savingPropietarioIds, setSavingPropietarioIds] = useState<Set<number>>(new Set());
 
@@ -274,22 +295,35 @@ const PostePage = () => {
 
     useEffect(() => {
         if (!canEdit) return;
-        Promise.all([getMaterial(), getPropietario()])
-            .then(([mats, props]) => {
-                setMaterialList(mats ?? []);
-                setPropietarioList(props ?? []);
+        getOpcionesPoste()
+            .then((opciones) => {
+                setMaterialList(opciones.material);
+                setPropietarioList(opciones.propietario);
+                setEstadoOpciones("listas");
             })
-            .catch(() => { /* silent: dropdowns just won't populate */ });
+            .catch((error) => {
+                setMaterialList([]);
+                setPropietarioList([]);
+                setEstadoOpciones(estadoTrasFallo(error));
+            });
     }, [canEdit]);
 
     const handleMaterialChange = useCallback(async (poste: PosteInterface, newMaterialId: number) => {
         if (!poste.id || poste.id_material === newMaterialId) return;
-        const newMaterial = materialList.find((m) => m.id === newMaterialId);
-        if (!newMaterial) return;
+        // Still a guard and not a lookup: nothing outside the catalogue gets
+        // written, which is what stops a stale menu from saving a deleted id.
+        if (!materialList.some((m) => m.id === newMaterialId)) return;
 
         setSavingMaterialIds((prev) => new Set(prev).add(poste.id as number));
+        // Only the id moves, here and in the rollback below. The name shown in
+        // the cell is resolved from `materialList` against `id_material`, so the
+        // optimistic update no longer has to fabricate a nested row — which it
+        // could not do honestly any more: the catalogue hands back `{id, name}`
+        // and `MaterialInterface` declares a `description` that this screen has
+        // never received, because `GET /api/poste/` projects the association to
+        // those same two columns.
         setList((curr) => (curr ?? []).map((p) =>
-            p.id === poste.id ? { ...p, id_material: newMaterialId, material: newMaterial } : p
+            p.id === poste.id ? { ...p, id_material: newMaterialId } : p
         ));
 
         const payload: PosteInterface = { ...poste, id_material: newMaterialId };
@@ -301,19 +335,18 @@ const PostePage = () => {
         } else {
             toast.error("No se pudo actualizar");
             setList((curr) => (curr ?? []).map((p) =>
-                p.id === poste.id ? { ...p, id_material: poste.id_material, material: poste.material } : p
+                p.id === poste.id ? { ...p, id_material: poste.id_material } : p
             ));
         }
     }, [materialList]);
 
     const handlePropietarioChange = useCallback(async (poste: PosteInterface, newPropId: number) => {
         if (!poste.id || poste.id_propietario === newPropId) return;
-        const newProp = propietarioList.find((p) => p.id === newPropId);
-        if (!newProp) return;
+        if (!propietarioList.some((p) => p.id === newPropId)) return;
 
         setSavingPropietarioIds((prev) => new Set(prev).add(poste.id as number));
         setList((curr) => (curr ?? []).map((p) =>
-            p.id === poste.id ? { ...p, id_propietario: newPropId, propietario: newProp } : p
+            p.id === poste.id ? { ...p, id_propietario: newPropId } : p
         ));
 
         const payload: PosteInterface = { ...poste, id_propietario: newPropId };
@@ -325,7 +358,7 @@ const PostePage = () => {
         } else {
             toast.error("No se pudo actualizar");
             setList((curr) => (curr ?? []).map((p) =>
-                p.id === poste.id ? { ...p, id_propietario: poste.id_propietario, propietario: poste.propietario } : p
+                p.id === poste.id ? { ...p, id_propietario: poste.id_propietario } : p
             ));
         }
     }, [propietarioList]);
@@ -432,7 +465,13 @@ const PostePage = () => {
             header: "Material",
             cell: ({ row }) => {
                 const isSaving = savingMaterialIds.has(row.original.id as number);
-                const name = row.original.material?.name ?? "—";
+                // The catalogue first, the row's own association second. That
+                // order is what lets the optimistic update move only the id: the
+                // name follows from it. The fallback still matters — the
+                // catalogue is empty while it loads, and stays empty if the
+                // request was refused.
+                const name = materialList.find((m) => m.id === row.original.id_material)?.name
+                    ?? row.original.material?.name ?? "—";
 
                 if (!canEdit) {
                     return <span className="text-sm">{name}</span>;
@@ -450,6 +489,17 @@ const PostePage = () => {
                             <ChevronDownIcon className="h-3 w-3 opacity-60" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-56 max-h-72 overflow-y-auto">
+                            {materialList.length === 0 && (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                    {estadoOpciones === "denegado"
+                                        ? "No tiene permiso para consultar los materiales."
+                                        : estadoOpciones === "fallo"
+                                            ? "No se pudo cargar la lista de materiales."
+                                            : estadoOpciones === "cargando"
+                                                ? "Cargando…"
+                                                : "Sin materiales registrados."}
+                                </div>
+                            )}
                             {materialList.map((m) => (
                                 <DropdownMenuItem
                                     key={m.id}
@@ -470,7 +520,8 @@ const PostePage = () => {
             header: "Propietario",
             cell: ({ row }) => {
                 const isSaving = savingPropietarioIds.has(row.original.id as number);
-                const name = row.original.propietario?.name ?? "—";
+                const name = propietarioList.find((p) => p.id === row.original.id_propietario)?.name
+                    ?? row.original.propietario?.name ?? "—";
 
                 if (!canEdit) {
                     return <span className="text-sm">{name}</span>;
@@ -488,6 +539,17 @@ const PostePage = () => {
                             <ChevronDownIcon className="h-3 w-3 opacity-60" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start" className="w-56 max-h-72 overflow-y-auto">
+                            {propietarioList.length === 0 && (
+                                <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                    {estadoOpciones === "denegado"
+                                        ? "No tiene permiso para consultar los propietarios."
+                                        : estadoOpciones === "fallo"
+                                            ? "No se pudo cargar la lista de propietarios."
+                                            : estadoOpciones === "cargando"
+                                                ? "Cargando…"
+                                                : "Sin propietarios registrados."}
+                                </div>
+                            )}
                             {propietarioList.map((p) => (
                                 <DropdownMenuItem
                                     key={p.id}
@@ -596,7 +658,7 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, page, pageSize, materialList, propietarioList, savingMaterialIds, savingPropietarioIds, handleMaterialChange, handlePropietarioChange]);
+    ], [navigate, canEdit, canAdd, isAdmin, handleOpenEdit, page, pageSize, materialList, propietarioList, estadoOpciones, savingMaterialIds, savingPropietarioIds, handleMaterialChange, handlePropietarioChange]);
 
     const archivedColumns = useMemo<Col<PosteInterface>[]>(() => [
         { accessorKey: "name", header: "Nombre" },

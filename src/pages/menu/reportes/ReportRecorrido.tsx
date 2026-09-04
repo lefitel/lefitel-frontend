@@ -9,12 +9,13 @@ import { es } from "date-fns/locale";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { getReporteRecorrido } from "../../../api/reporte.api";
-import { getCiudad } from "../../../api/Ciudad.api";
+import {
+    estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
+} from "../../../api/opciones.api";
 import { getPosteByTramo } from "../../../api/Poste.api";
 import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
 import {
-    CiudadInterface,
     EventoInterface,
     PosteInterface,
     ReporteInterface,
@@ -125,8 +126,16 @@ const ReportRecorridoSec = () => {
     const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
     const [tramoInicial, setTramoInicial] = useState<number | null>(null);
     const [tramoFinal, setTramoFinal] = useState<number | null>(null);
-    const [listCiudad, setListCiudad] = useState<CiudadInterface[]>([]);
-    const neighbors = useTramoNeighbors();
+    const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
+    const [tramos, setTramos] = useState<TramoPair[]>([]);
+    /**
+     * Why the two comboboxes are empty, when they are — and this screen is the
+     * one that most needs to say it. Without cities there is no stretch, and
+     * without a stretch `handleGenerar` refuses: the screen is simply dead, and
+     * a four-second toast is all it used to offer as an explanation.
+     */
+    const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
+    const neighbors = useTramoNeighbors(tramos);
     const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
     const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
@@ -139,8 +148,23 @@ const ReportRecorridoSec = () => {
     const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
     const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
 
+    // Both blocks of the same response. `lat`/`lng` are the load-bearing part
+    // here: the whole route calculation sits behind `if (a?.lat && a?.lng …)`,
+    // so a city list without them draws this screen with no line and no error.
     useEffect(() => {
-        getCiudad().then(setListCiudad).catch(() => toast.error("Error al cargar las ciudades"));
+        getOpcionesReporte()
+            .then((opciones) => {
+                setListCiudad(opciones.ciudad);
+                setTramos(opciones.tramos);
+                setEstadoOpciones("listas");
+            })
+            .catch((error) => {
+                const estado = estadoTrasFallo(error);
+                setEstadoOpciones(estado);
+                toast.error(estado === "denegado"
+                    ? "No tiene permiso para consultar los catálogos de informes."
+                    : "No se pudieron cargar los catálogos del informe.");
+            });
     }, []);
 
     useEffect(() => {
@@ -302,6 +326,18 @@ const ReportRecorridoSec = () => {
                             </span>
                         </label>
                     </div>
+                    {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
+                        // The screen that most needs this: without cities there
+                        // is no stretch, and `handleGenerar` refuses without a
+                        // stretch. All it used to offer was a toast that is
+                        // gone four seconds later, leaving a page with two
+                        // empty comboboxes and no explanation at all.
+                        <p className="text-sm text-destructive mt-3">
+                            {estadoOpciones === "denegado"
+                                ? "No tiene permiso para consultar los catálogos de informes, y sin ellos esta pantalla no puede ofrecerle ningún tramo."
+                                : "No se pudieron cargar los catálogos, y sin ellos esta pantalla no puede ofrecerle ningún tramo. Recargue la pantalla."}
+                        </p>
+                    )}
                     <div className="flex gap-2 mt-3 justify-end">
                         <Button onClick={handleGenerar} disabled={loading}>
                             {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <RouteIcon className="h-4 w-4 mr-2" />}

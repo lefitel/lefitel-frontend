@@ -4,16 +4,24 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
 import {
-  AdssInterface,
   AdssPosteInterface,
-  CiudadInterface,
   EventoInterface,
   EventoObsInterface,
-  MaterialInterface,
-  ObsInterface,
-  PropietarioInterface,
 } from "../../interfaces/interfaces";
 import logoUrl from "../../assets/images/logo.png";
+
+/**
+ * What this file needs of a catalogue row: an id to match an incident against,
+ * and a name to print in a column header.
+ *
+ * Narrower on purpose than the five interfaces these parameters used to name.
+ * Since C2 the lists arrive from `/api/reporte/opciones`, projected to exactly
+ * these two columns, and a signature demanding a `description` or an `image`
+ * that this file never reads would have forced the screen to cast — which is
+ * how a projection ends up typed as something it is not. `id` stays optional to
+ * match how the rest of the app models a row that may not be persisted yet.
+ */
+type FilaCatalogo = { id?: number | null; name: string };
 
 // ─── Palette ──────────────────────────────────────────────────────────────────
 const CLR = {
@@ -66,11 +74,11 @@ const applyUniformBorder = (cell: ExcelJS.Cell, argb: string, style: "thin" | "m
 
 export interface TramoExcelParams {
   list:            EventoInterface[];
-  listPropietario: PropietarioInterface[];
-  listMaterial:    MaterialInterface[];
-  listAdss:        AdssInterface[];
-  listObs:         ObsInterface[];
-  listCiudad:      CiudadInterface[];
+  listPropietario: FilaCatalogo[];
+  listMaterial:    FilaCatalogo[];
+  listAdss:        FilaCatalogo[];
+  listObs:         FilaCatalogo[];
+  listCiudad:      FilaCatalogo[];
   tramoInicial:    number | null;
   tramoFinal:      number | null;
   fechaInicio:     Date;
@@ -350,8 +358,8 @@ export const PDF_HEADERS_TRAMO = [
 
 export const toRowsTramo = (
   list:     EventoInterface[],
-  listAdss: AdssInterface[],
-  listObs:  ObsInterface[],
+  listAdss: FilaCatalogo[],
+  listObs:  FilaCatalogo[],
 ) =>
   list.map((e, i) => {
     const matchedAdss = listAdss
@@ -375,8 +383,8 @@ export const toRowsTramo = (
 
 export const exportCsvTramo = (
   list:     EventoInterface[],
-  listAdss: AdssInterface[],
-  listObs:  ObsInterface[],
+  listAdss: FilaCatalogo[],
+  listObs:  FilaCatalogo[],
 ) => {
   const esc = (v: string) =>
     v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
@@ -394,15 +402,15 @@ export const exportCsvTramo = (
 
 export const exportPdfTramo = async (
   list:            EventoInterface[],
-  listAdss:        AdssInterface[],
-  listObs:         ObsInterface[],
-  listPropietario: PropietarioInterface[],
-  listMaterial:    MaterialInterface[],
+  listAdss:        FilaCatalogo[],
+  listObs:         FilaCatalogo[],
+  listPropietario: FilaCatalogo[],
+  listMaterial:    FilaCatalogo[],
   fechaInicio:     Date,
   fechaFin:        Date,
   tramoInicial:    number | null,
   tramoFinal:      number | null,
-  listCiudad:      CiudadInterface[],
+  listCiudad:      FilaCatalogo[],
 ) => {
   const res  = await fetch(logoUrl);
   const blob = await res.blob();

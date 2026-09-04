@@ -6,11 +6,12 @@ import { Switch } from "../ui/switch";
 import { Checkbox } from "../ui/checkbox";
 import { SesionContext } from "../../context/SesionContext";
 import { createEvento } from "../../api/Evento.api";
-import { getObs } from "../../api/Obs.api";
-import { getTipoObs } from "../../api/TipoObs.api";
+import {
+    estadoTrasFallo, getOpcionesEvento, EstadoOpciones, OpcionObs, OpcionSimple,
+} from "../../api/opciones.api";
 import { exportPostes } from "../../api/Poste.api";
 import { uploadImage } from "../../api/Upload.api";
-import { ObsInterface, PosteInterface, TipoObsInterface } from "../../interfaces/interfaces";
+import { PosteInterface } from "../../interfaces/interfaces";
 import { DatePicker } from "../ui/date-picker";
 import { Button } from "../ui/button";
 import { Label } from "../ui/label";
@@ -40,8 +41,20 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     const [selectedPosteId, setSelectedPosteId] = useState<number>(0);
 
     const [listPoste, setListPoste] = useState<PosteInterface[]>([]);
-    const [listObs, setListObs] = useState<ObsInterface[]>([]);
-    const [listTipoObs, setListTipoObs] = useState<TipoObsInterface[]>([]);
+    const [listObs, setListObs] = useState<OpcionObs[]>([]);
+    const [listTipoObs, setListTipoObs] = useState<OpcionSimple[]>([]);
+    /**
+     * Why the observation accordion is empty. Same reasoning as `EventoSheet`,
+     * minus its editing mode: this sheet only ever creates, so without at least
+     * one observation there is genuinely nothing to do here.
+     *
+     * Both of its mount points are already behind `eventos.ver` — the incident
+     * screen through `<ModuleRoute modulo="eventos">`, the home screen through
+     * `HomeRoute` — so the refused branch is not reachable today. It costs one
+     * ternary, and it stops this file depending on where somebody mounts it
+     * next.
+     */
+    const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
     const [loadingData, setLoadingData] = useState(false);
     const [saving, setSaving] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
@@ -49,14 +62,30 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
     useEffect(() => {
         if (!open) return;
         setLoadingData(true);
-        Promise.all([exportPostes(), getObs(), getTipoObs()])
-            .then(([postes, obs, tipos]) => {
-                setListPoste(postes);
-                setListObs(obs);
-                setListTipoObs(tipos);
+        setEstadoOpciones("cargando");
+
+        // The pole register still comes from `?export=true`: adding a `poste`
+        // block to `/api/evento/opciones` would serve the whole register under
+        // `eventos.ver`, which is worse than the round trip it saves. That
+        // decision belongs to C3, and until then the two loads are separate —
+        // so a refusal on one does not empty the other's combobox as well.
+        const postes = exportPostes()
+            .then(setListPoste)
+            .catch(() => toast.error("Error al cargar los postes"));
+
+        const opciones = getOpcionesEvento()
+            .then((o) => {
+                setListObs(o.obs);
+                setListTipoObs(o.tipoObs);
+                setEstadoOpciones("listas");
             })
-            .catch(() => toast.error("Error al cargar los datos"))
-            .finally(() => setLoadingData(false));
+            .catch((error) => {
+                setListObs([]);
+                setListTipoObs([]);
+                setEstadoOpciones(estadoTrasFallo(error));
+            });
+
+        Promise.all([postes, opciones]).finally(() => setLoadingData(false));
     }, [open]);
 
     const selectedPoste = listPoste.find((p) => p.id === selectedPosteId);
@@ -220,6 +249,17 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                             </div>
                         ) : (
                             <div className="rounded-lg border border-input overflow-hidden">
+                                {listTipoObs.length === 0 && (
+                                    <p className="px-3 py-2.5 text-sm text-muted-foreground">
+                                        {estadoOpciones === "denegado"
+                                            ? "No tiene permiso para consultar las observaciones, así que no puede registrar la incidencia."
+                                            : estadoOpciones === "fallo"
+                                                ? "No se pudieron cargar las observaciones. Cierre y vuelva a abrir para reintentarlo."
+                                                : estadoOpciones === "cargando"
+                                                    ? "Cargando…"
+                                                    : "Sin observaciones configuradas."}
+                                    </p>
+                                )}
                                 {listTipoObs.map((tipo) => {
                                     const obsForTipo = listObs.filter((o) => o.id_tipoObs === tipo.id);
                                     if (obsForTipo.length === 0) return null;
