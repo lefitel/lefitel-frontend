@@ -2,57 +2,48 @@ import axios from "axios";
 import { urlEvento, urlApi, urlPoste } from "./url";
 import { EventoInterface } from "../interfaces/interfaces";
 import { eventoExample } from "../data/example";
+import { comoParametros, ListParams, Paginado, pedirListado, todasLasFilas } from "./listado";
+import { descargarListado, type FormatoDescarga } from "./descarga";
 
-export interface EventoPaginatedResponse {
-  data: EventoInterface[];
-  total: number;
-  page: number;
-  totalPages: number;
-  limit: number;
-}
+export const getEvento = (params: ListParams = {}): Promise<Paginado<EventoInterface>> =>
+  pedirListado<EventoInterface>(urlApi + urlEvento, comoParametros(params));
 
-export interface GetEventoParams {
-  page?: number;
-  limit?: number;
-  archived?: boolean;
-  sortBy?: string[];
-  sortOrder?: ('asc' | 'desc')[];
-  filters?: { column: string; value: string }[];
-}
+/**
+ * The incident list as a file the server builds. See `exportarPostes`.
+ *
+ * The three quick filters above the table — Estado, Gravedad, Prioritario —
+ * travel with it, which is the whole point: this is the screen where the old
+ * button was worst. Four rows on screen, 1.514 in the file, and a heading that
+ * read "Eventos del Sistema" either way.
+ */
+export const exportarEventos = (
+  formato: FormatoDescarga,
+  params: ListParams = {},
+): Promise<{ blob: Blob; filename: string }> =>
+  descargarListado(urlApi + urlEvento + "export", { ...comoParametros(params), format: formato });
 
-export const getEvento = (params: GetEventoParams = {}): Promise<EventoPaginatedResponse> => {
-  const { archived, filters, ...rest } = params;
-  return axios
-    .get(urlApi + urlEvento, {
-      params: {
-        ...(archived ? { archived: true } : {}),
-        ...(filters?.length ? {
-          filterColumn: filters.map(f => f.column),
-          filterValue: filters.map(f => f.value),
-        } : {}),
-        ...rest,
-      },
-    })
-    .then((r) => r.data);
-};
-
-export const exportEventos = (archived = false): Promise<EventoInterface[]> =>
-  axios
-    .get(urlApi + urlEvento, {
-      params: { export: true, ...(archived ? { archived: true } : {}) },
-    })
-    .then((r) => r.data);
-
+/**
+ * Every incident one person has registered.
+ *
+ * The count check matters more here than anywhere. Both the profile screen and
+ * the staff detail screen divide the resolved ones by `length` and print the
+ * result as a percentage — so a list truncated at fifty did not look truncated,
+ * it looked like an appraisal of somebody's work.
+ */
 export const getEvento_usuario = (id_usuario: number): Promise<EventoInterface[]> =>
-  axios
-    .get(urlApi + urlEvento + "usuario/" + id_usuario)
-    .then((r) => r.data);
+  todasLasFilas<EventoInterface>(urlApi + urlEvento + "usuario/" + id_usuario);
 
-export const getEvento_poste = (id_poste: number): Promise<EventoInterface[]> => {
-  return axios
-    .get(urlApi + urlEvento + urlPoste + id_poste)
-    .then((r) => r.data);
-};
+/**
+ * Every incident on one pole.
+ *
+ * Read by the pole list before archiving: "no se puede archivar, tiene eventos
+ * asociados" is a guard that exists **only in the browser** — the server does
+ * not check it — and it is written as `eventos.length > 0`. Against a shape it
+ * cannot read, that is `undefined > 0`, which is false, and the pole would be
+ * archived with its incidents still hanging off it.
+ */
+export const getEvento_poste = (id_poste: number): Promise<EventoInterface[]> =>
+  todasLasFilas<EventoInterface>(urlApi + urlEvento + urlPoste + id_poste);
 
 export const createEvento = (
   data: EventoInterface

@@ -1,4 +1,5 @@
 import axios from "axios";
+import { celdaCsv } from "./csv";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
@@ -419,11 +420,9 @@ export const toRowsGeneral = (list: EventoInterface[]) =>
   });
 
 export const exportCsvGeneral = (list: EventoInterface[]) => {
-  const esc = (v: string) =>
-    v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
   const lines = [
-    PDF_HEADERS_GENERAL.map(esc).join(","),
-    ...toRowsGeneral(list).map((r) => r.map(esc).join(",")),
+    PDF_HEADERS_GENERAL.map(celdaCsv).join(","),
+    ...toRowsGeneral(list).map((r) => r.map(celdaCsv).join(",")),
   ];
   saveAs(
     new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" }),

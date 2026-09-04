@@ -1,4 +1,5 @@
 import ExcelJS from "exceljs";
+import { celdaCsv } from "./csv";
 import { saveAs } from "file-saver";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -386,11 +387,9 @@ export const exportCsvTramo = (
   listAdss: FilaCatalogo[],
   listObs:  FilaCatalogo[],
 ) => {
-  const esc = (v: string) =>
-    v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
   const lines = [
-    PDF_HEADERS_TRAMO.map(esc).join(","),
-    ...toRowsTramo(list, listAdss, listObs).map((r) => r.map(esc).join(",")),
+    PDF_HEADERS_TRAMO.map(celdaCsv).join(","),
+    ...toRowsTramo(list, listAdss, listObs).map((r) => r.map(celdaCsv).join(",")),
   ];
   saveAs(
     new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" }),

@@ -4,14 +4,11 @@ import { toast } from "sonner";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
-import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deleteEvento, desarchivarEvento, editEvento, exportEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
+import { deleteEvento, desarchivarEvento, editEvento, exportarEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
+import { mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -26,7 +23,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import {
-    getCriticalityMeta, getEventCriticality,
+    getEventCriticality,
     CRITICALITY_BAND_OPTIONS, type CriticalityBand,
 } from "../../../lib/criticality";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
@@ -37,204 +34,6 @@ import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
-
-// ─── export helpers ───────────────────────────────────────────────────────────
-
-// "Gravedad" sits between Estado and Prioritario because they are the three
-// facts a reader sorts on, and it must not be mistaken for either: Estado is
-// whether it is closed, Prioritario is a person's manual flag, Gravedad is the
-// worst level among the event's observations.
-const HEADERS = ["#", "Poste", "Tramo", "Propietario", "Lat", "Lng", "Descripción", "Estado", "Gravedad", "Prioritario", "Última revisión", "Observaciones"];
-const PRIMARY: [number, number, number] = [0, 31, 93];
-const ACCENT: [number, number, number] = [240, 244, 255];
-const filename = (ext: string) => {
-    const n = new Date();
-    const date = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}`;
-    const time = `${String(n.getHours()).padStart(2, "0")}${String(n.getMinutes()).padStart(2, "0")}${String(n.getSeconds()).padStart(2, "0")}`;
-    return `eventos_${date}_${time}.${ext}`;
-};
-
-const toRows = (list: EventoInterface[]) =>
-    list.map((e, i) => {
-        const level = getEventCriticality(e);
-        return [
-            String(i + 1),
-            e.poste?.name ?? "",
-            `${e.poste?.ciudadA?.name ?? ""} > ${e.poste?.ciudadB?.name ?? ""}`,
-            e.poste?.propietario?.name ?? "",
-            e.poste?.lat != null ? String(e.poste.lat) : "",
-            e.poste?.lng != null ? String(e.poste.lng) : "",
-            e.description,
-            e.state ? "Resuelto" : "Pendiente",
-            level != null ? `${level} - ${getCriticalityMeta(level).label}` : "Sin clasificar",
-            e.priority ? "Sí" : "No",
-            e.revisions?.length
-                ? new Date(Math.max(...e.revisions.map((r) => new Date(r.date).getTime()))).toLocaleDateString("es-ES")
-                : "",
-            e.eventoObs?.map((eo) => eo.ob?.name).filter(Boolean).join(", ") ?? "",
-        ];
-    });
-
-const fetchLogo = async () => {
-    const res = await fetch(logoUrl);
-    const blob = await res.blob();
-    const buffer = await blob.arrayBuffer();
-    const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-    });
-    return { dataUrl, buffer };
-};
-
-const exportExcel = async (list: EventoInterface[]) => {
-    const { buffer: logoBuffer } = await fetchLogo();
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "Osefi srl";
-    wb.created = new Date();
-    const ws = wb.addWorksheet("Eventos");
-    const COLS = HEADERS.length;
-
-    const imgId = wb.addImage({ buffer: logoBuffer, extension: "png" });
-    ws.mergeCells(1, 1, 3, 2);
-    ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 72, height: 72 } });
-
-    ws.mergeCells(1, 3, 1, COLS);
-    ws.mergeCells(2, 3, 2, COLS);
-    ws.mergeCells(3, 3, 3, COLS);
-
-    const tc = ws.getCell("C1");
-    tc.value = "OSEFI SRL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
-    const sc = ws.getCell("C2");
-    sc.value = "Eventos del Sistema"; sc.font = { size: 12, color: { argb: "FF374151" } }; sc.alignment = { vertical: "middle" };
-    const dc = ws.getCell("C3");
-    dc.value = `Generado el ${new Date().toLocaleString("es-ES", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-    dc.font = { size: 9, color: { argb: "FF9CA3AF" } }; dc.alignment = { vertical: "middle" };
-    ws.getRow(1).height = 26; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
-
-    ws.columns = [
-        { key: "num", width: 6 },
-        { key: "poste", width: 18 },
-        { key: "tramo", width: 28 },
-        { key: "prop", width: 18 },
-        { key: "lat", width: 14 },
-        { key: "lng", width: 14 },
-        { key: "desc", width: 32 },
-        { key: "estado", width: 12 },
-        { key: "gravedad", width: 20 },
-        { key: "prior", width: 12 },
-        { key: "ultima", width: 16 },
-        { key: "obs", width: 40 },
-    ];
-
-    const hr = ws.addRow(HEADERS);
-    hr.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    hr.alignment = { vertical: "middle", horizontal: "center" };
-    hr.height = 20;
-    for (let c = 1; c <= COLS; c++) {
-        hr.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF001F5D" } };
-    }
-    ws.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
-    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: COLS } };
-
-    toRows(list).forEach((row, i) => {
-        const r = ws.addRow(row);
-        r.height = 16; r.alignment = { vertical: "middle" };
-        if (i % 2 === 1) {
-            for (let c = 1; c <= COLS; c++) {
-                r.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F4FF" } };
-            }
-        }
-    });
-
-    ws.eachRow((row, rowNum) => {
-        if (rowNum < 5) return;
-        row.eachCell((cell) => {
-            cell.border = {
-                top: { style: "thin", color: { argb: "FFD0D8EF" } },
-                left: { style: "thin", color: { argb: "FFD0D8EF" } },
-                bottom: { style: "thin", color: { argb: "FFD0D8EF" } },
-                right: { style: "thin", color: { argb: "FFD0D8EF" } },
-            };
-        });
-    });
-
-    const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf], { type: "application/octet-stream" }), filename("xlsx"));
-};
-
-const exportCsv = (list: EventoInterface[]) => {
-    const escape = (v: string) =>
-        v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
-    const lines = [
-        HEADERS.map(escape).join(","),
-        ...toRows(list).map((row) => row.map(escape).join(",")),
-    ];
-    saveAs(new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" }), filename("csv"));
-};
-
-const exportPdf = async (list: EventoInterface[]) => {
-    const { dataUrl: logoDataUrl } = await fetchLogo();
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const W = 297;
-
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, W, 28, "F");
-    doc.addImage(logoDataUrl, "PNG", 10, 4, 20, 20);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...PRIMARY);
-    doc.text("OSEFI SRL", 34, 12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 90, 110);
-    doc.text("Eventos del Sistema", 34, 18);
-    const dateStr = new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
-    doc.setFontSize(8); doc.setTextColor(150, 160, 175);
-    doc.text(dateStr, W - 14, 18, { align: "right" });
-    doc.setFillColor(...PRIMARY);
-    doc.rect(0, 28, W, 1.5, "F");
-
-    autoTable(doc, {
-        startY: 33,
-        head: [HEADERS],
-        body: toRows(list),
-        styles: { fontSize: 7, cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 }, valign: "middle", textColor: [30, 40, 60] },
-        headStyles: { fillColor: PRIMARY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.5 },
-        alternateRowStyles: { fillColor: ACCENT },
-        // Widths sum to 275mm, which is the A4 landscape page minus its 10mm
-        // margins. Adding a column without taking the space from another one
-        // pushes the last one off the sheet.
-        columnStyles: {
-            0: { cellWidth: 8 }, // #
-            1: { cellWidth: 24 }, // Poste
-            2: { cellWidth: 34 }, // Tramo
-            3: { cellWidth: 24 }, // Propietario
-            4: { cellWidth: 18 }, // Lat
-            5: { cellWidth: 18 }, // Lng
-            6: { cellWidth: 34 }, // Descripción
-            7: { cellWidth: 18 }, // Estado
-            8: { cellWidth: 22 }, // Gravedad
-            9: { cellWidth: 18 }, // Prioritario
-            10: { cellWidth: 22 }, // Última rev.
-            11: { cellWidth: 35 }, // Observaciones
-        },
-        margin: { left: 10, right: 10 },
-        tableLineColor: [208, 216, 239],
-        tableLineWidth: 0.2,
-    });
-
-    const pageCount = (doc as jsPDF & { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
-        doc.setDrawColor(208, 216, 239);
-        doc.line(10, 208, W - 10, 208);
-        doc.text("Osefi srl", 10, 212);
-        doc.text(`Página ${i} de ${pageCount}`, W - 10, 212, { align: "right" });
-    }
-    doc.save(filename("pdf"));
-};
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -276,6 +75,16 @@ const EventoPage = () => {
 
     const [archivedList, setArchivedList] = useState<EventoInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
+    /**
+     * The Archivados tab's own paging, filters and order. See the twin comment
+     * in the pole list: sharing the active tab's state makes the footer count
+     * the other tab's rows and strands the user on a page that no longer exists.
+     */
+    const [archivedTotal, setArchivedTotal] = useState(0);
+    const [archivedPage, setArchivedPage] = useState(1);
+    const [archivedPageSize, setArchivedPageSize] = useState(15);
+    const [archivedFilters, setArchivedFilters] = useState<{ column: string; value: string }[]>([]);
+    const [archivedSorting, setArchivedSorting] = useState<SortingState>([]);
 
     const [editId, setEditId] = useState<number | null>(null);
     const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -289,6 +98,9 @@ const EventoPage = () => {
     const [unarchiving, setUnarchiving] = useState(false);
 
     const [savingPriorityIds, setSavingPriorityIds] = useState<Set<number>>(new Set());
+
+    /** Which file is being built, or `null`. See the twin in the pole screen. */
+    const [exportando, setExportando] = useState<FormatoDescarga | null>(null);
 
     const rol = sesion.usuario.id_rol;
     const canAdd = can(rol, "eventos", "crear");
@@ -327,16 +139,71 @@ const EventoPage = () => {
             .finally(() => setLoading(false));
     }, []);
 
+    /**
+     * Asks the server for the file the screen is showing.
+     *
+     * 🔴 **This is the screen the change was for.** The three quick filters are
+     * what this page exists around, they already travel to the server for the
+     * list, and the export threw them away: filter to "pendientes + críticas +
+     * solo prioritarias", read four rows, press Excel, and receive a file of
+     * 1.514 incidents headed "Eventos del Sistema" with nothing inside saying it
+     * was not what you asked for. They travel now, and the file prints them
+     * under its title.
+     *
+     * `query.current` and not the state, for the same reason `load` reads it:
+     * it is the query the server was actually asked, which is what the file has
+     * to match.
+     */
+    const exportar = async (formato: FormatoDescarga) => {
+        if (exportando) return;
+        setExportando(formato);
+        const archivados = innerTab === "archivados";
+        const q = query.current;
+        const sort = archivados ? archivedSorting : q.sorting;
+        const filters = archivados
+            ? archivedFilters
+            : [...q.columnFilters, ...quickToFilters(q.quick)];
+        try {
+            const { blob, filename } = await exportarEventos(formato, {
+                archived: archivados,
+                filters,
+                sortBy: sort.map((x) => x.id),
+                sortOrder: sort.map((x) => (x.desc ? "desc" : "asc")),
+            });
+            saveAs(blob, filename);
+        } catch (error) {
+            toast.error(await mensajeDeErrorAsync(error, "No se pudo generar el fichero"));
+        } finally {
+            setExportando(null);
+        }
+    };
+
     const applyQuickFilters = useCallback((next: Partial<QuickFilters>) => {
         const merged = { ...quickFilters, ...next };
         setQuickFilters(merged);
         load({ page: 1, quick: merged });
     }, [quickFilters, load]);
 
-    const loadArchived = useCallback(() => {
+    const loadArchived = useCallback((
+        p = 1,
+        ps = 15,
+        filters: { column: string; value: string }[] = [],
+        sort: SortingState = [],
+    ) => {
         setLoadingArchived(true);
-        exportEventos(true)
-            .then((data) => setArchivedList(data ?? []))
+        getEvento({
+            archived: true,
+            page: p,
+            limit: ps,
+            filters: filters.length ? filters : undefined,
+            sortBy: sort.length ? sort.map((s) => s.id) : undefined,
+            sortOrder: sort.length ? sort.map((s) => (s.desc ? "desc" : "asc")) : undefined,
+        })
+            .then((res) => {
+                setArchivedList(res.data);
+                setArchivedTotal(res.total);
+                setArchivedPage(res.page);
+            })
             .catch(() => { toast.error("Error al cargar eventos archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
     }, []);
@@ -344,8 +211,12 @@ const EventoPage = () => {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        if (innerTab === "archivados" && archivedList === null) loadArchived();
-    }, [innerTab, archivedList, loadArchived]);
+        if (innerTab === "archivados" && archivedList === null) loadArchived(1, archivedPageSize, archivedFilters, archivedSorting);
+    // The four values are the tab's own paging state, and including them is
+    // both what the linter asks for and harmless: the guard above only lets the
+    // body run while the list is still unloaded, so a later filter change
+    // re-evaluates the effect and does nothing.
+    }, [innerTab, archivedList, loadArchived, archivedPageSize, archivedFilters, archivedSorting]);
 
     const handlePriorityToggle = useCallback(async (evento: EventoInterface) => {
         if (!evento.id) return;
@@ -392,7 +263,10 @@ const EventoPage = () => {
             if (result === 200) {
                 toast.success("Evento desarchivado");
                 setUnarchiveTarget(null);
+                // And back to the first page with it: the row just left this
+                // list, so page five of four is now reachable by doing nothing.
                 setArchivedList(null);
+                setArchivedPage(1);
                 load();
             } else {
                 toast.error("No se pudo desarchivar");
@@ -468,6 +342,12 @@ const EventoPage = () => {
         {
             id: "propietario",
             header: "Propietario",
+            // Not filterable: the server refuses a column it cannot filter by
+            // (400), and since the query serialiser was fixed that refusal
+            // actually arrives — `load`'s `.catch` would replace the whole table
+            // with "Error al cargar los datos". Sorting stays: the shared filter
+            // does map this one.
+            enableColumnFilter: false,
             accessorFn: (row) => row.poste?.propietario?.name ?? null,
             cell: ({ row }) => (
                 <span className="text-sm">{row.original.poste?.propietario?.name ?? "—"}</span>
@@ -544,6 +424,12 @@ const EventoPage = () => {
         {
             id: "ultimaRev",
             header: "Última revisión",
+            // Not filterable: the server refuses a column it cannot filter by
+            // (400), and since the query serialiser was fixed that refusal
+            // actually arrives — `load`'s `.catch` would replace the whole table
+            // with "Error al cargar los datos". Sorting stays: the shared filter
+            // does map this one.
+            enableColumnFilter: false,
             accessorFn: (row) => {
                 const revs = row.revisions ?? [];
                 if (!revs.length) return null;
@@ -559,6 +445,12 @@ const EventoPage = () => {
         {
             id: "usuario",
             header: "Creador",
+            // Not filterable: the server refuses a column it cannot filter by
+            // (400), and since the query serialiser was fixed that refusal
+            // actually arrives — `load`'s `.catch` would replace the whole table
+            // with "Error al cargar los datos". Sorting stays: the shared filter
+            // does map this one.
+            enableColumnFilter: false,
             accessorFn: (row) => row.usuario ? `${row.usuario.name} ${row.usuario.lastname}` : null,
             cell: ({ row }) => {
                 const u = row.original.usuario;
@@ -701,6 +593,16 @@ const EventoPage = () => {
         {
             accessorKey: "deletedAt",
             header: "Archivado el",
+            // Not filterable, and this is a fix rather than a preference. The
+            // filter picker offers every column with an accessor, so this one
+            // appeared in it — and since C3 the server answers 400 to a filter
+            // column it does not know, which this is. Before C3 it answered
+            // every row instead, with the filter chip drawn as active: the same
+            // defect from the other side. Its three siblings that hold a date
+            // (`date`, `createdAt`, `updatedAt`) were already excluded for the
+            // same reason; this one was missed because it only exists on the
+            // Archivados table.
+            enableColumnFilter: false,
             cell: ({ row }) => (
                 <span className="text-sm text-muted-foreground whitespace-nowrap">
                     {row.original.deletedAt ? new Date(row.original.deletedAt).toLocaleDateString("es-ES") : "—"}
@@ -812,17 +714,29 @@ const EventoPage = () => {
                                 <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportExcel)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("excel"); }}
+                                >
                                     <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                    Excel (.xlsx)
+                                    {exportando === "excel" ? "Generando…" : "Excel (.xlsx)"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportCsv)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("csv"); }}
+                                >
                                     <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                    CSV
+                                    {exportando === "csv" ? "Generando…" : "CSV"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportEventos().then(exportPdf)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("pdf"); }}
+                                >
                                     <FileIcon className="h-4 w-4 text-red-500" />
-                                    PDF
+                                    {exportando === "pdf" ? "Generando…" : "PDF"}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -846,10 +760,16 @@ const EventoPage = () => {
                     data={archivedList}
                     loading={loadingArchived}
                     columns={archivedColumns}
-                    onRetry={loadArchived}
+                    onRetry={() => loadArchived(archivedPage, archivedPageSize, archivedFilters, archivedSorting)}
                     hasPaginated={true}
+                    serverSide={{
+                        total: archivedTotal,
+                        onPageChange: (p, ps) => { setArchivedPage(p); setArchivedPageSize(ps); loadArchived(p, ps, archivedFilters, archivedSorting); },
+                        onFilterChange: (filters) => { setArchivedFilters(filters); setArchivedPage(1); loadArchived(1, archivedPageSize, filters, archivedSorting); },
+                        onSortingChange: (s) => { setArchivedSorting(s); setArchivedPage(1); loadArchived(1, archivedPageSize, archivedFilters, s); },
+                    }}
                     actions={
-                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" onClick={() => loadArchived(archivedPage, archivedPageSize, archivedFilters, archivedSorting)} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }

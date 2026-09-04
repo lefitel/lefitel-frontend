@@ -32,7 +32,7 @@ export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
         if (a.priority !== b.priority) return (b.priority ? 1 : 0) - (a.priority ? 1 : 0);
         return new Date(b.date).getTime() - new Date(a.date).getTime();
       }));
-      setBitacora(b);
+      setBitacora(b.data);
     } catch {
       toast.error("Error al cargar los datos del usuario");
     } finally {

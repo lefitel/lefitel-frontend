@@ -1,16 +1,13 @@
 import axios from "axios";
 import { urlBitacora, urlApi } from "./url";
 import { BitacoraInterface } from "../interfaces/interfaces";
+import { Paginado, pedirListado } from "./listado";
 
 export const getBitacora = (
   id_usuario: number,
   limit = 50
-): Promise<BitacoraInterface[]> =>
-  axios
-    .get(urlApi + urlBitacora + id_usuario, {
-      params: { limit },
-    })
-    .then((r) => r.data);
+): Promise<Paginado<BitacoraInterface>> =>
+  pedirListado<BitacoraInterface>(urlApi + urlBitacora + id_usuario, { limit });
 
 export interface BitacoraFilters {
   id_usuario?: number;
@@ -61,11 +58,15 @@ export interface AutorBitacora {
 export const getAutoresBitacora = (): Promise<AutorBitacora[]> =>
   axios.get(urlApi + urlBitacora + "autores").then((r) => r.data);
 
+/**
+ * A page of the log.
+ *
+ * The envelope was half an envelope until C3 — `{data, total}` with no `page`
+ * and no `limit` — so a caller could not tell a complete answer from a
+ * truncated one. `BitacoraPanel`, which sends no limit at all, had been showing
+ * the first fifty entries of a sheet's history as though they were all of it.
+ */
 export const getAllBitacora = (
   filters: BitacoraFilters
-): Promise<{ data: BitacoraInterface[]; total: number }> =>
-  axios
-    .get(urlApi + urlBitacora, {
-      params: filters,
-    })
-    .then((r) => r.data);
+): Promise<Paginado<BitacoraInterface>> =>
+  pedirListado<BitacoraInterface>(urlApi + urlBitacora, { ...filters });

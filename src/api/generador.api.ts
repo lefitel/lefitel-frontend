@@ -1,4 +1,5 @@
 import axios from "axios";
+import { nombreDeFichero } from "./descarga";
 import { urlApi } from "./url";
 
 const urlGenerador = "generador/";
@@ -235,25 +236,16 @@ const FALLBACK_NAME: Record<ExportFormat, string> = {
 };
 
 /**
- * Reads the name the server chose.
+ * Reads the name the server chose, with this module's own fallback.
  *
- * It sends both forms: filename* percent-encoded so accents survive, and a
- * plain filename for anything that ignores RFC 5987. The header only reaches us
- * because app.ts lists it in the CORS exposedHeaders; without that the browser
- * hides it and every download would be called "reporte".
+ * The reading itself lives in `descarga.ts` now, because the three list exports
+ * need exactly the same thing and a second copy of an RFC-5987 regex is a
+ * second place for accents to stop surviving. What stayed here is the fallback:
+ * "reporte.xlsx" is the right guess for this screen and the wrong one for a
+ * directory of staff.
  */
 export function filenameFromDisposition(header: unknown, format: ExportFormat): string {
-  if (typeof header !== "string") return FALLBACK_NAME[format];
-  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
-  if (encoded) {
-    try {
-      return decodeURIComponent(encoded[1].trim());
-    } catch {
-      // A malformed header must not cost the user their download.
-    }
-  }
-  const plain = /filename="?([^";]+)"?/i.exec(header);
-  return plain ? plain[1].trim() : FALLBACK_NAME[format];
+  return nombreDeFichero(header, FALLBACK_NAME[format]);
 }
 
 /**
@@ -286,31 +278,9 @@ export const exportarReporte = async (
   };
 };
 
-/**
- * Extracts the server's message, which is written for the user, not the developer.
- *
- * A failed download arrives as a Blob, because that is what the request asked
- * for: the JSON body is inside it and has to be read out, which is asynchronous.
- * Callers that can be a download use `mensajeDeErrorAsync`.
- */
-export const mensajeDeError = (error: unknown, fallback: string): string => {
-  if (axios.isAxiosError(error)) {
-    const message = (error.response?.data as { message?: string } | undefined)?.message;
-    if (typeof message === "string" && message.trim() !== "") return message;
-  }
-  return fallback;
-};
-
-export const mensajeDeErrorAsync = async (error: unknown, fallback: string): Promise<string> => {
-  if (axios.isAxiosError(error) && error.response?.data instanceof Blob) {
-    try {
-      const text = await error.response.data.text();
-      const parsed = JSON.parse(text) as { message?: string };
-      if (typeof parsed.message === "string" && parsed.message.trim() !== "") return parsed.message;
-    } catch {
-      // Not JSON, or an empty body. Fall through to the generic message.
-    }
-    return fallback;
-  }
-  return mensajeDeError(error, fallback);
-};
+// Both moved to `descarga.ts` with the three list exports, which need them for
+// the same reason this screen does: a failed download arrives as a Blob and its
+// message has to be read out of it. Re-exported rather than relocated at the
+// call sites, so that the twelve `mensajeDeError(...)` in the generator screen
+// keep importing from the module they already import everything else from.
+export { mensajeDeError, mensajeDeErrorAsync } from "./descarga";

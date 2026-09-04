@@ -1,14 +1,12 @@
 import axios from "axios";
 import { urlRevision, urlApi } from "./url";
+import { todasLasFilas } from "./listado";
 import { RevisionInterface } from "../interfaces/interfaces";
 
 export const getRevision = (
   id_evento: number
-): Promise<RevisionInterface[]> => {
-  return axios
-    .get(urlApi + urlRevision + id_evento)
-    .then((r) => r.data);
-};
+): Promise<RevisionInterface[]> =>
+  todasLasFilas<RevisionInterface>(urlApi + urlRevision + id_evento);
 
 export const createRevision = (
   data: RevisionInterface

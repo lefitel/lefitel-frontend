@@ -1,5 +1,6 @@
 import axios from "axios";
 import { urlAdss, urlApi } from "./url";
+import { todasLasFilas } from "./listado";
 import { AdssInterface } from "../interfaces/interfaces";
 
 export interface AdssStats {
@@ -8,13 +9,17 @@ export interface AdssStats {
   empty: number;
 }
 
-export const getAdss = (archived = false): Promise<AdssInterface[]> => {
-  const url = urlApi + urlAdss + (archived ? "?archived=true" : "");
-  return axios
-    .get(url)
-    .then((r) => r.data)
-    .catch(() => []);
-};
+/**
+ * The whole catalogue, and an error rather than part of it.
+ *
+ * The `.catch(() => [])` this replaces was the only one of the eight catalogue
+ * readers that swallowed its own failure, and it is why the pole sheet printed
+ * "Sin ADSS registradas" — a claim about the database — whenever the request
+ * had simply failed. C2 gave that screen an answer for the refusal; this gives
+ * the reader one for everything else.
+ */
+export const getAdss = (archived = false): Promise<AdssInterface[]> =>
+  todasLasFilas<AdssInterface>(urlApi + urlAdss, archived ? { archived: true } : {});
 
 export const getAdssStats = (): Promise<AdssStats> =>
   axios

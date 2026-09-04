@@ -21,16 +21,18 @@
 // projects the association to `{id, name}` too.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import PostePage from "./index";
 import { SesionContext } from "../../../context/SesionContext";
 import { usuarioExample } from "../../../data/example";
+import { toast } from "sonner";
 
+const saveAs = vi.fn();
 const getOpcionesPoste = vi.fn();
 const getPoste = vi.fn();
-const exportPostes = vi.fn();
+const exportarPostes = vi.fn();
 const editPoste = vi.fn();
 const getMaterial = vi.fn();
 const getPropietario = vi.fn();
@@ -41,7 +43,7 @@ vi.mock("../../../api/opciones.api", async (importOriginal) => ({
 }));
 vi.mock("../../../api/Poste.api", () => ({
   getPoste: (...a: unknown[]) => getPoste(...a),
-  exportPostes: (...a: unknown[]) => exportPostes(...a),
+  exportarPostes: (...a: unknown[]) => exportarPostes(...a),
   editPoste: (...a: unknown[]) => editPoste(...a),
   searchPoste: vi.fn(),
   deletePoste: vi.fn(),
@@ -58,10 +60,13 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../lib/permissions")>()),
   can: () => true,
 }));
-vi.mock("exceljs", () => ({ default: { Workbook: class { } } }));
-vi.mock("jspdf", () => ({ default: class { } }));
-vi.mock("jspdf-autotable", () => ({ default: vi.fn() }));
-vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
+// `exceljs`, `jspdf` and `jspdf-autotable` were mocked here so the export menu
+// would not drag megabytes of parser into a render test. This screen imports
+// none of them any more: the file is built on the server and what arrives is
+// bytes. `file-saver` stays, because saving those bytes is still the browser's
+// job — and it is spied rather than stubbed, so the tests at the end can see
+// what it was handed.
+vi.mock("file-saver", () => ({ saveAs: (...a: unknown[]) => saveAs(...a) }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
 const OPCIONES = {
@@ -84,7 +89,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   getOpcionesPoste.mockResolvedValue(OPCIONES);
   getPoste.mockResolvedValue({ data: [FILA], total: 1, page: 1, totalPages: 1, limit: 15 });
-  exportPostes.mockResolvedValue([]);
+  exportarPostes.mockResolvedValue({ blob: new Blob(["x"]), filename: "Postes_01-01-2026_00-00-00.xlsx" });
   editPoste.mockResolvedValue({ status: 200 });
 });
 
@@ -181,5 +186,140 @@ describe("when the lists are refused", () => {
 
     await waitFor(() => expect(screen.getByTitle("Click para cambiar material").textContent)
       .toContain("Madera"));
+  });
+});
+
+describe("el botón de exportar", () => {
+  /** Pinta, espera al primer listado y abre el menú de exportación. */
+  const abrirMenu = async () => {
+    pintar();
+    await waitFor(() => expect(getPoste).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: /exportar/i }));
+  };
+
+  it("pide el fichero al servidor y lo guarda con el nombre que el servidor eligió", async () => {
+    await abrirMenu();
+    await userEvent.click(await screen.findByText("Excel (.xlsx)"));
+
+    await waitFor(() => expect(exportarPostes).toHaveBeenCalled());
+    // El formato viaja como valor del vocabulario del servidor — "excel" — y no
+    // como la extensión del fichero, que es sólo cómo acaba llamándose.
+    expect(exportarPostes.mock.calls[0][0]).toBe("excel");
+    await waitFor(() => expect(saveAs).toHaveBeenCalled());
+    // Lo que mide esta línea es que la pantalla reenvía a `saveAs` el nombre
+    // que le dan, y nada más: el módulo de la API está simulado entero, así
+    // que ni `descargarListado` ni la lectura de la cabecera llegan a
+    // ejecutarse aquí. Que ese nombre salga de `Content-Disposition` — con sus
+    // dos formas, para que los acentos sobrevivan — lo cubre
+    // `generador.api.test.ts`, que ejercita la misma función de `descarga.ts`.
+    expect(saveAs.mock.calls[0][1]).toBe("Postes_01-01-2026_00-00-00.xlsx");
+  });
+
+  it("manda el orden que la pantalla tiene puesto, no el de por defecto", async () => {
+    // 🔴 Lo que este arco arregla. El botón de antes llamaba a la API sin un
+    // solo parámetro: ni filtros, ni orden, ni pestaña. El fichero no tenía
+    // relación con lo que estabas mirando y nada dentro lo decía.
+    //
+    // Se comprueba el orden y no el filtro porque la cabecera de una columna es
+    // alcanzable y la barra de filtros vive tras un icono sin texto. **No son
+    // el mismo objeto**: `exportar` construye el suyo y `load` el suyo, que es
+    // precisamente por lo que pueden separarse — una auditoría encontró que
+    // `load()` sin argumentos tiraba el filtro y el estado lo conservaba. Los
+    // dos leen ahora `query.current`, y eso es lo que sujeta la prueba de
+    // «refrescar conserva el orden», más abajo.
+    pintar();
+    await waitFor(() => expect(getPoste).toHaveBeenCalled());
+    // La cabecera y no el botón del mismo nombre que hay dentro de cada fila:
+    // ese navega a la ficha del poste. La cabecera ordenable es un `div` con
+    // `onClick`, sin rol de botón — anotado de paso, porque tampoco se puede
+    // usar con el teclado.
+    // Dentro de la cabecera, no la cabecera: el `onClick` vive en un `div` de
+    // dentro, y un clic en el `th` no baja hasta él.
+    const cabecera = screen.getByRole("columnheader", { name: /Nombre/ });
+    await userEvent.click(within(cabecera).getByText("Nombre"));
+    await waitFor(() => expect(getPoste).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole("button", { name: /exportar/i }));
+    await userEvent.click(await screen.findByText("CSV"));
+
+    await waitFor(() => expect(exportarPostes).toHaveBeenCalled());
+    const [formato, params] = exportarPostes.mock.calls[0] as [string, { sortBy: string[]; archived: boolean }];
+    expect(formato).toBe("csv");
+    expect(params.sortBy).toEqual(["name"]);
+    // La pestaña activa, dicha explícitamente. La rama de archivados existe en
+    // `exportar` y hoy no se puede alcanzar: esa pestaña no tiene menú de
+    // exportación, ni lo tenía antes de este cambio.
+    expect(params.archived).toBe(false);
+  });
+
+  it("dice lo que falló, en vez de no hacer nada", async () => {
+    // 🔴 Ninguno de los nueve botones tenía `.catch`. Un fallo no producía
+    // fichero, ni mensaje, ni línea en la consola; y las frases que el servidor
+    // escribe para el usuario — "ya hay una exportación en curso", "la lista
+    // supera el máximo" — no llegaban a nadie.
+    exportarPostes.mockRejectedValue(new Error("cualquier cosa"));
+    await abrirMenu();
+    await userEvent.click(await screen.findByText("PDF"));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(saveAs).not.toHaveBeenCalled();
+  });
+
+  it("mientras construye, lo dice y deja los tres formatos deshabilitados", async () => {
+    // Sin estado de carga no había nada en pantalla entre el clic y la descarga,
+    // así que la reacción natural a tres segundos de espera era volver a pulsar,
+    // y cada clic era otra pasada entera sobre la tabla.
+    //
+    // Lo que sujeta esto es el `disabled` de los tres elementos del menú, y no
+    // el `if (exportando) return` de `exportar`: quitar el guardían no rompe
+    // esta prueba, porque el clic ya no llega. Comprobado con una mutación — la
+    // primera versión de esta prueba se llamaba "no lanza una segunda
+    // construcción" y pasaba por un motivo distinto del que decía. El guardían
+    // se queda, para una llamada que no venga del menú; lo que se mide aquí es
+    // lo que ve el usuario.
+    let resolver: (v: unknown) => void = () => { };
+    exportarPostes.mockReturnValue(new Promise((r) => { resolver = r; }));
+
+    await abrirMenu();
+    await userEvent.click(await screen.findByText("Excel (.xlsx)"));
+    await waitFor(() => expect(exportarPostes).toHaveBeenCalledTimes(1));
+
+    // El menú sigue abierto: `onSelect` cancela el cierre a propósito, para que
+    // el "Generando…" se vea. (Y mientras está abierto, Radix marca el resto de
+    // la página como oculta, así que el disparador no se puede volver a buscar.)
+    expect(await screen.findByText("Generando…")).toBeInTheDocument();
+    for (const etiqueta of ["Generando…", "CSV", "PDF"]) {
+      expect(screen.getByText(etiqueta).closest("[role=\"menuitem\"]"))
+        .toHaveAttribute("aria-disabled", "true");
+    }
+    await userEvent.click(screen.getByText("CSV"));
+    expect(exportarPostes).toHaveBeenCalledTimes(1);
+
+    resolver({ blob: new Blob(["x"]), filename: "Postes.csv" });
+  });
+});
+
+describe("la consulta que el servidor recibe de verdad", () => {
+  it("refrescar conserva el orden en vez de volver a la lista de siempre", async () => {
+    // 🔴 `load` leía sus valores por defecto del cierre de la **primera**
+    // renderización — `1, 15, [], []` — así que toda llamada sin argumentos
+    // (el botón de refrescar, y lo que hacen los tres diálogos al guardar) pedía
+    // en silencio la página uno sin filtro ni orden, mientras el estado
+    // conservaba el filtro y el chip seguía dibujado en pantalla. Y como la
+    // exportación leía ese mismo estado, el fichero habría salido filtrado y la
+    // pantalla no: el desacuerdo que esta tarea existe para cerrar, entrando
+    // por el otro lado.
+    pintar();
+    await waitFor(() => expect(getPoste).toHaveBeenCalled());
+
+    const cabecera = screen.getByRole("columnheader", { name: /Nombre/ });
+    await userEvent.click(within(cabecera).getByText("Nombre"));
+    await waitFor(() => expect(getPoste).toHaveBeenCalledTimes(2));
+
+    await userEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    await waitFor(() => expect(getPoste).toHaveBeenCalledTimes(3));
+
+    const ultima = getPoste.mock.calls[2][0] as { sortBy?: string[] };
+    expect(ultima.sortBy, "refrescar tiró el orden de la pantalla").toEqual(["name"]);
   });
 });

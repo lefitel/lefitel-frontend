@@ -1,17 +1,14 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
 import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon, CheckIcon } from "lucide-react";
-import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import logoUrl from "../../../assets/images/logo.png";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deletePoste, desarchivarPoste, editPoste, exportPostes, getPoste, searchPoste } from "../../../api/Poste.api";
+import { deletePoste, desarchivarPoste, editPoste, exportarPostes, getPoste, searchPoste } from "../../../api/Poste.api";
+import { mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { getEvento_poste } from "../../../api/Evento.api";
 import { estadoTrasFallo, getOpcionesPoste, EstadoOpciones, OpcionSimple } from "../../../api/opciones.api";
 import { PosteInterface } from "../../../interfaces/interfaces";
@@ -33,179 +30,6 @@ import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
-// ─── export helpers ───────────────────────────────────────────────────────────
-
-const HEADERS = ["#", "Nombre", "Tramo", "Material", "Propietario", "Lat", "Lng", "Fecha en campo"];
-const PRIMARY: [number, number, number] = [0, 31, 93];
-const ACCENT: [number, number, number] = [240, 244, 255];
-const filename = (ext: string) => {
-    const n = new Date();
-    const date = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}`;
-    const time = `${String(n.getHours()).padStart(2, "0")}${String(n.getMinutes()).padStart(2, "0")}${String(n.getSeconds()).padStart(2, "0")}`;
-    return `postes_${date}_${time}.${ext}`;
-};
-
-const toRows = (list: PosteInterface[]) =>
-    list.map((p, i) => [
-        String(i + 1),
-        p.name,
-        `${p.ciudadA?.name ?? ""} > ${p.ciudadB?.name ?? ""}`,
-        p.material?.name ?? "",
-        p.propietario?.name ?? "",
-        p.lat != null ? String(p.lat) : "",
-        p.lng != null ? String(p.lng) : "",
-        p.date ? new Date(p.date).toLocaleDateString("es-ES") : "",
-    ]);
-
-const fetchLogo = async () => {
-    const res = await fetch(logoUrl);
-    const blob = await res.blob();
-    const buffer = await blob.arrayBuffer();
-    const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-    });
-    return { dataUrl, buffer };
-};
-
-const exportExcel = async (list: PosteInterface[]) => {
-    const { buffer: logoBuffer } = await fetchLogo();
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "Osefi srl";
-    wb.created = new Date();
-    const ws = wb.addWorksheet("Postes");
-    const COLS = HEADERS.length;
-
-    const imgId = wb.addImage({ buffer: logoBuffer, extension: "png" });
-    ws.mergeCells(1, 1, 3, 2);
-    ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 72, height: 72 } });
-
-    ws.mergeCells(1, 3, 1, COLS);
-    ws.mergeCells(2, 3, 2, COLS);
-    ws.mergeCells(3, 3, 3, COLS);
-
-    const tc = ws.getCell("C1");
-    tc.value = "OSEFI SRL"; tc.font = { bold: true, size: 18, color: { argb: "FF001F5D" } }; tc.alignment = { vertical: "middle" };
-    const sc = ws.getCell("C2");
-    sc.value = "Reporte de Postes"; sc.font = { size: 12, color: { argb: "FF374151" } }; sc.alignment = { vertical: "middle" };
-    const dc = ws.getCell("C3");
-    dc.value = `Generado el ${new Date().toLocaleString("es-ES", { day: "2-digit", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
-    dc.font = { size: 9, color: { argb: "FF9CA3AF" } }; dc.alignment = { vertical: "middle" };
-    ws.getRow(1).height = 26; ws.getRow(2).height = 20; ws.getRow(3).height = 18;
-
-    ws.columns = [
-        { key: "num", width: 6 },
-        { key: "name", width: 14 },
-        { key: "tramo", width: 30 },
-        { key: "mat", width: 18 },
-        { key: "prop", width: 20 },
-        { key: "lat", width: 14 },
-        { key: "lng", width: 14 },
-        { key: "fecha", width: 14 },
-    ];
-
-    const hr = ws.addRow(HEADERS);
-    hr.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    hr.alignment = { vertical: "middle", horizontal: "center" };
-    hr.height = 20;
-    for (let c = 1; c <= COLS; c++) {
-        hr.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF001F5D" } };
-    }
-    ws.views = [{ state: "frozen", xSplit: 0, ySplit: 4 }];
-    ws.autoFilter = { from: { row: 4, column: 1 }, to: { row: 4, column: COLS } };
-
-    toRows(list).forEach((row, i) => {
-        const r = ws.addRow(row);
-        r.height = 16; r.alignment = { vertical: "middle" };
-        if (i % 2 === 1) {
-            for (let c = 1; c <= COLS; c++) {
-                r.getCell(c).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F4FF" } };
-            }
-        }
-    });
-
-    ws.eachRow((row, rowNum) => {
-        if (rowNum < 4) return;
-        row.eachCell((cell) => {
-            cell.border = {
-                top: { style: "thin", color: { argb: "FFD0D8EF" } },
-                left: { style: "thin", color: { argb: "FFD0D8EF" } },
-                bottom: { style: "thin", color: { argb: "FFD0D8EF" } },
-                right: { style: "thin", color: { argb: "FFD0D8EF" } },
-            };
-        });
-    });
-
-    const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf], { type: "application/octet-stream" }), filename("xlsx"));
-};
-
-const exportCsv = (list: PosteInterface[]) => {
-    const escape = (v: string) =>
-        v.includes(",") || v.includes('"') || v.includes("\n") ? `"${v.replace(/"/g, '""')}"` : v;
-    const lines = [
-        HEADERS.map(escape).join(","),
-        ...toRows(list).map((row) => row.map(escape).join(",")),
-    ];
-    saveAs(new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" }), filename("csv"));
-};
-
-const exportPdf = async (list: PosteInterface[]) => {
-    const { dataUrl: logoDataUrl } = await fetchLogo();
-    const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-    const W = 297;
-
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, W, 28, "F");
-    doc.addImage(logoDataUrl, "PNG", 10, 4, 20, 20);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...PRIMARY);
-    doc.text("OSEFI SRL", 34, 12);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 90, 110);
-    doc.text("Reporte de Postes", 34, 18);
-    const dateStr = new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" });
-    doc.setFontSize(8); doc.setTextColor(150, 160, 175);
-    doc.text(dateStr, W - 14, 18, { align: "right" });
-    doc.setFillColor(...PRIMARY);
-    doc.rect(0, 28, W, 1.5, "F");
-
-    autoTable(doc, {
-        startY: 33,
-        head: [HEADERS],
-        body: toRows(list),
-        styles: { fontSize: 7, cellPadding: { top: 2, right: 2.5, bottom: 2, left: 2.5 }, valign: "middle", textColor: [30, 40, 60] },
-        headStyles: { fillColor: PRIMARY, textColor: [255, 255, 255], fontStyle: "bold", fontSize: 7.5 },
-        alternateRowStyles: { fillColor: ACCENT },
-        columnStyles: {
-            0: { cellWidth: 8 }, // #
-            1: { cellWidth: 22 }, // Nombre
-            2: { cellWidth: 44 }, // Tramo
-            3: { cellWidth: 28 }, // Material
-            4: { cellWidth: 32 }, // Propietario
-            5: { cellWidth: 36 }, // Coordenadas
-            6: { cellWidth: 22 }, // Registrado
-        },
-        margin: { left: 10, right: 10 },
-        tableLineColor: [208, 216, 239],
-        tableLineWidth: 0.2,
-    });
-
-    const pageCount = (doc as jsPDF & { internal: { getNumberOfPages: () => number } }).internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7.5); doc.setTextColor(160, 170, 190);
-        doc.setDrawColor(208, 216, 239);
-        doc.line(10, 203, W - 10, 203);
-        doc.text("Osefi srl", 10, 207);
-        doc.text(`Página ${i} de ${pageCount}`, W - 10, 207, { align: "right" });
-    }
-    doc.save(filename("pdf"));
-};
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 type InnerTab = "activos" | "archivados";
@@ -221,11 +45,35 @@ const PostePage = () => {
     const [total, setTotal] = useState(0);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(15);
-    const [activeFilters, setActiveFilters] = useState<{ column: string; value: string }[]>([]);
-    const [sorting, setSorting] = useState<SortingState>([]);
 
     const [archivedList, setArchivedList] = useState<PosteInterface[] | null>(null);
     const [loadingArchived, setLoadingArchived] = useState(false);
+    /**
+     * The Archivados tab's own paging, filters and order.
+     *
+     * It used to fetch every archived row and sort, filter and page them in the
+     * browser. Since C3 it pages on the server like the tab beside it — and it
+     * needs **its own** state for all of it: sharing the active tab's `total`
+     * makes the footer announce the other tab's count the moment you switch,
+     * and sharing the page number leaves you on page five of a list that now
+     * has four.
+     */
+    const [archivedTotal, setArchivedTotal] = useState(0);
+    const [archivedPage, setArchivedPage] = useState(1);
+    const [archivedPageSize, setArchivedPageSize] = useState(15);
+    const [archivedFilters, setArchivedFilters] = useState<{ column: string; value: string }[]>([]);
+    const [archivedSorting, setArchivedSorting] = useState<SortingState>([]);
+
+    /**
+     * Which file is being built, or `null`.
+     *
+     * Not a boolean, because the menu names the format it is working on — and
+     * not absent, which is what it was: the browser version gave no feedback at
+     * all between the click and the download, so the honest reaction to a
+     * three-second wait was to click again, and each click was another full
+     * pass over the table.
+     */
+    const [exportando, setExportando] = useState<FormatoDescarga | null>(null);
 
     const [addOpen, setAddOpen] = useState(false);
     const [selectedPoste, setSelectedPoste] = useState<PosteInterface>(posteExample);
@@ -269,20 +117,107 @@ const PostePage = () => {
     const isAdmin = can(rol, "postes", "archivar");
 
 
-    const load = useCallback((p = page, ps = pageSize, filters = activeFilters, sort = sorting) => {
-        const sortBy = sort.map(s => s.id);
-        const sortOrder = sort.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
+    /**
+     * Asks the server for the file the screen is showing.
+     *
+     * The filters and the order of **the tab you are on**, which is the whole
+     * change: the old button sent not one parameter and downloaded the entire
+     * table whatever the screen showed.
+     *
+     * The Archivados branch below is not reachable today — that tab has no
+     * export menu, and never had one — and it stays because `innerTab` is real
+     * state and this is the correct reading of it: the day the menu is added
+     * there, a version without the branch would hand the user the active poles
+     * under a heading that said Archivados. An earlier draft of this comment
+     * claimed that was the old bug; it was not, because there was no button to
+     * press.
+     *
+     * The `catch` is not decoration either. Not one of the nine buttons had one
+     * — a failure produced no file, no message and no console line, and the
+     * server's sentences ("la lista supera el máximo", "ya hay una exportación
+     * en curso") reached nobody. `mensajeDeErrorAsync` is what digs them out of
+     * the blob a failed download arrives as.
+     */
+    const exportar = async (formato: FormatoDescarga) => {
+        if (exportando) return;
+        setExportando(formato);
+        const archivados = innerTab === "archivados";
+        // `query.current` and not the state: it is the query the server was
+        // actually asked, which is what the file has to match.
+        const sort = archivados ? archivedSorting : query.current.sorting;
+        try {
+            const { blob, filename } = await exportarPostes(formato, {
+                archived: archivados,
+                filters: archivados ? archivedFilters : query.current.filters,
+                sortBy: sort.map((x) => x.id),
+                sortOrder: sort.map((x) => (x.desc ? "desc" : "asc")),
+            });
+            saveAs(blob, filename);
+        } catch (error) {
+            toast.error(await mensajeDeErrorAsync(error, "No se pudo generar el fichero"));
+        } finally {
+            setExportando(null);
+        }
+    };
+
+    /**
+     * What the server is currently being asked for.
+     *
+     * A ref and not state, because `load` has to stay referentially stable —
+     * three dialogs take it as their `onSuccess` — while still knowing the live
+     * query. The incident screen has the same one, for the same reason.
+     *
+     * 🔴 Without it, `load` read its defaults from the closure of the **first**
+     * render: `1, 15, [], []`. So every bare `load()` — the refresh button, and
+     * what all three dialogs call after saving — quietly asked for page one,
+     * unfiltered and unsorted, while `activeFilters` kept the filter and the
+     * chip stayed drawn on screen. Filter, save a pole, and the table showed
+     * every row under an active filter. Since the export reads the same state,
+     * the file would then have been correctly filtered and the screen not:
+     * the very disagreement this task exists to close, arriving from the other
+     * side.
+     */
+    const query = useRef({
+        page: 1,
+        pageSize: 15,
+        filters: [] as { column: string; value: string }[],
+        sorting: [] as SortingState,
+    });
+
+    const load = useCallback((next: Partial<typeof query.current> = {}) => {
+        const q = { ...query.current, ...next };
+        query.current = q;
+
+        const sortBy = q.sorting.map(s => s.id);
+        const sortOrder = q.sorting.map(s => s.desc ? 'desc' : 'asc') as ('asc' | 'desc')[];
+        setPageSize(q.pageSize);
         setLoading(true);
-        getPoste({ page: p, limit: ps, filters: filters.length ? filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
+        getPoste({ page: q.page, limit: q.pageSize, filters: q.filters.length ? q.filters : undefined, sortBy: sortBy.length ? sortBy : undefined, sortOrder: sortOrder.length ? sortOrder : undefined })
             .then((res) => { setList(res.data); setTotal(res.total); setPage(res.page); })
             .catch(() => { toast.error("Error al cargar postes"); setList(null); })
             .finally(() => setLoading(false));
-    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    }, []);
 
-    const loadArchived = useCallback(() => {
+    const loadArchived = useCallback((
+        p = 1,
+        ps = 15,
+        filters: { column: string; value: string }[] = [],
+        sort: SortingState = [],
+    ) => {
         setLoadingArchived(true);
-        exportPostes(true)
-            .then((data) => setArchivedList(data ?? []))
+        getPoste({
+            archived: true,
+            page: p,
+            limit: ps,
+            filters: filters.length ? filters : undefined,
+            sortBy: sort.length ? sort.map((s) => s.id) : undefined,
+            sortOrder: sort.length ? sort.map((s) => (s.desc ? "desc" : "asc")) : undefined,
+        })
+            .then((res) => {
+                setArchivedList(res.data);
+                setArchivedTotal(res.total);
+                setArchivedPage(res.page);
+            })
             .catch(() => { toast.error("Error al cargar postes archivados"); setArchivedList(null); })
             .finally(() => setLoadingArchived(false));
     }, []);
@@ -290,8 +225,12 @@ const PostePage = () => {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        if (innerTab === "archivados" && archivedList === null) loadArchived();
-    }, [innerTab, archivedList, loadArchived]);
+        if (innerTab === "archivados" && archivedList === null) loadArchived(1, archivedPageSize, archivedFilters, archivedSorting);
+    // The four values are the tab's own paging state, and including them is
+    // both what the linter asks for and harmless: the guard above only lets the
+    // body run while the list is still unloaded, so a later filter change
+    // re-evaluates the effect and does nothing.
+    }, [innerTab, archivedList, loadArchived, archivedPageSize, archivedFilters, archivedSorting]);
 
     useEffect(() => {
         if (!canEdit) return;
@@ -399,7 +338,10 @@ const PostePage = () => {
             if (result === 200) {
                 toast.success("Poste desarchivado");
                 setUnarchiveTarget(null);
+                // And back to the first page with it: the row just left this
+                // list, so page five of four is now reachable by doing nothing.
                 setArchivedList(null);
+                setArchivedPage(1);
                 load();
             } else {
                 toast.error("No se pudo desarchivar");
@@ -685,6 +627,16 @@ const PostePage = () => {
         {
             accessorKey: "deletedAt",
             header: "Archivado el",
+            // Not filterable, and this is a fix rather than a preference. The
+            // filter picker offers every column with an accessor, so this one
+            // appeared in it — and since C3 the server answers 400 to a filter
+            // column it does not know, which this is. Before C3 it answered
+            // every row instead, with the filter chip drawn as active: the same
+            // defect from the other side. Its three siblings that hold a date
+            // (`date`, `createdAt`, `updatedAt`) were already excluded for the
+            // same reason; this one was missed because it only exists on the
+            // Archivados table.
+            enableColumnFilter: false,
             cell: ({ row }) => (
                 <span className="text-sm text-muted-foreground whitespace-nowrap">
                     {row.original.deletedAt ? new Date(row.original.deletedAt).toLocaleDateString("es-ES") : "—"}
@@ -727,14 +679,14 @@ const PostePage = () => {
                     data={list}
                     loading={loading}
                     columns={columns}
-                    onRetry={() => load(page, pageSize, activeFilters, sorting)}
+                    onRetry={() => load()}
                     hasPaginated={true}
                     initialColumnVisibility={{ createdAt: false, updatedAt: false }}
                     serverSide={{
                         total,
-                        onPageChange: (p, ps) => { setPage(p); setPageSize(ps); load(p, ps, activeFilters, sorting); },
-                        onFilterChange: (filters) => { setActiveFilters(filters); setPage(1); load(1, pageSize, filters, sorting); },
-                        onSortingChange: (s) => { setSorting(s); setPage(1); load(1, pageSize, activeFilters, s); },
+                        onPageChange: (p, ps) => load({ page: p, pageSize: ps }),
+                        onFilterChange: (filters) => load({ page: 1, filters }),
+                        onSortingChange: (sorting) => load({ page: 1, sorting }),
                     }}
                     actions={<>
                         <DropdownMenu>
@@ -747,22 +699,34 @@ const PostePage = () => {
                                 <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-44">
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportExcel)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("excel"); }}
+                                >
                                     <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                    Excel (.xlsx)
+                                    {exportando === "excel" ? "Generando…" : "Excel (.xlsx)"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportCsv)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("csv"); }}
+                                >
                                     <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                    CSV
+                                    {exportando === "csv" ? "Generando…" : "CSV"}
                                 </DropdownMenuItem>
-                                <DropdownMenuItem className="gap-2" onClick={() => void exportPostes().then(exportPdf)}>
+                                <DropdownMenuItem
+                                    className="gap-2"
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("pdf"); }}
+                                >
                                     <FileIcon className="h-4 w-4 text-red-500" />
-                                    PDF
+                                    {exportando === "pdf" ? "Generando…" : "PDF"}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
 
-                        <Button variant="outline" size="icon-sm" onClick={() => load()} disabled={loading}>
+                        <Button variant="outline" size="icon-sm" aria-label="Actualizar" onClick={() => load()} disabled={loading}>
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
                         {canAdd && (
@@ -780,10 +744,16 @@ const PostePage = () => {
                     data={archivedList}
                     loading={loadingArchived}
                     columns={archivedColumns}
-                    onRetry={loadArchived}
+                    onRetry={() => loadArchived(archivedPage, archivedPageSize, archivedFilters, archivedSorting)}
                     hasPaginated={true}
+                    serverSide={{
+                        total: archivedTotal,
+                        onPageChange: (p, ps) => { setArchivedPage(p); setArchivedPageSize(ps); loadArchived(p, ps, archivedFilters, archivedSorting); },
+                        onFilterChange: (filters) => { setArchivedFilters(filters); setArchivedPage(1); loadArchived(1, archivedPageSize, filters, archivedSorting); },
+                        onSortingChange: (s) => { setArchivedSorting(s); setArchivedPage(1); loadArchived(1, archivedPageSize, archivedFilters, s); },
+                    }}
                     actions={
-                        <Button variant="outline" size="icon-sm" onClick={loadArchived} disabled={loadingArchived}>
+                        <Button variant="outline" size="icon-sm" aria-label="Actualizar" onClick={() => loadArchived(archivedPage, archivedPageSize, archivedFilters, archivedSorting)} disabled={loadingArchived}>
                             <RefreshCwIcon className={`h-4 w-4 ${loadingArchived ? "animate-spin" : ""}`} />
                         </Button>
                     }

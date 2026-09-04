@@ -21,7 +21,7 @@ import { SesionContext } from "../../context/SesionContext";
 import { usuarioExample } from "../../data/example";
 
 const getOpcionesEvento = vi.fn();
-const exportPostes = vi.fn();
+const todosLosPostes = vi.fn();
 const getObs = vi.fn();
 const getTipoObs = vi.fn();
 
@@ -29,7 +29,7 @@ vi.mock("../../api/opciones.api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/opciones.api")>()),
   getOpcionesEvento: () => getOpcionesEvento(),
 }));
-vi.mock("../../api/Poste.api", () => ({ exportPostes: (...a: unknown[]) => exportPostes(...a) }));
+vi.mock("../../api/Poste.api", () => ({ todosLosPostes: (...a: unknown[]) => todosLosPostes(...a) }));
 vi.mock("../../api/Evento.api", () => ({ createEvento: vi.fn() }));
 vi.mock("../../api/Upload.api", () => ({ uploadImage: vi.fn() }));
 // The two this sheet used to call.
@@ -51,7 +51,7 @@ const POSTES = [{
 beforeEach(() => {
   vi.clearAllMocks();
   getOpcionesEvento.mockResolvedValue(OPCIONES);
-  exportPostes.mockResolvedValue(POSTES);
+  todosLosPostes.mockResolvedValue(POSTES);
 });
 
 const sesion = { usuario: usuarioExample, autenticado: true };
@@ -76,7 +76,7 @@ describe("the two questions it asks", () => {
   it("still asks for the pole register separately, which is C3's to change", async () => {
     pintar();
 
-    await waitFor(() => expect(exportPostes).toHaveBeenCalled());
+    await waitFor(() => expect(todosLosPostes).toHaveBeenCalled());
   });
 
   it("groups each observation under its type", async () => {
@@ -91,7 +91,7 @@ describe("the two questions it asks", () => {
 describe("when one of the two fails", () => {
   it("keeps the observations when it is the pole register that failed", async () => {
     // The separation, asserted from the side that used to lose everything.
-    exportPostes.mockRejectedValue(new Error("Network Error"));
+    todosLosPostes.mockRejectedValue(new Error("Network Error"));
 
     pintar();
 

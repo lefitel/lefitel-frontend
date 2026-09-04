@@ -93,7 +93,10 @@ export function usePerfilData(id: number | null | undefined): PerfilData {
 
     Promise.all([
       searchUsuario(id),
-      getBitacora(id, BITACORA_LIMIT).catch(() => [] as BitacoraInterface[]),
+      // `.data` since C3: the log answers the same envelope as every other
+      // listing. What the screen shows is deliberately the last few entries,
+      // not all of them, so the count that comes with it is not read here.
+      getBitacora(id, BITACORA_LIMIT).then((r) => r.data).catch(() => [] as BitacoraInterface[]),
       getEvento_usuario(id).catch(() => [] as EventoInterface[]),
       getSessions(),
     ])

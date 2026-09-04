@@ -1,13 +1,10 @@
 import axios from "axios";
 import { urlRol, urlApi } from "./url";
+import { todasLasFilas } from "./listado";
 import { RolInterface } from "../interfaces/interfaces";
 
-export const getRol = (archived = false): Promise<RolInterface[]> => {
-  const url = urlApi + urlRol + (archived ? "?archived=true" : "");
-  return axios
-    .get(url)
-    .then((r) => r.data);
-};
+export const getRol = (archived = false): Promise<RolInterface[]> =>
+  todasLasFilas<RolInterface>(urlApi + urlRol, archived ? { archived: true } : {});
 
 export const createRol = (data: RolInterface): Promise<number> => {
   return axios

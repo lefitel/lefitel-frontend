@@ -104,6 +104,40 @@ for (const method of WRITE_METHODS) {
   axios.defaults.headers[method][CLIENT_HEADER] = CLIENT_HEADER_VALUE;
 }
 
+/**
+ * How a repeated query parameter is written on the wire.
+ *
+ * 🔴 **Without this, every filter and every sort order in the application was
+ * silently discarded by the server**, and had been since the lists started
+ * sending them. Axios writes an array as `filterColumn[]=name&filterColumn[]=poste`.
+ * Express 5 changed its default query parser from `extended` to `simple`, and
+ * `simple` is `querystring.parse`, which does not interpret the brackets: the
+ * server received a parameter whose **name** was the seven characters
+ * `filterColumn[]` and nothing at all under `filterColumn`. Every controller
+ * then read `undefined`, normalised it to `[]`, and answered the unfiltered,
+ * unsorted table — with the filter chip still drawn as active on screen.
+ *
+ * `indexes: null` writes `filterColumn=name&filterColumn=poste` instead, which
+ * `querystring.parse` turns into the array the controllers expect, and a single
+ * value into a plain string, which they already handle.
+ *
+ * **Why here and not on the server.** The other one-line fix is
+ * `app.set("query parser", "extended")`, which swaps in `qs` for every route in
+ * the API at once — and `qs` also reads `?a[b][c]=1` as a nested object where
+ * every handler in the codebase expects a string. Widening the shape of
+ * `req.query` across the whole surface to fix how one client writes a list is
+ * the larger change, and the riskier one. The repeated-key form is also what
+ * the API's own tests have always sent (`supertest` writes arrays that way), so
+ * this makes the client agree with the contract the server was already tested
+ * against, rather than moving the contract.
+ *
+ * Nothing was measuring the join: the client's tests mock the API modules and
+ * the server's tests speak to it through `supertest`, so no test in either
+ * repository ever put an array through axios and pulled it out of Express.
+ * `listado.test.ts` does now.
+ */
+axios.defaults.paramsSerializer = { indexes: null };
+
 
 // El interceptor del step-up, registrado a nivel de módulo desde aquí — no
 // dentro de un efecto de React. El porqué está en su propio fichero: en un

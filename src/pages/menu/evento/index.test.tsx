@@ -34,7 +34,7 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
 }));
 vi.mock("../../../api/Evento.api", () => ({
   getEvento: (...args: unknown[]) => getEvento(...args),
-  exportEventos: vi.fn().mockResolvedValue([]),
+  exportarEventos: vi.fn().mockResolvedValue({ blob: new Blob(["x"]), filename: "Incidencias.csv" }),
   editEvento: vi.fn().mockResolvedValue({ status: 200 }),
   deleteEvento: vi.fn().mockResolvedValue(200),
   desarchivarEvento: vi.fn().mockResolvedValue(200),
@@ -43,10 +43,9 @@ vi.mock("../../../api/Evento.api", () => ({
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
-// The export libraries are megabytes of parsing for a menu nothing here opens.
-vi.mock("exceljs", () => ({ default: { Workbook: class { } } }));
-vi.mock("jspdf", () => ({ default: class { } }));
-vi.mock("jspdf-autotable", () => ({ default: vi.fn() }));
+// The export libraries used to be mocked here because they were megabytes of
+// parsing for a menu nothing in this file opens. This screen no longer imports
+// them: the server builds the file now. `file-saver` still saves the bytes.
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
 
 const EventoPage = (await import("./index")).default;

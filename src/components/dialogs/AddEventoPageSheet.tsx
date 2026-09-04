@@ -9,7 +9,7 @@ import { createEvento } from "../../api/Evento.api";
 import {
     estadoTrasFallo, getOpcionesEvento, EstadoOpciones, OpcionObs, OpcionSimple,
 } from "../../api/opciones.api";
-import { exportPostes } from "../../api/Poste.api";
+import { todosLosPostes } from "../../api/Poste.api";
 import { uploadImage } from "../../api/Upload.api";
 import { PosteInterface } from "../../interfaces/interfaces";
 import { DatePicker } from "../ui/date-picker";
@@ -69,7 +69,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
         // `eventos.ver`, which is worse than the round trip it saves. That
         // decision belongs to C3, and until then the two loads are separate —
         // so a refusal on one does not empty the other's combobox as well.
-        const postes = exportPostes()
+        const postes = todosLosPostes()
             .then(setListPoste)
             .catch(() => toast.error("Error al cargar los postes"));
 

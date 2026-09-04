@@ -1,14 +1,36 @@
 import axios from "axios";
 import { urlUsuario, urlApi } from "./url";
+import { todasLasFilas } from "./listado";
+import { descargarListado, type FormatoDescarga } from "./descarga";
 import { UsuarioInterface } from "../interfaces/interfaces";
 
-export const getUsuario = (archived = false): Promise<UsuarioInterface[]> => {
-  return axios
-    .get(urlApi + urlUsuario, {
-      params: archived ? { archived: true } : {},
-    })
-    .then((r) => r.data);
-};
+/** The whole directory, and an error rather than part of it. */
+export const getUsuario = (archived = false): Promise<UsuarioInterface[]> =>
+  todasLasFilas<UsuarioInterface>(urlApi + urlUsuario, archived ? { archived: true } : {});
+
+/**
+ * The staff directory as a file the server builds. See `exportarPostes`.
+ *
+ * No filters, and that is not an oversight: this screen filters, sorts and
+ * pages **in the browser** over a directory it holds whole, so there is nothing
+ * on the wire for the server to honour. Its button already produced the entire
+ * directory rather than the filtered view; what changed is that the file now
+ * says "Listado completo" on its second line instead of leaving the reader to
+ * assume it was what they were looking at.
+ *
+ * What the server sends back is seven columns, declared one by one there. The
+ * listing this screen reads sends seventeen — including the recovery address
+ * of every account and which of them can still sign in without a second factor
+ * — and a spreadsheet that gets forwarded is not a screen behind a session.
+ */
+export const exportarUsuarios = (
+  formato: FormatoDescarga,
+  archived = false,
+): Promise<{ blob: Blob; filename: string }> =>
+  descargarListado(urlApi + urlUsuario + "export", {
+    format: formato,
+    ...(archived ? { archived: true } : {}),
+  });
 
 export const searchUsuario = (dataId: number): Promise<UsuarioInterface> => {
   return axios

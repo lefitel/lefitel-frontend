@@ -178,7 +178,9 @@ beforeEach(() => {
   // what they do in production when the request fails — see `usePerfilData`,
   // where only the profile itself is allowed to fail loudly.
   getSessions.mockResolvedValue([]);
-  getBitacora.mockResolvedValue([]);
+  // The envelope, since C3: every listing answers `{data, total, page, limit}`
+  // and this screen reads `.data`.
+  getBitacora.mockResolvedValue({ data: [], total: 0, page: 1, limit: 25 });
   getEvento_usuario.mockResolvedValue([]);
   endSession.mockResolvedValue({ status: 200, message: null });
   logoutAllSessions.mockResolvedValue({ status: 200, message: null, cerradas: 0 });

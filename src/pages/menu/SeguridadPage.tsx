@@ -3,14 +3,11 @@ import { toast } from "sonner";
 import type { Col } from "../../components/table/tableFeatures";
 import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon, MailCheckIcon, MailWarningIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import logoUrl from "../../assets/images/logo.png";
 import { SesionContext } from "../../context/SesionContext";
 import { can } from "../../lib/permissions";
-import { deleteUsuario, desarchivarUsuario, getUsuario } from "../../api/Usuario.api";
+import { deleteUsuario, desarchivarUsuario, exportarUsuarios, getUsuario } from "../../api/Usuario.api";
+import { mensajeDeErrorAsync, type FormatoDescarga } from "../../api/descarga";
 import { url } from "../../api/url";
 import { UsuarioInterface } from "../../interfaces/interfaces";
 import { Button } from "../../components/ui/button";
@@ -61,237 +58,6 @@ function UsuarioAvatar({ name, image, onImageClick }: {
     );
 }
 
-const HEADERS = ["Nombre", "Apellido", "Usuario", "Teléfono", "Rol", "Nacimiento", "Registrado"];
-const HEADER_COLOR = "001F5D";
-const PRIMARY: [number, number, number] = [0, 31, 93];    // #001F5D
-const ACCENT: [number, number, number] = [240, 244, 255]; // #F0F4FF
-
-const filename = (ext: string) =>
-    `usuarios_${new Date().toISOString().slice(0, 10)}.${ext}`;
-
-const dateEs = (d: Date | string | null | undefined) =>
-    d ? new Date(d).toLocaleDateString("es-ES") : "";
-
-const toRows = (usuarios: UsuarioInterface[]) =>
-    usuarios.map((u) => [
-        u.name,
-        u.lastname,
-        u.user,
-        u.phone ?? "",
-        u.rol?.name ?? "",
-        dateEs(u.birthday),
-        dateEs(u.createdAt),
-    ]);
-
-/** Fetches the logo as base64 data URL (for jsPDF) and ArrayBuffer (for ExcelJS) */
-const fetchLogo = async (): Promise<{ dataUrl: string; buffer: ArrayBuffer }> => {
-    const res = await fetch(logoUrl);
-    const blob = await res.blob();
-    const buffer = await blob.arrayBuffer();
-    const dataUrl = await new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.readAsDataURL(blob);
-    });
-    return { dataUrl, buffer };
-};
-
-// ─── Excel ────────────────────────────────────────────────────────────────────
-
-const exportExcel = async (usuarios: UsuarioInterface[]) => {
-    const { buffer: logoBuffer } = await fetchLogo();
-
-    const wb = new ExcelJS.Workbook();
-    wb.creator = "Osefi srl";
-    wb.created = new Date();
-    const ws = wb.addWorksheet("Usuarios");
-
-    const COLS = 7;
-
-    // Logo image (rows 1-3, column A)
-    const imgId = wb.addImage({ buffer: logoBuffer, extension: "png" });
-    ws.addImage(imgId, { tl: { col: 0, row: 0 }, ext: { width: 60, height: 60 } });
-
-    // Title rows (merged, alongside logo)
-    ws.mergeCells(1, 2, 1, COLS); // B1:G1 — "OSEFI SRL"
-    ws.mergeCells(2, 2, 2, COLS); // B2:G2 — subtitle
-    ws.mergeCells(3, 2, 3, COLS); // B3:G3 — date
-
-    const titleCell = ws.getCell("B1");
-    titleCell.value = "OSEFI SRL";
-    titleCell.font = { bold: true, size: 18, color: { argb: `FF${HEADER_COLOR}` } };
-    titleCell.alignment = { vertical: "middle" };
-
-    const subtitleCell = ws.getCell("B2");
-    subtitleCell.value = "Usuarios del Sistema";
-    subtitleCell.font = { size: 12, color: { argb: "FF374151" } };
-    subtitleCell.alignment = { vertical: "middle" };
-
-    const dateCell = ws.getCell("B3");
-    dateCell.value = `Generado el ${new Date().toLocaleDateString("es-ES", { day: "2-digit", month: "long", year: "numeric" })}`;
-    dateCell.font = { size: 9, color: { argb: "FF9CA3AF" } };
-    dateCell.alignment = { vertical: "middle" };
-
-    ws.getRow(1).height = 22;
-    ws.getRow(2).height = 18;
-    ws.getRow(3).height = 16;
-    ws.addRow([]); // empty spacer row 4
-
-    // Column definitions (row 5+)
-    ws.columns = [
-        { key: "name", width: 22 },
-        { key: "lastname", width: 22 },
-        { key: "user", width: 18 },
-        { key: "phone", width: 16 },
-        { key: "rol", width: 14 },
-        { key: "birthday", width: 14 },
-        { key: "createdAt", width: 14 },
-    ];
-
-    // Header row (row 5)
-    const headerRow = ws.addRow(HEADERS);
-    headerRow.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-    headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${HEADER_COLOR}` } };
-    headerRow.alignment = { vertical: "middle", horizontal: "center" };
-    headerRow.height = 20;
-
-    // Data rows
-    toRows(usuarios).forEach((row, i) => {
-        const r = ws.addRow(row);
-        r.height = 16;
-        r.alignment = { vertical: "middle" };
-        if (i % 2 === 1) {
-            r.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0F4FF" } };
-        }
-    });
-
-    // Borders on data + header rows only (row 5 onward)
-    ws.eachRow((row, rowNum) => {
-        if (rowNum < 5) return;
-        row.eachCell((cell) => {
-            cell.border = {
-                top: { style: "thin", color: { argb: "FFD0D8EF" } },
-                left: { style: "thin", color: { argb: "FFD0D8EF" } },
-                bottom: { style: "thin", color: { argb: "FFD0D8EF" } },
-                right: { style: "thin", color: { argb: "FFD0D8EF" } },
-            };
-        });
-    });
-
-    const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf], { type: "application/octet-stream" }), filename("xlsx"));
-};
-
-// ─── CSV ──────────────────────────────────────────────────────────────────────
-
-const exportCsv = (usuarios: UsuarioInterface[]) => {
-    const escape = (v: string) =>
-        v.includes(",") || v.includes('"') || v.includes("\n")
-            ? `"${v.replace(/"/g, '""')}"`
-            : v;
-
-    const lines = [
-        HEADERS.map(escape).join(","),
-        ...toRows(usuarios).map((row) => row.map(escape).join(",")),
-    ];
-
-    // UTF-8 BOM so Excel opens accents correctly
-    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    saveAs(blob, filename("csv"));
-};
-
-// ─── PDF ──────────────────────────────────────────────────────────────────────
-
-const exportPdf = async (usuarios: UsuarioInterface[]) => {
-    const { dataUrl: logoDataUrl } = await fetchLogo();
-
-    // Portrait A4: 210 x 297 mm, usable width ~182mm with 14mm margins
-    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-    const W = 210;
-
-    // ── Header band (white background with logo + text) ──
-    const BAND_H = 28;
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, W, BAND_H, "F");
-
-    // Logo (square, left-aligned)
-    doc.addImage(logoDataUrl, "PNG", 10, 4, 20, 20);
-
-    // Company name + subtitle
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(15);
-    doc.setTextColor(...PRIMARY);
-    doc.text("OSEFI SRL", 34, 12);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 90, 110);
-    doc.text("Usuarios del Sistema", 34, 18);
-
-    // Date (right-aligned)
-    const dateStr = new Date().toLocaleDateString("es-ES", {
-        day: "2-digit", month: "long", year: "numeric",
-    });
-    doc.setFontSize(8);
-    doc.setTextColor(150, 160, 175);
-    doc.text(dateStr, W - 14, 18, { align: "right" });
-
-    // ── Blue separator line ──
-    doc.setFillColor(...PRIMARY);
-    doc.rect(0, BAND_H, W, 1.5, "F");
-
-    // ── Table ──
-    autoTable(doc, {
-        startY: BAND_H + 5,
-        head: [HEADERS],
-        body: toRows(usuarios),
-        styles: {
-            fontSize: 8,
-            cellPadding: { top: 2.5, right: 3, bottom: 2.5, left: 3 },
-            valign: "middle",
-            textColor: [30, 40, 60],
-        },
-        headStyles: {
-            fillColor: PRIMARY,
-            textColor: [255, 255, 255],
-            fontStyle: "bold",
-            fontSize: 8.5,
-        },
-        alternateRowStyles: {
-            fillColor: ACCENT,
-        },
-        // Portrait A4 usable: ~182mm — total must fit
-        columnStyles: {
-            0: { cellWidth: 28 }, // Nombre
-            1: { cellWidth: 28 }, // Apellido
-            2: { cellWidth: 26 }, // Usuario
-            3: { cellWidth: 24 }, // Teléfono
-            4: { cellWidth: 20 }, // Rol
-            5: { cellWidth: 24 }, // Nacimiento
-            6: { cellWidth: 24 }, // Registrado  → total 154mm, centered with margins
-        },
-        margin: { left: 14, right: 14 },
-        tableLineColor: [208, 216, 239],
-        tableLineWidth: 0.2,
-    });
-
-    // ── Footer: page numbers + brand ──
-    const pageCount = (doc as jsPDF & { internal: { getNumberOfPages: () => number } })
-        .internal.getNumberOfPages();
-    for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i);
-        doc.setFontSize(7.5);
-        doc.setTextColor(160, 170, 190);
-        doc.text("Osefi srl", 14, 291);
-        doc.text(`Página ${i} de ${pageCount}`, W - 14, 291, { align: "right" });
-        // thin line above footer
-        doc.setDrawColor(208, 216, 239);
-        doc.line(14, 288, W - 14, 288);
-    }
-
-    doc.save(filename("pdf"));
-};
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 type InnerTab = "activos" | "archivados" | "permisos";
@@ -301,6 +67,9 @@ const SeguridadPage = () => {
     const rol = sesion.usuario.id_rol;
 
     const [innerTab, setInnerTab] = useState<InnerTab>("activos");
+
+    /** Which file is being built, or `null`. See the twin in the pole screen. */
+    const [exportando, setExportando] = useState<FormatoDescarga | null>(null);
     const [matrizKey, setMatrizKey] = useState(0);
 
     const [list, setList] = useState<UsuarioInterface[] | null>(null);
@@ -552,6 +321,35 @@ const SeguridadPage = () => {
 
     const hasData = !!list?.length;
 
+    /**
+     * Asks the server for the staff directory as a file.
+     *
+     * It sends no filters, and unlike its two siblings that is not a loss: this
+     * screen filters and pages **in the browser**, so there is nothing on the
+     * wire to pass on, and the button already produced the whole directory
+     * rather than the filtered view. What is new is that the file says
+     * "Listado completo" under its title instead of letting the reader assume
+     * it was the rows they were looking at. The day this screen pages on the
+     * server, the filters come here too.
+     *
+     * Seven columns arrive, chosen one by one on the server. The listing this
+     * page reads sends seventeen — among them every account's recovery address
+     * and which of them can still sign in without a second factor — and a
+     * spreadsheet that gets forwarded is not a screen behind a session.
+     */
+    const exportar = async (formato: FormatoDescarga) => {
+        if (exportando) return;
+        setExportando(formato);
+        try {
+            const { blob, filename } = await exportarUsuarios(formato, innerTab === "archivados");
+            saveAs(blob, filename);
+        } catch (error) {
+            toast.error(await mensajeDeErrorAsync(error, "No se pudo generar el fichero"));
+        } finally {
+            setExportando(null);
+        }
+    };
+
     return (
         <div className="@container/card  p-4 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -590,24 +388,27 @@ const SeguridadPage = () => {
                             <DropdownMenuContent align="end" className="w-44">
                                 <DropdownMenuItem
                                     className="gap-2"
-                                    onClick={() => void exportExcel(list ?? [])}
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("excel"); }}
                                 >
                                     <FileSpreadsheetIcon className="h-4 w-4 text-emerald-600" />
-                                    Excel (.xlsx)
+                                    {exportando === "excel" ? "Generando…" : "Excel (.xlsx)"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     className="gap-2"
-                                    onClick={() => exportCsv(list ?? [])}
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("csv"); }}
                                 >
                                     <FileTextIcon className="h-4 w-4 text-blue-500" />
-                                    CSV
+                                    {exportando === "csv" ? "Generando…" : "CSV"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                     className="gap-2"
-                                    onClick={() => void exportPdf(list ?? [])}
+                                    disabled={exportando !== null}
+                                    onSelect={(e) => { e.preventDefault(); void exportar("pdf"); }}
                                 >
                                     <FileIcon className="h-4 w-4 text-red-500" />
-                                    PDF
+                                    {exportando === "pdf" ? "Generando…" : "PDF"}
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
