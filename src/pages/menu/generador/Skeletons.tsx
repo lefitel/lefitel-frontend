@@ -166,7 +166,7 @@ const CardSkeleton = ({ title, lines }: { title: string; lines: number }) => (
     <CardHeader className="border-b border-border/40 pb-3">
       <CardTitle className="text-base">{title}</CardTitle>
     </CardHeader>
-    <CardContent className="pt-4">
+    <CardContent>
       <div className="space-y-2" aria-hidden="true">
         {Array.from({ length: lines }).map((_, i) => (
           <Skeleton key={i} className="h-8" style={{ width: widthAt(i) }} />
@@ -238,7 +238,7 @@ export const PageSkeleton = () => (
             </div>
           </div>
         </CardHeader>
-        <CardContent className="pt-4">
+        <CardContent>
           <PlainTableSkeleton />
         </CardContent>
       </Card>

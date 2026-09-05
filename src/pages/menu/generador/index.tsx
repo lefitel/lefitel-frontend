@@ -941,12 +941,19 @@ const GeneradorPage = () => {
               </div>
             </CardHeader>
             {/*
+              No top padding here, and that is deliberate: `Card` already sets a
+              flex `gap` between its header and its content equal to its own
+              side padding — twelve pixels compact, sixteen otherwise. Adding
+              `pt-4` on top of it made the space under the rule twenty-eight
+              against twelve at the sides, which reads as the header floating
+              away from what it names.
+
               Each panel caps itself rather than the band capping all four: the
               headings stay visible and only the list that is actually long —
               sixty columns, a hundred filters — moves. The selects and pickers
               inside portal out of here, so nothing they open is clipped by it.
             */}
-            <CardContent className="max-h-72 overflow-y-auto pt-4">
+            <CardContent className="max-h-72 overflow-y-auto">
               {/*
                 Tabs and not two stacked groups, and the difference is not
                 cosmetic: with both lists on screen at once, an empty page
@@ -1010,7 +1017,7 @@ const GeneradorPage = () => {
                 </CardHelp>
               </div>
             </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto pt-4">
+            <CardContent className="max-h-72 overflow-y-auto">
               <Select
                 value={config.root}
                 onValueChange={(value) => {
@@ -1096,7 +1103,7 @@ const GeneradorPage = () => {
                 />
               </div>
             </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto space-y-3 pt-4">
+            <CardContent className="max-h-72 overflow-y-auto space-y-3">
               {/*
                 The rule, said before it is broken instead of after.
 
@@ -1180,7 +1187,7 @@ const GeneradorPage = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto pt-4">
+            <CardContent className="max-h-72 overflow-y-auto">
               <FilterBuilder
                 config={config}
                 root={root}
@@ -1405,7 +1412,7 @@ const GeneradorPage = () => {
               </div>
             </CardHeader>
 
-            <CardContent className="pt-4">
+            <CardContent>
               {problems.length > 0 && (
                 <div
                   role="alert"
