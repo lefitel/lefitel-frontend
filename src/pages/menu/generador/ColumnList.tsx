@@ -65,119 +65,140 @@ const ColumnRow = memo(function ColumnRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex items-center gap-2 px-2 py-1.5",
+        "flex flex-col gap-1 px-2 py-1.5",
         // Lifted while it travels, so the row being moved is never confused
         // with the ones it is passing over.
         isDragging && "relative z-10 rounded-md bg-accent shadow-md",
       )}
     >
       {/*
-        The handle, and the only thing that starts a drag: the row holds a text
-        box you have to be able to select inside, so making the whole row
-        draggable would fight every rename.
+        Two lines, and the split is what makes the name box usable.
 
-        `listeners` also carry the keyboard: focus this and press space, then
-        the arrow keys, then space again. That is not a nicety — it replaced the
-        two ↑↓ buttons that used to live here, and without it a keyboard has no
-        way to reorder anything at all.
+        Everything used to share one: handle, name, summary select and three
+        icon buttons. That fitted while the configuration was a 400-pixel column
+        down the left side of the page. Since it became one of four panels in a
+        band across the top, a row is around 260 pixels wide and the fixed-width
+        parts claim almost all of it — the name box was left a couple of
+        characters wide, which is a box you cannot read what you are typing in.
+
+        So the name takes the first line on its own, and what describes the
+        column — where the field comes from, how it is summarised — goes below
+        it.
       */}
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label={`Mover ${label}`}
-        className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-      >
-        <GripVerticalIcon className="h-3.5 w-3.5" />
-      </button>
+      <div className="flex items-center gap-2">
+        {/*
+          The handle, and the only thing that starts a drag: the row holds a text
+          box you have to be able to select inside, so making the whole row
+          draggable would fight every rename.
 
-      <div className="min-w-0 flex-1">
+          `listeners` also carry the keyboard: focus this and press space, then
+          the arrow keys, then space again. That is not a nicety — it replaced the
+          two ↑↓ buttons that used to live here, and without it a keyboard has no
+          way to reorder anything at all.
+        */}
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={`Mover ${label}`}
+          className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        >
+          <GripVerticalIcon className="h-3.5 w-3.5" />
+        </button>
+
         <Input
           value={column.label ?? ""}
           placeholder={label}
           aria-label={`Nombre de la columna ${label}`}
           onChange={(e) => onRename(index, e.target.value)}
           maxLength={120}
-          className="h-7 border-0 px-1 shadow-none focus-visible:ring-1"
+          className="h-7 min-w-0 flex-1 border-0 px-1 shadow-none focus-visible:ring-1"
         />
-        <p className="truncate px-1 text-xs text-muted-foreground">{group}</p>
-      </div>
 
-      {available.length > 0 && !isGrouped && (
-        <Select
-          value={column.agg ?? "none"}
-          onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
-        >
-          <SelectTrigger className="h-7 w-28 text-xs" aria-label={`Resumen de ${label}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
-            {available.map((agg) => (
-              <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
-
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={sortDir ? "secondary" : "ghost"}
-            size="icon"
-            className="h-7 w-7"
-            aria-label={sortLabel}
-            // The aggregate travels with the path. Without it the server
-            // refuses every sort in a grouped report — a column that is not
-            // grouped has to say how it is summarised — and two rows of the
-            // same field could not be sorted apart.
-            onClick={() => onToggleSort(column.path, column.agg)}
-          >
-            {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
-              : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
-              : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{sortLabel}</TooltipContent>
-      </Tooltip>
-
-      {canGroup && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={isGrouped ? "default" : "ghost"}
+              variant={sortDir ? "secondary" : "ghost"}
               size="icon"
-              className="h-7 w-7"
-              aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
-              aria-pressed={isGrouped}
-              onClick={() => onToggleGroup(index)}
+              className="h-7 w-7 shrink-0"
+              aria-label={sortLabel}
+              // The aggregate travels with the path. Without it the server
+              // refuses every sort in a grouped report — a column that is not
+              // grouped has to say how it is summarised — and two rows of the
+              // same field could not be sorted apart.
+              onClick={() => onToggleSort(column.path, column.agg)}
             >
-              <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+              {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
+                : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
+                : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            {/*
-              One string for both, like the sort button in this same row. The
-              tooltip used to state a status ("Agrupando por esta columna")
-              while the accessible name offered the inverse action ("Dejar de
-              agrupar por X"): in the pressed state the two said opposite
-              things, and a sighted person and a screen-reader user could not
-              talk about the same control.
-            */}
-            {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
-          </TooltipContent>
+          <TooltipContent>{sortLabel}</TooltipContent>
         </Tooltip>
-      )}
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-        aria-label={`Quitar ${label}`}
-        onClick={() => onRemove(index)}
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </Button>
+        {canGroup && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isGrouped ? "default" : "ghost"}
+                size="icon"
+                className="h-7 w-7 shrink-0"
+                aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
+                aria-pressed={isGrouped}
+                onClick={() => onToggleGroup(index)}
+              >
+                <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {/*
+                One string for both, like the sort button in this same row. The
+                tooltip used to state a status ("Agrupando por esta columna")
+                while the accessible name offered the inverse action ("Dejar de
+                agrupar por X"): in the pressed state the two said opposite
+                things, and a sighted person and a screen-reader user could not
+                talk about the same control.
+              */}
+              {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+          aria-label={`Quitar ${label}`}
+          onClick={() => onRemove(index)}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      {/*
+        The second line, indented to start where the name does: the handle is
+        fourteen pixels and the gap beside it eight.
+      */}
+      <div className="flex items-center gap-2 pl-[1.375rem]">
+        <p className="min-w-0 flex-1 truncate px-1 text-xs text-muted-foreground">{group}</p>
+
+        {available.length > 0 && !isGrouped && (
+          <Select
+            value={column.agg ?? "none"}
+            onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
+          >
+            <SelectTrigger className="h-7 w-28 shrink-0 text-xs" aria-label={`Resumen de ${label}`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
+              {available.map((agg) => (
+                <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
     </li>
   );
 });

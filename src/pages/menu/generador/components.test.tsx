@@ -200,6 +200,29 @@ describe("ColumnList", () => {
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveAttribute("placeholder", "Descripción");
   });
 
+  it("keeps the name on a line of its own, above the summary", () => {
+    // Four panels across a band leaves a row about 260 pixels wide. With the
+    // handle, the name box, the summary select and three icon buttons all
+    // sharing one line, the fixed-width parts claimed nearly all of it and the
+    // name box came out a couple of characters wide — unusable, and the reason
+    // this split exists.
+    //
+    // Nothing here measures anything: the environment draws nothing. What it
+    // can state is that the two no longer share a line and are still the same
+    // column, which is what stops the squeeze coming back.
+    wrap(
+      <ColumnList
+        config={config} root={root}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+      />,
+    );
+
+    const name = screen.getByLabelText("Nombre de la columna Descripción");
+    const summary = screen.getByLabelText("Resumen de Descripción");
+    expect(name.parentElement).not.toContainElement(summary as HTMLElement);
+    expect(name.closest("li")).toContainElement(summary as HTMLElement);
+  });
+
   it("marks a grouped column as pressed and hides its aggregate selector", () => {
     wrap(
       <ColumnList
