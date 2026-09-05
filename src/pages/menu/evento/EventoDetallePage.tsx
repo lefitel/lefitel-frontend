@@ -1,9 +1,12 @@
 import { useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
-import { CircleMarker, MapContainer, Polyline, Popup, useMap } from "react-leaflet";
-import ThemedTileLayer from "../../../components/map/ThemedTileLayer";
+import BaseMap from "../../../components/map/BaseMap";
+import MapPoint from "../../../components/map/MapPoint";
+import MapLine from "../../../components/map/MapLine";
 import { SonarMarker } from "../../../components/map/SonarMarker";
+import { FitView } from "../../../components/map/useFitCoords";
+import { fromLatLngTuple, type LatLng } from "../../../components/map/mapGeo";
 import { MAP_RADIUS, MAP_WEIGHT } from "../../../components/map/mapConstants";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
@@ -73,7 +76,9 @@ export default function EventoDetallePage() {
 
   const poste = d.evento?.poste;
   const hasCoords = (poste?.lat ?? 0) !== 0 && (poste?.lng ?? 0) !== 0;
-  const center: [number, number] = hasCoords ? [poste!.lat, poste!.lng] : [latExample, lngExample];
+  const center: LatLng = hasCoords
+    ? { lat: poste!.lat, lng: poste!.lng }
+    : { lat: latExample, lng: lngExample };
 
   useEffect(() => {
     if (!poste) return;
@@ -115,7 +120,7 @@ export default function EventoDetallePage() {
   const boundsCoords: [number, number][] = [
     ...(poste?.ciudadA?.lat && poste.ciudadA.lng ? [[poste.ciudadA.lat, poste.ciudadA.lng] as [number, number]] : []),
     ...(poste?.ciudadB?.lat && poste.ciudadB.lng ? [[poste.ciudadB.lat, poste.ciudadB.lng] as [number, number]] : []),
-    ...(hasCoords ? [center] : []),
+    ...(hasCoords ? [[center.lat, center.lng] as [number, number]] : []),
     ...tramoPostes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
   ];
 
@@ -349,107 +354,112 @@ export default function EventoDetallePage() {
                     </Button>
                   </div>
                 )}
-                <MapContainer
+                <BaseMap
                   center={center}
                   zoom={hasCoords ? 15 : 5}
                   style={{ height: "100%", minHeight: "420px" }}
-                  scrollWheelZoom
-                  zoomControl={false}
                 >
-                  <ThemedTileLayer />
-                  <MapView
-                    center={center}
-                    boundsCoords={boundsCoords}
-                    fitTramo={fitTramo}
-                    hasCoords={hasCoords}
+                  <FitView
+                    coords={boundsCoords.map(fromLatLngTuple)}
+                    fit={fitTramo}
+                    center={hasCoords ? center : { lat: 0, lng: 0 }}
+                    zoom={15}
                   />
 
                   {poste?.ciudadA?.lat && poste.ciudadA.lng && (
-                    <CircleMarker
-                      center={[poste.ciudadA.lat, poste.ciudadA.lng]}
+                    <MapPoint
+                      center={{ lat: poste.ciudadA.lat, lng: poste.ciudadA.lng }}
                       radius={7}
-                      pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: MAP_WEIGHT.secondary }}
+                      strokeColor="#374151"
+                      fillColor="#374151"
+                      fillOpacity={1}
+                      strokeWidth={MAP_WEIGHT.secondary}
+                      popupMinWidth={200}
                     >
-                      <Popup minWidth={200}>
-                        <CityPopup
-                          name={poste.ciudadA.name}
-                          role="Inicio del tramo"
-                          lat={poste.ciudadA.lat}
-                          lng={poste.ciudadA.lng}
-                          onVer={() => navigate(`/app/ciudades/${poste.id_ciudadA}`)}
-                        />
-                      </Popup>
-                    </CircleMarker>
+                      <CityPopup
+                        name={poste.ciudadA.name}
+                        role="Inicio del tramo"
+                        lat={poste.ciudadA.lat}
+                        lng={poste.ciudadA.lng}
+                        onVer={() => navigate(`/app/ciudades/${poste.id_ciudadA}`)}
+                      />
+                    </MapPoint>
                   )}
 
                   {poste?.ciudadB?.lat && poste.ciudadB.lng && (
-                    <CircleMarker
-                      center={[poste.ciudadB.lat, poste.ciudadB.lng]}
+                    <MapPoint
+                      center={{ lat: poste.ciudadB.lat, lng: poste.ciudadB.lng }}
                       radius={7}
-                      pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: MAP_WEIGHT.secondary }}
+                      strokeColor="#374151"
+                      fillColor="#374151"
+                      fillOpacity={1}
+                      strokeWidth={MAP_WEIGHT.secondary}
+                      popupMinWidth={200}
                     >
-                      <Popup minWidth={200}>
-                        <CityPopup
-                          name={poste.ciudadB.name}
-                          role="Fin del tramo"
-                          lat={poste.ciudadB.lat}
-                          lng={poste.ciudadB.lng}
-                          onVer={() => navigate(`/app/ciudades/${poste.id_ciudadB}`)}
-                        />
-                      </Popup>
-                    </CircleMarker>
+                      <CityPopup
+                        name={poste.ciudadB.name}
+                        role="Fin del tramo"
+                        lat={poste.ciudadB.lat}
+                        lng={poste.ciudadB.lng}
+                        onVer={() => navigate(`/app/ciudades/${poste.id_ciudadB}`)}
+                      />
+                    </MapPoint>
                   )}
 
                   {tramoPostes
                     .filter((p) => p.id !== poste?.id && p.lat && p.lng)
                     .map((p) => (
-                      <CircleMarker
+                      <MapPoint
                         key={p.id as number}
-                        center={[p.lat, p.lng]}
+                        center={{ lat: p.lat, lng: p.lng }}
                         radius={MAP_RADIUS.secondary}
-                        pathOptions={{ color: "#9ca3af", fillColor: "#9ca3af", fillOpacity: 0.65, weight: MAP_WEIGHT.secondary }}
+                        strokeColor="#9ca3af"
+                        fillColor="#9ca3af"
+                        fillOpacity={0.65}
+                        strokeWidth={MAP_WEIGHT.secondary}
+                        popupMinWidth={200}
                       >
-                        <Popup minWidth={200}>
-                          <TramoPostePopup
-                            name={p.name}
-                            ciudadA={p.ciudadA?.name}
-                            ciudadB={p.ciudadB?.name}
-                            onVer={() => navigate(`/app/postes/${p.id}`)}
-                          />
-                        </Popup>
-                      </CircleMarker>
+                        <TramoPostePopup
+                          name={p.name}
+                          ciudadA={p.ciudadA?.name}
+                          ciudadB={p.ciudadB?.name}
+                          onVer={() => navigate(`/app/postes/${p.id}`)}
+                        />
+                      </MapPoint>
                     ))}
 
                   {routePath.length >= 2 && (
-                    <Polyline
-                      positions={routePath}
-                      pathOptions={{ color: "#596BAB", weight: 3, opacity: 0.7 }}
+                    <MapLine
+                      id="evento-route"
+                      positions={routePath.map(fromLatLngTuple)}
+                      color="#596BAB"
+                      width={3}
+                      opacity={0.7}
                     />
                   )}
 
                   {hasCoords && (
                     <SonarMarker
-                      center={center}
+                      center={[center.lat, center.lng]}
                       fillColor={eventoCfg.fill}
                       strokeColor={eventoCfg.stroke}
                       rgb={eventoCfg.rgb}
                       dotRadius={MAP_RADIUS.main}
                       weight={MAP_WEIGHT.main}
+                      popupMinWidth={200}
                     >
-                      <Popup minWidth={200}>
-                        <EventoPostePopup
-                          name={poste?.name ?? ""}
-                          ciudadA={poste?.ciudadA?.name}
-                          ciudadB={poste?.ciudadB?.name}
-                          eventoId={d.evento?.id as number}
-                          lat={poste?.lat}
-                          lng={poste?.lng}
-                          onVer={() => navigate(`/app/postes/${poste?.id}`)}
-                        />
-                      </Popup>
+                      <EventoPostePopup
+                        name={poste?.name ?? ""}
+                        ciudadA={poste?.ciudadA?.name}
+                        ciudadB={poste?.ciudadB?.name}
+                        eventoId={d.evento?.id as number}
+                        lat={poste?.lat}
+                        lng={poste?.lng}
+                        onVer={() => navigate(`/app/postes/${poste?.id}`)}
+                      />
                     </SonarMarker>
                   )}
-                </MapContainer>
+                </BaseMap>
               </div>
             )}
           </CardContent>
@@ -962,24 +972,3 @@ function EventoPostePopup({
   );
 }
 
-// ─── MapView ──────────────────────────────────────────────────────────────────
-
-function MapView({
-  center, boundsCoords, fitTramo, hasCoords,
-}: {
-  center: [number, number];
-  boundsCoords: [number, number][];
-  fitTramo: boolean;
-  hasCoords: boolean;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (fitTramo && boundsCoords.length >= 2) {
-      map.fitBounds(boundsCoords, { padding: [40, 40] });
-    } else if (hasCoords) {
-      map.setView(center, 15);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, fitTramo, center[0], center[1]]);
-  return null;
-}

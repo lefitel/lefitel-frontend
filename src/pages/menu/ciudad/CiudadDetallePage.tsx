@@ -1,10 +1,12 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { CircleMarker, MapContainer, Popup, useMap } from "react-leaflet";
-import ThemedTileLayer from "../../../components/map/ThemedTileLayer";
+import BaseMap from "../../../components/map/BaseMap";
+import MapPoint from "../../../components/map/MapPoint";
 import { SonarMarker } from "../../../components/map/SonarMarker";
+import { FitView } from "../../../components/map/useFitCoords";
+import { fromLatLngTuple, type LatLng } from "../../../components/map/mapGeo";
 import { MAP_RADIUS, MAP_WEIGHT } from "../../../components/map/mapConstants";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
@@ -46,12 +48,12 @@ export default function CiudadDetallePage() {
   const [fitPostes, setFitPostes] = useState(false);
 
   const hasCoords = (d.ciudad?.lat ?? 0) !== 0 && (d.ciudad?.lng ?? 0) !== 0;
-  const center: [number, number] = hasCoords
-    ? [d.ciudad!.lat, d.ciudad!.lng]
-    : [latExample, lngExample];
+  const center: LatLng = hasCoords
+    ? { lat: d.ciudad!.lat, lng: d.ciudad!.lng }
+    : { lat: latExample, lng: lngExample };
 
   const boundsCoords: [number, number][] = [
-    ...(hasCoords ? [center] : []),
+    ...(hasCoords ? [[center.lat, center.lng] as [number, number]] : []),
     ...d.postes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
   ];
 
@@ -191,57 +193,55 @@ export default function CiudadDetallePage() {
                   </div>
                 )}
 
-                <MapContainer
+                <BaseMap
                   center={center}
                   zoom={hasCoords ? 13 : 5}
                   style={{ height: "100%", minHeight: "420px" }}
-                  scrollWheelZoom
-                  zoomControl={false}
                 >
-                  <ThemedTileLayer />
-                  <CityMapView
-                    center={center}
-                    boundsCoords={boundsCoords}
-                    fitPostes={fitPostes}
-                    hasCoords={hasCoords}
+                  <FitView
+                    coords={boundsCoords.map(fromLatLngTuple)}
+                    fit={fitPostes}
+                    center={hasCoords ? center : { lat: 0, lng: 0 }}
+                    zoom={13}
                   />
 
                   {/* Postes secundarios */}
                   {d.postes
                     .filter((p) => p.lat && p.lng)
                     .map((p) => (
-                      <CircleMarker
+                      <MapPoint
                         key={p.id as number}
-                        center={[p.lat, p.lng]}
+                        center={{ lat: p.lat, lng: p.lng }}
                         radius={MAP_RADIUS.secondary}
-                        pathOptions={{ color: "#9ca3af", fillColor: "#9ca3af", fillOpacity: 0.75, weight: MAP_WEIGHT.secondary }}
+                        strokeColor="#9ca3af"
+                        fillColor="#9ca3af"
+                        fillOpacity={0.75}
+                        strokeWidth={MAP_WEIGHT.secondary}
+                        popupMinWidth={220}
                       >
-                        <Popup minWidth={220}>
-                          <PostePopup poste={p} onVer={() => navigate(`/app/postes/${p.id}`)} />
-                        </Popup>
-                      </CircleMarker>
+                        <PostePopup poste={p} onVer={() => navigate(`/app/postes/${p.id}`)} />
+                      </MapPoint>
                     ))}
 
                   {/* Ciudad principal — SonarMarker */}
                   {hasCoords && (
                     <SonarMarker
-                      center={center}
+                      center={[center.lat, center.lng]}
                       fillColor={CITY_COLOR.fill}
                       strokeColor={CITY_COLOR.stroke}
                       rgb={CITY_COLOR.rgb}
                       dotRadius={MAP_RADIUS.main}
                       weight={MAP_WEIGHT.main}
+                      popupMinWidth={200}
                     >
-                      <Popup minWidth={200}>
-                        <CiudadPopup
-                          ciudad={d.ciudad!}
-                          canEdit={can(rol, "ciudades", "editar")}
-                          onEditar={() => setOpenEditCiudad(true)}
-                        />
-                      </Popup>
+                      <CiudadPopup
+                        ciudad={d.ciudad!}
+                        canEdit={can(rol, "ciudades", "editar")}
+                        onEditar={() => setOpenEditCiudad(true)}
+                      />
                     </SonarMarker>
                   )}
-                </MapContainer>
+                </BaseMap>
               </div>
             )}
           </CardContent>
@@ -432,28 +432,6 @@ function StripCell({
       <div className="min-w-0">{children}</div>
     </div>
   );
-}
-
-// ── Map helpers ───────────────────────────────────────────────────────────────
-
-function CityMapView({
-  center, boundsCoords, fitPostes, hasCoords,
-}: {
-  center: [number, number];
-  boundsCoords: [number, number][];
-  fitPostes: boolean;
-  hasCoords: boolean;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (fitPostes && boundsCoords.length >= 2) {
-      map.fitBounds(boundsCoords, { padding: [40, 40] });
-    } else if (hasCoords) {
-      map.setView(center, 13);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, fitPostes, center[0], center[1]]);
-  return null;
 }
 
 // ── Popup components ──────────────────────────────────────────────────────────

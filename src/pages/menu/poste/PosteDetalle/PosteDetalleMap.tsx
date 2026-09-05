@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { CiudadInterface, EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
 import { Card, CardContent } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Button } from "../../../../components/ui/button";
-import { CircleMarker, MapContainer, Polyline, Popup, useMap } from "react-leaflet";
-import ThemedTileLayer from "../../../../components/map/ThemedTileLayer";
+import BaseMap from "../../../../components/map/BaseMap";
+import MapPoint from "../../../../components/map/MapPoint";
+import MapLine from "../../../../components/map/MapLine";
 import { SonarMarker } from "../../../../components/map/SonarMarker";
+import { FitView } from "../../../../components/map/useFitCoords";
+import { fromLatLngTuple, type LatLng } from "../../../../components/map/mapGeo";
 import { latExample, lngExample } from "../../../../data/example";
 import { MAP_RADIUS, MAP_WEIGHT } from "../../../../components/map/mapConstants";
 import { LocateFixedIcon, RouteIcon } from "lucide-react";
@@ -47,7 +50,9 @@ export default function PosteDetalleMap({
   canEditPostes, canEditCiudades,
 }: Props) {
   const hasCoords = (poste?.lat ?? 0) !== 0 && (poste?.lng ?? 0) !== 0;
-  const center: [number, number] = hasCoords ? [poste!.lat, poste!.lng] : [latExample, lngExample];
+  const center: LatLng = hasCoords
+    ? { lat: poste!.lat, lng: poste!.lng }
+    : { lat: latExample, lng: lngExample };
   const [fitTramo, setFitTramo] = useState(false);
 
   const health = useMemo(() => computeHealth(eventos), [eventos]);
@@ -86,112 +91,116 @@ export default function PosteDetalleMap({
               <LegendItem color="#f59e0b" label="Atención" />
               <LegendItem color="#ef4444" label="Crítico" />
             </div>
-            <MapContainer
+            <BaseMap
               center={center}
               zoom={hasCoords ? 13 : 5}
               style={{ height: "100%", minHeight: "420px" }}
-              scrollWheelZoom={true}
-              zoomControl={false}
             >
-              <ThemedTileLayer />
-              <MapView center={center} boundsCoords={boundsCoords} fitTramo={fitTramo} hasCoords={hasCoords} />
+              <FitView
+                coords={boundsCoords.map(fromLatLngTuple)}
+                fit={fitTramo}
+                center={hasCoords ? center : { lat: 0, lng: 0 }}
+                zoom={15}
+              />
 
               {/* Ciudad A */}
               {poste?.ciudadA?.lat && poste.ciudadA.lng && (
-                <CircleMarker
-                  center={[poste.ciudadA.lat, poste.ciudadA.lng]}
+                <MapPoint
+                  center={{ lat: poste.ciudadA.lat, lng: poste.ciudadA.lng }}
                   radius={7}
-                  pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: MAP_WEIGHT.secondary }}
+                  strokeColor="#374151"
+                  fillColor="#374151"
+                  fillOpacity={1}
+                  strokeWidth={MAP_WEIGHT.secondary}
+                  popupMinWidth={220}
                 >
-                  <Popup minWidth={220}>
-                    <CiudadPopup
-                      ciudad={poste.ciudadA}
-                      role="Inicio del tramo"
-                      canEdit={canEditCiudades}
-                      onVer={() => onVerCiudad(poste.id_ciudadA)}
-                      onEditar={() => onEditarCiudad(poste.ciudadA!)}
-                    />
-                  </Popup>
-                </CircleMarker>
+                  <CiudadPopup
+                    ciudad={poste.ciudadA}
+                    role="Inicio del tramo"
+                    canEdit={canEditCiudades}
+                    onVer={() => onVerCiudad(poste.id_ciudadA)}
+                    onEditar={() => onEditarCiudad(poste.ciudadA!)}
+                  />
+                </MapPoint>
               )}
 
               {/* Ciudad B */}
               {poste?.ciudadB?.lat && poste.ciudadB.lng && (
-                <CircleMarker
-                  center={[poste.ciudadB.lat, poste.ciudadB.lng]}
+                <MapPoint
+                  center={{ lat: poste.ciudadB.lat, lng: poste.ciudadB.lng }}
                   radius={7}
-                  pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: MAP_WEIGHT.secondary }}
+                  strokeColor="#374151"
+                  fillColor="#374151"
+                  fillOpacity={1}
+                  strokeWidth={MAP_WEIGHT.secondary}
+                  popupMinWidth={220}
                 >
-                  <Popup minWidth={220}>
-                    <CiudadPopup
-                      ciudad={poste.ciudadB}
-                      role="Fin del tramo"
-                      canEdit={canEditCiudades}
-                      onVer={() => onVerCiudad(poste.id_ciudadB)}
-                      onEditar={() => onEditarCiudad(poste.ciudadB!)}
-                    />
-                  </Popup>
-                </CircleMarker>
+                  <CiudadPopup
+                    ciudad={poste.ciudadB}
+                    role="Fin del tramo"
+                    canEdit={canEditCiudades}
+                    onVer={() => onVerCiudad(poste.id_ciudadB)}
+                    onEditar={() => onEditarCiudad(poste.ciudadB!)}
+                  />
+                </MapPoint>
               )}
 
               {/* Otros postes del tramo */}
               {tramoPosotes
                 .filter((p) => p.id !== poste?.id && p.lat && p.lng)
                 .map((p) => (
-                  <CircleMarker
+                  <MapPoint
                     key={p.id as number}
-                    center={[p.lat, p.lng]}
+                    center={{ lat: p.lat, lng: p.lng }}
                     radius={MAP_RADIUS.secondary}
-                    pathOptions={{
-                      color: "#9ca3af",
-                      fillColor: "#9ca3af",
-                      fillOpacity: 0.65,
-                      weight: MAP_WEIGHT.secondary,
-                    }}
+                    strokeColor="#9ca3af"
+                    fillColor="#9ca3af"
+                    fillOpacity={0.65}
+                    strokeWidth={MAP_WEIGHT.secondary}
+                    popupMinWidth={240}
                   >
-                    <Popup minWidth={240}>
-                      <PostePopup
-                        poste={p}
-                        canEdit={canEditPostes}
-                        onVer={() => onVerPoste(p.id as number)}
-                        onEditar={() => onEditarOtroPoste(p.id as number)}
-                      />
-                    </Popup>
-                  </CircleMarker>
+                    <PostePopup
+                      poste={p}
+                      canEdit={canEditPostes}
+                      onVer={() => onVerPoste(p.id as number)}
+                      onEditar={() => onEditarOtroPoste(p.id as number)}
+                    />
+                  </MapPoint>
                 ))}
 
               {routePath.length >= 2 && (
-                <Polyline
-                  positions={routePath}
-                  pathOptions={{ color: "#596BAB", weight: 3, opacity: 0.7 }}
+                <MapLine
+                  id="poste-detalle-route"
+                  positions={routePath.map(fromLatLngTuple)}
+                  color="#596BAB"
+                  width={3}
+                  opacity={0.7}
                 />
               )}
 
               {/* Poste actual con health-based color */}
               {hasCoords && (
                 <SonarMarker
-                  center={center}
+                  center={[center.lat, center.lng]}
                   fillColor={healthCfg.fill}
                   strokeColor={healthCfg.stroke}
                   rgb={healthCfg.rgb}
                   dotRadius={MAP_RADIUS.main}
                   weight={MAP_WEIGHT.main}
                 >
-                  <Popup minWidth={240}>
-                    <PostePopup
-                      poste={poste!}
-                      isActual
-                      health={health}
-                      healthLabel={healthCfg.label}
-                      abiertos={abiertosCount}
-                      criticos={criticosCount}
-                      canEdit={canEditPostes}
-                      onEditar={onEditarEstePoste}
-                    />
-                  </Popup>
+                  <PostePopup
+                    poste={poste!}
+                    isActual
+                    health={health}
+                    healthLabel={healthCfg.label}
+                    abiertos={abiertosCount}
+                    criticos={criticosCount}
+                    canEdit={canEditPostes}
+                    onEditar={onEditarEstePoste}
+                  />
                 </SonarMarker>
               )}
-            </MapContainer>
+            </BaseMap>
           </div>
         )}
       </CardContent>
@@ -339,24 +348,4 @@ function PostePopup({
       </div>
     </div>
   );
-}
-
-function MapView({
-  center, boundsCoords, fitTramo, hasCoords,
-}: {
-  center: [number, number];
-  boundsCoords: [number, number][];
-  fitTramo: boolean;
-  hasCoords: boolean;
-}) {
-  const map = useMap();
-  useEffect(() => {
-    if (fitTramo && boundsCoords.length >= 2) {
-      map.fitBounds(boundsCoords, { padding: [40, 40] });
-    } else if (hasCoords) {
-      map.setView(center, 15);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, fitTramo, center[0], center[1]]);
-  return null;
 }

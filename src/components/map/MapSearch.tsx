@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMap } from "react-leaflet";
-import * as L from "leaflet";
+import { useMap } from "@vis.gl/react-maplibre";
 import { Loader2Icon, SearchIcon, XIcon } from "lucide-react";
 
 type NominatimResult = {
@@ -11,7 +10,7 @@ type NominatimResult = {
 };
 
 export default function MapSearch() {
-  const map = useMap();
+  const { current: map } = useMap();
   const wrapperRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -21,11 +20,19 @@ export default function MapSearch() {
   const [loading, setLoading] = useState(false);
   const [noResults, setNoResults] = useState(false);
 
-  // Prevent Leaflet from intercepting events on this element
+  // vis.gl mounts plain children of <Map> in a div that sits beside MapLibre's
+  // canvas container, and MapLibre binds its interaction handlers on that
+  // container — so these events never reach the map by bubbling anyway. The
+  // listeners stay as a guard in case a future version mounts children inside
+  // it, which is how the Leaflet version of this component was wired.
   useEffect(() => {
-    if (!wrapperRef.current) return;
-    L.DomEvent.disableClickPropagation(wrapperRef.current);
-    L.DomEvent.disableScrollPropagation(wrapperRef.current);
+    const el = wrapperRef.current;
+    if (!el) return;
+
+    const stop = (e: Event) => e.stopPropagation();
+    const events = ["mousedown", "dblclick", "wheel", "touchstart", "contextmenu"] as const;
+    events.forEach((name) => el.addEventListener(name, stop));
+    return () => events.forEach((name) => el.removeEventListener(name, stop));
   }, []);
 
   // Close dropdown on outside click
@@ -62,7 +69,7 @@ export default function MapSearch() {
   };
 
   const handleSelect = (r: NominatimResult) => {
-    map.flyTo([parseFloat(r.lat), parseFloat(r.lon)], 14);
+    map?.flyTo({ center: [parseFloat(r.lon), parseFloat(r.lat)], zoom: 14 });
     setQuery(r.display_name.split(",")[0].trim());
     setDropdownOpen(false);
   };

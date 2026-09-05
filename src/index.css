@@ -138,7 +138,6 @@
 .sonar-ring-1 { animation: sonar-r1 2.4s ease-out infinite; }
 .sonar-ring-2 { animation: sonar-r2 2.4s ease-out infinite; }
 .sonar-b      { animation-delay: -1.2s; }
-.sonar-marker { transition: transform 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 
 /* Loading screen animations */
 @keyframes sweep-rtl {
@@ -200,19 +199,7 @@
   animation: shimmer-sweep 3.5s linear infinite;
 }
 
-/* Legacy pulsing markers (OperationsMap, CiudadDetallePage) */
-@keyframes circle-marker-pulse {
-  0%, 100% { transform: scale(1); }
-  50%       { transform: scale(1.15); }
-}
-
-.circle-pulse-marker {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: circle-marker-pulse 0.6s ease-in-out infinite;
-}
-
-.leaflet-container {
+.maplibregl-map {
   width: 100%;
   height: 100%;
   min-height: 200px;
@@ -220,39 +207,69 @@
   isolation: isolate;
 }
 
-.leaflet-control-attribution {
+/* Attribution stays visible (OpenStreetMap data is ODbL-licensed) — this
+   only restyles it, never hides it. */
+.maplibregl-ctrl-attrib {
   background: transparent !important;
   font-size: 9px !important;
   color: oklch(0.55 0.02 264 / 0.5) !important;
   padding: 0 4px !important;
   box-shadow: none !important;
 }
-.leaflet-control-attribution a {
+.maplibregl-ctrl-attrib a {
   color: inherit !important;
   text-decoration: none !important;
 }
-.leaflet-control-attribution a:hover {
+.maplibregl-ctrl-attrib a:hover {
   color: oklch(0.55 0.02 264 / 0.9) !important;
   text-decoration: underline !important;
 }
 
-/* Leaflet popup — theme-aware */
-.leaflet-popup-content-wrapper {
+/* MapLibre popup — theme-aware */
+.maplibregl-popup-content {
   background: var(--card) !important;
   color: var(--card-foreground) !important;
   border: 1px solid var(--border) !important;
   box-shadow: 0 2px 14px oklch(0 0 0 / 14%) !important;
+  /* Matches the 12px the Leaflet wrapper it replaced always used. MapLibre
+     squares the corner nearest the tip on a diagonal anchor (top-left,
+     bottom-right, ...); Leaflet never did that, so `!important` here keeps
+     every corner rounded regardless of which side the tip lands on. */
+  border-radius: 12px !important;
 }
 
-.leaflet-popup-tip {
-  background: var(--card) !important;
+/* Unlike Leaflet's popup tip, MapLibre's is a CSS border-triangle (zero
+   width/height, colour comes from border-*-color) — setting `background`
+   here has no visible effect. Each anchor direction colours a different
+   border side, so every direction needs its own override. */
+.maplibregl-popup-anchor-top .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+  border-bottom-color: var(--card) !important;
+}
+.maplibregl-popup-anchor-bottom .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+.maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip {
+  border-top-color: var(--card) !important;
+}
+.maplibregl-popup-anchor-left .maplibregl-popup-tip {
+  border-right-color: var(--card) !important;
+}
+.maplibregl-popup-anchor-right .maplibregl-popup-tip {
+  border-left-color: var(--card) !important;
 }
 
-.leaflet-popup-close-button {
+.maplibregl-popup-close-button {
   color: var(--muted-foreground) !important;
+  /* Tailwind's Preflight zeroes button padding and sets font-size: 100%, so
+     without this the × sits flush in the corner, right on top of the
+     content's own padding, instead of clear of it the way Leaflet's
+     close button (font 16px, padded) always was. */
+  padding: 4px 6px !important;
+  font-size: 16px !important;
 }
 
-.leaflet-popup-close-button:hover {
+.maplibregl-popup-close-button:hover {
   color: var(--foreground) !important;
 }
 

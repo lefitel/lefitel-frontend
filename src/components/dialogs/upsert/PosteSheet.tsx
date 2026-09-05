@@ -1,6 +1,5 @@
 import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { CircleMarker, MapContainer, Polyline, Popup, useMap, useMapEvent } from "react-leaflet";
 import { getPosteByTramo } from "../../../api/Poste.api";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
 import { SesionContext } from "../../../context/SesionContext";
@@ -24,7 +23,11 @@ import { Skeleton } from "../../ui/skeleton";
 import {
   Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
 } from "../../ui/sheet";
-import ThemedTileLayer from "../../map/ThemedTileLayer";
+import BaseMap from "../../map/BaseMap";
+import MapPoint from "../../map/MapPoint";
+import MapLine from "../../map/MapLine";
+import { FitView } from "../../map/useFitCoords";
+import { fromLatLngTuple, type LatLng } from "../../map/mapGeo";
 import MapSearch from "../../map/MapSearch";
 import { Loader2Icon } from "lucide-react";
 import { SonarMarker } from "../../map/SonarMarker";
@@ -232,11 +235,11 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
 
   const ciudadA = listCiudad.find((c) => c.id === (poste?.id_ciudadA ?? data.id_ciudadA));
   const ciudadB = listCiudad.find((c) => c.id === (poste?.id_ciudadB ?? data.id_ciudadB));
-  const allCoords: [number, number][] = isEditing ? [
-    ...(ciudadA?.lat && ciudadA?.lng ? [[ciudadA.lat, ciudadA.lng] as [number, number]] : []),
-    ...(ciudadB?.lat && ciudadB?.lng ? [[ciudadB.lat, ciudadB.lng] as [number, number]] : []),
-    ...(data.lat && data.lng ? [[data.lat, data.lng] as [number, number]] : []),
-    ...tramoPostes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
+  const allCoords: LatLng[] = isEditing ? [
+    ...(ciudadA?.lat && ciudadA?.lng ? [{ lat: ciudadA.lat, lng: ciudadA.lng }] : []),
+    ...(ciudadB?.lat && ciudadB?.lng ? [{ lat: ciudadB.lat, lng: ciudadB.lng }] : []),
+    ...(data.lat && data.lng ? [{ lat: data.lat, lng: data.lng }] : []),
+    ...tramoPostes.filter((p) => p.lat && p.lng).map((p) => ({ lat: p.lat, lng: p.lng })),
   ] : [];
 
   return (
@@ -403,44 +406,59 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Ubicación <span className="text-destructive">*</span></Label>
             <div className="relative h-72 rounded-lg overflow-hidden border border-border isolate">
-              <MapContainer
-                center={[data.lat || latExample, data.lng || lngExample]}
+              <BaseMap
+                center={{ lat: data.lat || latExample, lng: data.lng || lngExample }}
                 zoom={13}
                 style={{ height: "100%" }}
-                scrollWheelZoom
-                zoomControl={false}
+                onMapClick={(!isEditing || canEdit) ? (p) => {
+                  setData((d) => ({ ...d, lat: p.lat, lng: p.lng }));
+                  if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+                } : undefined}
               >
-                <ThemedTileLayer />
                 <MapSearch />
-                {(!isEditing || canEdit) && <ClickToPlace setData={setData} onPlace={() => { if (errors.location) setErrors(p => ({ ...p, location: "" })); }} />}
-                {isEditing && <RecenterMap lat={poste?.lat ?? 0} lng={poste?.lng ?? 0} />}
-                {isEditing && allCoords.length >= 2 && <FitBounds coords={allCoords} />}
+                {isEditing && (
+                  <FitView
+                    coords={allCoords}
+                    fit={allCoords.length >= 2}
+                    center={{ lat: poste?.lat ?? 0, lng: poste?.lng ?? 0 }}
+                    zoom={13}
+                  />
+                )}
 
                 {isEditing && routePath.length >= 2 && (
-                  <Polyline positions={routePath} pathOptions={{ color: "#596BAB", weight: 3, opacity: 0.7 }} />
+                  <MapLine id="poste-route" positions={routePath.map(fromLatLngTuple)} color="#596BAB" width={3} opacity={0.7} />
                 )}
                 {isEditing && ciudadA?.lat && ciudadA?.lng && (
-                  <CircleMarker
-                    center={[ciudadA.lat, ciudadA.lng]}
+                  <MapPoint
+                    center={{ lat: ciudadA.lat, lng: ciudadA.lng }}
                     radius={7}
-                    pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: 0 }}
+                    strokeColor="#374151"
+                    fillColor="#374151"
+                    fillOpacity={1}
+                    strokeWidth={0}
                   />
                 )}
                 {isEditing && ciudadB?.lat && ciudadB?.lng && (
-                  <CircleMarker
-                    center={[ciudadB.lat, ciudadB.lng]}
+                  <MapPoint
+                    center={{ lat: ciudadB.lat, lng: ciudadB.lng }}
                     radius={7}
-                    pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 1, weight: 0 }}
+                    strokeColor="#374151"
+                    fillColor="#374151"
+                    fillOpacity={1}
+                    strokeWidth={0}
                   />
                 )}
                 {isEditing && tramoPostes
                   .filter((p) => p.id !== poste?.id && p.lat && p.lng)
                   .map((p) => (
-                    <CircleMarker
+                    <MapPoint
                       key={p.id as number}
-                      center={[p.lat, p.lng]}
+                      center={{ lat: p.lat, lng: p.lng }}
                       radius={5}
-                      pathOptions={{ color: "#9ca3af", fillColor: "#9ca3af", fillOpacity: 0.7, weight: 1.5 }}
+                      strokeColor="#9ca3af"
+                      fillColor="#9ca3af"
+                      fillOpacity={0.7}
+                      strokeWidth={1.5}
                     />
                   ))}
                 {data.lat && data.lng && (
@@ -451,11 +469,12 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
                     rgb="89, 107, 171"
                     dotRadius={isEditing ? 10 : 8}
                     weight={1.5}
+                    popupMinWidth={160}
                   >
-                    {isEditing && <Popup>Poste {data.name}</Popup>}
+                    {isEditing && <>Poste {data.name}</>}
                   </SonarMarker>
                 )}
-              </MapContainer>
+              </BaseMap>
 
               <div className="absolute bottom-3 left-3 right-3 z-1000 flex gap-2">
                 <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
@@ -517,30 +536,4 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       </SheetContent>
     </Sheet>
   );
-}
-
-function ClickToPlace({ setData, onPlace }: { setData: React.Dispatch<React.SetStateAction<PosteInterface>>; onPlace?: () => void }) {
-  useMapEvent("click", (e) => {
-    setData((d) => ({ ...d, lat: e.latlng.lat, lng: e.latlng.lng }));
-    onPlace?.();
-  });
-  return null;
-}
-
-function RecenterMap({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  useEffect(() => {
-    if (lat && lng) map.setView([lat, lng], map.getZoom());
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lat, lng]);
-  return null;
-}
-
-function FitBounds({ coords }: { coords: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (coords.length >= 2) map.fitBounds(coords, { padding: [30, 30] });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [coords.length]);
-  return null;
 }

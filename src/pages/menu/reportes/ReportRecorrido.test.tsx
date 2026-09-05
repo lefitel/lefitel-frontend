@@ -24,6 +24,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import ReportRecorrido from "./ReportRecorrido";
 import { SesionContext } from "../../../context/SesionContext";
+import { ThemeProvider } from "../../../components/theme-provider";
 import { usuarioExample } from "../../../data/example";
 
 const getOpcionesReporte = vi.fn();
@@ -45,14 +46,18 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
   can: () => true,
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
-vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
-  CircleMarker: () => null,
-  Polyline: () => null,
-  Popup: () => null,
-  useMap: () => ({ setView: vi.fn(), fitBounds: vi.fn(), getZoom: () => 13 }),
+// @vis.gl/react-maplibre is mocked whole: no test in this repository renders a
+// real map, and the real one wants a sized DOM element and a WebGL context
+// that jsdom does not give it.
+vi.mock("@vis.gl/react-maplibre", () => ({
+  Map: ({ children }: { children?: React.ReactNode }) => <div data-testid="map">{children}</div>,
+  Marker: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Popup: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Source: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Layer: () => null,
+  NavigationControl: () => null,
+  useMap: () => ({ current: null }),
 }));
-vi.mock("../../../components/map/ThemedTileLayer", () => ({ default: () => null }));
 
 const OPCIONES = {
   ciudad: [
@@ -73,13 +78,15 @@ beforeEach(() => {
 const sesion = { usuario: usuarioExample, autenticado: true };
 const pintar = () =>
   render(
-    <MemoryRouter>
-      <SesionContext.Provider
-        value={{ sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() } as never}
-      >
-        <ReportRecorrido />
-      </SesionContext.Provider>
-    </MemoryRouter>,
+    <ThemeProvider>
+      <MemoryRouter>
+        <SesionContext.Provider
+          value={{ sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() } as never}
+        >
+          <ReportRecorrido />
+        </SesionContext.Provider>
+      </MemoryRouter>
+    </ThemeProvider>,
   );
 
 describe("where the cities come from", () => {

@@ -1,8 +1,11 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { MapContainer, CircleMarker, Polyline, Popup, useMap } from "react-leaflet";
-import ThemedTileLayer from "../../../components/map/ThemedTileLayer";
+import BaseMap from "../../../components/map/BaseMap";
+import MapPoint from "../../../components/map/MapPoint";
+import MapLine from "../../../components/map/MapLine";
+import { FitView } from "../../../components/map/useFitCoords";
+import { fromLatLngTuple } from "../../../components/map/mapGeo";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -103,18 +106,6 @@ const exportCsv = (rowsOnScreen: EventoInterface[], ciudadA: string, ciudadB: st
     a.download = `recorrido_${ciudadA}-${ciudadB}_${ts}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-};
-
-// ─── FitBounds ────────────────────────────────────────────────────────────────
-
-const FitBounds = ({ coords }: { coords: [number, number][] }) => {
-    const map = useMap();
-    useEffect(() => {
-        if (coords.length === 0) return;
-        if (coords.length === 1) { map.setView(coords[0], 13); return; }
-        map.fitBounds(coords, { padding: [40, 40] });
-    }, [map, coords]);
-    return null;
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -452,53 +443,53 @@ const ReportRecorridoSec = () => {
                             </div>
                         </CardHeader>
                         <CardContent className="p-0 overflow-hidden rounded-b-xl">
-                            <MapContainer center={mapCenter} zoom={8} style={{ height: "460px" }} scrollWheelZoom zoomControl={false}>
-                                <ThemedTileLayer />
-                                <FitBounds coords={boundsCoords} />
+                            <BaseMap center={fromLatLngTuple(mapCenter)} zoom={8} style={{ height: "460px" }}>
+                                {boundsCoords.length > 0 && (
+                                    <FitView
+                                        coords={boundsCoords.map(fromLatLngTuple)}
+                                        fit
+                                        center={boundsCoords.length === 1 ? fromLatLngTuple(boundsCoords[0]) : fromLatLngTuple(mapCenter)}
+                                        zoom={13}
+                                    />
+                                )}
 
                                 {routePath.length >= 2 && (
-                                    <Polyline positions={routePath} pathOptions={{ color: "var(--primary)", weight: 3, opacity: 0.75 }} />
+                                    <MapLine id="recorrido-route" positions={routePath.map(fromLatLngTuple)} width={3} opacity={0.75} />
                                 )}
 
                                 {/* Ciudad A */}
                                 {ciudadA.lat && ciudadA.lng && (
-                                    <CircleMarker center={[ciudadA.lat, ciudadA.lng]} radius={7} pathOptions={{ color: "#1e293b", fillColor: "#1e293b", fillOpacity: 1, weight: 0 }}>
-                                        <Popup minWidth={160}>
-                                            <div style={{ padding: "4px 2px 2px" }}>
-                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadA.name}</p>
-                                                <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Inicio del tramo</p>
-                                                <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadA.lat.toFixed(4)}, {ciudadA.lng.toFixed(4)}</p>
-                                            </div>
-                                        </Popup>
-                                    </CircleMarker>
+                                    <MapPoint center={{ lat: ciudadA.lat, lng: ciudadA.lng }} radius={7} strokeColor="#1e293b" fillColor="#1e293b" fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
+                                        <div style={{ padding: "4px 2px 2px" }}>
+                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadA.name}</p>
+                                            <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Inicio del tramo</p>
+                                            <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadA.lat.toFixed(4)}, {ciudadA.lng.toFixed(4)}</p>
+                                        </div>
+                                    </MapPoint>
                                 )}
                                 {/* Ciudad B */}
                                 {ciudadB.lat && ciudadB.lng && (
-                                    <CircleMarker center={[ciudadB.lat, ciudadB.lng]} radius={7} pathOptions={{ color: "#1e293b", fillColor: "#1e293b", fillOpacity: 1, weight: 0 }}>
-                                        <Popup minWidth={160}>
-                                            <div style={{ padding: "4px 2px 2px" }}>
-                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadB.name}</p>
-                                                <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Fin del tramo</p>
-                                                <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadB.lat.toFixed(4)}, {ciudadB.lng.toFixed(4)}</p>
-                                            </div>
-                                        </Popup>
-                                    </CircleMarker>
+                                    <MapPoint center={{ lat: ciudadB.lat, lng: ciudadB.lng }} radius={7} strokeColor="#1e293b" fillColor="#1e293b" fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
+                                        <div style={{ padding: "4px 2px 2px" }}>
+                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadB.name}</p>
+                                            <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Fin del tramo</p>
+                                            <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadB.lat.toFixed(4)}, {ciudadB.lng.toFixed(4)}</p>
+                                        </div>
+                                    </MapPoint>
                                 )}
 
                                 {/* Event markers */}
                                 {mapTab === "eventos" && eventMapMarkers.map((e, i) => (
-                                    <CircleMarker
+                                    <MapPoint
                                         key={i}
-                                        center={[e.poste!.lat, e.poste!.lng]}
+                                        center={{ lat: e.poste!.lat, lng: e.poste!.lng }}
                                         radius={8}
-                                        pathOptions={{
-                                            color: "#fff",
-                                            fillColor: getEventColor(e),
-                                            fillOpacity: 0.95,
-                                            weight: 2.5,
-                                        }}
+                                        strokeColor="#fff"
+                                        fillColor={getEventColor(e)}
+                                        fillOpacity={0.95}
+                                        strokeWidth={2.5}
+                                        popupMinWidth={230}
                                     >
-                                        <Popup minWidth={230}>
                                             <div style={{ padding: "4px 2px 2px", minWidth: 215 }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                                                     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: "50%", background: getEventColorBg(e), flexShrink: 0 }}>
@@ -558,16 +549,14 @@ const ReportRecorridoSec = () => {
                                                     </button>
                                                 )}
                                             </div>
-                                        </Popup>
-                                    </CircleMarker>
+                                    </MapPoint>
                                 ))}
 
                                 {/* Poste markers */}
                                 {mapTab === "postes" && posteMapMarkers.map((p, i) => (
-                                    <CircleMarker key={i} center={[p.lat, p.lng]} radius={8}
-                                        pathOptions={{ color: "#fff", fillColor: "#596BAB", fillOpacity: 0.95, weight: 2.5 }}
+                                    <MapPoint key={i} center={{ lat: p.lat, lng: p.lng }} radius={8}
+                                        strokeColor="#fff" fillColor="#596BAB" fillOpacity={0.95} strokeWidth={2.5} popupMinWidth={220}
                                     >
-                                        <Popup minWidth={220}>
                                             <div style={{ padding: "4px 2px 2px", minWidth: 205 }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                                                     <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: "50%", background: "rgba(89,107,171,0.12)", flexShrink: 0 }}>
@@ -610,10 +599,9 @@ const ReportRecorridoSec = () => {
                                                     Ver poste
                                                 </button>
                                             </div>
-                                        </Popup>
-                                    </CircleMarker>
+                                    </MapPoint>
                                 ))}
-                            </MapContainer>
+                            </BaseMap>
 
                             {mapTab === "eventos" && (
                                 <div className="flex flex-wrap items-center gap-4 px-4 py-2.5 border-t border-border/40 text-xs text-muted-foreground">

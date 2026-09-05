@@ -26,13 +26,15 @@
 //     and the sentence "Sin ADSS registradas" — a claim about the database made
 //     by a screen that had been told nothing at all.
 //
-// react-leaflet is mocked whole: no test in this repository had ever rendered a
-// map, and the real one wants a sized DOM element that jsdom does not give it.
+// @vis.gl/react-maplibre is mocked whole: no test in this repository had ever
+// rendered a map, and the real one wants a sized DOM element and a WebGL
+// context that jsdom does not give it.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import PosteSheet from "./PosteSheet";
 import { SesionContext } from "../../../context/SesionContext";
+import { ThemeProvider } from "../../theme-provider";
 import { usuarioExample } from "../../../data/example";
 
 const getOpcionesPoste = vi.fn();
@@ -68,15 +70,15 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
 }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
 
-vi.mock("react-leaflet", () => ({
-  MapContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
-  CircleMarker: () => null,
-  Polyline: () => null,
-  Popup: () => null,
-  useMap: () => ({ setView: vi.fn(), fitBounds: vi.fn(), getZoom: () => 13 }),
-  useMapEvent: () => null,
+vi.mock("@vis.gl/react-maplibre", () => ({
+  Map: ({ children }: { children?: React.ReactNode }) => <div data-testid="map">{children}</div>,
+  Marker: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Popup: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Source: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Layer: () => null,
+  NavigationControl: () => null,
+  useMap: () => ({ current: null }),
 }));
-vi.mock("../../map/ThemedTileLayer", () => ({ default: () => null }));
 vi.mock("../../map/MapSearch", () => ({ default: () => null }));
 vi.mock("../../map/SonarMarker", () => ({ SonarMarker: () => null }));
 
@@ -107,11 +109,13 @@ beforeEach(() => {
 const sesion = { usuario: usuarioExample, autenticado: true };
 const pintar = (poste: typeof POSTE | null) =>
   render(
-    <SesionContext.Provider
-      value={{ sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() } as never}
-    >
-      <PosteSheet poste={poste} open setOpen={vi.fn()} onSuccess={vi.fn()} />
-    </SesionContext.Provider>,
+    <ThemeProvider>
+      <SesionContext.Provider
+        value={{ sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() } as never}
+      >
+        <PosteSheet poste={poste} open setOpen={vi.fn()} onSuccess={vi.fn()} />
+      </SesionContext.Provider>
+    </ThemeProvider>,
   );
 
 describe("where the four lists come from", () => {

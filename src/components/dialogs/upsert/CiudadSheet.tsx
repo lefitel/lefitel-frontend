@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { MapContainer, useMapEvent } from "react-leaflet";
+import BaseMap from "../../map/BaseMap";
 import { SonarMarker } from "../../map/SonarMarker";
-import ThemedTileLayer from "../../map/ThemedTileLayer";
 import MapSearch from "../../map/MapSearch";
 import { createCiudad, editCiudad } from "../../../api/Ciudad.api";
 import { uploadImage } from "../../../api/Upload.api";
@@ -21,11 +20,6 @@ interface Props {
   open: boolean;
   setOpen: (v: boolean) => void;
   onSuccess: () => void;
-}
-
-function LocationPicker({ onPick }: { onPick: (lat: number, lng: number) => void }) {
-  useMapEvent("click", (e) => onPick(e.latlng.lat, e.latlng.lng));
-  return null;
 }
 
 export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props) {
@@ -130,17 +124,20 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
               <span className="text-xs text-muted-foreground ml-1.5 font-normal">(haz clic en el mapa)</span>
             </Label>
             <div className="relative h-72 rounded-lg overflow-hidden border border-border isolate">
-              <MapContainer
+              <BaseMap
                 key={`${ciudad?.id ?? "new"}-${open}`}
-                center={lat !== 0 && lng !== 0 ? [lat, lng] : [latExample, lngExample]}
+                center={lat !== 0 && lng !== 0
+                  ? { lat, lng }
+                  : { lat: latExample, lng: lngExample }}
                 zoom={lat !== 0 ? 13 : 5}
                 style={{ height: "100%" }}
-                scrollWheelZoom
-                zoomControl={false}
+                onMapClick={(p) => {
+                  setLat(p.lat);
+                  setLng(p.lng);
+                  if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+                }}
               >
-                <ThemedTileLayer />
                 <MapSearch />
-                <LocationPicker onPick={(lt, lg) => { setLat(lt); setLng(lg); if (errors.location) setErrors(p => ({ ...p, location: "" })); }} />
                 {lat !== 0 && lng !== 0 && (
                   <SonarMarker
                     center={[lat, lng]}
@@ -151,7 +148,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
                     weight={1.5}
                   />
                 )}
-              </MapContainer>
+              </BaseMap>
 
               <div className="absolute bottom-3 left-3 right-3 z-1000 flex gap-2">
                 <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">

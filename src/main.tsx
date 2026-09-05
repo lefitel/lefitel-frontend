@@ -8,7 +8,7 @@ import './api/http'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import './index.css'
-import 'leaflet/dist/leaflet.css'
+import 'maplibre-gl/dist/maplibre-gl.css'
 import App from './App.tsx'
 
 if (import.meta.env.DEV) {
