@@ -147,7 +147,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
             }
             const uploadResult = subida.path;
 
-            const eventoResult = await createEvento(
+            await createEvento(
                 {
                     description,
                     image: uploadResult,
@@ -161,16 +161,11 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
                 }
             );
 
-            if (eventoResult.status !== 200 && eventoResult.status !== 201) {
-                toast.error("No se pudo crear el evento");
-                return;
-            }
-
             toast.success("Evento creado");
             handleClose();
             onSuccess();
-        } catch {
-            toast.error("Error al crear el evento");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "Error al crear el evento"));
         } finally {
             setSaving(false);
         }

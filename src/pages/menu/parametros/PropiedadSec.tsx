@@ -25,6 +25,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { mensajeDeError } from "../../../api/descarga";
 
 interface Props { innerTab: InnerTab; }
 
@@ -84,15 +85,13 @@ const PropietarioSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarPropietario(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Propietario desarchivado");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarPropietario(unarchiveTarget.id as number);
+            toast.success("Propietario desarchivado");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }
@@ -116,32 +115,34 @@ const PropietarioSec = ({ innerTab }: Props) => {
         if (!name.trim()) return toast.warning("El nombre es requerido");
         setSaving(true);
         const payload: PropietarioInterface = { ...selected, name };
-        const result = await (selected?.id ? editPropietario(payload) : createPropietario(payload));
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await (selected?.id ? editPropietario(payload) : createPropietario(payload));
             toast.success(selected?.id ? "Propietario actualizado" : "Propietario creado");
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo guardar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo guardar"));
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deletePropietario(selected.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deletePropietario(selected.id as number);
             toast.success("Propietario archivado");
             setDeleteOpen(false);
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const columns = useMemo<Col<PropietarioInterface>[]>(() => [

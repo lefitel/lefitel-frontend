@@ -20,32 +20,53 @@ export const searchCiudad = (id: number): Promise<CiudadInterface> =>
     .get(urlApi + urlCiudad + id)
     .then((r) => r.data as CiudadInterface);
 
+/**
+ * Nota de C4, y es temporal.
+ *
+ * Ésta es una de las cinco funciones de esta carpeta que siguen devolviendo un
+ * número en vez de propagar el fallo. No por criterio: su único llamante es
+ * `CiudadSheet.tsx`, y esa sesión está reescribiendo ese fichero ahora mismo,
+ * así que tocarlo metería su trabajo a medias en este commit.
+ *
+ * Mientras tanto, **un éxito resuelve 200 sea cual sea el código real**. Sin
+ * esa línea, en cuanto el servidor conteste 201 la pantalla diría «no se pudo»
+ * sobre algo que sí se hizo, y la persona lo reintentaría. Cuando el otro
+ * trabajo aterrice, esto pasa a `Promise<CiudadInterface>` como sus vecinas.
+ */
 export const createCiudad = (data: CiudadInterface): Promise<number> => {
   type CiudadWithoutId = Omit<CiudadInterface, "id">;
   const newData: CiudadWithoutId = { name: data.name, image: data.image, lat: data.lat, lng: data.lng };
   return axios
     .post(urlApi + urlCiudad, newData)
-    .then((response) => response.status)
+    .then(() => 200)
     .catch(() => 400);
 };
 
+/**
+ * Nota de C4, y es temporal.
+ *
+ * Ésta va con `createCiudad` por vecindad, no por necesidad: es un `PUT` y el
+ * servidor le contesta 200 hoy y después de C4, así que el atajo no la está
+ * salvando de ningún cambio de código. Lo que sí sigue haciendo es tragarse el
+ * fallo, y por eso `CiudadSheet.tsx` todavía dice «No se pudo guardar los
+ * cambios» donde el servidor había mandado una frase. Se arregla con su
+ * pantalla, que es de la sesión del mapa.
+ */
 export const editCiudad = (data: CiudadInterface): Promise<number> => {
   return axios
     .put(urlApi + urlCiudad + data.id, data)
-    .then((response) => response.status)
+    .then(() => 200)
     .catch(() => 400);
 };
 
-export const deleteCiudad = (id: number): Promise<number> => {
+export const deleteCiudad = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlCiudad + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarCiudad = (id: number): Promise<number> => {
+export const desarchivarCiudad = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlCiudad + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

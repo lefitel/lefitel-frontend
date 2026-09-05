@@ -25,6 +25,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { mensajeDeError } from "../../../api/descarga";
 
 interface Props { innerTab: InnerTab; }
 
@@ -85,15 +86,13 @@ const TipoObsSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarTipoObs(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Tipo de observación desarchivado");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarTipoObs(unarchiveTarget.id as number);
+            toast.success("Tipo de observación desarchivado");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }
@@ -119,32 +118,34 @@ const TipoObsSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: TipoObsInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editTipoObs(payload) : createTipoObs(payload));
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await (selected?.id ? editTipoObs(payload) : createTipoObs(payload));
             toast.success(selected?.id ? "Tipo de observación actualizado" : "Tipo de observación creado");
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo guardar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo guardar"));
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteTipoObs(selected.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deleteTipoObs(selected.id as number);
             toast.success("Tipo de observación archivado");
             setDeleteOpen(false);
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const columns = useMemo<Col<TipoObsInterface>[]>(() => [

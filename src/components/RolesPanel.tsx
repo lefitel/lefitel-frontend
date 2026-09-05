@@ -4,6 +4,7 @@ import { ArchiveIcon, ArchiveRestoreIcon, Loader2Icon, PencilIcon, PlusIcon, Shi
 import { SesionContext } from "../context/SesionContext";
 import { can } from "../lib/permissions";
 import { getRol, createRol, editRol, archiveRol, desarchivarRol } from "../api/Rol.api";
+import { mensajeDeError } from "../api/descarga";
 import type { RolInterface } from "../interfaces/interfaces";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -93,15 +94,13 @@ export default function RolesPanel({ onChange }: { onChange?: () => void }) {
     setGuardando(true);
     try {
       const datos = { ...(editando ?? {}), name: nombre.trim(), description: descripcion.trim() } as RolInterface;
-      const status = editando ? await editRol(datos) : await createRol(datos);
-      if (status !== 200) {
-        toast.error(editando ? "No se pudo guardar el rol" : "No se pudo crear el rol");
-        return;
-      }
+      if (editando) await editRol(datos); else await createRol(datos);
       toast.success(editando ? "Rol actualizado" : "Rol creado, sin ningún permiso todavía");
       setSheetOpen(false);
       await load();
       onChange?.();
+    } catch (error) {
+      toast.error(mensajeDeError(error, editando ? "No se pudo guardar el rol" : "No se pudo crear el rol"));
     } finally {
       setGuardando(false);
     }
@@ -111,18 +110,16 @@ export default function RolesPanel({ onChange }: { onChange?: () => void }) {
     if (!aArchivar?.id) return;
     setArchivando(true);
     try {
-      const r = await archiveRol(aArchivar.id);
-      if (r.status !== 200) {
-        // The server's own sentence, which carries the number of accounts still
-        // holding the role. Replacing it with "no se pudo" here would throw away
-        // the only thing that tells the administrator what to do next.
-        toast.error(r.message ?? "No se pudo archivar el rol");
-        return;
-      }
+      await archiveRol(aArchivar.id);
       toast.success("Rol archivado");
       setAArchivar(null);
       await load();
       onChange?.();
+    } catch (error) {
+      // The server's own sentence, which carries the number of accounts still
+      // holding the role. Replacing it with "no se pudo" here would throw away
+      // the only thing that tells the administrator what to do next.
+      toast.error(mensajeDeError(error, "No se pudo archivar el rol"));
     } finally {
       setArchivando(false);
     }
@@ -130,8 +127,12 @@ export default function RolesPanel({ onChange }: { onChange?: () => void }) {
 
   async function restaurar(rol: RolInterface) {
     if (!rol.id) return;
-    const status = await desarchivarRol(rol.id);
-    if (status !== 200) { toast.error("No se pudo desarchivar el rol"); return; }
+    try {
+      await desarchivarRol(rol.id);
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo desarchivar el rol"));
+      return;
+    }
     toast.success("Rol restaurado");
     await load();
     onChange?.();

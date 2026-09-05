@@ -26,10 +26,19 @@ export const getOrphanFiles = (): Promise<OrphanFileInfo[]> =>
     .get(urlApi + urlFiles + "orphans")
     .then((r) => r.data);
 
+/**
+ * Deletes one file from disk. Really nothing comes back now.
+ *
+ * It was typed `Promise<void>` and returned `r.data`, which was the string
+ * `"OK"` — `res.sendStatus(200)` sends that as `text/plain` — so the type had
+ * always been a lie. Since C4 the route answers `204`, whose body axios hands
+ * back as the empty string, and the lie would have become the kind that bites:
+ * `""` is falsy where `"OK"` was not.
+ */
 export const deleteFile = (name: string): Promise<void> =>
   axios
     .delete(urlApi + urlFiles + encodeURIComponent(name))
-    .then((r) => r.data);
+    .then(() => undefined);
 
 export const deleteOrphanFiles = (): Promise<{ deleted: number }> =>
   axios

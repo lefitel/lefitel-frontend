@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { createRevision } from "../../api/Revision.api";
+import { mensajeDeError } from "../../api/descarga";
 import { DatePicker } from "../ui/date-picker";
 import { Loader2Icon } from "lucide-react";
 import { Button } from "../ui/button";
@@ -37,31 +38,30 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
         if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
         setSaving(true);
         try {
-            const status = await createRevision({ description, date, id_evento: eventoId });
-            if (status !== 200) {
-                /**
-                 * Anything but 200 leaves the sheet open with the text still in it.
-                 *
-                 * The old version awaited the call, ignored what came back and
-                 * announced success. `createRevision` swallows its own rejection
-                 * and hands back a number, so the `catch` below could never run
-                 * either: a refusal, a server error and a dead connection all
-                 * read as "Revisión agregada", the sheet closed, and the
-                 * inspection somebody had just walked out to a pole to write was
-                 * gone with nothing on screen to say so.
-                 */
-                toast.error(
-                    status === 403
-                        ? "No tienes permiso para registrar revisiones"
-                        : "No se pudo agregar la revisión. Vuelve a intentarlo.",
-                );
-                return;
-            }
+            await createRevision({ description, date, id_evento: eventoId });
             toast.success("Revisión agregada");
             handleClose();
             onSuccess();
-        } catch {
-            toast.error("No se pudo agregar la revisión. Vuelve a intentarlo.");
+        } catch (error) {
+            /**
+             * A failure leaves the sheet open with the text still in it.
+             *
+             * Two versions of this have been wrong in opposite directions, and
+             * both cost something. The first awaited the call, ignored what came
+             * back and announced success: a refusal, a server error and a dead
+             * connection all read as "Revisión agregada", the sheet closed, and
+             * the inspection somebody had just walked out to a pole to write was
+             * gone with nothing on screen to say so. The second compared the
+             * status against `200` — which C4 turned into `201`, so every saved
+             * inspection would have reported a failure and been typed in again,
+             * this time as a duplicate row.
+             *
+             * Neither number appears now. The call either resolves or it does
+             * not, and the sentence is the server's own — "no tienes permiso
+             * para registrar revisiones" arrives written by the side that
+             * decided it.
+             */
+            toast.error(mensajeDeError(error, "No se pudo agregar la revisión. Vuelve a intentarlo."));
         } finally {
             setSaving(false);
         }

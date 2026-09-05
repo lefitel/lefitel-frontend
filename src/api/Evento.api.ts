@@ -1,7 +1,6 @@
 import axios from "axios";
 import { urlEvento, urlApi, urlPoste } from "./url";
 import { EventoInterface } from "../interfaces/interfaces";
-import { eventoExample } from "../data/example";
 import { comoParametros, ListParams, Paginado, pedirListado, todasLasFilas } from "./listado";
 import { descargarListado, type FormatoDescarga } from "./descarga";
 
@@ -45,9 +44,7 @@ export const getEvento_usuario = (id_usuario: number): Promise<EventoInterface[]
 export const getEvento_poste = (id_poste: number): Promise<EventoInterface[]> =>
   todasLasFilas<EventoInterface>(urlApi + urlEvento + urlPoste + id_poste);
 
-export const createEvento = (
-  data: EventoInterface
-): Promise<{ status: number; data: EventoInterface }> => {
+export const createEvento = (data: EventoInterface): Promise<EventoInterface> => {
   type EventoWithoutId = Omit<EventoInterface, "id">;
   const newData: EventoWithoutId = {
     description: data.description,
@@ -61,9 +58,8 @@ export const createEvento = (
     ...(data.revision ? { revision: data.revision } : {}),
   };
   return axios
-    .post(urlApi + urlEvento, newData)
-    .then((response) => ({ status: response.status, data: response.data }))
-    .catch(() => ({ status: 400, data: eventoExample }));
+    .post<EventoInterface>(urlApi + urlEvento, newData)
+    .then((response) => response.data);
 };
 
 export const searchEvento = (dataId: number): Promise<EventoInterface> => {
@@ -72,40 +68,51 @@ export const searchEvento = (dataId: number): Promise<EventoInterface> => {
     .then((response) => response.data as EventoInterface);
 };
 
-export const editEvento = (
-  data: EventoInterface
-): Promise<{ status: number; data: EventoInterface }> => {
+export const editEvento = (data: EventoInterface): Promise<EventoInterface> => {
   return axios
-    .put(urlApi + urlEvento + data.id, data)
-    .then((response) => ({ status: response.status, data: response.data }))
-    .catch(() => ({ status: 400, data: eventoExample }));
+    .put<EventoInterface>(urlApi + urlEvento + data.id, data)
+    .then((response) => response.data);
 };
 
+/**
+ * Nota de C4, y es temporal.
+ *
+ * Ésta es una de las cinco funciones de esta carpeta que siguen devolviendo un
+ * número en vez de propagar el fallo. No por criterio: la llama
+ * `EventoDetallePage.tsx`, y esa sesión está reescribiendo ese fichero ahora
+ * mismo, así que tocarlo metería su trabajo a medias en este commit.
+ *
+ * Mientras tanto, **un éxito resuelve 200 sea cual sea el código real**. Sin
+ * esa línea, en cuanto el servidor conteste 204 la pantalla diría «no se pudo»
+ * sobre algo que sí se hizo, y la persona lo reintentaría.
+ *
+ * **Tiene tres llamantes, no uno**, y los otros dos están en ficheros libres:
+ * `evento/index.tsx` y `usePosteDetalleData.ts`. Los tres pasan a
+ * `Promise<void>` de una vez cuando el fichero bloqueado se suelte; convertir
+ * sólo los libres significaría dos formas del mismo verbo a la vez.
+ */
 export const reabrirEvento = (id: number): Promise<number> =>
   axios
     .post(urlApi + urlEvento + id + "/reabrir", {})
-    .then((r) => r.status)
+    .then(() => 200)
     .catch(() => 400);
 
 export const resolverEvento = (
   id: number,
   data: { description: string; date: Date; image: string }
-): Promise<number> =>
+): Promise<void> =>
   axios
     .post(urlApi + urlEvento + id + "/resolver", data)
-    .then((r) => r.status)
-    .catch(() => 400);
+    .then(() => undefined);
 
-export const deleteEvento = (id: number): Promise<number> => {
+export const deleteEvento = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlEvento + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarEvento = (id: number): Promise<number> => {
+export const desarchivarEvento = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlEvento + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

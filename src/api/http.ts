@@ -24,6 +24,7 @@
 
 import axios from "axios";
 import { instalarInterceptorStepUp } from "./stepUpInterceptor";
+import { marcarFallo, SIN_CONEXION } from "./fallo";
 
 /**
  * The header every write carries, so the server can tell a request from this
@@ -148,4 +149,70 @@ axios.defaults.paramsSerializer = { indexes: null };
 // Se instala aquí y no en `main.tsx` porque este módulo ya es el único punto
 // donde se configura cómo habla la aplicación con la API, y `http.test.ts` ya
 // vigila que `main.tsx` lo importe.
-instalarInterceptorStepUp();
+export const ID_INTERCEPTOR_STEP_UP = instalarInterceptorStepUp();
+
+/**
+ * El traductor de fallos, y va **después** del interceptor del segundo factor.
+ *
+ * Lo que hace: a todo rechazo de axios le engancha `error.normalized = {status,
+ * message}` y lo vuelve a rechazar **tal cual**, con el `AxiosError` original.
+ * Antes de esto, un 403 por permiso, un 500 del servidor y una red caída
+ * llegaban los tres a la pantalla como el número 400, porque la capa de `api/`
+ * los aplastaba con `.catch(() => 400)`. La información se destruía antes de
+ * que nadie pudiera mirarla.
+ *
+ * **Las dos reglas de aquí abajo protegen cosas distintas, y confundirlas
+ * rompe una de las dos en silencio.** Medido contra el axios instalado, no
+ * razonado:
+ *
+ * - **El orden es defensa, no lo que sostiene el segundo factor hoy.** Axios
+ *   ejecuta los manejadores de respuesta en orden de registro, también los de
+ *   error, así que el del segundo factor ve el fallo antes que esto. Pero
+ *   medido: **ponerlo delante tampoco lo cegaría**, porque esto sólo añade un
+ *   campo y vuelve a rechazar el mismo objeto, con su `response.status` y su
+ *   `data.code` intactos. El orden importaría el día que alguien hiciera que
+ *   rechazara con otra cosa — que es justo lo que la regla de abajo prohibe—,
+ *   y por eso se fija igualmente.
+ * - **Rechazar con el error original protege al cierre de sesión.**
+ *   `SesionProvider` registra el suyo al montarse, o sea siempre después de
+ *   éste: ningún orden lo salva. Lee `error.config`, `error.response.headers` y
+ *   `error.response.status === 401`. Si esto rechazara con un objeto plano, se
+ *   quedaría sin las tres y **una sesión revocada dejaría de echar a nadie**.
+ *   Y con él caerían los treinta sitios de `src/api` y de las pantallas que
+ *   leen `error.response`, incluido `opcionesDenegadas`, que es lo que
+ *   distingue «denegado» de «falló» en las ocho pantallas de C2.
+ *
+ * **El manejador de éxito es la identidad y tiene que serlo.** El interceptor
+ * del segundo factor reintenta la petición desde dentro de su rama de error, y
+ * esa llamada recorre la cadena entera otra vez: medido, los manejadores de
+ * éxito que van detrás corren **dos veces** por cada reintento. Contar, medir o
+ * registrar algo aquí saldría duplicado.
+ */
+export const ID_NORMALIZADOR = axios.interceptors.response.use(
+  (respuesta) => respuesta,
+  (error: unknown) => {
+    // Una petición que alguien canceló no es un fallo de red, y la pantalla del
+    // generador ya distingue las dos con `axios.isCancel`. Marcarla diría «sin
+    // conexión» sobre una exportación que la persona misma acaba de parar.
+    if (!axios.isCancel(error) && axios.isAxiosError(error)) {
+      const respuesta = error.response;
+      const datos = respuesta?.data as { message?: unknown; code?: unknown } | undefined;
+      const suyo = datos?.message;
+      // Una negativa del protocolo del segundo factor se queda sin frase, y a
+      // propósito: `code` sólo aparece en esa respuesta de todo el servidor, y
+      // el interceptor que la lee **ya ha sacado su propio aviso** —con su
+      // botón «Configurarlo»— antes de volver a rechazar. Sin esta línea, los
+      // cuarenta `catch` nuevos sacarían un segundo aviso con exactamente el
+      // mismo texto y sin el botón.
+      const delProtocolo = typeof datos?.code === "string";
+      marcarFallo(error, {
+        status: respuesta?.status ?? 0,
+        // Sin respuesta, la frase es nuestra. Con respuesta, o es la del
+        // servidor o no hay ninguna: la genérica la pone la pantalla, que sabe
+        // qué estaba haciendo.
+        message: respuesta === undefined ? SIN_CONEXION : !delProtocolo && typeof suyo === "string" ? suyo : "",
+      });
+    }
+    return Promise.reject(error);
+  },
+);

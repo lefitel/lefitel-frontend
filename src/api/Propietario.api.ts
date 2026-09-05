@@ -26,32 +26,28 @@ export const getPropietarioStats = (): Promise<PropietarioStats> =>
     .get(urlApi + urlPropietario + "stats")
     .then((r) => r.data);
 
-export const createPropietario = (data: PropietarioInterface): Promise<number> => {
+export const createPropietario = (data: PropietarioInterface): Promise<PropietarioInterface> => {
   type PropietarioWithoutId = Omit<PropietarioInterface, "id">;
   const newData: PropietarioWithoutId = { name: data.name };
   return axios
-    .post(urlApi + urlPropietario, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<PropietarioInterface>(urlApi + urlPropietario, newData)
+    .then((response) => response.data);
 };
 
-export const editPropietario = (data: PropietarioInterface): Promise<number> => {
+export const editPropietario = (data: PropietarioInterface): Promise<PropietarioInterface> => {
   return axios
-    .put(urlApi + urlPropietario + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<PropietarioInterface>(urlApi + urlPropietario + data.id, data)
+    .then((response) => response.data);
 };
 
-export const deletePropietario = (id: number): Promise<number> => {
+export const deletePropietario = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlPropietario + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarPropietario = (id: number): Promise<number> => {
+export const desarchivarPropietario = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlPropietario + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

@@ -75,12 +75,25 @@ export const getPosteByTramo = (
 ): Promise<PosteInterface[]> =>
   todasLasFilas<PosteInterface>(urlApi + urlPoste, { ciudadA, ciudadB });
 
+/**
+ * Nota de C4, y es temporal.
+ *
+ * Ésta es una de las cinco funciones de esta carpeta que siguen devolviendo un
+ * número en vez de propagar el fallo. No por criterio: su único llamante es
+ * `PosteSheet.tsx`, y esa sesión está reescribiendo ese fichero ahora mismo,
+ * así que tocarlo metería su trabajo a medias en este commit.
+ *
+ * Mientras tanto, **un éxito resuelve 200 sea cual sea el código real**. Sin
+ * esa línea, en cuanto el servidor conteste 201 la pantalla diría «no se pudo»
+ * sobre algo que sí se hizo, y la persona lo reintentaría. Cuando el otro
+ * trabajo aterrice, esto pasa a `Promise<PosteInterface>` como sus vecinas.
+ */
 export const createPoste = (
   data: PosteInterface
 ): Promise<{ status: number; data: PosteInterface }> => {
   return axios
     .post(urlApi + urlPoste, data)
-    .then((response) => ({ status: response.status, data: response.data }))
+    .then((response) => ({ status: 200, data: response.data as PosteInterface }))
     .catch(() => ({ status: 400, data: posteExample }));
 };
 
@@ -90,25 +103,39 @@ export const searchPoste = (dataId: number): Promise<PosteInterface> => {
     .then((response) => response.data as PosteInterface);
 };
 
+/**
+ * Nota de C4, y es temporal.
+ *
+ * Ésta es un `PUT` y el servidor le contesta 200 hoy y después de C4, así que
+ * el atajo no la salva de ningún cambio de código: va con `createPoste` porque
+ * comparte pantalla, `PosteSheet.tsx`, que es de la sesión del mapa.
+ *
+ * **Tiene tres llamantes, no uno.** Además de la hoja, `poste/index.tsx` la usa
+ * dos veces para cambiar el material y el propietario **desde la propia
+ * tabla**, pintando la fila antes de preguntar. Esos dos sitios no tienen
+ * `try` ninguno: hoy da igual porque esta función se traga el fallo, pero el
+ * día que pase a `Promise<PosteInterface>` hay que mover el revert al `catch`
+ * y limpiar el identificador de «guardando» en un `finally`, o la fila se
+ * queda con el material que el servidor rechazó y el desplegable deshabilitado
+ * para siempre.
+ */
 export const editPoste = (
   data: PosteInterface
 ): Promise<{ status: number; data: PosteInterface }> => {
   return axios
     .put(urlApi + urlPoste + data.id, data)
-    .then((response) => ({ status: response.status, data: response.data }))
+    .then((response) => ({ status: 200, data: response.data as PosteInterface }))
     .catch(() => ({ status: 400, data: posteExample }));
 };
 
-export const deletePoste = (id: number): Promise<number> => {
+export const deletePoste = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlPoste + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarPoste = (id: number): Promise<number> => {
+export const desarchivarPoste = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlPoste + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

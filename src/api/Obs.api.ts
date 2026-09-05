@@ -26,7 +26,7 @@ export const getObsStats = (): Promise<ObsStats> =>
     .get(urlApi + urlObs + "stats")
     .then((r) => r.data);
 
-export const createObs = (data: ObsInterface): Promise<number> => {
+export const createObs = (data: ObsInterface): Promise<ObsInterface> => {
   type ObsWithoutId = Omit<ObsInterface, "id">;
   const newData: ObsWithoutId = {
     name: data.name,
@@ -35,28 +35,24 @@ export const createObs = (data: ObsInterface): Promise<number> => {
     criticality: data.criticality ?? null,
   };
   return axios
-    .post(urlApi + urlObs, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<ObsInterface>(urlApi + urlObs, newData)
+    .then((response) => response.data);
 };
 
-export const editObs = (data: ObsInterface): Promise<number> => {
+export const editObs = (data: ObsInterface): Promise<ObsInterface> => {
   return axios
-    .put(urlApi + urlObs + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<ObsInterface>(urlApi + urlObs + data.id, data)
+    .then((response) => response.data);
 };
 
-export const deleteObs = (id: number): Promise<number> => {
+export const deleteObs = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlObs + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarObs = (id: number): Promise<number> => {
+export const desarchivarObs = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlObs + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

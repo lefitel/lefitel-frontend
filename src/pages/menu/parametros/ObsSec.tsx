@@ -29,6 +29,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { mensajeDeError } from "../../../api/descarga";
 
 interface Props { innerTab: InnerTab; }
 
@@ -93,15 +94,13 @@ const ObsSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarObs(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Observación desarchivada");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarObs(unarchiveTarget.id as number);
+            toast.success("Observación desarchivada");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }
@@ -128,16 +127,20 @@ const ObsSec = ({ innerTab }: Props) => {
         ));
 
         const payload: ObsInterface = { ...obs, id_tipoObs: newTipoId };
-        const result = await editObs(payload);
-        setSavingTipoObsIds((prev) => { const next = new Set(prev); next.delete(obs.id as number); return next; });
-
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await editObs(payload);
             toast.success("Tipo actualizado");
-        } else {
-            toast.error("No se pudo actualizar");
+        } catch (error) {
+            // The row already shows the new type. Without this revert the
+            // screen would keep claiming a change the server refused, for as
+            // long as nobody reloads — and it is the only place on this screen
+            // that can lie about what is stored.
+            toast.error(mensajeDeError(error, "No se pudo actualizar"));
             setList((curr) => (curr ?? []).map((o) =>
                 o.id === obs.id ? { ...o, id_tipoObs: obs.id_tipoObs, tipoObs: obs.tipoObs } : o
             ));
+        } finally {
+            setSavingTipoObsIds((prev) => { const next = new Set(prev); next.delete(obs.id as number); return next; });
         }
     }, [tipoObsList]);
 
@@ -177,16 +180,16 @@ const ObsSec = ({ innerTab }: Props) => {
         setList((curr) => (curr ?? []).map((o) => o.id === obs.id ? { ...o, criticality: newLevel } : o));
 
         const payload: ObsInterface = { ...obs, criticality: newLevel };
-        const result = await editObs(payload);
-        setSavingCriticalityIds((prev) => { const next = new Set(prev); next.delete(obs.id as number); return next; });
-
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await editObs(payload);
             toast.success("Criticidad actualizada");
             loadStats();
-        } else {
-            toast.error("No se pudo actualizar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo actualizar"));
             // Revert
             setList((curr) => (curr ?? []).map((o) => o.id === obs.id ? { ...o, criticality: obs.criticality } : o));
+        } finally {
+            setSavingCriticalityIds((prev) => { const next = new Set(prev); next.delete(obs.id as number); return next; });
         }
     }, [loadStats]);
 
@@ -195,32 +198,34 @@ const ObsSec = ({ innerTab }: Props) => {
         if (!idTipoObs) return toast.warning("Selecciona un tipo de observación");
         setSaving(true);
         const payload: ObsInterface = { ...selected, name, description, id_tipoObs: idTipoObs, criticality };
-        const result = await (selected?.id ? editObs(payload) : createObs(payload));
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await (selected?.id ? editObs(payload) : createObs(payload));
             toast.success(selected?.id ? "Observación actualizada" : "Observación creada");
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo guardar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo guardar"));
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteObs(selected.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deleteObs(selected.id as number);
             toast.success("Observación archivada");
             setDeleteOpen(false);
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const columns = useMemo<Col<ObsInterface>[]>(() => [

@@ -26,31 +26,27 @@ export const getAdssStats = (): Promise<AdssStats> =>
     .get(urlApi + urlAdss + "stats")
     .then((r) => r.data);
 
-export const createAdss = (data: AdssInterface): Promise<number> => {
+export const createAdss = (data: AdssInterface): Promise<AdssInterface> => {
   const newData: AdssInterface = { name: data.name, description: data.description };
   return axios
-    .post(urlApi + urlAdss, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<AdssInterface>(urlApi + urlAdss, newData)
+    .then((response) => response.data);
 };
 
-export const editAdss = (data: AdssInterface): Promise<number> => {
+export const editAdss = (data: AdssInterface): Promise<AdssInterface> => {
   return axios
-    .put(urlApi + urlAdss + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<AdssInterface>(urlApi + urlAdss + data.id, data)
+    .then((response) => response.data);
 };
 
-export const deleteAdss = (id: number): Promise<number> => {
+export const deleteAdss = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlAdss + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarAdss = (id: number): Promise<number> => {
+export const desarchivarAdss = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlAdss + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

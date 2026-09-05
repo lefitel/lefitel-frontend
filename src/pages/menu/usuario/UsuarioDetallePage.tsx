@@ -267,7 +267,13 @@ export default function UsuarioDetallePage() {
     if (!d.usuario?.id) return;
     setUnlocking(true);
     const res = await desbloquearUsuario(d.usuario.id);
-    if (res.status === 200) {
+    // Cualquier 2xx, y no un número concreto. Desde C4 esta ruta contesta 204
+    // en vez de 200, y las dos orillas no se despliegan a la vez: fijar el
+    // número nuevo diría «no se pudo desbloquear» sobre una cuenta que el
+    // servidor acaba de desbloquear, en la única pantalla cuyo trabajo es
+    // rescatar a alguien que no puede entrar. Fijar el viejo diría lo mismo al
+    // revés. Un rango no puede equivocarse en ninguna de las dos direcciones.
+    if (res.status >= 200 && res.status < 300) {
       toast.success("Cuenta desbloqueada. Ya puede volver a intentar iniciar sesión.");
       setOpenUnlock(false);
       d.load();

@@ -54,8 +54,10 @@ export const uploadImage = async (data: File): Promise<UploadResult> => {
     const response = await axios.post(urlApi + urlUpload, formData);
     const path = response.data?.path;
     if (typeof path !== "string" || path === "") {
-      // A 200 with nothing usable in it. Rare, and worth refusing here rather
-      // than letting an empty `image` reach a row.
+      // A success with nothing usable in it. Rare, and worth refusing here
+      // rather than letting an empty `image` reach a row. No status is compared:
+      // this route answers 201 since C4 and would have answered 200 before, and
+      // either way what matters is whether a path came back.
       return { ok: false, message: "El servidor no devolvió la imagen guardada." };
     }
     return { ok: true, path };

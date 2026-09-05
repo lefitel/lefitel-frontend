@@ -25,6 +25,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { mensajeDeError } from "../../../api/descarga";
 
 interface Props { innerTab: InnerTab; }
 
@@ -85,15 +86,13 @@ const MaterialSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarMaterial(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Material desarchivado");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarMaterial(unarchiveTarget.id as number);
+            toast.success("Material desarchivado");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }
@@ -119,32 +118,34 @@ const MaterialSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: MaterialInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editMaterial(payload) : createMaterial(payload));
-        if (Number(result) === 200 || Number(result) === 201) {
+        try {
+            await (selected?.id ? editMaterial(payload) : createMaterial(payload));
             toast.success(selected?.id ? "Material actualizado" : "Material creado");
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo guardar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo guardar"));
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteMaterial(selected.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deleteMaterial(selected.id as number);
             toast.success("Material archivado");
             setDeleteOpen(false);
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const columns = useMemo<Col<MaterialInterface>[]>(() => [

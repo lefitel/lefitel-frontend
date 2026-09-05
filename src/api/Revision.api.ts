@@ -8,9 +8,20 @@ export const getRevision = (
 ): Promise<RevisionInterface[]> =>
   todasLasFilas<RevisionInterface>(urlApi + urlRevision + id_evento);
 
+/**
+ * Records one inspection, and lets the failure travel.
+ *
+ * It used to hand back a status number, and before that a flat 400 for
+ * everything — which threw away the one thing the caller needed: a 403 means
+ * this account may not record inspections and no amount of retrying will help,
+ * while a 500 or a dead connection means try again. Rejecting keeps that
+ * distinction and adds the server's own sentence, which the number never
+ * carried. The status is still readable where it matters, off
+ * `error.normalized`.
+ */
 export const createRevision = (
   data: RevisionInterface
-): Promise<number> => {
+): Promise<RevisionInterface> => {
   const newData: RevisionInterface = {
     description: data.description,
     date: data.date,
@@ -18,22 +29,6 @@ export const createRevision = (
   };
 
   return axios
-    .post(urlApi + urlRevision, newData)
-    .then((response) => {
-      return response.status;
-    })
-    .catch((error: unknown) => {
-      /**
-       * The status the server actually sent, or 0 if it never answered.
-       *
-       * This used to flatten everything to 400, which threw away the only thing
-       * the caller needed to tell a refusal from a breakage: a 403 means this
-       * account may not record inspections and no amount of retrying will help,
-       * while a 500 or a dead connection means try again. The dialog now says
-       * which of those happened, so 0 has to be distinguishable from a real
-       * status rather than dressed up as one.
-       */
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      return typeof status === "number" ? status : 0;
-    });
+    .post<RevisionInterface>(urlApi + urlRevision, newData)
+    .then((response) => response.data);
 };

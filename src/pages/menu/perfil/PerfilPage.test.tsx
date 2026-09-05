@@ -188,7 +188,7 @@ beforeEach(() => {
   // the literal "500", which shared its type with a real path and could be
   // saved as one. See `api/Upload.api.ts`.
   uploadImage.mockResolvedValue({ ok: true, path: "/uploads/una-foto.jpg" });
-  editUsuario.mockResolvedValue(200);
+  editUsuario.mockResolvedValue({ id: 1, name: "Isaias" });
   // As the API really answers it: JSON, so `birthday` is a string and not a
   // `Date`. The screen slices the first ten characters off it to feed the date
   // picker, which an object's `toString()` does not survive.

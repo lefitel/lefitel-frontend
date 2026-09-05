@@ -48,7 +48,9 @@ beforeEach(() => {
   // "Not found" is what a free username looks like through this API: the sheet
   // treats a resolved search as "taken" and a rejection as "available".
   searchUsuario_user.mockRejectedValue(new Error("no existe"));
-  createUsuario.mockResolvedValue(200);
+  // La fila que devuelve el 201. La hoja ya no mira el número: mira si hubo
+  // respuesta. Dejar aquí un 200 literal era fijar el contrato al revés.
+  createUsuario.mockResolvedValue({ id: 11, name: "Nuevo" });
   getRol.mockResolvedValue([{ id: 3, name: "Coordinador", description: "" }]);
 });
 

@@ -44,7 +44,7 @@ export const searchUsuario_user = (user: string): Promise<UsuarioInterface> => {
     .then((response) => response.data as UsuarioInterface);
 };
 
-export const createUsuario = (data: UsuarioInterface): Promise<number> => {
+export const createUsuario = (data: UsuarioInterface): Promise<UsuarioInterface> => {
   type UsuarioWithoutId = Omit<UsuarioInterface, "id">;
   const newData: UsuarioWithoutId = {
     name: data.name,
@@ -57,16 +57,14 @@ export const createUsuario = (data: UsuarioInterface): Promise<number> => {
     id_rol: data.id_rol,
   };
   return axios
-    .post(urlApi + urlUsuario, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<UsuarioInterface>(urlApi + urlUsuario, newData)
+    .then((response) => response.data);
 };
 
-export const editUsuario = (data: UsuarioInterface): Promise<number> => {
+export const editUsuario = (data: UsuarioInterface): Promise<UsuarioInterface> => {
   return axios
-    .put(urlApi + urlUsuario + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<UsuarioInterface>(urlApi + urlUsuario + data.id, data)
+    .then((response) => response.data);
 };
 
 /**
@@ -157,7 +155,7 @@ export const desbloquearUsuario = (id: number): Promise<{ status: number; messag
     });
 };
 
-export const deleteUsuario = (id: number): Promise<number> => {
+export const deleteUsuario = (id: number): Promise<void> => {
   return axios
     // `{ data: {} }` porque `axios.delete(url)` descarta el cuerpo, y sin
     // cuerpo el interceptor de step-up no tiene dónde poner la contraseña.
@@ -165,13 +163,11 @@ export const deleteUsuario = (id: number): Promise<number> => {
     // `stepup_password` contra una ruta que la exige, y funciona — Express
     // parsea el cuerpo de un DELETE con `Content-Type: application/json`.
     .delete(urlApi + urlUsuario + id, { data: {} })
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarUsuario = (id: number): Promise<number> => {
+export const desarchivarUsuario = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlUsuario + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

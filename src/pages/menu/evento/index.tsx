@@ -8,7 +8,7 @@ import { saveAs } from "file-saver";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { deleteEvento, desarchivarEvento, editEvento, exportarEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
-import { mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
+import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
@@ -228,30 +228,33 @@ const EventoPage = () => {
         ));
 
         const payload: EventoInterface = { ...evento, priority: newPriority };
-        const res = await editEvento(payload);
-        setSavingPriorityIds((prev) => { const next = new Set(prev); next.delete(evento.id as number); return next; });
-
-        if (Number(res.status) === 200 || Number(res.status) === 201) {
+        try {
+            await editEvento(payload);
             toast.success(newPriority ? "Marcado como prioritario" : "Prioridad quitada");
-        } else {
-            toast.error("No se pudo actualizar");
+        } catch (error) {
+            // The star in the row is already lit. Reverting is what stops the
+            // list claiming a priority the server refused to store.
+            toast.error(mensajeDeError(error, "No se pudo actualizar"));
             setList((curr) => (curr ?? []).map((e) =>
                 e.id === evento.id ? { ...e, priority: evento.priority } : e
             ));
+        } finally {
+            setSavingPriorityIds((prev) => { const next = new Set(prev); next.delete(evento.id as number); return next; });
         }
     }, []);
 
     const handleDelete = async () => {
         if (!deleteId) return;
         setDeleting(true);
-        const status = await deleteEvento(deleteId);
-        setDeleting(false);
-        setDeleteId(null);
-        if (status === 200) {
+        try {
+            await deleteEvento(deleteId);
             toast.success("Evento archivado.");
             load();
-        } else {
-            toast.error("Error al archivar el evento.");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "Error al archivar el evento."));
+        } finally {
+            setDeleting(false);
+            setDeleteId(null);
         }
     };
 
@@ -259,18 +262,16 @@ const EventoPage = () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarEvento(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Evento desarchivado");
-                setUnarchiveTarget(null);
-                // And back to the first page with it: the row just left this
-                // list, so page five of four is now reachable by doing nothing.
-                setArchivedList(null);
-                setArchivedPage(1);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarEvento(unarchiveTarget.id as number);
+            toast.success("Evento desarchivado");
+            setUnarchiveTarget(null);
+            // And back to the first page with it: the row just left this
+            // list, so page five of four is now reachable by doing nothing.
+            setArchivedList(null);
+            setArchivedPage(1);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }

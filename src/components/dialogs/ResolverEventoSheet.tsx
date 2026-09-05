@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { resolverEvento } from "../../api/Evento.api";
+import { mensajeDeError } from "../../api/descarga";
 import { uploadImage } from "../../api/Upload.api";
 import { EventoInterface } from "../../interfaces/interfaces";
 import { DatePicker } from "../ui/date-picker";
@@ -53,17 +54,23 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
         imagePath = subida.path;
       }
 
-      const status = await resolverEvento(
+      await resolverEvento(
         evento.id as number,
         { description, date, image: imagePath }
       );
-      if (status === 200) {
-        toast.success("Evento resuelto");
-        handleClose();
-        onSuccess();
-      } else {
-        toast.error("No se pudo resolver el evento");
-      }
+      toast.success("Evento resuelto");
+      handleClose();
+      onSuccess();
+    } catch (error) {
+      // The sheet deliberately stays open with the text still in it, which is
+      // the right call for a refusal somebody can act on — and it is also the
+      // one that can duplicate work, because the photo went up before this
+      // call and a retry uploads a second one. That is the trade, taken with
+      // eyes open: the alternative is closing the sheet and losing what was
+      // written. What makes it survivable is that the message is now the
+      // server's own, so "no puedes resolver una incidencia ya resuelta" stops
+      // reading as "try again".
+      toast.error(mensajeDeError(error, "No se pudo resolver el evento"));
     } finally {
       setSaving(false);
     }

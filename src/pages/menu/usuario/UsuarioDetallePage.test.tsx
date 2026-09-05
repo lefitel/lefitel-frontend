@@ -194,7 +194,10 @@ beforeEach(() => {
   editUserName.mockResolvedValue({ status: 200 });
   editUserPass.mockResolvedValue({ status: 200 });
   resetMfaUsuario.mockResolvedValue({ status: 200 });
-  desbloquearUsuario.mockResolvedValue({ status: 200 });
+  // 204 y no 200: desde C4 el desbloqueo no devuelve nada. Con un 200 aquí,
+  // este fichero seguiría en verde con la pantalla diciendo que el rescate
+  // falló sobre una cuenta ya desbloqueada.
+  desbloquearUsuario.mockResolvedValue({ status: 204 });
 });
 
 describe("changing your own username", () => {

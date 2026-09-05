@@ -26,32 +26,28 @@ export const getMaterialStats = (): Promise<MaterialStats> =>
     .get(urlApi + urlMaterial + "stats")
     .then((r) => r.data);
 
-export const createMaterial = (data: MaterialInterface): Promise<number> => {
+export const createMaterial = (data: MaterialInterface): Promise<MaterialInterface> => {
   type MaterialWithoutId = Omit<MaterialInterface, "id">;
   const newData: MaterialWithoutId = { name: data.name, description: data.description };
   return axios
-    .post(urlApi + urlMaterial, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<MaterialInterface>(urlApi + urlMaterial, newData)
+    .then((response) => response.data);
 };
 
-export const editMaterial = (data: MaterialInterface): Promise<number> => {
+export const editMaterial = (data: MaterialInterface): Promise<MaterialInterface> => {
   return axios
-    .put(urlApi + urlMaterial + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<MaterialInterface>(urlApi + urlMaterial + data.id, data)
+    .then((response) => response.data);
 };
 
-export const deleteMaterial = (id: number): Promise<number> => {
+export const deleteMaterial = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlMaterial + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarMaterial = (id: number): Promise<number> => {
+export const desarchivarMaterial = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlMaterial + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

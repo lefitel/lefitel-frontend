@@ -12,6 +12,7 @@ import { MailWarningIcon } from "lucide-react";
 import { editUsuario, editUserName, editUserPass } from "../../../api/Usuario.api";
 import { sendVerificationEmail, verifyEmailToken, endSession, logoutAllSessions } from "../../../api/Login.api";
 import { uploadImage } from "../../../api/Upload.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { passwordLengthError } from "../../../lib/password";
 import type { SesionActivaInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { usePerfilData } from "./usePerfilData";
@@ -302,17 +303,14 @@ const PerfilPage = () => {
         phone: datos.phone,
         birthday: datos.birthday as unknown as Date,
       };
-      if (await editUsuario(payload) === 200) {
-        setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, ...payload } }));
-        d.actualizarUsuario(payload);
-        setDatosGuardados(datos);
-        cerrarTrasGuardar("personal");
-        toast.success("Información actualizada.");
-      } else {
-        toast.error("Error al actualizar la información.");
-      }
-    } catch {
-      toast.error("Ocurrió un error en el servidor.");
+      await editUsuario(payload);
+      setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, ...payload } }));
+      d.actualizarUsuario(payload);
+      setDatosGuardados(datos);
+      cerrarTrasGuardar("personal");
+      toast.success("Información actualizada.");
+    } catch (error) {
+      toast.error(mensajeDeError(error, "Error al actualizar la información."));
     }
     setGuardandoPersonal(false);
   };
@@ -341,8 +339,10 @@ const PerfilPage = () => {
     }
     const path = subida.path;
     const payload: UsuarioInterface = { ...base(), image: path };
-    if (await editUsuario(payload) !== 200) {
-      toast.error("No se pudo guardar la foto.");
+    try {
+      await editUsuario(payload);
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo guardar la foto."));
       return false;
     }
     setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, image: path } }));

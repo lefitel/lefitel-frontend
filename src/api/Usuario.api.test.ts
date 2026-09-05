@@ -332,9 +332,13 @@ describe("desbloquearUsuario", () => {
   });
 
   it("reports a success with no message at all", async () => {
-    vi.spyOn(axios, "patch").mockResolvedValue({ status: 200, data: {} });
+    // 204 y cuerpo vacío: desde C4 `PATCH /usuario/:id/desbloquear` no devuelve
+    // nada. Con un 200 aquí este fichero describía una respuesta que el
+    // servidor ya no manda, y la pantalla que lee esto (`UsuarioDetallePage`)
+    // acabaría contradiciéndolo sin que nada se pusiera rojo.
+    vi.spyOn(axios, "patch").mockResolvedValue({ status: 204, data: "" });
 
-    expect(await desbloquearUsuario(7)).toEqual({ status: 200 });
+    expect(await desbloquearUsuario(7)).toEqual({ status: 204 });
   });
 });
 

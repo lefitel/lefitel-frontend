@@ -24,9 +24,13 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
+import { rechazoDelServidor } from "../../../test/fallos";
 import type { EventoInterface, SesionInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 
 const getEvento = vi.fn();
+const editEvento = vi.fn();
+const toastError = vi.fn();
+const toastSuccess = vi.fn();
 
 vi.mock("../../../lib/permissions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../lib/permissions")>()),
@@ -35,13 +39,17 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
 vi.mock("../../../api/Evento.api", () => ({
   getEvento: (...args: unknown[]) => getEvento(...args),
   exportarEventos: vi.fn().mockResolvedValue({ blob: new Blob(["x"]), filename: "Incidencias.csv" }),
-  editEvento: vi.fn().mockResolvedValue({ status: 200 }),
-  deleteEvento: vi.fn().mockResolvedValue(200),
-  desarchivarEvento: vi.fn().mockResolvedValue(200),
+  // Desde C4 estas tres devuelven la fila o nada, y ninguna devuelve un
+  // número. `reabrirEvento` es la excepción y está dicho en su propio
+  // fichero: sigue devolviendo 200 hasta que la sesión de MapLibre suelte
+  // `EventoDetallePage.tsx`.
+  editEvento: (...args: unknown[]) => editEvento(...args),
+  deleteEvento: vi.fn().mockResolvedValue(undefined),
+  desarchivarEvento: vi.fn().mockResolvedValue(undefined),
   reabrirEvento: vi.fn().mockResolvedValue(200),
 }));
 vi.mock("sonner", () => ({
-  toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
+  toast: { warning: vi.fn(), error: toastError, success: toastSuccess, info: vi.fn() },
 }));
 // The export libraries used to be mocked here because they were megabytes of
 // parsing for a menu nothing in this file opens. This screen no longer imports
@@ -107,6 +115,7 @@ beforeEach(() => {
   cleanup();
   vi.clearAllMocks();
   getEvento.mockResolvedValue({ data: [], total: 0, page: 1 });
+  editEvento.mockResolvedValue({ id: 1 });
 });
 
 describe("tabla de eventos — la gravedad se ve", () => {
@@ -225,5 +234,38 @@ describe("tabla de eventos — recargar no descarta la vista", () => {
 
     // The bare `load()` used to reload page 1 unfiltered, so this was `[]`.
     expect(lastFilters()).toContainEqual({ column: "criticality", value: "criticas" });
+  });
+});
+
+describe("tabla de eventos — la estrella de prioridad no puede mentir", () => {
+  // The row is repainted before the server is asked, which is what makes the
+  // screen feel instant — and what makes a refused write dangerous: with
+  // nothing to undo it, the list goes on showing a priority that was never
+  // stored, for as long as nobody reloads. C4 moved the write from "returns a
+  // number" to "throws", so the revert moved from an `else` into a `catch`, and
+  // until these two tests nothing in either repository was watching it.
+  it("deja la marca puesta cuando el servidor la acepta", async () => {
+    getEvento.mockResolvedValue({ data: [evento(1)], total: 1, page: 1 });
+    renderPage();
+
+    await userEvent.click(await screen.findByTitle(/cambiar prioridad/i));
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith("Marcado como prioritario"));
+    expect(await screen.findByText("Sí")).toBeInTheDocument();
+  });
+
+  it("la quita otra vez si el servidor la rechaza, y dice por qué", async () => {
+    getEvento.mockResolvedValue({ data: [evento(1)], total: 1, page: 1 });
+    editEvento.mockRejectedValue(rechazoDelServidor(403, "No puedes editar incidencias resueltas"));
+    renderPage();
+
+    await userEvent.click(await screen.findByTitle(/cambiar prioridad/i));
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    // The server's own sentence, not "No se pudo actualizar".
+    expect(String(toastError.mock.calls[0][0])).toMatch(/no puedes editar/i);
+    // And the row is back to what the database really holds.
+    expect(await screen.findByText("No")).toBeInTheDocument();
+    expect(screen.queryByText("Sí")).not.toBeInTheDocument();
   });
 });

@@ -7,7 +7,7 @@ import { saveAs } from "file-saver";
 import { SesionContext } from "../../context/SesionContext";
 import { can } from "../../lib/permissions";
 import { deleteUsuario, desarchivarUsuario, exportarUsuarios, getUsuario } from "../../api/Usuario.api";
-import { mensajeDeErrorAsync, type FormatoDescarga } from "../../api/descarga";
+import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../api/descarga";
 import { url } from "../../api/url";
 import { UsuarioInterface } from "../../interfaces/interfaces";
 import { Button } from "../../components/ui/button";
@@ -111,30 +111,29 @@ const SeguridadPage = () => {
     const handleDelete = async () => {
         if (!deleteTarget?.id) return;
         setDeleting(true);
-        const result = await deleteUsuario(deleteTarget.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deleteUsuario(deleteTarget.id as number);
             toast.success("Usuario archivado");
             setDeleteTarget(null);
             load();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const handleUnarchive = async () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarUsuario(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Usuario desarchivado");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarUsuario(unarchiveTarget.id as number);
+            toast.success("Usuario desarchivado");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }

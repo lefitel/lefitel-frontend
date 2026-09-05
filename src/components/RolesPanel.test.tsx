@@ -15,6 +15,7 @@ import { SesionContext, type contextProps } from "../context/SesionContext";
 import type { SesionInterface } from "../interfaces/interfaces";
 import { setPermisos, olvidarPermisos, sinPermisos } from "../lib/permissions";
 import RolesPanel from "./RolesPanel";
+import { rechazoDelServidor } from "../test/fallos";
 
 const getRol = vi.hoisted(() => vi.fn());
 const createRol = vi.hoisted(() => vi.fn());
@@ -74,11 +75,13 @@ describe("RolesPanel", () => {
   });
 
   it("shows the server's refusal verbatim, with the number of accounts", async () => {
-    archiveRol.mockResolvedValue({
-      status: 409,
-      message: "No se puede archivar: hay 3 cuentas con este rol. Cámbiales el rol antes de archivarlo.",
-      cuentas: 3,
-    });
+    // Since C4 the refusal travels the way every other refusal does: the call
+    // rejects and `mensajeDeError` reads the server's own sentence off it. The
+    // bespoke `{status, message, cuentas}` this used to mock no longer exists,
+    // and `cuentas` never had a reader outside this fixture.
+    archiveRol.mockRejectedValue(
+      rechazoDelServidor(409, "No se puede archivar: hay 3 cuentas con este rol. Cámbiales el rol antes de archivarlo."),
+    );
     renderPanel();
     const user = userEvent.setup();
 
@@ -91,7 +94,7 @@ describe("RolesPanel", () => {
   });
 
   it("does not tell the parent to reload when the archive was refused", async () => {
-    archiveRol.mockResolvedValue({ status: 409, message: "No se puede archivar: hay 1 cuenta con este rol.", cuentas: 1 });
+    archiveRol.mockRejectedValue(rechazoDelServidor(409, "No se puede archivar: hay 1 cuenta con este rol."));
     const { onChange } = renderPanel();
     const user = userEvent.setup();
 
@@ -103,7 +106,7 @@ describe("RolesPanel", () => {
   });
 
   it("archives when nobody holds the role, and tells the parent to reload the matrix", async () => {
-    archiveRol.mockResolvedValue({ status: 200 });
+    archiveRol.mockResolvedValue(undefined);
     const { onChange } = renderPanel();
     const user = userEvent.setup();
 
@@ -118,7 +121,7 @@ describe("RolesPanel", () => {
     // The server seeds thirty-two denied cells, so a new role can do nothing until
     // somebody grants it something. An administrator who does not know that
     // files a bug about the account being broken.
-    createRol.mockResolvedValue(200);
+    createRol.mockResolvedValue({ id: 9, name: "Inspector" });
     renderPanel();
     const user = userEvent.setup();
 

@@ -318,8 +318,7 @@ const PostePage = () => {
         try {
             const eventos = await getEvento_poste(confirmDelete.id as number);
             if (eventos.length > 0) { toast.error("No se puede archivar: tiene eventos asociados"); return; }
-            const res = await deletePoste(confirmDelete.id as number);
-            if (Number(res) !== 200) { toast.error("No se pudo archivar"); return; }
+            await deletePoste(confirmDelete.id as number);
             toast.success("Poste archivado");
             setConfirmDelete(null);
             load();
@@ -340,18 +339,16 @@ const PostePage = () => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarPoste(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("Poste desarchivado");
-                setUnarchiveTarget(null);
-                // And back to the first page with it: the row just left this
-                // list, so page five of four is now reachable by doing nothing.
-                setArchivedList(null);
-                setArchivedPage(1);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarPoste(unarchiveTarget.id as number);
+            toast.success("Poste desarchivado");
+            setUnarchiveTarget(null);
+            // And back to the first page with it: the row just left this
+            // list, so page five of four is now reachable by doing nothing.
+            setArchivedList(null);
+            setArchivedPage(1);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }

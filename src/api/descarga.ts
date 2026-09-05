@@ -20,6 +20,7 @@
 // asynchronous, which is why there are two functions and not one.
 
 import axios from "axios";
+import { normalizado } from "./fallo";
 
 /** Reads the name the server chose, or falls back to one the caller supplies. */
 export function nombreDeFichero(header: unknown, respaldo: string): string {
@@ -38,8 +39,30 @@ export function nombreDeFichero(header: unknown, respaldo: string): string {
   return plano ? plano[1].trim() : respaldo;
 }
 
-/** Extracts the server's message, which is written for the user, not the developer. */
+/**
+ * Extracts the server's message, which is written for the user, not the developer.
+ *
+ * Reads `error.normalized` first, and that is what makes the failure with **no
+ * answer at all** sayable. A dead network has no `response`, so the branch
+ * below finds nothing and every caller falls back to its own sentence — "Error
+ * al generar el reporte" for a server that is not running. There were
+ * seventeen such callers before C4 and there are fifty-five now, which is why
+ * the case stopped being a corner. The normalizer in `http.ts` is the only thing that knows the
+ * difference, and this is where what it knows comes out.
+ *
+ * The `response.data.message` branch stays underneath it, and not as a
+ * belt-and-braces: an error built by hand in a test, or one raised before the
+ * interceptor ever ran, has no `normalized`, and this function is called on
+ * plenty of both.
+ */
 export const mensajeDeError = (error: unknown, respaldo: string): string => {
+  const fallo = normalizado(error);
+  // When the normalizer has been here, what it decided is the whole answer:
+  // its sentence, or the screen's. Falling through to `response.data.message`
+  // after an **empty** one would undo the one case it deliberately leaves
+  // empty — the second-factor refusal, whose own interceptor has already put
+  // that exact sentence on screen with a button attached.
+  if (fallo) return fallo.message.trim() !== "" ? fallo.message : respaldo;
   if (axios.isAxiosError(error)) {
     const message = (error.response?.data as { message?: string } | undefined)?.message;
     if (typeof message === "string" && message.trim() !== "") return message;

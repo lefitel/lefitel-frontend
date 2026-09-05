@@ -163,13 +163,13 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                 id_rol: idRol,
                 image: imagePath,
             };
-            const result = await editUsuario(payload);
-            if (Number(result) === 200) {
+            try {
+                await editUsuario(payload);
                 toast.success("Usuario actualizado");
                 setOpen(false);
                 onSuccess();
-            } else {
-                toast.error("No se pudo guardar");
+            } catch (error) {
+                toast.error(mensajeDeError(error, "No se pudo guardar"));
             }
         } else {
             const payload: UsuarioInterface = {
@@ -182,13 +182,18 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
                 id_rol: idRol,
                 image: imagePath,
             };
-            const result = await createUsuario(payload);
-            if (Number(result) === 200 || Number(result) === 201) {
+            try {
+                await createUsuario(payload);
                 toast.success("Usuario creado");
                 setOpen(false);
                 onSuccess();
-            } else {
-                toast.error("No se pudo crear el usuario");
+            } catch (error) {
+                // The server has three specific refusals here — the name is
+                // taken (409), the password is too weak (400), the role is not
+                // one this account may hand out (403) — and each of them
+                // arrives with a sentence that says which. "No se pudo crear
+                // el usuario" was the same words for all three.
+                toast.error(mensajeDeError(error, "No se pudo crear el usuario"));
             }
         }
 

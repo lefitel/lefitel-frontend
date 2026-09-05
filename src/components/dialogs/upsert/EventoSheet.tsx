@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { createEvento, editEvento, searchEvento } from "../../../api/Evento.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { getRevision } from "../../../api/Revision.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
 import { getEventoObs } from "../../../api/EventoObs.api";
@@ -174,16 +175,15 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
           if (!r.ok) { toast.error(r.message); return; }
           imagePath = r.path;
         }
-        const result = await editEvento(
+        await editEvento(
           { ...evento, description, priority, image: imagePath, id_usuario: evento.id_usuario ?? sesion.usuario.id ?? 0, obs_ids: selectedObs }
         );
-        if (result.status !== 200) { toast.error("No se pudo guardar el evento"); return; }
         toast.success("Evento actualizado");
       } else {
         const subida = await uploadImage(imageFile!);
         if (!subida.ok) { toast.error(subida.message); return; }
         const uploadResult = subida.path;
-        const result = await createEvento(
+        await createEvento(
           {
             description,
             image: uploadResult,
@@ -196,14 +196,13 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
             revision: { description: revDesc, date: revDate },
           }
         );
-        if (result.status !== 200 && result.status !== 201) { toast.error("No se pudo crear el evento"); return; }
         toast.success("Evento creado");
       }
 
       handleClose();
       onSuccess();
-    } catch {
-      toast.error("Error al guardar");
+    } catch (error) {
+      toast.error(mensajeDeError(error, "Error al guardar"));
     } finally {
       setSaving(false);
     }

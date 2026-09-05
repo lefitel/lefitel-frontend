@@ -25,6 +25,7 @@ import {
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { mensajeDeError } from "../../../api/descarga";
 
 interface Props { innerTab: InnerTab; }
 
@@ -85,15 +86,13 @@ const AdssSec = ({ innerTab }: Props) => {
         if (!unarchiveTarget) return;
         setUnarchiving(true);
         try {
-            const result = await desarchivarAdss(unarchiveTarget.id as number);
-            if (result === 200) {
-                toast.success("ADSS desarchivado");
-                setUnarchiveTarget(null);
-                setArchivedList(null);
-                load();
-            } else {
-                toast.error("No se pudo desarchivar");
-            }
+            await desarchivarAdss(unarchiveTarget.id as number);
+            toast.success("ADSS desarchivado");
+            setUnarchiveTarget(null);
+            setArchivedList(null);
+            load();
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo desarchivar"));
         } finally {
             setUnarchiving(false);
         }
@@ -119,32 +118,34 @@ const AdssSec = ({ innerTab }: Props) => {
         if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
         setSaving(true);
         const payload: AdssInterface = { ...selected, name, description };
-        const result = await (selected?.id ? editAdss(payload) : createAdss(payload));
-        if (Number(result) === 200) {
+        try {
+            await (selected?.id ? editAdss(payload) : createAdss(payload));
             toast.success(selected?.id ? "ADSS actualizado" : "ADSS creado");
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo guardar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo guardar"));
+        } finally {
+            setSaving(false);
         }
-        setSaving(false);
     };
 
     const handleDelete = async () => {
         if (!selected?.id) return;
         setDeleting(true);
-        const result = await deleteAdss(selected.id as number);
-        if (Number(result) === 200) {
+        try {
+            await deleteAdss(selected.id as number);
             toast.success("ADSS archivado");
             setDeleteOpen(false);
             handleClose();
             load();
             loadStats();
-        } else {
-            toast.error("No se pudo archivar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo archivar"));
+        } finally {
+            setDeleting(false);
         }
-        setDeleting(false);
     };
 
     const columns = useMemo<Col<AdssInterface>[]>(() => [

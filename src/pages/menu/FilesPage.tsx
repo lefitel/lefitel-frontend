@@ -14,6 +14,7 @@ import {
   EntityImageStats,
   BrokenRef,
 } from "../../api/Files.api";
+import { mensajeDeError } from "../../api/descarga";
 import { Button } from "../../components/ui/button";
 import { Badge } from "../../components/ui/badge";
 import { Card, CardContent } from "../../components/ui/card";
@@ -121,8 +122,10 @@ const FilesPage = () => {
       toast.success(`${cleared} referencia${cleared !== 1 ? "s" : ""} limpiada${cleared !== 1 ? "s" : ""}`);
       setClearBrokenDialogOpen(false);
       loadStats();
-    } catch {
-      toast.error("No se pudieron limpiar las referencias");
+    } catch (error) {
+      // Misma puerta que los dos botones de abajo — `archivos.archivar` — así
+      // que la misma razón para dejar hablar al servidor.
+      toast.error(mensajeDeError(error, "No se pudieron limpiar las referencias"));
     } finally {
       setClearingBroken(false);
     }
@@ -134,20 +137,35 @@ const FilesPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Both of these awaited a call that propagates its failure and had no
+  // `catch`: a refusal — an account without `archivos.archivar` pressing
+  // Eliminar — left the row's spinner turning for ever, the dialog open, and
+  // nothing at all on screen. Every other call on this screen already had one.
   const handleDeleteFile = async (name: string) => {
     setDeletingName(name);
-    await deleteFile(name);
-    setFiles((prev) => prev.filter((f) => f.name !== name));
-    setDeletingName(null);
-    setFileToDelete(null);
+    try {
+      await deleteFile(name);
+      setFiles((prev) => prev.filter((f) => f.name !== name));
+      setFileToDelete(null);
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo eliminar el archivo"));
+    } finally {
+      setDeletingName(null);
+    }
   };
 
   const handleDeleteOrphans = async () => {
     setDeletingOrphans(true);
-    await deleteOrphanFiles();
-    setDeletingOrphans(false);
-    setOrphansDialogOpen(false);
-    load();
+    try {
+      const { deleted } = await deleteOrphanFiles();
+      toast.success(`${deleted} archivo${deleted !== 1 ? "s" : ""} eliminado${deleted !== 1 ? "s" : ""}`);
+      setOrphansDialogOpen(false);
+      load();
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudieron eliminar los archivos huérfanos"));
+    } finally {
+      setDeletingOrphans(false);
+    }
   };
 
   const orphans = files.filter((f) => f.isOrphan);

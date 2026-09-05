@@ -26,32 +26,28 @@ export const getTipoObsStats = (): Promise<TipoObsStats> =>
     .get(urlApi + urlTipoObs + "stats")
     .then((r) => r.data);
 
-export const createTipoObs = (data: TipoObsInterface): Promise<number> => {
+export const createTipoObs = (data: TipoObsInterface): Promise<TipoObsInterface> => {
   type TipoObsWithoutId = Omit<TipoObsInterface, "id">;
   const newData: TipoObsWithoutId = { name: data.name, description: data.description };
   return axios
-    .post(urlApi + urlTipoObs, newData)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .post<TipoObsInterface>(urlApi + urlTipoObs, newData)
+    .then((response) => response.data);
 };
 
-export const editTipoObs = (data: TipoObsInterface): Promise<number> => {
+export const editTipoObs = (data: TipoObsInterface): Promise<TipoObsInterface> => {
   return axios
-    .put(urlApi + urlTipoObs + data.id, data)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .put<TipoObsInterface>(urlApi + urlTipoObs + data.id, data)
+    .then((response) => response.data);
 };
 
-export const deleteTipoObs = (id: number): Promise<number> => {
+export const deleteTipoObs = (id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlTipoObs + id)
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };
 
-export const desarchivarTipoObs = (id: number): Promise<number> => {
+export const desarchivarTipoObs = (id: number): Promise<void> => {
   return axios
     .patch(urlApi + urlTipoObs + id + "/desarchivar", {})
-    .then((response) => response.status)
-    .catch(() => 400);
+    .then(() => undefined);
 };

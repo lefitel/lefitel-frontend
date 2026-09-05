@@ -7,6 +7,7 @@ import { can } from "../../../lib/permissions";
 import { deleteCiudad, desarchivarCiudad, getCiudad } from "../../../api/Ciudad.api";
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
+import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
 import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
@@ -82,15 +83,13 @@ export default function CiudadesPage() {
     if (!unarchiveTarget) return;
     setUnarchiving(true);
     try {
-      const result = await desarchivarCiudad(unarchiveTarget.id as number);
-      if (result === 200) {
-        toast.success("Ciudad desarchivada");
-        setUnarchiveTarget(null);
-        setArchivedCiudades(null); // fuerza reload al volver al tab
-        load();
-      } else {
-        toast.error("No se pudo desarchivar la ciudad");
-      }
+      await desarchivarCiudad(unarchiveTarget.id as number);
+      toast.success("Ciudad desarchivada");
+      setUnarchiveTarget(null);
+      setArchivedCiudades(null); // fuerza reload al volver al tab
+      load();
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo desarchivar la ciudad"));
     } finally {
       setUnarchiving(false);
     }
@@ -100,14 +99,12 @@ export default function CiudadesPage() {
     if (!deleteCiudadTarget) return;
     setDeleting(true);
     try {
-      const result = await deleteCiudad(deleteCiudadTarget.id as number);
-      if (result === 200) {
-        toast.success("Ciudad archivada");
-        setDeleteCiudadTarget(null);
-        load();
-      } else {
-        toast.error("No se pudo archivar la ciudad");
-      }
+      await deleteCiudad(deleteCiudadTarget.id as number);
+      toast.success("Ciudad archivada");
+      setDeleteCiudadTarget(null);
+      load();
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo archivar la ciudad"));
     } finally {
       setDeleting(false);
     }
