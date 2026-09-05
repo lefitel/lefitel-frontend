@@ -161,10 +161,26 @@ export const ResultSkeleton = ({ columns, root }: ResultSkeletonProps) => {
  * that never depended on the catalog, so drawing a grey bar over them would be
  * hiding text that is already in hand.
  */
-const CardSkeleton = ({ title, lines }: { title: string; lines: number }) => (
-  <Card className="min-w-0 border-muted/60 shadow-sm">
+const CardSkeleton = ({
+  title, lines, tabs = false,
+}: { title: string; lines: number; tabs?: boolean }) => (
+  // `size="sm"` because the four real panels are that size, and the size is
+  // what sets the padding and the gap under the heading. Without it the
+  // skeleton stood four pixels wider on every side than the card that replaced
+  // it, which is the jump this whole component exists to avoid.
+  <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
     <CardHeader className="border-b border-border/40 pb-3">
-      <CardTitle className="text-base">{title}</CardTitle>
+      <div className="flex items-center justify-between gap-2">
+        <CardTitle className="text-base">{title}</CardTitle>
+        {/*
+          The Guardados/Plantillas strip. It is a bet, and worth naming as one:
+          the real strip only appears once the catalog says this reader has
+          templates, and the catalog is precisely what has not arrived. Drawn
+          because everyone who has a catalog at all has templates in it, so
+          leaving it out guesses wrong far more often than drawing it does.
+        */}
+        {tabs && <Skeleton className="h-7 w-36 rounded-lg" />}
+      </div>
     </CardHeader>
     <CardContent>
       <div className="space-y-2" aria-hidden="true">
@@ -219,7 +235,7 @@ export const PageSkeleton = () => (
         left out because the skeleton has to sit in the same box the page will,
         or the layout jumps the moment the catalog lands. */}
     <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <CardSkeleton title="Abrir un reporte" lines={4} />
+      <CardSkeleton title="Abrir un reporte" lines={4} tabs />
       <CardSkeleton title="Nivel de detalle" lines={1} />
       <CardSkeleton title="Columnas" lines={3} />
       <CardSkeleton title="Filtros" lines={2} />

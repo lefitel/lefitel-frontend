@@ -1317,6 +1317,25 @@ describe("the table scrolls, not the page", () => {
 });
 
 describe("something to start from", () => {
+  it("switches the two lists from the heading, above what scrolls", async () => {
+    renderPage();
+    await ready();
+
+    const strip = screen.getByRole("tab", { name: "Guardados" }).closest('[role="tablist"]');
+    expect(strip).not.toBeNull();
+
+    // In the heading, beside the name of the card it belongs to.
+    const heading = strip?.closest('[data-slot="card-header"]');
+    expect(heading).not.toBeNull();
+    expect(heading).toHaveTextContent("Abrir un reporte");
+
+    // And out of the body, which is the whole point rather than a matter of
+    // taste: the body caps its height and scrolls, so a switch inside it slid
+    // out of sight along with the list it names.
+    expect(strip?.closest('[data-slot="card-content"]')).toBeNull();
+    expect(screen.getByRole("tabpanel").closest('[data-slot="card-content"]')).not.toBeNull();
+  });
+
   it("says what each one is, and what a row of it will be", async () => {
     // Six names on their own are six guesses. The description is what somebody
     // chooses between them by, and the row meaning comes from the catalog —

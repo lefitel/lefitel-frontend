@@ -924,69 +924,99 @@ const GeneradorPage = () => {
             in it is not saved and not the reader's.
           */}
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
-            <CardHeader className="border-b border-border/40 pb-3">
-              <div className="flex items-center gap-1.5">
-                <CardTitle className="text-base">Abrir un reporte</CardTitle>
-                <CardHelp label="Abrir un reporte">
-                  <p>
-                    <strong className="font-medium text-foreground">Guardados</strong> son los suyos
-                    y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
-                    seis reportes ya armados: se abren, se tocan y se generan.
-                  </p>
-                  <p className="mt-2">
-                    Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
-                    cuando usted quiera.
-                  </p>
-                </CardHelp>
-              </div>
-            </CardHeader>
             {/*
-              No top padding here, and that is deliberate: `Card` already sets a
-              flex `gap` between its header and its content equal to its own
-              side padding — twelve pixels compact, sixteen otherwise. Adding
-              `pt-4` on top of it made the space under the rule twenty-eight
-              against twelve at the sides, which reads as the header floating
-              away from what it names.
+              `Tabs` wraps the heading as well as the body, and it has to: the
+              strip and the panels it switches read the same root, so a strip
+              beside the title means the root starts above the title.
 
-              Each panel caps itself rather than the band capping all four: the
-              headings stay visible and only the list that is actually long —
-              sixty columns, a hundred filters — moves. The selects and pickers
-              inside portal out of here, so nothing they open is clipped by it.
+              Spacing them becomes its job in the process — `Card` separates its
+              children with a flex gap, and it now has one child where it had
+              two — hence the gap restated here. Left alone, the twelve pixels
+              under the rule quietly became eight.
             */}
-            <CardContent className="max-h-72 overflow-y-auto">
-              {/*
-                Tabs and not two stacked groups, and the difference is not
-                cosmetic: with both lists on screen at once, an empty page
-                showed the same six templates here and again in the gallery on
-                the right. One at a time, opening on "Guardados", and the
-                duplication is gone without hiding anything — the other list is
-                one click away instead of one scroll.
-              */}
-              <Tabs defaultValue="guardados" className="space-y-3">
-                <TabsList variant="line">
-                  <TabsTrigger value="guardados">Guardados</TabsTrigger>
-                  {(catalog.templates?.length ?? 0) > 0 && (
-                    <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
-                  )}
-                </TabsList>
+            <Tabs defaultValue="guardados" className="gap-3">
+              <CardHeader className="border-b border-border/40 pb-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <CardTitle className="truncate text-base">Abrir un reporte</CardTitle>
+                    <CardHelp label="Abrir un reporte">
+                      <p>
+                        <strong className="font-medium text-foreground">Guardados</strong> son los suyos
+                        y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
+                        seis reportes ya armados: se abren, se tocan y se generan.
+                      </p>
+                      <p className="mt-2">
+                        Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
+                        cuando usted quiera.
+                      </p>
+                    </CardHelp>
+                  </div>
 
+                  {/*
+                    Up here rather than in the body, which is not only where it
+                    looks better: the body caps its height and scrolls, so from
+                    inside it the strip slid out of sight along with the list it
+                    was labelling.
+
+                    Held to 28 pixels against the 36 the control asks for, with
+                    `!` because the height it wants arrives through a variant
+                    that a plain `h-7` cannot outrank. This heading was cut down
+                    on purpose two changes ago and a full-size control would
+                    hand back most of what that saved.
+
+                    Hidden outright when this reader's catalog offers no
+                    template: a segmented control with one segment is a button
+                    that does nothing.
+                  */}
+                  {(catalog.templates?.length ?? 0) > 0 && (
+                    <TabsList className="h-7! shrink-0">
+                      <TabsTrigger value="guardados" className="px-2.5 text-xs">
+                        Guardados
+                      </TabsTrigger>
+                      <TabsTrigger value="plantillas" className="px-2.5 text-xs">
+                        Plantillas
+                      </TabsTrigger>
+                    </TabsList>
+                  )}
+                </div>
+              </CardHeader>
+              {/*
+                No top padding here, and that is deliberate: `Card` already sets
+                a flex `gap` between its header and its content equal to its own
+                side padding — twelve pixels compact, sixteen otherwise. Adding
+                `pt-4` on top of it made the space under the rule twenty-eight
+                against twelve at the sides, which reads as the header floating
+                away from what it names.
+
+                Each panel caps itself rather than the band capping all four:
+                the headings stay visible and only the list that is actually
+                long — sixty columns, a hundred filters — moves. The selects and
+                pickers inside portal out of here, so nothing they open is
+                clipped by it.
+
+                One list at a time, and the difference is not cosmetic: with
+                both on screen an empty page showed the same six templates here
+                and again in the gallery on the right. The other one is a click
+                away instead of a scroll away.
+              */}
+              <CardContent className="max-h-72 overflow-y-auto">
                 <TabsContent value="guardados">
-                <SavedReports
-                  reports={saved}
-                  total={savedTotal}
-                  onLoadMore={() => loadSaved(true)}
-                  currentId={current?.id ?? null}
-                  currentUserId={currentUserId}
-                  onOpen={handleOpen}
-                  // Opening and running are `ver`, which this page already
-                  // required to load at all. The three that write are not.
-                  onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
-                  onDuplicate={mayCreate ? handleDuplicate : undefined}
-                  onDelete={mayArchive ? handleDelete : undefined}
-                  failed={savedFailed}
-                  onRetry={refreshSaved}
-                  loading={loadingSaved}
-                />
+                  <SavedReports
+                    reports={saved}
+                    total={savedTotal}
+                    onLoadMore={() => loadSaved(true)}
+                    currentId={current?.id ?? null}
+                    currentUserId={currentUserId}
+                    onOpen={handleOpen}
+                    // Opening and running are `ver`, which this page already
+                    // required to load at all. The three that write are not.
+                    onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
+                    onDuplicate={mayCreate ? handleDuplicate : undefined}
+                    onDelete={mayArchive ? handleDelete : undefined}
+                    failed={savedFailed}
+                    onRetry={refreshSaved}
+                    loading={loadingSaved}
+                  />
                 </TabsContent>
 
                 <TabsContent value="plantillas">
@@ -996,8 +1026,8 @@ const GeneradorPage = () => {
                     onPick={handlePickTemplate}
                   />
                 </TabsContent>
-              </Tabs>
-            </CardContent>
+              </CardContent>
+            </Tabs>
           </Card>
 
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
