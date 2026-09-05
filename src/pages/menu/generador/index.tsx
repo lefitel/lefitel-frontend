@@ -871,30 +871,29 @@ const GeneradorPage = () => {
       </div>
 
       {/*
-        `min-w-0` on both columns, and it is not decoration.
+        The configuration sits above the table, not beside it.
 
-        A `1fr` track is `minmax(auto, 1fr)`, and that `auto` minimum resolves to
-        the item's automatic minimum size — its min-content width — because a
-        grid item is only floored at zero when it is itself a scroll container,
-        and these are plain divs. The result column holds a table whose headers
-        are `whitespace-nowrap`, so its min-content is the full width of the
-        table: the track grew to fit it, the grid outgrew the page, and the
-        application's `<main>` — which is `overflow-auto` — took the horizontal
-        scrollbar. Everything slid, which reads as the page scrolling sideways.
+        It used to be a column 320 to 400 pixels wide down the left, which is a
+        quarter to a third of the screen spent, permanently, on four panels that
+        are read while a report is being set up and ignored while it is being
+        read. The table is what needs the width — it is the report, its headers
+        do not wrap, and it was the one thing squeezed.
 
-        The `overflow-x-auto` around the table could not help. It scrolls when it
-        is narrower than its contents, and nothing was ever asking it to be
-        narrower: the track had already widened to accommodate it.
+        Each panel caps its own height and scrolls inside itself rather than the
+        band scrolling as a whole, so all four headings stay visible and only the
+        long one — sixty columns, a hundred filters — moves. `items-start` keeps
+        a card holding one select from being stretched to the height of a card
+        holding forty rows.
 
-        Zero here lets the track fall back to the space actually available, and
-        the table scrolls inside its own box, which is what it was built to do.
-        The configuration column gets the same for the same reason — its track
-        stops growing at 400px, but an item wider than its track still adds to
-        what the page can scroll.
+        `min-w-0` on each card for the reason the old two-column layout needed
+        it: a grid track is floored at its item's min-content width unless the
+        item is itself a scroll container, so a card wider than its share widens
+        the grid, the grid outgrows the page, and the application's `<main>` —
+        which is `overflow-auto` — takes a horizontal scrollbar.
       */}
-      <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
         {/* ── Configuration ─────────────────────────────────────────────── */}
-        <div className="min-w-0 space-y-4">
+        <>
           {/*
             First, not last. It used to sit under the filter list, which can be
             a hundred rows tall, so the most frequent task in the page — running
@@ -914,11 +913,17 @@ const GeneradorPage = () => {
             The card is no longer titled "Reportes guardados": half of what is
             in it is not saved and not the reader's.
           */}
-          <Card className="border-muted/60 shadow-sm">
+          <Card className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <CardTitle className="text-base">Abrir un reporte</CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
+            {/*
+              Each panel caps itself rather than the band capping all four: the
+              headings stay visible and only the list that is actually long —
+              sixty columns, a hundred filters — moves. The selects and pickers
+              inside portal out of here, so nothing they open is clipped by it.
+            */}
+            <CardContent className="max-h-72 overflow-y-auto pt-4">
               {/*
                 Tabs and not two stacked groups, and the difference is not
                 cosmetic: with both lists on screen at once, an empty page
@@ -965,12 +970,12 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-muted/60 shadow-sm">
+          <Card className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <CardTitle className="text-base">Nivel de detalle</CardTitle>
               <CardDescription>Define qué representa cada fila del reporte.</CardDescription>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="max-h-72 overflow-y-auto pt-4">
               <Select
                 value={config.root}
                 onValueChange={(value) => {
@@ -1005,7 +1010,7 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-muted/60 shadow-sm">
+          <Card className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base">Columnas</CardTitle>
@@ -1044,7 +1049,7 @@ const GeneradorPage = () => {
                 />
               </div>
             </CardHeader>
-            <CardContent className="space-y-3 pt-4">
+            <CardContent className="max-h-72 overflow-y-auto space-y-3 pt-4">
               {/*
                 The rule, said before it is broken instead of after.
 
@@ -1076,7 +1081,7 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="border-muted/60 shadow-sm">
+          <Card className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base">Filtros</CardTitle>
@@ -1117,7 +1122,7 @@ const GeneradorPage = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="max-h-72 overflow-y-auto pt-4">
               <FilterBuilder
                 config={config}
                 root={root}
@@ -1127,11 +1132,17 @@ const GeneradorPage = () => {
               />
             </CardContent>
           </Card>
+        </>
+      </div>
 
-        </div>
-
-        {/* ── Results ───────────────────────────────────────────────────── */}
-        <div className="min-w-0 space-y-4">
+      {/* ── Results ─────────────────────────────────────────────────────── */}
+      {/*
+        Full width now, and no `min-w-0`: this is a block child of a block, so
+        its width comes from its containing block and the table's own
+        `overflow-x-auto` is finally the thing that decides. The floor only ever
+        mattered while this was a grid item.
+      */}
+      <div>
           <Card className="border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1433,7 +1444,6 @@ const GeneradorPage = () => {
               )}
             </CardContent>
           </Card>
-        </div>
       </div>
 
       <AlertDialog open={clearingFilters} onOpenChange={setClearingFilters}>

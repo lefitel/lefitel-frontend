@@ -1244,31 +1244,51 @@ describe("the report taking shape while it is built", () => {
 });
 
 describe("the table scrolls, not the page", () => {
-  it("lets both columns of the layout be narrower than their contents", async () => {
+  it("lets every configuration panel be narrower than its contents", async () => {
     // A class check standing in for a layout check, because jsdom has no layout
     // engine and cannot be asked how wide anything ended up.
     //
-    // What it guards: a `1fr` track is `minmax(auto, 1fr)`, and that `auto`
-    // minimum is the item's min-content width unless the item is a scroll
-    // container. These are plain divs holding a table whose headers are
-    // `whitespace-nowrap`, so the track grew to the full width of the table,
-    // the grid outgrew the page, and the application's `<main>` — which is
-    // `overflow-auto` — took a horizontal scrollbar. The whole page slid
-    // sideways while the table sat still inside its own scroll box, never
-    // asked to be any narrower.
+    // What it guards: a grid track is floored at its item's min-content width
+    // unless the item is itself a scroll container. A card wider than its share
+    // therefore widens the grid, the grid outgrows the page, and the
+    // application's <main> — which is overflow-auto — takes a horizontal
+    // scrollbar, so the whole page slides sideways while the table sits still
+    // inside its own scroll box, never asked to be any narrower.
     //
-    // Losing `min-w-0` brings all of that back and nothing else fails, which
-    // is why it is worth a test that only reads a class name.
+    // Losing min-w-0 brings that back and nothing else fails, which is why it
+    // is worth a test that only reads a class name.
     const user = userEvent.setup();
     renderPage();
     await ready();
     await addColumn(user, /Descripción/);
 
-    const grid = document.querySelector<HTMLElement>('[class*="lg:grid-cols-"]');
-    expect(grid).not.toBeNull();
-    const columns = Array.from(grid!.children) as HTMLElement[];
-    expect(columns).toHaveLength(2);
-    for (const column of columns) expect(column.className).toMatch(/\bmin-w-0\b/);
+    const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
+    expect(band).not.toBeNull();
+    const panels = Array.from(band!.children) as HTMLElement[];
+    expect(panels).toHaveLength(4);
+    for (const panel of panels) expect(panel.className).toContain("min-w-0");
+  });
+
+  it("caps each configuration panel and scrolls it inside itself", async () => {
+    // The band sits above the table now, so its height is taken from the thing
+    // people actually read: sixty columns or a hundred filters would otherwise
+    // push the report off the bottom of the screen.
+    //
+    // Each panel caps itself rather than the band capping all four, so the four
+    // headings stay visible and only the long list moves. Asserted as four,
+    // because a cap missing from one of them is what goes unnoticed.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
+    const capped = Array.from(band!.querySelectorAll('[data-slot="card-content"]'));
+    expect(capped).toHaveLength(4);
+    for (const content of capped) {
+      expect(content.className).toContain("max-h-");
+      expect(content.className).toContain("overflow-y-auto");
+    }
   });
 
   it("keeps the table's own scroll box around the table", async () => {

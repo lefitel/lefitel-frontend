@@ -162,7 +162,7 @@ export const ResultSkeleton = ({ columns, root }: ResultSkeletonProps) => {
  * hiding text that is already in hand.
  */
 const CardSkeleton = ({ title, lines }: { title: string; lines: number }) => (
-  <Card className="border-muted/60 shadow-sm">
+  <Card className="min-w-0 border-muted/60 shadow-sm">
     <CardHeader className="border-b border-border/40 pb-3">
       <CardTitle className="text-base">{title}</CardTitle>
     </CardHeader>
@@ -213,37 +213,35 @@ export const PageSkeleton = () => (
       <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
     </div>
 
-    {/* `min-w-0` for the reason the real page carries it: a `1fr` track is
-        floored at its item's min-content width, and without this the column
-        holding the table widens the whole page. It is repeated here rather than
+    {/* The same shape the page will have, down to the containment: four panels
+        in a band above a full-width table, `min-w-0` on each so a card wider
+        than its share cannot widen the grid. It is repeated here rather than
         left out because the skeleton has to sit in the same box the page will,
         or the layout jumps the moment the catalog lands. */}
-    <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
-      <div className="min-w-0 space-y-4">
-        <CardSkeleton title="Abrir un reporte" lines={4} />
-        <CardSkeleton title="Nivel de detalle" lines={1} />
-        <CardSkeleton title="Columnas" lines={3} />
-        <CardSkeleton title="Filtros" lines={2} />
-      </div>
+    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <CardSkeleton title="Abrir un reporte" lines={4} />
+      <CardSkeleton title="Nivel de detalle" lines={1} />
+      <CardSkeleton title="Columnas" lines={3} />
+      <CardSkeleton title="Filtros" lines={2} />
+    </div>
 
-      <div className="min-w-0">
-        <Card className="border-muted/60 shadow-sm">
-          <CardHeader className="border-b border-border/40 pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">Resultado</CardTitle>
-              <div className="flex flex-wrap items-center gap-2" aria-hidden="true">
-                <Skeleton className="h-8 w-24 rounded-md" />
-                <Skeleton className="h-8 w-24 rounded-md" />
-                <Skeleton className="h-8 w-20 rounded-md" />
-                <Skeleton className="h-8 w-24 rounded-md" />
-              </div>
+    <div>
+      <Card className="border-muted/60 shadow-sm">
+        <CardHeader className="border-b border-border/40 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Resultado</CardTitle>
+            <div className="flex flex-wrap items-center gap-2" aria-hidden="true">
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-24 rounded-md" />
+              <Skeleton className="h-8 w-20 rounded-md" />
+              <Skeleton className="h-8 w-24 rounded-md" />
             </div>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <PlainTableSkeleton />
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-4">
+          <PlainTableSkeleton />
+        </CardContent>
+      </Card>
     </div>
   </div>
 );
