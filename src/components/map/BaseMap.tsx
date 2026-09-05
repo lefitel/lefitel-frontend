@@ -1,7 +1,25 @@
 import { Map, type MapLayerMouseEvent } from "@vis.gl/react-maplibre";
+import { setWorkerUrl } from "maplibre-gl";
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
 import { useTheme } from "../theme-provider";
 import { styleForTheme } from "./mapStyle";
 import type { LatLng } from "./mapGeo";
+
+/**
+ * Tell MapLibre where its worker lives, instead of letting it guess.
+ *
+ * Left alone, it builds the worker's URL as `new URL("./maplibre-gl-worker.mjs",
+ * import.meta.url)` — relative to wherever its own module ended up. That guess is
+ * wrong twice over here: in development Vite pre-bundles the dependency into
+ * `.vite/deps/`, where no worker file exists, and in a production build the
+ * bundler cannot see through the computed filename, so it never emits the worker
+ * at all. Both fail the same way, with the map asking for a file that is not
+ * there.
+ *
+ * `?url` hands the import to Vite as an asset: it is served in development and
+ * emitted with a hashed name in the build, and either way this is the real URL.
+ */
+setWorkerUrl(workerUrl);
 
 interface BaseMapProps {
   center: LatLng;
