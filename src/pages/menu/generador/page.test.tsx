@@ -203,6 +203,14 @@ const ready = async () => {
  * finds the panel and a prefix finds the gallery — no reaching into the markup.
  */
 const panelTemplate = (name: string) => screen.getByRole("button", { name });
+/**
+ * The panel lists one of the two at a time, opening on "Guardados". Reaching a
+ * template there is a click, and the tests say so rather than pretending the
+ * list is always drawn: only the active tab is rendered at all.
+ */
+const openTemplatesTab = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole("tab", { name: "Plantillas" }));
+};
 const galleryTemplate = (name: string) =>
   screen.getByRole("button", { name: new RegExp(`^${name}.+`, "s") });
 
@@ -1127,16 +1135,30 @@ describe("the report taking shape while it is built", () => {
   it("offers reports to open before anything has been chosen", async () => {
     // What stands in the empty panel now. The bare invitation is the fallback
     // for a server that sends no templates, covered below.
+    const user = userEvent.setup();
     renderPage();
     await ready();
 
-    // Twice, and that is the point: the gallery receives whoever is opening the
-    // screen for the first time, and the panel is the way back to them on every
-    // day after — the gallery only stands in an empty panel.
     expect(galleryTemplate("Todos los eventos")).toBeInTheDocument();
+    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
+
+    // And reachable from the panel too, which is the way back to them once the
+    // gallery is gone.
+    await openTemplatesTab(user);
     expect(panelTemplate("Todos los eventos")).toBeInTheDocument();
     expect(panelTemplate("Listado de postes")).toBeInTheDocument();
-    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
+  });
+
+  it("does not put the same six on screen twice", async () => {
+    // The reason they are tabs. Listed under the saved reports rather than
+    // behind a tab, an empty page showed all six in the panel and all six again
+    // in the gallery beside it, which reads as the screen repeating itself.
+    // The panel opens on "Guardados", so the gallery is the only one showing.
+    renderPage();
+    await ready();
+
+    expect(galleryTemplate("Todos los eventos")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^Todos los eventos/ })).toHaveLength(1);
   });
 
   it("appears with the first column, before anything has been asked for", async () => {
@@ -1286,6 +1308,7 @@ describe("something to start from", () => {
     // Six names on their own are six guesses. The description is what somebody
     // chooses between them by, and the row meaning comes from the catalog —
     // which is also the quietest way to teach the level of detail.
+    const user = userEvent.setup();
     renderPage();
     await ready();
 
@@ -1295,8 +1318,10 @@ describe("something to start from", () => {
     expect(galleryTemplate("Todos los eventos"))
       .toHaveTextContent(/Cada evento con su descripción.*Una fila por evento/s);
     expect(galleryTemplate("Listado de postes")).toHaveTextContent("Una fila por poste");
+
     // The panel row carries the name alone: three lines times six, beside four
     // other cards, is a wall.
+    await openTemplatesTab(user);
     expect(panelTemplate("Todos los eventos"))
       .not.toHaveTextContent(/Cada evento con su descripción/);
   });
@@ -1352,6 +1377,7 @@ describe("something to start from", () => {
     // the panel list is on screen the whole time — and without the defence one
     // press writes a template over somebody's saved report, and over the team's
     // copy if it was shared.
+    await openTemplatesTab(user);
     await user.click(panelTemplate("Todos los eventos"));
 
     expect(await screen.findByRole("button", { name: /^Guardar$/ })).toBeInTheDocument();
@@ -1440,6 +1466,7 @@ describe("the way back to a template", () => {
     await addColumn(user, /Descripción/);
     expect(screen.queryByText(/Empiece por uno de estos/)).not.toBeInTheDocument();
 
+    await openTemplatesTab(user);
     await user.click(panelTemplate("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
@@ -1451,8 +1478,10 @@ describe("the way back to a template", () => {
     // row therefore carries none of the three buttons a saved report's does —
     // rows that look alike and behave differently is the defect this layout
     // exists to avoid.
+    const user = userEvent.setup();
     renderPage();
     await ready();
+    await openTemplatesTab(user);
 
     const row = panelTemplate("Todos los eventos").closest("li");
     expect(row).not.toBeNull();

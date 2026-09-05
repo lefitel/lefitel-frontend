@@ -39,6 +39,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Switch } from "../../../components/ui/switch";
 import { Textarea } from "../../../components/ui/textarea";
 
@@ -864,11 +865,24 @@ const GeneradorPage = () => {
             <CardHeader className="border-b border-border/40 pb-3">
               <CardTitle className="text-base">Abrir un reporte</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Guardados
-                </p>
+            <CardContent className="pt-4">
+              {/*
+                Tabs and not two stacked groups, and the difference is not
+                cosmetic: with both lists on screen at once, an empty page
+                showed the same six templates here and again in the gallery on
+                the right. One at a time, opening on "Guardados", and the
+                duplication is gone without hiding anything — the other list is
+                one click away instead of one scroll.
+              */}
+              <Tabs defaultValue="guardados" className="space-y-3">
+                <TabsList variant="line">
+                  <TabsTrigger value="guardados">Guardados</TabsTrigger>
+                  {(catalog.templates?.length ?? 0) > 0 && (
+                    <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
+                  )}
+                </TabsList>
+
+                <TabsContent value="guardados">
                 <SavedReports
                   reports={saved}
                   total={savedTotal}
@@ -885,21 +899,17 @@ const GeneradorPage = () => {
                   onRetry={refreshSaved}
                   loading={loadingSaved}
                 />
-              </div>
+                </TabsContent>
 
-              {(catalog.templates?.length ?? 0) > 0 && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Plantillas
-                  </p>
+                <TabsContent value="plantillas">
                   <TemplateGallery
                     templates={catalog.templates ?? []}
                     roots={catalog.roots}
                     onPick={handlePickTemplate}
                     compact
                   />
-                </div>
-              )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
