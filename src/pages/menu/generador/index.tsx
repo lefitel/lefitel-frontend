@@ -881,19 +881,85 @@ const GeneradorPage = () => {
       </div>
 
       {/*
+        The level of detail, on a strip of its own rather than in a card.
+
+        A card is the right container for a panel of controls, and the other
+        three are that. This one held a single select, so a quarter of the band
+        — permanently, on every screen — went on one control that is touched
+        once per report. On a strip it costs around forty pixels instead of a
+        hundred and twenty.
+
+        Above the panels rather than beside them, which is also what it is: the
+        decision the other three are made under. Changing it discards columns
+        and filters, and the panels it invalidates are the ones directly below.
+      */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
+        <div className="flex items-center gap-1.5">
+          <span className="text-sm font-medium text-foreground">Nivel de detalle</span>
+          <CardHelp label="el nivel de detalle">
+            <p>
+              Define qué representa cada fila del reporte, y es la decisión que manda sobre
+              todas las demás: los mismos datos dan tablas distintas según sea una fila por
+              evento o una por revisión.
+            </p>
+            <p className="mt-2">
+              Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
+              hacerlo.
+            </p>
+          </CardHelp>
+        </div>
+
+        <Select
+          value={config.root}
+          onValueChange={(value) => {
+            const next = catalog.roots.find((r) => r.key === value);
+            if (!next || next.key === config.root) return;
+            // Outside the updater. A state updater must be pure — React
+            // calls it twice in development on purpose — so every one of
+            // these warnings appeared twice, and in concurrent rendering
+            // the double call is not a development-only courtesy.
+            const cleaned = changeRoot(config, next);
+            const lost = elementCount(config) - elementCount(cleaned);
+            // Asked, not announced. This is the most destructive control
+            // on the page dressed as a preference: it throws away columns
+            // and filters, and it used to say so afterwards in a message
+            // that disappears on its own. Somebody who wanted to look at
+            // the other level of detail for a second lost twenty minutes
+            // of work and was told about it by a toast.
+            if (lost > 0) {
+              setPendingRoot({ root: next, cleaned, lost });
+              return;
+            }
+            applyRoot(cleaned);
+          }}
+        >
+          <SelectTrigger
+            className="h-8 w-auto min-w-[13rem] text-sm"
+            aria-label="Nivel de detalle"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {catalog.roots.map((r) => (
+              <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/*
         The configuration sits above the table, not beside it.
 
         It used to be a column 320 to 400 pixels wide down the left, which is a
-        quarter to a third of the screen spent, permanently, on four panels that
-        are read while a report is being set up and ignored while it is being
-        read. The table is what needs the width — it is the report, its headers
+        quarter to a third of the screen spent, permanently, on panels that are
+        read while a report is being set up and ignored while it is being read. The table is what needs the width — it is the report, its headers
         do not wrap, and it was the one thing squeezed.
 
         Each panel caps its own height and scrolls inside itself rather than the
-        band scrolling as a whole, so all four headings stay visible and only the
+        band scrolling as a whole, so every heading stays visible and only the
         long one — sixty columns, a hundred filters — moves. `items-start` keeps
-        a card holding one select from being stretched to the height of a card
-        holding forty rows.
+        a panel holding two saved reports from being stretched to the height of
+        one holding forty columns.
 
         `min-w-0` on each card for the reason the old two-column layout needed
         it: a grid track is floored at its item's min-content width unless the
@@ -901,7 +967,7 @@ const GeneradorPage = () => {
         the grid, the grid outgrows the page, and the application's `<main>` —
         which is `overflow-auto` — takes a horizontal scrollbar.
       */}
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
         {/* ── Configuration ─────────────────────────────────────────────── */}
         <>
           {/*
@@ -1028,58 +1094,6 @@ const GeneradorPage = () => {
                 </TabsContent>
               </CardContent>
             </Tabs>
-          </Card>
-
-          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
-            <CardHeader className="border-b border-border/40 pb-3">
-              <div className="flex items-center gap-1.5">
-                <CardTitle className="text-base">Nivel de detalle</CardTitle>
-                <CardHelp label="el nivel de detalle">
-                  <p>
-                    Define qué representa cada fila del reporte, y es la decisión que manda sobre
-                    todas las demás: los mismos datos dan tablas distintas según sea una fila por
-                    evento o una por revisión.
-                  </p>
-                  <p className="mt-2">
-                    Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
-                    hacerlo.
-                  </p>
-                </CardHelp>
-              </div>
-            </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto">
-              <Select
-                value={config.root}
-                onValueChange={(value) => {
-                  const next = catalog.roots.find((r) => r.key === value);
-                  if (!next || next.key === config.root) return;
-                  // Outside the updater. A state updater must be pure — React
-                  // calls it twice in development on purpose — so every one of
-                  // these warnings appeared twice, and in concurrent rendering
-                  // the double call is not a development-only courtesy.
-                  const cleaned = changeRoot(config, next);
-                  const lost = elementCount(config) - elementCount(cleaned);
-                  // Asked, not announced. This is the most destructive control
-                  // on the page dressed as a preference: it throws away columns
-                  // and filters, and it used to say so afterwards in a message
-                  // that disappears on its own. Somebody who wanted to look at
-                  // the other level of detail for a second lost twenty minutes
-                  // of work and was told about it by a toast.
-                  if (lost > 0) {
-                    setPendingRoot({ root: next, cleaned, lost });
-                    return;
-                  }
-                  applyRoot(cleaned);
-                }}
-              >
-                <SelectTrigger aria-label="Nivel de detalle"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {catalog.roots.map((r) => (
-                    <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </CardContent>
           </Card>
 
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">

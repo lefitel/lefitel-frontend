@@ -157,7 +157,7 @@ export const ResultSkeleton = ({ columns, root }: ResultSkeletonProps) => {
  * A card of the configuration panel before the catalog has arrived.
  *
  * The title is real. Four of the five headings on this page — "Reportes
- * guardados", "Nivel de detalle", "Columnas", "Filtros" — are fixed strings
+ * guardados", "Columnas", "Filtros" — are fixed strings
  * that never depended on the catalog, so drawing a grey bar over them would be
  * hiding text that is already in hand.
  */
@@ -229,14 +229,22 @@ export const PageSkeleton = () => (
       <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
     </div>
 
-    {/* The same shape the page will have, down to the containment: four panels
-        in a band above a full-width table, `min-w-0` on each so a card wider
+    {/* The same shape the page will have, down to the containment: a strip and
+        three panels above a full-width table, `min-w-0` on each so a card wider
         than its share cannot widen the grid. It is repeated here rather than
         left out because the skeleton has to sit in the same box the page will,
         or the layout jumps the moment the catalog lands. */}
-    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-4">
+    {/* The level of detail, which is a strip and not a panel: one select, and
+        the heading beside it is a fixed string that never waited on the
+        catalog, so drawing a grey bar over it would hide text already in
+        hand. */}
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
+      <span className="text-sm font-medium text-foreground">Nivel de detalle</span>
+      <Skeleton className="h-8 w-52 rounded-md" />
+    </div>
+
+    <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
       <CardSkeleton title="Abrir un reporte" lines={4} tabs />
-      <CardSkeleton title="Nivel de detalle" lines={1} />
       <CardSkeleton title="Columnas" lines={3} />
       <CardSkeleton title="Filtros" lines={2} />
     </div>

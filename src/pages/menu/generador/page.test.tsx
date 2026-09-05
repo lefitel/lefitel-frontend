@@ -728,6 +728,25 @@ describe("changing the detail level", () => {
     await ready();
     expect(screen.getByLabelText("Nivel de detalle")).toHaveTextContent("Una fila por evento");
   });
+
+  it("sits above the panels instead of being one of them", async () => {
+    // It used to be a card of its own holding a single select, which spent a
+    // quarter of the band on one control touched once per report. On a strip
+    // it costs about a third of that, and it lands where it belongs: the
+    // decision the three panels below are made under rather than one of them.
+    //
+    // Structure, not geometry — this environment measures nothing. Outside the
+    // band and ahead of it in the document is the whole of the claim.
+    renderPage();
+    await ready();
+
+    const control = screen.getByLabelText("Nivel de detalle");
+    const band = document.querySelector('[class*="xl:grid-cols-"]');
+    expect(band).not.toBeNull();
+    expect(band).not.toContainElement(control as HTMLElement);
+    expect(control.compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING)
+      .toBeTruthy();
+  });
 });
 
 describe("starting over", () => {
@@ -1271,7 +1290,7 @@ describe("the table scrolls, not the page", () => {
     const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
     expect(band).not.toBeNull();
     const panels = Array.from(band!.children) as HTMLElement[];
-    expect(panels).toHaveLength(4);
+    expect(panels).toHaveLength(3);
     for (const panel of panels) expect(panel.className).toContain("min-w-0");
   });
 
@@ -1280,9 +1299,9 @@ describe("the table scrolls, not the page", () => {
     // people actually read: sixty columns or a hundred filters would otherwise
     // push the report off the bottom of the screen.
     //
-    // Each panel caps itself rather than the band capping all four, so the four
-    // headings stay visible and only the long list moves. Asserted as four,
-    // because a cap missing from one of them is what goes unnoticed.
+    // Each panel caps itself rather than the band capping the lot, so every
+    // heading stays visible and only the long list moves. Counted, because a
+    // cap missing from one of them is what goes unnoticed.
     const user = userEvent.setup();
     renderPage();
     await ready();
@@ -1290,7 +1309,7 @@ describe("the table scrolls, not the page", () => {
 
     const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
     const capped = Array.from(band!.querySelectorAll('[data-slot="card-content"]'));
-    expect(capped).toHaveLength(4);
+    expect(capped).toHaveLength(3);
     for (const content of capped) {
       expect(content.className).toContain("max-h-");
       expect(content.className).toContain("overflow-y-auto");
