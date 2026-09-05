@@ -218,9 +218,16 @@ const ReportRecorridoSec = () => {
         const seq = ++runSeq.current;
         setLoading(true);
         try {
+            // The poles are decoration: they shape the line drawn on the map,
+            // and without them the fallback below still draws city to city. So
+            // they must not be able to void a report that arrived. Since C5
+            // they can be refused on their own — `GET /api/poste/` asks for
+            // `postes.ver` and this screen opens on `reportes.ver` — and a
+            // rejected leg of a `Promise.all` used to take the whole report
+            // down with it, with a message blaming the report.
             const [data, postesTramo] = await Promise.all([
                 getReporteRecorrido(filtro),
-                getPosteByTramo(tramoInicial, tramoFinal),
+                getPosteByTramo(tramoInicial, tramoFinal).catch(() => []),
             ]);
             if (seq !== runSeq.current) return;
 

@@ -1,5 +1,7 @@
 import { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { mensajeDeError } from "../../../api/descarga";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { InfoIcon } from "lucide-react";
@@ -168,8 +170,21 @@ export function OperationsMap({
                           {can(rol, "postes", "editar") && (
                             <button
                               style={{ flex: 1, padding: "7px 0", borderRadius: 6, background: "var(--primary)", color: "#fff", border: "none", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                              // The pole is fetched before the sheet can show
+                              // anything, and the fetch can now be refused:
+                              // C5 puts `postes.ver` on `GET /api/poste/:id`,
+                              // while this button only asks for `postes.editar`.
+                              // Unguarded, a refusal threw here and the button
+                              // did nothing at all — no sheet, no message.
                               onClick={async () => {
-                                if (m.item.id) { setOpenEditPoste(true); setDataPoste(await searchPoste(m.item.id)); }
+                                if (!m.item.id) return;
+                                try {
+                                  const poste = await searchPoste(m.item.id);
+                                  setDataPoste(poste);
+                                  setOpenEditPoste(true);
+                                } catch (error) {
+                                  toast.error(mensajeDeError(error, "No se pudo abrir este poste para editarlo."));
+                                }
                               }}
                             >
                               Editar

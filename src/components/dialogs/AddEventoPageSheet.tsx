@@ -10,6 +10,7 @@ import {
     estadoTrasFallo, getOpcionesEvento, EstadoOpciones, OpcionObs, OpcionSimple,
 } from "../../api/opciones.api";
 import { todosLosPostes } from "../../api/Poste.api";
+import { mensajeDeError } from "../../api/descarga";
 import { uploadImage } from "../../api/Upload.api";
 import { PosteInterface } from "../../interfaces/interfaces";
 import { DatePicker } from "../ui/date-picker";
@@ -64,14 +65,27 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
         setLoadingData(true);
         setEstadoOpciones("cargando");
 
-        // The pole register still comes from `?export=true`: adding a `poste`
-        // block to `/api/evento/opciones` would serve the whole register under
-        // `eventos.ver`, which is worse than the round trip it saves. That
-        // decision belongs to C3, and until then the two loads are separate —
-        // so a refusal on one does not empty the other's combobox as well.
+        // The pole register is its own request, not a block inside
+        // `/api/evento/opciones`: putting it there would serve the whole
+        // register under `eventos.ver`, which is worse than the round trip it
+        // saves. Separate also means a refusal on one does not empty the
+        // other's combobox.
+        //
+        // And a refusal is now possible: C5 puts `postes.ver` on
+        // `GET /api/poste/`, while this sheet opens on `eventos.crear`. An
+        // administrator can build a role that registers incidents without
+        // reading the pole register, and when that happens the combobox is
+        // empty for a reason worth saying — the old sentence blamed the
+        // network for a decision somebody made on purpose.
         const postes = todosLosPostes()
             .then(setListPoste)
-            .catch(() => toast.error("Error al cargar los postes"));
+            .catch((error) => {
+                setListPoste([]);
+                toast.error(mensajeDeError(
+                    error,
+                    "No se pudo cargar la lista de postes, así que no se puede elegir uno.",
+                ));
+            });
 
         const opciones = getOpcionesEvento()
             .then((o) => {

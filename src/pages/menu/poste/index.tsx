@@ -8,7 +8,7 @@ import { saveAs } from "file-saver";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { deletePoste, desarchivarPoste, editPoste, exportarPostes, getPoste, searchPoste } from "../../../api/Poste.api";
-import { mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
+import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { getEvento_poste } from "../../../api/Evento.api";
 import { estadoTrasFallo, getOpcionesPoste, EstadoOpciones, OpcionSimple } from "../../../api/opciones.api";
 import { PosteInterface } from "../../../interfaces/interfaces";
@@ -323,8 +323,14 @@ const PostePage = () => {
             toast.success("Poste archivado");
             setConfirmDelete(null);
             load();
-        } catch {
-            toast.error("Ocurrió un error al archivar");
+        } catch (error) {
+            // The check above reads the pole's incidents, and since C5 that
+            // read asks for `eventos.ver` while this button asks for
+            // `postes.archivar`. Refused, nothing is archived — the right
+            // direction — but "ocurrió un error" left somebody unable to
+            // archive a pole and unable to learn why. The guard is only in the
+            // browser, so failing closed is load-bearing and worth naming.
+            toast.error(mensajeDeError(error, "Ocurrió un error al archivar"));
         } finally {
             setDeleting(false);
         }

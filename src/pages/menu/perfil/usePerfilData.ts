@@ -62,10 +62,21 @@ export interface PerfilData {
  * nothing. `getSessions` already swallows its own failures in `Login.api.ts`;
  * the other two are caught here.
  *
- * None of the four needs a permission the caller might not have.
- * `GET /bitacora/:id_usuario` is behind `requireSelfOrPermission`, so asking
- * about yourself always passes; `GET /evento/usuario/:id` and
- * `GET /auth/sessions` are behind nothing but a session.
+ * None of the four needs a permission the caller might not have, and since C5
+ * two of them say so by construction rather than by being open.
+ * `GET /bitacora/:id_usuario` and `GET /evento/usuario/:id` are both behind
+ * `requireSelfOrPermission`, so asking about yourself always passes — provided
+ * each route hands that middleware the name of its own parameter, which is a
+ * defect that has shipped before and now has `evento.self.test.ts` measuring
+ * it. `GET /auth/sessions` reads the caller's id off the session and takes
+ * nothing from the request, so there is no other person's list it could return.
+ *
+ * That is why the swallow below is a swallow and not a report: on this screen a
+ * failure of any of the three means the section is empty, and an empty section
+ * is the truth for somebody with no log, no incidents and one device. The one
+ * thing it cannot survive is a *wrong* gate, which would print "Eventos
+ * atendidos: 0" to a technician with four hundred — hence the test on the
+ * server, where the question can actually be asked.
  */
 export function usePerfilData(id: number | null | undefined): PerfilData {
   const [usuario, setUsuario] = useState<UsuarioInterface | null>(null);

@@ -119,10 +119,21 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       setAdssSelected([]);
     }
 
+    // Silent when the catalogues were already refused: since C5 both this and
+    // `/api/poste/opciones` ask for `postes.ver`, so one refusal produces both
+    // failures, and the sentence the sheet already shows on screen — "no tiene
+    // permiso para consultar los catálogos de postes" — is the true one. A
+    // second toast contradicting it would be this file answering a question
+    // the screen has already answered better.
     const propios = isEditing && poste?.id
       ? getAdssPoste(poste.id as number)
         .then((adssP) => setAdssSelected(adssP.map((a) => a.id_adss as number)))
-        .catch(() => toast.error("No se pudo cargar el ADSS de este poste"))
+        .catch((error) => {
+          setAdssSelected([]);
+          if (estadoTrasFallo(error) === "listas") {
+            toast.error("No se pudo cargar el ADSS de este poste");
+          }
+        })
       : Promise.resolve();
 
     Promise.all([opciones, propios]).finally(() => setLoadingData(false));

@@ -4,6 +4,7 @@ import { createUsuario, editUsuario, searchUsuario_user } from "../../../api/Usu
 import { passwordLengthError } from "../../../lib/password";
 import { uploadImage } from "../../../api/Upload.api";
 import { getRol } from "../../../api/Rol.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { RolInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
 import { Loader2Icon } from "lucide-react";
@@ -48,11 +49,35 @@ const UsuarioSheet = ({ usuario, open, setOpen, onSuccess }: Props) => {
         [roles]
     );
 
+    /**
+     * The role list, and what happens when it does not arrive.
+     *
+     * The `await` was bare, so a refusal threw before `setLoadingRoles(false)`
+     * and left the skeleton where the role picker goes — for ever, with an
+     * unhandled rejection and nothing on screen. Saving then asks for a role
+     * that no control can set, so the account could never be created and the
+     * person was never told why.
+     *
+     * C5 makes that reachable: `GET /api/rol/` used to answer any session and
+     * now asks for `roles.ver`, while this sheet opens on `seguridad.crear` or
+     * `seguridad.editar`. The two are separate permissions on purpose — handing
+     * out accounts is not the same authority as handing out authority — so an
+     * administrator can build a role that reaches here without them, and the
+     * refusal has to say so rather than spin.
+     */
     const loadRoles = useCallback(async () => {
         setLoadingRoles(true);
-        const data = await getRol();
-        setRoles(data ?? []);
-        setLoadingRoles(false);
+        try {
+            setRoles(await getRol() ?? []);
+        } catch (error) {
+            setRoles([]);
+            toast.error(mensajeDeError(
+                error,
+                "No se pudo cargar la lista de roles, así que no se puede asignar uno.",
+            ));
+        } finally {
+            setLoadingRoles(false);
+        }
     }, []);
 
     useEffect(() => {
