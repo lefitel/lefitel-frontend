@@ -74,7 +74,15 @@ const SavedReports = ({
   if (reports.length === 0) {
     return (
       <p className="rounded-md border border-dashed px-3 py-6 text-center text-sm text-muted-foreground">
-        Todavía no hay reportes guardados. Arme uno y guárdelo para volver a usarlo.
+        {/*
+          Where somebody who has never used this screen is looking, so it is
+          where the templates get pointed at. They sit in the next tab along,
+          and until this sentence said so the only way to find them was to press
+          a tab labelled "Plantillas" with no reason to think it held anything
+          worth pressing.
+        */}
+        Todavía no hay reportes guardados. Empiece por una plantilla, o arme el suyo y guárdelo
+        para volver a usarlo.
       </p>
     );
   }

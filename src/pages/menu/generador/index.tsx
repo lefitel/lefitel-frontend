@@ -906,7 +906,6 @@ const GeneradorPage = () => {
                     templates={catalog.templates ?? []}
                     roots={catalog.roots}
                     onPick={handlePickTemplate}
-                    compact
                   />
                 </TabsContent>
               </Tabs>
@@ -1299,22 +1298,20 @@ const GeneradorPage = () => {
                   root={root}
                   grouped={isSummary(config)}
                 />
-              ) : (catalog.templates?.length ?? 0) > 0 ? (
-                /*
-                  The emptiest part of the screen, which is also where somebody
-                  who does not know what to do is looking. It used to hold one
-                  sentence telling them to go choose columns — sound advice for
-                  anyone who already knows the data, and an empty room for the
-                  role that is literally called "Cliente".
-                */
-                <TemplateGallery
-                  templates={catalog.templates ?? []}
-                  roots={catalog.roots}
-                  onPick={handlePickTemplate}
-                />
               ) : (
+                /*
+                  The templates used to be listed here as well, and on an empty
+                  page that put the same six on screen twice — once in the panel
+                  and once here — which reads as the page repeating itself. They
+                  live in the panel, behind their own tab, and this says where
+                  rather than showing them again.
+                */
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  Elija las columnas en el panel de configuración para ir viendo aquí cómo queda el reporte.
+                  Elija las columnas en el panel de configuración para ir viendo aquí cómo queda el
+                  reporte
+                  {(catalog.templates?.length ?? 0) > 0
+                    ? ", o abra una de las plantillas de «Abrir un reporte»."
+                    : "."}
                 </p>
               )}
             </CardContent>

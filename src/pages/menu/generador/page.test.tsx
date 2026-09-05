@@ -194,24 +194,19 @@ const ready = async () => {
 };
 
 /**
- * The same six templates are listed twice on purpose, so a test has to say
- * which list it means.
- *
- * They are told apart by their accessible name, which is the row's text: the
- * compact row in the configuration panel is only the report's name, while the
- * gallery row carries the description and the row meaning too. So an exact name
- * finds the panel and a prefix finds the gallery — no reaching into the markup.
- */
-const panelTemplate = (name: string) => screen.getByRole("button", { name });
-/**
- * The panel lists one of the two at a time, opening on "Guardados". Reaching a
- * template there is a click, and the tests say so rather than pretending the
- * list is always drawn: only the active tab is rendered at all.
+ * The templates live in one place: the "Plantillas" tab of the configuration
+ * panel. Reaching one is always a click on that tab first — only the active tab
+ * is rendered at all — and the tests say so rather than pretending the list is
+ * simply on screen.
  */
 const openTemplatesTab = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(screen.getByRole("tab", { name: "Plantillas" }));
 };
-const galleryTemplate = (name: string) =>
+/**
+ * A row of that list. Matched on a prefix because the row's accessible name is
+ * its whole text: the name, the description and what one of its rows will mean.
+ */
+const templateRow = (name: string) =>
   screen.getByRole("button", { name: new RegExp(`^${name}.+`, "s") });
 
 const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
@@ -1132,33 +1127,25 @@ describe("what the screen shows while it waits", () => {
 });
 
 describe("the report taking shape while it is built", () => {
-  it("offers reports to open before anything has been chosen", async () => {
-    // What stands in the empty panel now. The bare invitation is the fallback
-    // for a server that sends no templates, covered below.
+  it("offers reports to open, in the tab that holds them", async () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
 
-    expect(galleryTemplate("Todos los eventos")).toBeInTheDocument();
-    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
-
-    // And reachable from the panel too, which is the way back to them once the
-    // gallery is gone.
     await openTemplatesTab(user);
-    expect(panelTemplate("Todos los eventos")).toBeInTheDocument();
-    expect(panelTemplate("Listado de postes")).toBeInTheDocument();
+    expect(templateRow("Todos los eventos")).toBeInTheDocument();
+    expect(templateRow("Listado de postes")).toBeInTheDocument();
   });
 
-  it("does not put the same six on screen twice", async () => {
-    // The reason they are tabs. Listed under the saved reports rather than
-    // behind a tab, an empty page showed all six in the panel and all six again
-    // in the gallery beside it, which reads as the screen repeating itself.
-    // The panel opens on "Guardados", so the gallery is the only one showing.
+  it("does not list them anywhere else", async () => {
+    // They were in the empty results panel too, which put the same six on
+    // screen twice and read as the page repeating itself. The results panel
+    // says where they are instead of showing them again.
     renderPage();
     await ready();
 
-    expect(galleryTemplate("Todos los eventos")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /^Todos los eventos/ })).toHaveLength(1);
+    expect(screen.queryAllByRole("button", { name: /^Todos los eventos/ })).toHaveLength(0);
+    expect(screen.getByText(/abra una de las plantillas/)).toBeInTheDocument();
   });
 
   it("appears with the first column, before anything has been asked for", async () => {
@@ -1311,19 +1298,14 @@ describe("something to start from", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openTemplatesTab(user);
 
     // Asserted on the row itself, not on the page: "Una fila por evento" is
     // also the label of the level-of-detail option, and finding it somewhere
-    // would pass with an empty gallery.
-    expect(galleryTemplate("Todos los eventos"))
+    // would pass with an empty list.
+    expect(templateRow("Todos los eventos"))
       .toHaveTextContent(/Cada evento con su descripción.*Una fila por evento/s);
-    expect(galleryTemplate("Listado de postes")).toHaveTextContent("Una fila por poste");
-
-    // The panel row carries the name alone: three lines times six, beside four
-    // other cards, is a wall.
-    await openTemplatesTab(user);
-    expect(panelTemplate("Todos los eventos"))
-      .not.toHaveTextContent(/Cada evento con su descripción/);
+    expect(templateRow("Listado de postes")).toHaveTextContent("Una fila por poste");
   });
 
   it("loads the report when it is pressed", async () => {
@@ -1331,7 +1313,8 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await user.click(galleryTemplate("Todos los eventos"));
+    await openTemplatesTab(user);
+    await user.click(templateRow("Todos los eventos"));
 
     // The columns are in the builder, and the preview is already drawing them.
     await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
@@ -1347,7 +1330,8 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await user.click(galleryTemplate("Listado de postes"));
+    await openTemplatesTab(user);
+    await user.click(templateRow("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
@@ -1378,7 +1362,7 @@ describe("something to start from", () => {
     // press writes a template over somebody's saved report, and over the team's
     // copy if it was shared.
     await openTemplatesTab(user);
-    await user.click(panelTemplate("Todos los eventos"));
+    await user.click(templateRow("Todos los eventos"));
 
     expect(await screen.findByRole("button", { name: /^Guardar$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Actualizar$/ })).not.toBeInTheDocument();
@@ -1429,7 +1413,8 @@ describe("the explanations that sit next to what they explain", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
-    await user.click(galleryTemplate("Listado de postes"));
+    await openTemplatesTab(user);
+    await user.click(templateRow("Listado de postes"));
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
 
@@ -1467,7 +1452,7 @@ describe("the way back to a template", () => {
     expect(screen.queryByText(/Empiece por uno de estos/)).not.toBeInTheDocument();
 
     await openTemplatesTab(user);
-    await user.click(panelTemplate("Listado de postes"));
+    await user.click(templateRow("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
@@ -1483,7 +1468,7 @@ describe("the way back to a template", () => {
     await ready();
     await openTemplatesTab(user);
 
-    const row = panelTemplate("Todos los eventos").closest("li");
+    const row = templateRow("Todos los eventos").closest("li");
     expect(row).not.toBeNull();
     expect(row!.querySelectorAll("button")).toHaveLength(1);
   });
