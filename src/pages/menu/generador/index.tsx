@@ -17,7 +17,8 @@ import {
 } from "../../../api/generador.api";
 import {
   addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
-  emptyConfig, filterLimitReached, isSummary, maxColumns, maxConditions, maxSorts, moveColumn,
+  emptyConfig, filterLimitReached, isSummary, maxColumns, maxConditions, maxSorts,
+  moveColumnByKey,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
   clearFilters,
@@ -46,6 +47,7 @@ import { Switch } from "../../../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { Textarea } from "../../../components/ui/textarea";
 
+import CardHelp from "./CardHelp";
 import ColumnList from "./ColumnList";
 import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
@@ -508,8 +510,16 @@ const GeneradorPage = () => {
   // twice in development to prove it, and every warning fired from one appeared
   // twice on screen.
 
-  const handleMove = useCallback((from: number, to: number) => {
-    setConfig((c) => moveColumn(c, from, to));
+  /**
+   * Reordering by dragging, named by key and never by position.
+   *
+   * The two ↑↓ buttons this replaces moved a column one place per press, which
+   * is eleven presses to bring the twelfth column to the front. The keys come
+   * from `columnKey`, so two columns of the same field — the minimum and the
+   * maximum of one date — are told apart, which position never could.
+   */
+  const handleReorder = useCallback((from: string, to: string) => {
+    setConfig((c) => moveColumnByKey(c, from, to));
   }, []);
 
   const handleRemoveColumn = useCallback((index: number) => {
@@ -913,9 +923,22 @@ const GeneradorPage = () => {
             The card is no longer titled "Reportes guardados": half of what is
             in it is not saved and not the reader's.
           */}
-          <Card className="min-w-0 border-muted/60 shadow-sm">
+          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <CardTitle className="text-base">Abrir un reporte</CardTitle>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-base">Abrir un reporte</CardTitle>
+                <CardHelp label="Abrir un reporte">
+                  <p>
+                    <strong className="font-medium text-foreground">Guardados</strong> son los suyos
+                    y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
+                    seis reportes ya armados: se abren, se tocan y se generan.
+                  </p>
+                  <p className="mt-2">
+                    Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
+                    cuando usted quiera.
+                  </p>
+                </CardHelp>
+              </div>
             </CardHeader>
             {/*
               Each panel caps itself rather than the band capping all four: the
@@ -970,10 +993,22 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0 border-muted/60 shadow-sm">
+          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <CardTitle className="text-base">Nivel de detalle</CardTitle>
-              <CardDescription>Define qué representa cada fila del reporte.</CardDescription>
+              <div className="flex items-center gap-1.5">
+                <CardTitle className="text-base">Nivel de detalle</CardTitle>
+                <CardHelp label="el nivel de detalle">
+                  <p>
+                    Define qué representa cada fila del reporte, y es la decisión que manda sobre
+                    todas las demás: los mismos datos dan tablas distintas según sea una fila por
+                    evento o una por revisión.
+                  </p>
+                  <p className="mt-2">
+                    Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
+                    hacerlo.
+                  </p>
+                </CardHelp>
+              </div>
             </CardHeader>
             <CardContent className="max-h-72 overflow-y-auto pt-4">
               <Select
@@ -1010,10 +1045,22 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0 border-muted/60 shadow-sm">
+          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base">Columnas</CardTitle>
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-base">Columnas</CardTitle>
+                  <CardHelp label="las columnas">
+                    <p>
+                      Lo que se ve en la tabla, en el orden en que se verá — y ese es también el
+                      orden del Excel. Arrástrelas por el agarre de la izquierda para cambiarlo.
+                    </p>
+                    <p className="mt-2">
+                      Puede renombrar la cabecera escribiendo encima. Los campos que empiezan por
+                      «Contar» no son un dato guardado: se cuentan al generar.
+                    </p>
+                  </CardHelp>
+                </div>
                 <FieldPicker
                   root={root}
                   chosen={chosen}
@@ -1071,7 +1118,7 @@ const GeneradorPage = () => {
               <ColumnList
                 config={config}
                 root={root}
-                onMove={handleMove}
+                onReorder={handleReorder}
                 onRemove={handleRemoveColumn}
                 onRename={handleRename}
                 onSetAgg={handleSetAgg}
@@ -1081,10 +1128,21 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
 
-          <Card className="min-w-0 border-muted/60 shadow-sm">
+          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
-                <CardTitle className="text-base">Filtros</CardTitle>
+                <div className="flex items-center gap-1.5">
+                  <CardTitle className="text-base">Filtros</CardTitle>
+                  <CardHelp label="los filtros">
+                    <p>
+                      Lo que se queda fuera del reporte. Sin filtros entra todo.
+                    </p>
+                    <p className="mt-2">
+                      Con dos o más aparece arriba un selector para decidir si han de cumplirse
+                      todos o basta con cualquiera de ellos.
+                    </p>
+                  </CardHelp>
+                </div>
                 <div className="flex items-center gap-1">
                   {/*
                     Only once there is more than one to lose. With a single

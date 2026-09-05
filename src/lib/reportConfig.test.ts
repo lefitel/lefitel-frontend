@@ -5,6 +5,7 @@ import {
   MAX_SORTS,
   addColumn,
   columnHeader,
+  columnKey,
   columnKind,
   columnLimitReached,
   filterLimitReached,
@@ -18,6 +19,7 @@ import {
   formatValue,
   isSummary,
   moveColumn,
+  moveColumnByKey,
   removeColumn,
   removeFilter,
   renameColumn,
@@ -915,5 +917,56 @@ describe("whether the table on screen can still stand for the configuration", ()
     // A saved report comes back without the key; the page builds it as [].
     const { groupBy: _dropped, ...withoutKey } = base;
     expect(sameShape(withoutKey as ReportConfig, { ...base, groupBy: [] })).toBe(true);
+  });
+});
+
+describe("moving a column by dragging it", () => {
+  const config: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [
+      { path: "description" },
+      { path: "date", agg: "min" },
+      { path: "date", agg: "max" },
+      { path: "state", label: "¿Listo?" },
+    ],
+  };
+  const keys = () => config.columns.map(columnKey);
+
+  it("puts the dragged column where the one it was dropped on sits", () => {
+    const [first, , third] = keys();
+    const moved = moveColumnByKey(config, third, first);
+    expect(moved.columns.map((c) => c.agg)).toEqual(["max", undefined, "min", undefined]);
+  });
+
+  it("tells two columns of the same field apart", () => {
+    // The minimum and the maximum of the same date are two columns. Keyed by
+    // path alone, dragging one would move whichever came first.
+    const [, min, max] = keys();
+    expect(min).not.toBe(max);
+    const moved = moveColumnByKey(config, min, max);
+    expect(moved.columns.map((c) => c.agg)).toEqual([undefined, "max", "min", undefined]);
+  });
+
+  it("tells two copies of one field apart by their headers", () => {
+    const twins: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }, { path: "description", label: "Detalle" }],
+    };
+    const [plain, renamed] = twins.columns.map(columnKey);
+    expect(plain).not.toBe(renamed);
+    expect(moveColumnByKey(twins, renamed, plain).columns[0].label).toBe("Detalle");
+  });
+
+  it("does nothing when a column is dropped on itself", () => {
+    const [first] = keys();
+    expect(moveColumnByKey(config, first, first)).toBe(config);
+  });
+
+  it("does nothing when either end is unknown", () => {
+    // A drop that lands outside the list, and a stale key from a row that was
+    // removed while the pointer was down.
+    const [first] = keys();
+    expect(moveColumnByKey(config, first, "no-existe|")).toBe(config);
+    expect(moveColumnByKey(config, "no-existe|", first)).toBe(config);
   });
 });

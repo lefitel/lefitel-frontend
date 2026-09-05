@@ -129,36 +129,52 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={emptyConfig("evento")} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
   });
 
-  it("cannot move the first column up nor the last down", () => {
+  it("gives every column a handle to drag it by", () => {
+    // What replaced the ↑↓ pair in every row. Two buttons that moved a column
+    // one place per press is eleven presses to bring the twelfth column to the
+    // front, and this list holds up to sixty.
+    //
+    // Only the handle drags. The row carries a text box that has to be
+    // selectable, so a draggable row would fight every rename.
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    const up = screen.getAllByRole("button", { name: /^Subir / });
-    const down = screen.getAllByRole("button", { name: /^Bajar / });
-    expect(up[0]).toBeDisabled();
-    expect(down[down.length - 1]).toBeDisabled();
+
+    const handles = screen.getAllByRole("button", { name: /^Mover / });
+    expect(handles).toHaveLength(config.columns.length);
+    // Named after the column, not "arrastrar": one handle per row and they are
+    // told apart by what they move.
+    expect(handles[0]).toHaveAccessibleName("Mover Descripción");
+    expect(screen.queryAllByRole("button", { name: /^Subir |^Bajar / })).toHaveLength(0);
   });
 
-  it("moves a column down", async () => {
-    const onMove = vi.fn();
-    const user = userEvent.setup();
+  it("leaves the handle reachable from the keyboard", () => {
+    // The one thing removing the arrows could have cost. dnd-kit's keyboard
+    // sensor drives the reorder from here — focus it, space, arrows, space —
+    // so the handle has to be a real focusable control and not an icon in a
+    // div. The gesture itself cannot be exercised in this environment, which
+    // draws nothing and measures nothing; `moveColumnByKey` is where the
+    // reordering rules are tested.
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={onMove} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    await user.click(screen.getAllByRole("button", { name: /^Bajar / })[0]);
-    expect(onMove).toHaveBeenCalledWith(0, 1);
+
+    const handle = screen.getAllByRole("button", { name: /^Mover / })[0];
+    handle.focus();
+    expect(handle).toHaveFocus();
+    expect(handle).toHaveAttribute("aria-roledescription");
   });
 
   it("removes a column by its field name", async () => {
@@ -167,7 +183,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={onRemove} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={onRemove} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     await user.click(screen.getByRole("button", { name: "Quitar Tramo" }));
@@ -178,7 +194,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={config} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveAttribute("placeholder", "Descripción");
@@ -188,7 +204,7 @@ describe("ColumnList", () => {
     wrap(
       <ColumnList
         config={{ ...config, groupBy: ["poste.tramo"] }} root={root}
-        onMove={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
     expect(screen.getByRole("button", { name: /dejar de agrupar/i })).toHaveAttribute("aria-pressed", "true");

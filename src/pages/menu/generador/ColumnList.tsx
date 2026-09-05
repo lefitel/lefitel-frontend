@@ -1,7 +1,17 @@
 import { memo } from "react";
 import {
-  ArrowDownIcon, ArrowDownNarrowWideIcon, ArrowUpIcon, ArrowUpNarrowWideIcon,
-  ArrowUpDownIcon, LayersIcon, XIcon,
+  DndContext, KeyboardSensor, PointerSensor, closestCenter,
+  useSensor, useSensors, type DragEndEvent,
+} from "@dnd-kit/core";
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import {
+  SortableContext, sortableKeyboardCoordinates, useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
+  ArrowDownNarrowWideIcon, ArrowUpNarrowWideIcon,
+  ArrowUpDownIcon, GripVerticalIcon, LayersIcon, XIcon,
 } from "lucide-react";
 import type { AggFn, CatalogRoot, ColumnSpec, ReportConfig } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
@@ -10,13 +20,12 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { AGG_LABEL, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
+import { AGG_LABEL, columnKey, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
 import { cn } from "../../../lib/utils";
 
 interface RowProps {
   column: ColumnSpec;
   index: number;
-  total: number;
   label: string;
   group: string;
   available: AggFn[];
@@ -24,7 +33,8 @@ interface RowProps {
   canGroup: boolean;
   isGrouped: boolean;
   sortDir: "asc" | "desc" | undefined;
-  onMove: (from: number, to: number) => void;
+  /** Identity that survives a reorder; see `columnKey`. */
+  id: string;
   onRemove: (index: number) => void;
   onRename: (index: number, label: string) => void;
   onSetAgg: (index: number, agg?: AggFn) => void;
@@ -40,36 +50,46 @@ interface RowProps {
  * selects each time — measured at over half a second per keypress.
  */
 const ColumnRow = memo(function ColumnRow({
-  column, index, total, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir,
-  onMove, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
+  column, index, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir,
+  id, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
 }: RowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id });
   const sortLabel =
     sortDir === "asc" ? `Ordenando por ${label}, ascendente`
     : sortDir === "desc" ? `Ordenando por ${label}, descendente`
     : `Ordenar por ${label}`;
 
   return (
-    <li className="flex items-center gap-2 px-2 py-1.5">
-      <div className="flex flex-col">
-        <button
-          type="button"
-          aria-label={`Subir ${label}`}
-          disabled={index === 0}
-          onClick={() => onMove(index, index - 1)}
-          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-        >
-          <ArrowUpIcon className="h-3 w-3" />
-        </button>
-        <button
-          type="button"
-          aria-label={`Bajar ${label}`}
-          disabled={index === total - 1}
-          onClick={() => onMove(index, index + 1)}
-          className="text-muted-foreground hover:text-foreground disabled:opacity-30"
-        >
-          <ArrowDownIcon className="h-3 w-3" />
-        </button>
-      </div>
+    <li
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex items-center gap-2 px-2 py-1.5",
+        // Lifted while it travels, so the row being moved is never confused
+        // with the ones it is passing over.
+        isDragging && "relative z-10 rounded-md bg-accent shadow-md",
+      )}
+    >
+      {/*
+        The handle, and the only thing that starts a drag: the row holds a text
+        box you have to be able to select inside, so making the whole row
+        draggable would fight every rename.
+
+        `listeners` also carry the keyboard: focus this and press space, then
+        the arrow keys, then space again. That is not a nicety — it replaced the
+        two ↑↓ buttons that used to live here, and without it a keyboard has no
+        way to reorder anything at all.
+      */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Mover ${label}`}
+        className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
+      >
+        <GripVerticalIcon className="h-3.5 w-3.5" />
+      </button>
 
       <div className="min-w-0 flex-1">
         <Input
@@ -165,7 +185,8 @@ const ColumnRow = memo(function ColumnRow({
 interface Props {
   config: ReportConfig;
   root: CatalogRoot | undefined;
-  onMove: (from: number, to: number) => void;
+  /** Both ends named by `columnKey`, never by position: position is what moves. */
+  onReorder: (from: string, to: string) => void;
   onRemove: (index: number) => void;
   onRename: (index: number, label: string) => void;
   onSetAgg: (index: number, agg?: AggFn) => void;
@@ -181,8 +202,33 @@ interface Props {
  * it keeps the lists from drifting apart.
  */
 const ColumnList = ({
-  config, root, onMove, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
+  config, root, onReorder, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
 }: Props) => {
+  /**
+   * Pointer and keyboard, both wired.
+   *
+   * The keyboard one is not optional politeness: it replaced the two ↑↓ buttons
+   * that used to sit in every row, and they were the only way to reorder
+   * without a mouse. Focus the handle, press space, move with the arrows, press
+   * space again.
+   *
+   * The pointer sensor waits for 6 pixels of travel before it calls something a
+   * drag, so a plain click on the handle is still a click and not a jerk of the
+   * list.
+   */
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    // `over` is null when the drop lands outside the list, and equal to
+    // `active` when the row was picked up and put back. Neither is a move.
+    if (!over || active.id === over.id) return;
+    onReorder(String(active.id), String(over.id));
+  };
+
   const summary = isSummary(config);
   const grouped = new Set(config.groupBy ?? []);
   // Keyed by column, not by field: the minimum and the maximum of the same
@@ -199,8 +245,20 @@ const ColumnList = ({
     );
   }
 
+  const ids = config.columns.map(columnKey);
+
   return (
-    <ul className="divide-y rounded-md border">
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      // A column list only moves up and down, and only within itself: without
+      // these a row can be dragged out over the rest of the page, which reads
+      // as a bug in a panel that is now one of four side by side.
+      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+      onDragEnd={handleDragEnd}
+    >
+      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+        <ul className="divide-y rounded-md border">
       {config.columns.map((column, index) => {
         const field = findField(root, column.path);
         const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
@@ -219,10 +277,10 @@ const ColumnList = ({
             // the key they arrived as two children with one key, which leaves
             // reconciliation undefined: an edit lands on the wrong twin, or
             // focus jumps out of the box being typed in.
-            key={`${column.path}|${column.agg ?? ""}|${column.label ?? ""}`}
+            key={ids[index]}
+            id={ids[index]}
             column={column}
             index={index}
-            total={config.columns.length}
             label={label}
             group={group}
             // A to-many relation can only be counted: the server needs a field
@@ -234,7 +292,6 @@ const ColumnList = ({
             canGroup={!isAggregateOnly && !field?.aggregate}
             isGrouped={grouped.has(column.path)}
             sortDir={sortByColumn.get(sortKey(column.path, column.agg))}
-            onMove={onMove}
             onRemove={onRemove}
             onRename={onRename}
             onSetAgg={onSetAgg}
@@ -249,7 +306,9 @@ const ColumnList = ({
           Reporte agrupado: cada columna no agrupada necesita un resumen.
         </li>
       )}
-    </ul>
+        </ul>
+      </SortableContext>
+    </DndContext>
   );
 };
 

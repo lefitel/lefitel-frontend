@@ -331,7 +331,12 @@ describe("running a report", () => {
     expect(second.columns).toHaveLength(2);
     // And no warning is left over: a banner that solves itself is how people
     // learn to ignore banners.
-    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+    //
+    // Asked by its words rather than by `role="status"`: the drag-and-drop
+    // library keeps a live region of that role mounted at all times to announce
+    // what a drag is doing, so the role no longer names this banner alone.
+    await waitFor(() =>
+      expect(screen.queryByText(/Cambió la configuración/)).not.toBeInTheDocument());
   });
 
   it("says the table is behind when nothing is going to fix it", async () => {
@@ -1171,13 +1176,14 @@ describe("the report taking shape while it is built", () => {
     await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
       .toEqual(["Descripción", "Resuelto"]));
 
-    // Moving a column in the panel moves it in the preview: the order here is
-    // the order of the exported file, and it was previously impossible to see
-    // without generating.
-    await user.click(screen.getByRole("button", { name: "Subir Resuelto" }));
-
-    await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
-      .toEqual(["Resuelto", "Descripción"]));
+    // The order here is the order of the exported file, and it was previously
+    // impossible to see without generating. Reordering is a drag now, which
+    // this environment cannot perform — it draws nothing, and the library
+    // measures real geometry to decide where a row lands. Every rule of the
+    // reorder is tested on `moveColumnByKey` instead; what belongs here is that
+    // each column has a handle to reorder it by.
+    expect(screen.getAllByRole("button", { name: /^Mover / }).map((h) => h.getAttribute("aria-label")))
+      .toEqual(["Mover Descripción", "Mover Resuelto"]);
     expect(api.runReporte).not.toHaveBeenCalled();
   });
 

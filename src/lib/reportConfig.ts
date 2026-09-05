@@ -248,6 +248,36 @@ export function moveColumn(config: ReportConfig, from: number, to: number): Repo
   return { ...config, columns };
 }
 
+/**
+ * A column's identity, stable across a reorder.
+ *
+ * Dragging needs to name rows by something that is not their position — the
+ * position is the thing changing — and two columns can share a path: the
+ * minimum and the maximum of the same date are two columns, and so are two
+ * copies of one field kept apart only by their headers. All three parts are
+ * needed, which is also why the list keys on exactly this.
+ */
+export const columnKey = (column: ColumnSpec): string =>
+  `${column.path}|${column.agg ?? ""}|${column.label ?? ""}`;
+
+/**
+ * Moves the column named `from` to where the column named `to` sits.
+ *
+ * Pulled out of the component and expressed in keys rather than indices so the
+ * part that can be tested is: the gesture itself cannot be, because the drag
+ * library measures real geometry and the test environment draws nothing. This
+ * is where a reorder can actually go wrong — an unknown key, a duplicate, a
+ * drop on itself — and none of that needs a mouse to check.
+ */
+export function moveColumnByKey(config: ReportConfig, from: string, to: string): ReportConfig {
+  if (from === to) return config;
+  const at = (key: string) => config.columns.findIndex((c) => columnKey(c) === key);
+  const source = at(from);
+  const target = at(to);
+  if (source === -1 || target === -1) return config;
+  return moveColumn(config, source, target);
+}
+
 export function renameColumn(config: ReportConfig, index: number, label: string): ReportConfig {
   const columns = config.columns.map((c, i) => {
     if (i !== index) return c;
