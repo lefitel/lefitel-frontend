@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
 import { getReporteGeneral } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import {
   estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
 } from "../../../api/opciones.api";
@@ -63,7 +64,13 @@ const ReportGeneralSec = () => {
   const [criticidad, setCriticidad] = useState<"todos" | "criticas" | "altas" | "medias" | "bajas" | "sin">("todos");
   const [excludeOld, setExcludeOld] = useState(false);
   const [list, setList] = useState<EventoInterface[]>([]);
-  const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
+  /**
+   * The filter the rows on screen were generated with. Set with `list` and
+   * cleared with it, so everything that describes the rows — the file's period
+   * header, the "nuevas · arrastradas" badge — reads this and never the live
+   * controls, which can be moved without pressing Generar.
+   */
+  const [applied, setApplied] = useState<{ start: Date; end: Date; excludeOld: boolean } | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
@@ -139,14 +146,25 @@ const ReportGeneralSec = () => {
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
         setList([]);
-        setAppliedRange(null);
+        setApplied(null);
       } else {
         setList(data);
-        setAppliedRange({ start: inicio, end: fin });
+        setApplied({ start: inicio, end: fin, excludeOld });
         toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
       }
-    } catch {
-      toast.error("Error al generar el reporte");
+    } catch (error) {
+      // The server's sentence when there is one. Since B3 the six reports
+      // answer 429 "espere un momento" after thirty heavy queries a minute —
+      // a budget shared with the report generator — and "Error al generar"
+      // would send the person straight back to the button.
+      //
+      // And the previous rows go, as the generator does on a failed Generar:
+      // they belong to another range, and a card of January's incidents under
+      // pickers that say February is a lie on screen — and, through Exportar,
+      // a lie in a file.
+      toast.error(mensajeDeError(error, "Error al generar el reporte"));
+      setList([]);
+      setApplied(null);
     } finally {
       setLoading(false);
     }
@@ -154,7 +172,7 @@ const ReportGeneralSec = () => {
 
   const handleLimpiar = () => {
     setList([]);
-    setAppliedRange(null);
+    setApplied(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
     setTramoInicial(null);
@@ -166,12 +184,17 @@ const ReportGeneralSec = () => {
   };
 
   const handleExport = async (format: "excel" | "csv" | "pdf") => {
-    if (!fechaInicio || !fechaFin) return;
+    // The range the rows were generated with, never the pickers. The pickers
+    // can be moved without pressing Generar, and the file's period header comes
+    // from these two dates: read off the pickers it was "01/02 — 28/02" over
+    // January's rows, with nothing inside the file to show it. `applied`
+    // is set with `list` and cleared with it, so it is the rows' own range.
+    if (!applied) return;
     setExporting(true);
     try {
-      if (format === "excel") await exportExcelGeneral(list, fechaInicio, fechaFin);
+      if (format === "excel") await exportExcelGeneral(list, applied.start, applied.end);
       else if (format === "csv") exportCsvGeneral(list);
-      else await exportPdfGeneral(list, fechaInicio, fechaFin);
+      else await exportPdfGeneral(list, applied.start, applied.end);
     } catch {
       toast.error("Error al exportar");
     } finally {
@@ -355,11 +378,11 @@ const ReportGeneralSec = () => {
   const solucionados = list.filter((e) => e.state).length;
   const criticos     = list.filter((e) => (e.revisions?.length ?? 0) >= 5).length;
   const prioritarios = list.filter((e) => e.priority).length;
-  const nuevas       = appliedRange
+  const nuevas       = applied
     ? list.filter((e) => {
         if (!e.date) return false;
         const d = new Date(e.date).getTime();
-        return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+        return d >= applied.start.getTime() && d <= applied.end.getTime();
       }).length
     : 0;
   const arrastradas  = list.length - nuevas;
@@ -506,12 +529,12 @@ const ReportGeneralSec = () => {
         <>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline">{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
-            {!excludeOld && arrastradas > 0 && (
+            {!applied?.excludeOld && arrastradas > 0 && (
               <Badge variant="outline" className="text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
                 {nuevas} nuevas · {arrastradas} arrastradas
               </Badge>
             )}
-            {excludeOld && (
+            {applied?.excludeOld && (
               <Badge variant="outline" className="text-blue-600">
                 solo nuevas del período
               </Badge>

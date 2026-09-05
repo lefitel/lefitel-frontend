@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getTiemposResumen, TiempoTramoRow } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -47,8 +48,14 @@ const ReportTiemposSec = () => {
       setGenerated(true);
       if (data.tramos.length === 0) toast.warning("No hay eventos reparados en el período");
       else toast.success(`${data.tramos.length} tramos con eventos reparados`);
-    } catch {
-      toast.error("Error al generar el reporte");
+    } catch (error) {
+      // The server's sentence when there is one (B3: 429 after thirty a
+      // minute, shared with the generator), and the previous rows go with the
+      // failure — see `ReportEstadoRedSec`.
+      toast.error(mensajeDeError(error, "Error al generar el reporte"));
+      setTramos([]);
+      setDescartados(0);
+      setGenerated(false);
     } finally {
       setLoading(false);
     }

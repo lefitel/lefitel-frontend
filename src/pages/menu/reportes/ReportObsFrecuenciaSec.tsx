@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { getObsFrecuencia, ObsFrecuenciaRow } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -35,8 +36,13 @@ const ReportObsFrecuenciaSec = () => {
       setGenerated(true);
       if (data.length === 0) toast.warning("Sin observaciones registradas en el período");
       else toast.success(`${data.length} tipos de observación encontrados`);
-    } catch {
-      toast.error("Error al generar el reporte");
+    } catch (error) {
+      // The server's sentence when there is one (B3: 429 after thirty a
+      // minute, shared with the generator), and the previous rows go with the
+      // failure — see `ReportEstadoRedSec`.
+      toast.error(mensajeDeError(error, "Error al generar el reporte"));
+      setRows([]);
+      setGenerated(false);
     } finally {
       setLoading(false);
     }

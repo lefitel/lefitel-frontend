@@ -1,4 +1,4 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { MapContainer, CircleMarker, Polyline, Popup, useMap } from "react-leaflet";
@@ -9,6 +9,7 @@ import { es } from "date-fns/locale";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { getReporteRecorrido } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import {
     estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
 } from "../../../api/opciones.api";
@@ -138,8 +139,19 @@ const ReportRecorridoSec = () => {
     const neighbors = useTramoNeighbors(tramos);
     const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
-    const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
+    /**
+     * The filter the rows on screen were generated with: dates, stretch and the
+     * "solo nuevas" switch. Set with `list` and cleared with it, so everything
+     * that describes the rows — the "Tramo:" label, the CSV's filename, the
+     * two city markers, the badge — reads this and never the live comboboxes,
+     * which can be moved without pressing Generar.
+     */
+    const [applied, setApplied] = useState<{
+        start: Date; end: Date; tramoInicial: number; tramoFinal: number; excludeOld: boolean;
+    } | null>(null);
     const [loading, setLoading] = useState(false);
+    /** The run whose answer is still wanted; see `handleGenerar`. */
+    const runSeq = useRef(0);
     const [mapTab, setMapTab] = useState<"eventos" | "postes">("eventos");
     const [estadoFilter, setEstadoFilter] = useState<"all" | "pending" | "solved">("all");
     const [critFilter, setCritFilter] = useState<CriticalityBand | "all">("all");
@@ -174,7 +186,26 @@ const ReportRecorridoSec = () => {
         }
     }, [tramoInicial, tramoFinal, neighbors]);
 
-    const handleGenerar = async () => {
+    /**
+     * Runs the report for what the controls say now.
+     *
+     * `keepOnError` is for the two re-runs this screen fires on its own — after
+     * an incident is resolved or revised from a map popup — and means what it
+     * means in the generator: a failure the person did not ask for keeps the
+     * rows they were reading. Since B3 that failure is usually a 429 "espere un
+     * momento", and this screen is the one most likely to hear it, because
+     * those re-runs spend the same thirty a minute as a press of Generar.
+     * Clearing there would take the map away after an operation that
+     * succeeded, and leave them unable to get it back for the rest of the
+     * minute. A failed Generar does clear: rows from another stretch or range
+     * under this one's header is a lie on screen.
+     *
+     * `runSeq` guards the overlap those re-runs allow. The button is disabled
+     * while loading; the popups are not, so a run that started first can
+     * finish last — and, before this guard, wipe the fresh rows of the one that
+     * had already succeeded.
+     */
+    const handleGenerar = async (keepOnError = false) => {
         if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
         if (fechaInicio > fechaFin) return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
         if (!tramoInicial || !tramoFinal) return toast.warning("Selecciona el tramo inicial y final");
@@ -184,12 +215,14 @@ const ReportRecorridoSec = () => {
         const fin = new Date(fechaFin); fin.setHours(23, 59, 59, 0);
         const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: tramoInicial, TramoFinal: tramoFinal, excludeOld };
 
+        const seq = ++runSeq.current;
         setLoading(true);
         try {
             const [data, postesTramo] = await Promise.all([
                 getReporteRecorrido(filtro),
                 getPosteByTramo(tramoInicial, tramoFinal),
             ]);
+            if (seq !== runSeq.current) return;
 
             const a = listCiudad.find((c) => c.id === tramoInicial)!;
             const b = listCiudad.find((c) => c.id === tramoFinal)!;
@@ -215,8 +248,10 @@ const ReportRecorridoSec = () => {
                     const waypoints = [[a.lng, a.lat], ...intermediates.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
                     const orsKey = import.meta.env.VITE_ORS_API_KEY as string;
                     const route = await fetchOrsRoute(waypoints, orsKey);
+                    if (seq !== runSeq.current) return;
                     setRoutePath(route ?? fallback);
                 } catch {
+                    if (seq !== runSeq.current) return;
                     setRoutePath(fallback);
                 }
             }
@@ -224,23 +259,34 @@ const ReportRecorridoSec = () => {
             if (data.length === 0) {
                 toast.warning("No hay eventos para el tramo y período seleccionado");
                 setList([]);
-                setAppliedRange(null);
+                setApplied(null);
             } else {
                 setList(data);
-                setAppliedRange({ start: inicio, end: fin });
+                setApplied({ start: inicio, end: fin, tramoInicial, tramoFinal, excludeOld });
                 toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
             }
-        } catch {
-            toast.error("Error al generar el reporte de recorrido");
+        } catch (error) {
+            if (seq !== runSeq.current) return;
+            // The server's sentence when there is one — since B3 the six
+            // reports answer 429 "espere un momento" after thirty a minute,
+            // shared with the generator. The rows go only when the person
+            // pressed Generar; the doc comment above says why.
+            toast.error(mensajeDeError(error, "Error al generar el reporte de recorrido"));
+            if (!keepOnError) {
+                setList([]);
+                setApplied(null);
+            }
         } finally {
-            setLoading(false);
+            if (seq === runSeq.current) setLoading(false);
         }
     };
 
     // ─── Derived ──────────────────────────────────────────────────────────────
 
-    const ciudadA = listCiudad.find((c) => c.id === tramoInicial);
-    const ciudadB = listCiudad.find((c) => c.id === tramoFinal);
+    // The stretch the rows were generated for, not the one the comboboxes show
+    // now: the label, the markers and the CSV's filename all describe the rows.
+    const ciudadA = listCiudad.find((c) => c.id === applied?.tramoInicial);
+    const ciudadB = listCiudad.find((c) => c.id === applied?.tramoFinal);
 
     const uniquePostes: PosteInterface[] = list.reduce((acc: PosteInterface[], e) => {
         if (e.poste && !acc.find((p) => p.id === e.poste!.id)) acc.push(e.poste as PosteInterface);
@@ -339,7 +385,7 @@ const ReportRecorridoSec = () => {
                         </p>
                     )}
                     <div className="flex gap-2 mt-3 justify-end">
-                        <Button onClick={handleGenerar} disabled={loading}>
+                        <Button onClick={() => void handleGenerar()} disabled={loading}>
                             {loading ? <Loader2Icon className="h-4 w-4 animate-spin mr-2" /> : <RouteIcon className="h-4 w-4 mr-2" />}
                             Generar
                         </Button>
@@ -350,11 +396,11 @@ const ReportRecorridoSec = () => {
             {list.length > 0 && ciudadA && ciudadB && (
                 <>
                     {(() => {
-                        const nuevas = appliedRange
+                        const nuevas = applied
                             ? list.filter((e) => {
                                 if (!e.date) return false;
                                 const d = new Date(e.date).getTime();
-                                return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+                                return d >= applied.start.getTime() && d <= applied.end.getTime();
                             }).length
                             : 0;
                         const arrastradas = list.length - nuevas;
@@ -364,12 +410,12 @@ const ReportRecorridoSec = () => {
                             Tramo: <span className="text-primary font-semibold">{ciudadA.name} — {ciudadB.name}</span>
                         </span>
                         <Badge variant="outline" className="gap-1"><MapPinIcon className="h-3 w-3" />{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
-                        {!excludeOld && arrastradas > 0 && (
+                        {!applied?.excludeOld && arrastradas > 0 && (
                             <Badge variant="outline" className="gap-1 text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
                                 {nuevas} nuevas · {arrastradas} arrastradas
                             </Badge>
                         )}
-                        {excludeOld && (
+                        {applied?.excludeOld && (
                             <Badge variant="outline" className="gap-1 text-blue-600">solo nuevas del período</Badge>
                         )}
                         <Badge variant="outline" className="gap-1">{uniquePostes.length} {uniquePostes.length === 1 ? "poste" : "postes"}</Badge>
@@ -666,7 +712,7 @@ const ReportRecorridoSec = () => {
                     evento={resolverEvento}
                     open={!!resolverEvento}
                     setOpen={(v) => { if (!v) setResolverEvento(null); }}
-                    onSuccess={handleGenerar}
+                    onSuccess={() => void handleGenerar(true)}
                 />
             </PermissionGuard>
             <PermissionGuard module="eventos" action="editar" open={!!addRevisionEventoId} onOpenChange={(v) => { if (!v) setAddRevisionEventoId(null); }}>
@@ -674,7 +720,7 @@ const ReportRecorridoSec = () => {
                     eventoId={addRevisionEventoId}
                     open={!!addRevisionEventoId}
                     setOpen={(v) => { if (!v) setAddRevisionEventoId(null); }}
-                    onSuccess={handleGenerar}
+                    onSuccess={() => void handleGenerar(true)}
                 />
             </PermissionGuard>
         </div>

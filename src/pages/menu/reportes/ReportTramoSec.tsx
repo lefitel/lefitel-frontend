@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col, Rw } from "../../../components/table/tableFeatures";
 import { getReporteTramo } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import {
   AdssPosteInterface,
   EventoInterface,
@@ -42,7 +43,16 @@ const ReportTramoSec = () => {
   const neighbors = useTramoNeighbors(tramos);
   const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
-  const [appliedRange, setAppliedRange] = useState<{ start: Date; end: Date } | null>(null);
+  /**
+   * The filter the rows on screen were generated with: dates, stretch and the
+   * "solo nuevas" switch. Set with `list` and cleared with it, so everything
+   * that describes the rows — the file's period and stretch headers, the
+   * "nuevas · arrastradas" badge — reads this and never the live controls,
+   * which can be moved without pressing Generar.
+   */
+  const [applied, setApplied] = useState<{
+    start: Date; end: Date; tramoInicial: number | null; tramoFinal: number | null; excludeOld: boolean;
+  } | null>(null);
   const [loading, setLoading]         = useState(false);
   const [exporting, setExporting]     = useState(false);
 
@@ -131,14 +141,21 @@ const ReportTramoSec = () => {
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
         setList([]);
-        setAppliedRange(null);
+        setApplied(null);
       } else {
         setList(data);
-        setAppliedRange({ start: inicio, end: fin });
+        setApplied({ start: inicio, end: fin, tramoInicial, tramoFinal, excludeOld });
         toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
       }
-    } catch {
-      toast.error("Error al generar el reporte");
+    } catch (error) {
+      // The server's sentence when there is one — since B3 the six reports
+      // answer 429 "espere un momento" after thirty a minute, shared with the
+      // generator — and the previous rows go with the failure: they belong to
+      // another range, and Exportar would print them under this one. See
+      // `ReportGeneralSec` for the long version.
+      toast.error(mensajeDeError(error, "Error al generar el reporte"));
+      setList([]);
+      setApplied(null);
     } finally {
       setLoading(false);
     }
@@ -146,7 +163,7 @@ const ReportTramoSec = () => {
 
   const handleLimpiar = () => {
     setList([]);
-    setAppliedRange(null);
+    setApplied(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
     setTramoInicial(null);
@@ -155,7 +172,10 @@ const ReportTramoSec = () => {
   };
 
   const handleExport = async (format: "excel" | "csv" | "pdf") => {
-    if (!fechaInicio || !fechaFin) return;
+    // The rows' own filter, never the pickers: dates and comboboxes can be
+    // moved without pressing Generar, and the file prints both as its header
+    // — "Fecha:" and "Tramo:" — over rows that were generated for others.
+    if (!applied) return;
     // The second door, and the one that actually matters. Guarding Generar is
     // not enough: `list` survives a Limpiar-less reload of nothing, and the
     // report request can answer before the catalogues do, so the Resultados
@@ -168,13 +188,17 @@ const ReportTramoSec = () => {
     try {
       if (format === "excel") {
         await exportExcelTramo({
-          list, listPropietario, listMaterial, listAdss, listObs,
-          listCiudad, tramoInicial, tramoFinal, fechaInicio, fechaFin,
+          list, listPropietario, listMaterial, listAdss, listObs, listCiudad,
+          tramoInicial: applied.tramoInicial, tramoFinal: applied.tramoFinal,
+          fechaInicio: applied.start, fechaFin: applied.end,
         });
       } else if (format === "csv") {
         exportCsvTramo(list, listAdss, listObs);
       } else {
-        await exportPdfTramo(list, listAdss, listObs, listPropietario, listMaterial, fechaInicio, fechaFin, tramoInicial, tramoFinal, listCiudad);
+        await exportPdfTramo(
+          list, listAdss, listObs, listPropietario, listMaterial,
+          applied.start, applied.end, applied.tramoInicial, applied.tramoFinal, listCiudad,
+        );
       }
     } catch {
       toast.error("Error al exportar");
@@ -366,11 +390,11 @@ const ReportTramoSec = () => {
       </Card>
 
       {list.length > 0 && (() => {
-        const nuevas = appliedRange
+        const nuevas = applied
           ? list.filter((e) => {
               if (!e.date) return false;
               const d = new Date(e.date).getTime();
-              return d >= appliedRange.start.getTime() && d <= appliedRange.end.getTime();
+              return d >= applied.start.getTime() && d <= applied.end.getTime();
             }).length
           : 0;
         const arrastradas = list.length - nuevas;
@@ -381,12 +405,12 @@ const ReportTramoSec = () => {
               <CardTitle>Resultados</CardTitle>
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="outline">{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
-                {!excludeOld && arrastradas > 0 && (
+                {!applied?.excludeOld && arrastradas > 0 && (
                   <Badge variant="outline" className="text-blue-600" title="Eventos creados en el rango / Eventos creados antes pero revisados en el rango">
                     {nuevas} nuevas · {arrastradas} arrastradas
                   </Badge>
                 )}
-                {excludeOld && (
+                {applied?.excludeOld && (
                   <Badge variant="outline" className="text-blue-600">solo nuevas del período</Badge>
                 )}
               </div>

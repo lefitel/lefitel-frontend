@@ -17,12 +17,15 @@
 // this is what states it.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import ReportTramoSec from "./ReportTramoSec";
 
 const getOpcionesReporte = vi.fn();
 const getReporteTramo = vi.fn();
+const exportExcelTramo = vi.fn();
+const exportPdfTramo = vi.fn();
 const getCiudad = vi.fn();
 const getAdss = vi.fn();
 const getMaterial = vi.fn();
@@ -46,6 +49,31 @@ vi.mock("jspdf", () => ({ default: class { } }));
 vi.mock("jspdf-autotable", () => ({ default: vi.fn() }));
 vi.mock("file-saver", () => ({ saveAs: vi.fn() }));
 vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn(), warning: vi.fn() } }));
+// Extended, not replaced: a factory naming only the two spied exporters would
+// hand the screen `undefined` for everything else it takes from this module.
+vi.mock("../../../lib/exports/reportTramo", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../lib/exports/reportTramo")>()),
+  exportExcelTramo: (...a: unknown[]) => exportExcelTramo(...a),
+  exportPdfTramo: (...a: unknown[]) => exportPdfTramo(...a),
+}));
+// The real DatePicker is a Radix popover over a calendar, and nothing in this
+// repository drives one through jsdom. A date input gives the screen the same
+// `Date` through `onSelect`, labelled by the same placeholder, so a test can
+// type a date instead of hunting a day cell. Local midnight, as the calendar
+// hands it over.
+vi.mock("../../../components/ui/date-picker", () => ({
+  DatePicker: ({ value, onSelect, placeholder }: {
+    value?: Date; onSelect?: (d: Date | undefined) => void; placeholder?: string;
+  }) => (
+    <input
+      aria-label={placeholder}
+      type="date"
+      value={value ? [value.getFullYear(), value.getMonth() + 1, value.getDate()]
+        .map((n) => String(n).padStart(2, "0")).join("-") : ""}
+      onChange={(e) => onSelect?.(e.target.value ? new Date(`${e.target.value}T00:00:00`) : undefined)}
+    />
+  ),
+}));
 
 const OPCIONES = {
   ciudad: [
@@ -154,5 +182,77 @@ describe("when the catalogues did not arrive", () => {
 
     expect(await screen.findByText(/No se pudieron cargar los catálogos/i)).toBeTruthy();
     expect(screen.queryByText(/No tiene permiso/i)).toBeNull();
+  });
+});
+
+/**
+ * The file's header is the rows' filter — B3, the client half.
+ *
+ * `handleExport` used to read the two date pickers and the two stretch
+ * comboboxes, and all four can be moved without pressing Generar. Rare while
+ * Generar always answered; routine once it can answer 429 "espere un momento"
+ * (B3: thirty heavy queries a minute, shared with the generator), because "it
+ * failed, export what I have" is what a person does. B3's own post-audit found
+ * the stretch half after the date half was fixed: generate the whole network
+ * for January, pick a stretch in the comboboxes, press Excel — a workbook
+ * headed `Tramo: Tacna — …` over every incident on the network, with nothing
+ * inside it saying so. The export now reads what the rows were generated with,
+ * dates and stretch alike, and this is what pins it.
+ */
+const FILA = {
+  id: 1, description: "Poste inclinado", date: "2026-01-10T12:00:00.000Z",
+  state: false, priority: false, image: null,
+  poste: {
+    id: 5, name: "P-5", lat: -18.01, lng: -70.25, id_ciudadA: 11, id_ciudadB: 12,
+    ciudadA: { id: 11, name: "Tacna" }, ciudadB: { id: 12, name: "Ilo" },
+    material: { id: 7, name: "Madera" }, propietario: { id: 2, name: "Osefi" }, adsspostes: [],
+  },
+  eventoObs: [], revisions: [], solucions: [],
+};
+
+const fechar = (etiqueta: string, iso: string) =>
+  fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: iso } });
+
+describe("the file's header is the rows' filter", () => {
+  it("exports with the dates and the stretch the rows were generated for, not the pickers", async () => {
+    getReporteTramo.mockResolvedValue([FILA]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    // January, whole network.
+    fechar("Inicio", "2026-01-01");
+    fechar("Fin", "2026-01-31");
+    await user.click(botonGenerar());
+    expect(await screen.findByText("Resultados")).toBeTruthy();
+
+    // Moved, and Generar not pressed again: February, and a stretch.
+    fechar("Inicio", "2026-02-01");
+    fechar("Fin", "2026-02-28");
+    const [desde] = await screen.findAllByText("Todas las ciudades");
+    await user.click(desde);
+    await user.click(await screen.findByText("Tacna"));
+
+    await user.click(screen.getByRole("button", { name: /Exportar/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Excel/i }));
+    await waitFor(() => expect(exportExcelTramo).toHaveBeenCalledTimes(1));
+    const [excel] = exportExcelTramo.mock.calls[0] as [{
+      fechaInicio: Date; fechaFin: Date; tramoInicial: number | null; tramoFinal: number | null;
+    }];
+    // As the file prints them: "Fecha:" and "Tramo:" in its header.
+    expect(excel.fechaInicio.toLocaleDateString("es-ES")).toBe("1/1/2026");
+    expect(excel.fechaFin.toLocaleDateString("es-ES")).toBe("31/1/2026");
+    expect(excel.tramoInicial).toBeNull();
+    expect(excel.tramoFinal).toBeNull();
+
+    // The PDF takes the same four positionally, which is where a swap hides.
+    await user.click(screen.getByRole("button", { name: /Exportar/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /PDF/i }));
+    await waitFor(() => expect(exportPdfTramo).toHaveBeenCalledTimes(1));
+    const pdf = exportPdfTramo.mock.calls[0] as unknown[];
+    expect((pdf[5] as Date).toLocaleDateString("es-ES")).toBe("1/1/2026");
+    expect((pdf[6] as Date).toLocaleDateString("es-ES")).toBe("31/1/2026");
+    expect(pdf[7]).toBeNull();
+    expect(pdf[8]).toBeNull();
   });
 });

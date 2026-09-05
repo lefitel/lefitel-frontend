@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getEstadoRed, EstadoRedRow } from "../../../api/reporte.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -43,8 +44,14 @@ const ReportEstadoRedSec = () => {
       setGenerated(true);
       if (data.length === 0) toast.warning("No hay tramos registrados");
       else toast.success(`${data.length} tramos cargados`);
-    } catch {
-      toast.error("Error al cargar el estado de la red");
+    } catch (error) {
+      // The server's sentence when there is one — since B3 the six reports
+      // answer 429 "espere un momento" after thirty a minute, shared with the
+      // generator. And the previous table goes: a toast is gone in four
+      // seconds, and "12 tramos" over rows from another period is not.
+      toast.error(mensajeDeError(error, "Error al cargar el estado de la red"));
+      setTramos([]);
+      setGenerated(false);
     } finally {
       setLoading(false);
     }
