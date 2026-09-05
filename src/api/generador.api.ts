@@ -244,6 +244,14 @@ export interface ExportOptions {
   subtitle?: string | null;
   /** Embed the photographs. Ignored for PDF. */
   photos?: boolean;
+  /**
+   * How much of the report goes in the file.
+   *
+   * Omitted means the whole of it, which is what this endpoint has always done:
+   * it reads from the first row whichever page is on screen. "page" honours the
+   * configuration's own `limit` and `offset` instead.
+   */
+  scope?: "all" | "page";
 }
 
 export interface ExportedFile {

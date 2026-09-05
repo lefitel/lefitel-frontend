@@ -7,7 +7,10 @@ import { Button } from "../../../components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "../../../components/ui/table";
-import { formatValue } from "../../../lib/reportConfig";
+import { PAGE_SIZES, formatValue } from "../../../lib/reportConfig";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "../../../components/ui/select";
 import { imageUrl } from "../../../lib/imageUrl";
 
 interface Props {
@@ -40,12 +43,23 @@ interface Props {
    * filter did.
    */
   hasFilters?: boolean;
+  /**
+   * Changes how many rows one page holds.
+   *
+   * Beside the pager it governs, which is where every table on earth puts it,
+   * and not in the header — that row already carries Guardar, two exports, the
+   * row count, Auto and Generar. Undefined leaves the footer as it was: the
+   * export builders render this component too, and a file has no pages.
+   */
+  onPageSize?: (limit: number) => void;
 }
 
 /** Thousands separated the way the rest of the screen separates them. */
 const es = (n: number) => n.toLocaleString("es-BO");
 
-const PreviewTable = ({ result, onPage, sort, onToggleSort, loading, hasFilters }: Props) => {
+const PreviewTable = ({
+  result, onPage, sort, onToggleSort, loading, hasFilters, onPageSize,
+}: Props) => {
   const { columns, rows, total, limit, offset } = result;
   const page = Math.floor(offset / Math.max(1, limit)) + 1;
   const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
@@ -222,6 +236,29 @@ const PreviewTable = ({ result, onPage, sort, onToggleSort, loading, hasFilters 
               : `Mostrando ${es(from)}–${es(to)} de ${es(total)}`}
         </span>
         <div className="flex items-center gap-2">
+          {onPageSize && (
+            <Select
+              value={String(limit)}
+              onValueChange={(value) => onPageSize(Number(value))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-8 w-[5.5rem] text-xs" aria-label="Filas por página">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {/*
+                  The report's own size is offered even when it is not one of
+                  the five — a report saved with 300 would otherwise show an
+                  empty box and lose its size to the first click.
+                */}
+                {[...new Set([...PAGE_SIZES, limit])]
+                  .sort((a, b) => a - b)
+                  .map((size) => (
+                    <SelectItem key={size} value={String(size)}>{es(size)} filas</SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
           <Button
             variant="outline" size="sm"
             disabled={offset <= 0 || loading}

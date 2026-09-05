@@ -32,6 +32,29 @@ export const MAX_SORTS = 10;
 export const MAX_FILTER_VALUE = 200;
 export const DEFAULT_LIMIT = 100;
 
+/**
+ * The page sizes the footer offers.
+ *
+ * The server accepts anything from 1 to `maxRows` (50.000) and defaults a
+ * request that carries no `limit` at all to 500 — which is how the six
+ * templates came to page in five-hundreds while a report built by hand paged in
+ * hundreds. Every configuration this screen produces now names its own, and
+ * these are the values worth naming: below 25 the pager is more work than the
+ * table, and above 500 a page stops being a page.
+ */
+export const PAGE_SIZES = [25, 50, 100, 250, 500] as const;
+
+/**
+ * A configuration with a page size on it.
+ *
+ * Applied wherever a configuration arrives from somewhere else — a template, a
+ * saved report — because "no limit" is not a neutral value: it is a silent 500
+ * from the server, and the screen would page one report differently from
+ * another with nothing on it to explain why.
+ */
+export const withPageSize = (config: ReportConfig): ReportConfig =>
+  config.limit === undefined ? { ...config, limit: DEFAULT_LIMIT } : config;
+
 /** The subset of the published limits this module needs. */
 export interface Limits {
   maxColumns?: number;
@@ -398,6 +421,18 @@ export function updateFilter(
     return next;
   });
   return { ...config, filters: { ...filters, conditions } };
+}
+
+/**
+ * Empties the filter list.
+ *
+ * The cap is a hundred conditions and the only way out was one ✕ at a time, so
+ * clearing a report narrowed by a dozen of them was a dozen clicks. It rebuilds
+ * the group rather than deleting the key: an absent `filters` and an empty one
+ * are the same report, and every other function here reads the empty shape.
+ */
+export function clearFilters(config: ReportConfig): ReportConfig {
+  return { ...config, filters: { op: config.filters?.op ?? "and", conditions: [] } };
 }
 
 export function removeFilter(config: ReportConfig, index: number): ReportConfig {

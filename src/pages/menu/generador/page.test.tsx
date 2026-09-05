@@ -1473,3 +1473,147 @@ describe("the way back to a template", () => {
     expect(row!.querySelectorAll("button")).toHaveLength(1);
   });
 });
+
+describe("the controls that were missing", () => {
+  /** Generates a report of `total` rows so the pager and the export scope exist. */
+  const withRows = async (user: ReturnType<typeof userEvent.setup>, total: number) => {
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      Promise.resolve(resultFor(config, { total, rows: [{ c0: "fila" }] })));
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
+  };
+
+  it("lets the reader choose how many rows a page holds", async () => {
+    // The one part of a configuration nobody could choose. The server even
+    // tells people to use it — "Pida menos filas por página" is what a refused
+    // over-large query says — while the control did not exist.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await withRows(user, 1376);
+
+    await user.click(screen.getByRole("combobox", { name: "Filas por página" }));
+    await user.click(screen.getByRole("option", { name: "250 filas" }));
+
+    await waitFor(() => {
+      const last = api.runReporte.mock.calls.at(-1)?.[0] as ReportConfig;
+      expect(last.limit).toBe(250);
+      // Back to the first page: the page you were on is a different page now.
+      expect(last.offset).toBe(0);
+    });
+  });
+
+  it("keeps the chosen size on the configuration, so it is saved with the report", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await withRows(user, 1376);
+
+    await user.click(screen.getByRole("combobox", { name: "Filas por página" }));
+    await user.click(screen.getByRole("option", { name: "25 filas" }));
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.type(screen.getByLabelText("Nombre"), "Con 25");
+    await user.click(screen.getByRole("button", { name: "Guardar reporte" }));
+
+    await waitFor(() => expect(api.crearReporte).toHaveBeenCalled());
+    const payload = api.crearReporte.mock.calls[0][0] as { config: ReportConfig };
+    expect(payload.config.limit).toBe(25);
+  });
+
+  it("gives a template the same page size as a report built by hand", async () => {
+    // The defect this came out of. A request carrying no `limit` is given 500
+    // by the server while everything the screen builds says 100, and none of
+    // the six templates carried one — so the identical report paged in
+    // five-hundreds opened from a template and in hundreds built by hand.
+    const user = userEvent.setup();
+    api.getCatalogo.mockResolvedValue({
+      ...catalog,
+      templates: [{ ...catalog.templates![0], config: { ...catalog.templates![0].config, limit: undefined } }],
+    });
+    renderPage();
+    await ready();
+
+    await openTemplatesTab(user);
+    await user.click(templateRow("Todos los eventos"));
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    const sent = api.runReporte.mock.calls[0][0] as ReportConfig;
+    expect(sent.limit).toBe(100);
+  });
+
+  it("says what the Auto switch does without being asked", async () => {
+    // Somebody had to ask, which is the whole test of a label. The explanation
+    // existed in the help panel — a place you go on purpose, not where the
+    // switch is.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.hover(screen.getByLabelText("Actualizar la tabla automáticamente"));
+
+    expect(await screen.findByText(/Rehace la tabla sola/)).toBeInTheDocument();
+  });
+
+  it("empties a filter list in one press, once there is more than one", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    // One filter: the ✕ beside it is closer and clearer than a second control.
+    await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+    await user.click(screen.getByRole("option", { name: /Descripción/ }));
+    expect(screen.queryByRole("button", { name: "Quitar todos" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+    await user.click(screen.getByRole("option", { name: /Resuelto/ }));
+
+    // Two or three go without a dialog: below four it costs more than the
+    // mistake it prevents.
+    await user.click(screen.getByRole("button", { name: "Quitar todos" }));
+    expect(await screen.findByText(/Sin filtros/)).toBeInTheDocument();
+  });
+
+  it("offers to export the page only when the report has more than one", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await withRows(user, 1376);
+
+    expect(screen.getByRole("combobox", { name: "Qué se exporta" })).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Qué se exporta" }));
+    await user.click(screen.getByRole("option", { name: /Solo esta página/ }));
+    await user.click(screen.getByRole("button", { name: /^Excel$/ }));
+
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const options = api.exportarReporte.mock.calls[0][1] as { scope?: string };
+    expect(options.scope).toBe("page");
+  });
+
+  it("does not offer it when the whole report is the page", async () => {
+    // Both answers would name the same rows, and a control whose two options
+    // are identical is one more thing to read and decide about for nothing.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await withRows(user, 1);
+
+    expect(screen.queryByRole("combobox", { name: "Qué se exporta" })).not.toBeInTheDocument();
+  });
+
+  it("exports the whole report unless told otherwise", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await withRows(user, 1376);
+
+    await user.click(screen.getByRole("button", { name: /^Excel$/ }));
+
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const options = api.exportarReporte.mock.calls[0][1] as { scope?: string };
+    expect(options.scope).toBe("all");
+  });
+});

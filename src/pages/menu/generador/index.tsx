@@ -20,6 +20,8 @@ import {
   emptyConfig, filterLimitReached, isSummary, maxColumns, maxConditions, maxSorts, moveColumn,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
+  clearFilters,
+  withPageSize,
 } from "../../../lib/reportConfig";
 import axios from "axios";
 import { saveAs } from "file-saver";
@@ -41,6 +43,7 @@ import {
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Switch } from "../../../components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { Textarea } from "../../../components/ui/textarea";
 
 import ColumnList from "./ColumnList";
@@ -82,6 +85,18 @@ const GeneradorPage = () => {
   const [estimate, setEstimate] = useState<number | null>(null);
   /** True while a refresh is armed but has not gone out: the banner defers to it. */
   const [autoPending, setAutoPending] = useState(false);
+  /** A level-of-detail change waiting to be confirmed, and what it would cost. */
+  /** Confirmation for emptying a filter list long enough to be worth rebuilding. */
+  const [clearingFilters, setClearingFilters] = useState(false);
+  /**
+   * How much of the report the exported file holds.
+   *
+   * "all" is what this always did and stays the default — a file of the whole
+   * report is what somebody exporting one usually wants. What was missing was
+   * the other answer and, more to the point, the admission: pressing Excel on
+   * page 4 produced a file starting at row 1 and nothing said so.
+   */
+  const [exportScope, setExportScope] = useState<"all" | "page">("all");
   /** A level-of-detail change waiting to be confirmed, and what it would cost. */
   const [pendingRoot, setPendingRoot] = useState<
     { root: CatalogRoot; cleaned: ReportConfig; lost: number } | null
@@ -211,6 +226,15 @@ const GeneradorPage = () => {
    * really are coming.
    */
   const previewing = config.columns.length > 0 && !showsResult && !running;
+
+  /**
+   * Filters as the panel lists them, which is the top level only.
+   *
+   * A nested group shows as one "Filtro avanzado" row however many conditions
+   * it holds, so counting the tree would offer to remove "todos los 9" over a
+   * list of three rows.
+   */
+  const filterCount = config.filters?.conditions?.length ?? 0;
 
   const isMine = current === null || current.id_usuario === currentUserId;
 
@@ -454,6 +478,29 @@ const GeneradorPage = () => {
     void run({ ...resultConfig, offset }, true);
   };
 
+  /**
+   * Changes how many rows a page holds, and asks for the first one again.
+   *
+   * Runs `resultConfig` and not `config`, exactly as paging does: resizing the
+   * table you are reading must not also apply half-finished edits you have not
+   * asked for yet. The size lands on the configuration too, so it survives into
+   * the saved report — it is part of what a report is, and until now it was the
+   * one part of it nobody could choose.
+   */
+  const handlePageSize = (limit: number) => {
+    setConfig((c) => ({ ...c, limit }));
+    if (!resultConfig) return;
+    // Same reason as in `handlePage`: an explicit click beats a refresh that
+    // has not gone out yet, and cancelling here stops it re-arming.
+    if (autoTimer.current !== null) {
+      clearTimeout(autoTimer.current);
+      autoTimer.current = null;
+      autoDone.current = signature;
+      setAutoPending(false);
+    }
+    void run({ ...resultConfig, limit, offset: 0 }, true);
+  };
+
   // ── Column and filter editing ──────────────────────────────────────────────
   //
   // Identity-stable on purpose: see `configRef`. None of these calls a toast
@@ -605,7 +652,10 @@ const GeneradorPage = () => {
     // narrowed to "eventos con alguna revisión en mayo" opened as "todos los
     // eventos", the warning blamed the reader's profile, and saving wrote the
     // widened version back over the original.
-    const cleaned = { ...pruneToCatalog(report.config, target), offset: 0 };
+    // `withPageSize` because a stored configuration can predate the page-size
+    // control, and "no limit" is not a neutral value: the server reads it as
+    // 500 while everything this screen builds says 100.
+    const cleaned = withPageSize({ ...pruneToCatalog(report.config, target), offset: 0 });
     // Two prunes, one number. The server drops what this account may not see
     // before the configuration ever arrives — it used to publish those paths,
     // filter values included — and this one drops what the catalog no longer
@@ -659,7 +709,7 @@ const GeneradorPage = () => {
    */
   const handlePickTemplate = (template: ReportTemplate) => {
     retireInFlight();
-    setConfig({ ...template.config, offset: 0 });
+    setConfig(withPageSize({ ...template.config, offset: 0 }));
     setCurrent(null);
     setSaveName(template.name);
     setSaveDescription(template.description);
@@ -750,6 +800,9 @@ const GeneradorPage = () => {
           title: exportTitle,
           subtitle: exportSubtitle,
           photos: format === "excel" && hasPhotoColumns && withPhotos,
+          // `resultConfig` carries the page on screen, so "page" needs nothing
+          // else: it is the same configuration the table was built from.
+          scope: exportScope,
         },
         { signal: controller.signal, onProgress: (received) => setExportBytes(received) },
       );
@@ -1027,6 +1080,27 @@ const GeneradorPage = () => {
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle className="text-base">Filtros</CardTitle>
+                <div className="flex items-center gap-1">
+                  {/*
+                    Only once there is more than one to lose. With a single
+                    filter the ✕ beside it is closer and clearer, and a second
+                    control for the same act would just be another thing to
+                    read.
+                  */}
+                  {filterCount > 1 && (
+                    <Button
+                      variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground"
+                      onClick={() => {
+                        // Confirmed above three, because that is where redoing
+                        // them by hand stops being a moment's work. Below it the
+                        // dialog costs more than the mistake.
+                        if (filterCount > 3) return setClearingFilters(true);
+                        setConfig((c) => clearFilters(c));
+                      }}
+                    >
+                      Quitar todos
+                    </Button>
+                  )}
                 <FieldPicker
                   root={root}
                   chosen={new Set()}
@@ -1040,6 +1114,7 @@ const GeneradorPage = () => {
                     setConfig(addFilter(config, field, limits));
                   }}
                 />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="pt-4">
@@ -1136,6 +1211,32 @@ const GeneradorPage = () => {
                     </div>
                   )}
 
+                  {/*
+                    Only when the report does not fit in one page. When it does,
+                    "todo el reporte" and "esta página" name the same rows, and
+                    a control whose two answers are identical is one more thing
+                    to read and decide about for nothing.
+                  */}
+                  {result && result.total > result.limit && (
+                    <Select
+                      value={exportScope}
+                      onValueChange={(value) => setExportScope(value as "all" | "page")}
+                      disabled={exporting !== null}
+                    >
+                      <SelectTrigger className="h-8 w-auto gap-1.5 text-xs" aria-label="Qué se exporta">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">
+                          Todo el reporte ({result.total.toLocaleString("es-BO")})
+                        </SelectItem>
+                        <SelectItem value="page">
+                          Solo esta página ({Math.min(result.limit, result.total - result.offset).toLocaleString("es-BO")})
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+
                   <Button
                     variant="outline" size="sm"
                     disabled={!result || exporting !== null}
@@ -1198,17 +1299,32 @@ const GeneradorPage = () => {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
-                    <Switch
-                      id="rep-auto"
-                      checked={auto}
-                      onCheckedChange={setAuto}
-                      aria-label="Actualizar la tabla automáticamente"
-                    />
-                    <Label htmlFor="rep-auto" className="cursor-pointer text-xs font-normal">
-                      Auto
-                    </Label>
-                  </div>
+                  {/*
+                    A tooltip because the control says "Auto" and nothing else.
+                    What it does was written down — in the help panel behind the
+                    ⓘ — which is a place you go on purpose, not where the switch
+                    is. Somebody had to ask what it did, which is the whole test
+                    of a label.
+                  */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
+                        <Switch
+                          id="rep-auto"
+                          checked={auto}
+                          onCheckedChange={setAuto}
+                          aria-label="Actualizar la tabla automáticamente"
+                        />
+                        <Label htmlFor="rep-auto" className="cursor-pointer text-xs font-normal">
+                          Auto
+                        </Label>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Rehace la tabla sola cuando cambia algo, medio segundo después de que pare de
+                      tocar. No arranca hasta el primer Generar. Apáguelo si el reporte tarda.
+                    </TooltipContent>
+                  </Tooltip>
 
                   <Button size="sm" onClick={handleGenerate} disabled={running}>
                     {running
@@ -1291,6 +1407,7 @@ const GeneradorPage = () => {
                   // From the configuration that produced the table, not the one
                   // being edited: the wording has to describe the result shown.
                   hasFilters={(resultConfig?.filters?.conditions?.length ?? 0) > 0}
+                  onPageSize={handlePageSize}
                 />
               ) : previewing ? (
                 <ShapePreview
@@ -1318,6 +1435,24 @@ const GeneradorPage = () => {
           </Card>
         </div>
       </div>
+
+      <AlertDialog open={clearingFilters} onOpenChange={setClearingFilters}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Quitar los {filterCount} filtros?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El reporte pasará a incluir todos los registros. Los filtros no se pueden recuperar:
+              habría que volver a armarlos uno a uno.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => setConfig((c) => clearFilters(c))}>
+              Quitar todos
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/*
         The confirmation the level of detail always needed. It names the number
