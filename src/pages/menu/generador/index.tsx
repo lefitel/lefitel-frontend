@@ -846,27 +846,60 @@ const GeneradorPage = () => {
             a hundred rows tall, so the most frequent task in the page — running
             a report that already exists — was the one furthest from the top.
           */}
+          {/*
+            One card, two named groups, because both hold reports you open and
+            neither is the other. A template has no owner, cannot be archived,
+            favourited or shared, and its row therefore carries none of the three
+            buttons a saved report's does — mixed into one list they would be
+            rows that look alike and behave differently, which is the same
+            defect as two picker entries reading identically. Keeping them apart
+            also keeps two true statements true: the footer counts the reader's
+            own reports, and "todavía no hay reportes guardados" goes on meaning
+            exactly that.
+
+            The card is no longer titled "Reportes guardados": half of what is
+            in it is not saved and not the reader's.
+          */}
           <Card className="border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <CardTitle className="text-base">Reportes guardados</CardTitle>
+              <CardTitle className="text-base">Abrir un reporte</CardTitle>
             </CardHeader>
-            <CardContent className="pt-4">
-              <SavedReports
-                reports={saved}
-                total={savedTotal}
-                onLoadMore={() => loadSaved(true)}
-                currentId={current?.id ?? null}
-                currentUserId={currentUserId}
-                onOpen={handleOpen}
-                // Opening and running are `ver`, which this page already
-                // required to load at all. The three that write are not.
-                onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
-                onDuplicate={mayCreate ? handleDuplicate : undefined}
-                onDelete={mayArchive ? handleDelete : undefined}
-                failed={savedFailed}
-                onRetry={refreshSaved}
-                loading={loadingSaved}
-              />
+            <CardContent className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Guardados
+                </p>
+                <SavedReports
+                  reports={saved}
+                  total={savedTotal}
+                  onLoadMore={() => loadSaved(true)}
+                  currentId={current?.id ?? null}
+                  currentUserId={currentUserId}
+                  onOpen={handleOpen}
+                  // Opening and running are `ver`, which this page already
+                  // required to load at all. The three that write are not.
+                  onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
+                  onDuplicate={mayCreate ? handleDuplicate : undefined}
+                  onDelete={mayArchive ? handleDelete : undefined}
+                  failed={savedFailed}
+                  onRetry={refreshSaved}
+                  loading={loadingSaved}
+                />
+              </div>
+
+              {(catalog.templates?.length ?? 0) > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Plantillas
+                  </p>
+                  <TemplateGallery
+                    templates={catalog.templates ?? []}
+                    roots={catalog.roots}
+                    onPick={handlePickTemplate}
+                    compact
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
 

@@ -193,6 +193,19 @@ const ready = async () => {
   await waitFor(() => expect(screen.getByRole("button", { name: "Generar" })).toBeInTheDocument());
 };
 
+/**
+ * The same six templates are listed twice on purpose, so a test has to say
+ * which list it means.
+ *
+ * They are told apart by their accessible name, which is the row's text: the
+ * compact row in the configuration panel is only the report's name, while the
+ * gallery row carries the description and the row meaning too. So an exact name
+ * finds the panel and a prefix finds the gallery — no reaching into the markup.
+ */
+const panelTemplate = (name: string) => screen.getByRole("button", { name });
+const galleryTemplate = (name: string) =>
+  screen.getByRole("button", { name: new RegExp(`^${name}.+`, "s") });
+
 const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
   await user.click(screen.getAllByRole("button", { name: /añadir columna/i })[0]);
   await user.click(screen.getByRole("option", { name }));
@@ -1000,7 +1013,7 @@ describe("what the screen shows while it waits", () => {
     // The heading and the four card titles are written into this page, not
     // fetched, so they are already readable while the fields travel.
     expect(await screen.findByRole("heading", { name: "Generador de reportes" })).toBeInTheDocument();
-    for (const title of ["Reportes guardados", "Nivel de detalle", "Columnas", "Filtros", "Resultado"]) {
+    for (const title of ["Abrir un reporte", "Nivel de detalle", "Columnas", "Filtros", "Resultado"]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
     // And it is announced as busy, not just drawn as busy.
@@ -1117,8 +1130,12 @@ describe("the report taking shape while it is built", () => {
     renderPage();
     await ready();
 
-    expect(screen.getByText("Todos los eventos")).toBeInTheDocument();
-    expect(screen.getByText("Listado de postes")).toBeInTheDocument();
+    // Twice, and that is the point: the gallery receives whoever is opening the
+    // screen for the first time, and the panel is the way back to them on every
+    // day after — the gallery only stands in an empty panel.
+    expect(galleryTemplate("Todos los eventos")).toBeInTheDocument();
+    expect(panelTemplate("Todos los eventos")).toBeInTheDocument();
+    expect(panelTemplate("Listado de postes")).toBeInTheDocument();
     expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
   });
 
@@ -1275,10 +1292,13 @@ describe("something to start from", () => {
     // Asserted on the row itself, not on the page: "Una fila por evento" is
     // also the label of the level-of-detail option, and finding it somewhere
     // would pass with an empty gallery.
-    expect(screen.getByRole("button", { name: /Todos los eventos/ }))
+    expect(galleryTemplate("Todos los eventos"))
       .toHaveTextContent(/Cada evento con su descripción.*Una fila por evento/s);
-    expect(screen.getByRole("button", { name: /Listado de postes/ }))
-      .toHaveTextContent("Una fila por poste");
+    expect(galleryTemplate("Listado de postes")).toHaveTextContent("Una fila por poste");
+    // The panel row carries the name alone: three lines times six, beside four
+    // other cards, is a wall.
+    expect(panelTemplate("Todos los eventos"))
+      .not.toHaveTextContent(/Cada evento con su descripción/);
   });
 
   it("loads the report when it is pressed", async () => {
@@ -1286,7 +1306,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await user.click(screen.getByRole("button", { name: /Todos los eventos/ }));
+    await user.click(galleryTemplate("Todos los eventos"));
 
     // The columns are in the builder, and the preview is already drawing them.
     await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
@@ -1302,7 +1322,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await user.click(screen.getByRole("button", { name: /Listado de postes/ }));
+    await user.click(galleryTemplate("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
@@ -1326,13 +1346,13 @@ describe("something to start from", () => {
     await user.click(screen.getByRole("button", { name: /^El mío/ }));
     expect(await screen.findByRole("button", { name: /^Actualizar$/ })).toBeInTheDocument();
 
-    // Not through "Nuevo": that clears the open report on its own, so it would
-    // hide whether picking a template clears it. The path that actually reaches
-    // the defence is emptying the report — the gallery comes back while the
-    // saved report is still open, and from there one press would otherwise
-    // write a template over somebody's saved report.
-    await user.click(screen.getByRole("button", { name: "Quitar Descripción" }));
-    await user.click(await screen.findByRole("button", { name: /Todos los eventos/ }));
+    // From the panel, with the saved report still open and its columns intact.
+    // Not through "Nuevo": that clears the open report by itself and would hide
+    // whether picking a template clears it. This is now the ordinary path —
+    // the panel list is on screen the whole time — and without the defence one
+    // press writes a template over somebody's saved report, and over the team's
+    // copy if it was shared.
+    await user.click(panelTemplate("Todos los eventos"));
 
     expect(await screen.findByRole("button", { name: /^Guardar$/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Actualizar$/ })).not.toBeInTheDocument();
@@ -1383,7 +1403,7 @@ describe("the explanations that sit next to what they explain", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
-    await user.click(screen.getByRole("button", { name: /Listado de postes/ }));
+    await user.click(galleryTemplate("Listado de postes"));
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
 
@@ -1405,5 +1425,37 @@ describe("the explanations that sit next to what they explain", () => {
 
     expect(await screen.findByText(/no lleva/)).toBeInTheDocument();
     expect(document.body.textContent).toMatch(/fotograf/i);
+  });
+});
+
+describe("the way back to a template", () => {
+  it("is reachable with a report already open", async () => {
+    // The gap this closed. The gallery only stands in an empty panel, so once
+    // a report had columns in it the only routes to a template were pressing
+    // "Nuevo" — which throws the report away — or deleting every column by
+    // hand. The panel list is on screen the whole time.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    expect(screen.queryByText(/Empiece por uno de estos/)).not.toBeInTheDocument();
+
+    await user.click(panelTemplate("Listado de postes"));
+
+    await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
+      .toHaveTextContent("Una fila por poste"));
+  });
+
+  it("keeps the panel list free of buttons that would do nothing", async () => {
+    // A template has no owner and cannot be archived, favourited or shared. Its
+    // row therefore carries none of the three buttons a saved report's does —
+    // rows that look alike and behave differently is the defect this layout
+    // exists to avoid.
+    renderPage();
+    await ready();
+
+    const row = panelTemplate("Todos los eventos").closest("li");
+    expect(row).not.toBeNull();
+    expect(row!.querySelectorAll("button")).toHaveLength(1);
   });
 });

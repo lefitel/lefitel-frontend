@@ -220,7 +220,7 @@ export const PageSkeleton = () => (
         or the layout jumps the moment the catalog lands. */}
     <div className="grid gap-4 lg:grid-cols-[minmax(320px,400px)_1fr]">
       <div className="min-w-0 space-y-4">
-        <CardSkeleton title="Reportes guardados" lines={3} />
+        <CardSkeleton title="Abrir un reporte" lines={4} />
         <CardSkeleton title="Nivel de detalle" lines={1} />
         <CardSkeleton title="Columnas" lines={3} />
         <CardSkeleton title="Filtros" lines={2} />
