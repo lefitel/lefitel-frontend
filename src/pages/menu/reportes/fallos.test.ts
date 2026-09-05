@@ -74,8 +74,8 @@ describe("ReportRecorrido.tsx, when a re-run it fired on its own fails", () => {
   // The generator drew this line first: a failed Generar clears, a failed
   // re-run the person did not ask for keeps the rows they were reading. The
   // two re-runs here fire after an incident is resolved or revised from a map
-  // popup, and the popups are not reachable from jsdom — Leaflet is mocked
-  // away in the screen's own test — so this is text, and says so.
+  // popup, and the popups are not reachable from jsdom — the map library is
+  // mocked away in the screen's own test — so this is text, and says so.
   it("keeps the rows: both popup callbacks ask for keepOnError, and the catch honours it", () => {
     const callbacks = fuente.match(/onSuccess=\{\(\) => void handleGenerar\(true\)\}/g) ?? [];
     expect(callbacks).toHaveLength(2);

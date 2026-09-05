@@ -21,7 +21,7 @@ import type { SesionInterface } from "./interfaces/interfaces";
 import { setPermisos, olvidarPermisos, sinPermisos, type Permisos, type Modulo } from "./lib/permissions";
 import { HomeRoute } from "./App";
 
-// The real dashboard drags in Leaflet, Recharts and a network call. What is
+// The real dashboard drags in MapLibre, Recharts and a network call. What is
 // under test is the decision in front of it, so a marker is enough — and it
 // also makes "did it render the dashboard" a positive assertion rather than an
 // absence.
