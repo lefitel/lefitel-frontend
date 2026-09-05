@@ -7,7 +7,7 @@ import { TramoPair } from "../api/opciones.api";
  *
  * **This hook used to fetch `GET /api/poste/tramos` itself, and no longer does.**
  * Its three consumers — the three report screens — now each ask
- * `/api/reporte/opciones` for the city list anyway, and that response already
+ * `/api/reporte/options` for the city list anyway, and that response already
  * carries the pairs in its `tramos` block. A hook that kept its own request
  * would have made every report screen fire the *same* endpoint twice per mount,
  * running the `GROUP BY` over `postes` on both: strictly worse than the two

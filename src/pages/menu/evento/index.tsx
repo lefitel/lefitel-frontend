@@ -827,14 +827,15 @@ const EventoPage = () => {
                             onClick={async () => {
                                 if (!reabrirId) return;
                                 setReabriendo(true);
-                                const status = await reabrirEvento(reabrirId);
-                                setReabriendo(false);
-                                if (status === 200) {
+                                try {
+                                    await reabrirEvento(reabrirId);
                                     toast.success("Evento reabierto");
                                     setReabrirId(null);
                                     load();
-                                } else {
-                                    toast.error("Error al des-resolver el evento");
+                                } catch (error) {
+                                    toast.error(mensajeDeError(error, "Error al des-resolver el evento"));
+                                } finally {
+                                    setReabriendo(false);
                                 }
                             }}
                         >

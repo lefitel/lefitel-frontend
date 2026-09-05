@@ -66,7 +66,7 @@ export default function AddEventoPageSheet({ open, setOpen, onSuccess }: Props) 
         setEstadoOpciones("cargando");
 
         // The pole register is its own request, not a block inside
-        // `/api/evento/opciones`: putting it there would serve the whole
+        // `/api/evento/options`: putting it there would serve the whole
         // register under `eventos.ver`, which is worse than the round trip it
         // saves. Separate also means a refusal on one does not empty the
         // other's combobox.

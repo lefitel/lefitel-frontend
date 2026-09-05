@@ -65,8 +65,8 @@ describe("the six go out as GET", () => {
       [() => getReporteTramo(FILTRO), "tramo"],
       [() => getReporteRecorrido({ ...FILTRO, TramoInicial: 3, TramoFinal: 7 }), "recorrido"],
       [() => getEstadoRed({}), "estado-red"],
-      [() => getObsFrecuencia({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "obs-frecuencia"],
-      [() => getTiemposResumen({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "tiempos-resumen"],
+      [() => getObsFrecuencia({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "frecuencia-obs"],
+      [() => getTiemposResumen({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "resumen-tiempos"],
     ];
 
     for (const [llamar, nombre] of casos) {

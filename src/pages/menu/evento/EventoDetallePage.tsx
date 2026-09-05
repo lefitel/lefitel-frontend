@@ -35,6 +35,7 @@ import {
 import { latExample, lngExample } from "../../../data/example";
 import { ImageViewer } from "../../../components/ui/image-viewer";
 import { reabrirEvento } from "../../../api/Evento.api";
+import { mensajeDeError } from "../../../api/descarga";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -518,14 +519,17 @@ export default function EventoDetallePage() {
               onClick={async () => {
                 if (!d.evento?.id) return;
                 setReabriendo(true);
-                const status = await reabrirEvento(d.evento.id as number);
-                setReabriendo(false);
-                if (status === 200) {
+                try {
+                  await reabrirEvento(d.evento.id as number);
                   toast.success("Evento reabierto");
                   setConfirmReabrir(false);
                   d.load();
-                } else {
-                  toast.error("Error al reabrir el evento");
+                } catch (error) {
+                  // La frase del servidor. El rechazo habitual es de permiso, y
+                  // «Error al reabrir el evento» no lo distinguía de una avería.
+                  toast.error(mensajeDeError(error, "Error al reabrir el evento"));
+                } finally {
+                  setReabriendo(false);
                 }
               }}
             >

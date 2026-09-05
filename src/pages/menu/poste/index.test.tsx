@@ -90,7 +90,11 @@ beforeEach(() => {
   getOpcionesPoste.mockResolvedValue(OPCIONES);
   getPoste.mockResolvedValue({ data: [FILA], total: 1, page: 1, totalPages: 1, limit: 15 });
   exportarPostes.mockResolvedValue({ blob: new Blob(["x"]), filename: "Postes_01-01-2026_00-00-00.xlsx" });
-  editPoste.mockResolvedValue({ status: 200 });
+  // La fila que devuelve el servidor, que es lo que `editPoste` resuelve
+  // desde D1. Antes era `{ status: 200 }`, una forma que la función ya no
+  // produce: el doble seguiría en verde mientras la pantalla leyera un campo
+  // que en producción no llega.
+  editPoste.mockResolvedValue({ id: 1 });
 });
 
 const sesion = { usuario: usuarioExample, autenticado: true };

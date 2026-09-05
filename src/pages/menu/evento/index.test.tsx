@@ -39,14 +39,15 @@ vi.mock("../../../lib/permissions", async (importOriginal) => ({
 vi.mock("../../../api/Evento.api", () => ({
   getEvento: (...args: unknown[]) => getEvento(...args),
   exportarEventos: vi.fn().mockResolvedValue({ blob: new Blob(["x"]), filename: "Incidencias.csv" }),
-  // Desde C4 estas tres devuelven la fila o nada, y ninguna devuelve un
-  // número. `reabrirEvento` es la excepción y está dicho en su propio
-  // fichero: sigue devolviendo 200 hasta que la sesión de MapLibre suelte
-  // `EventoDetallePage.tsx`.
+  // Desde C4 estas cuatro devuelven la fila o nada, y ninguna devuelve un
+  // número. `reabrirEvento` era la excepción, bloqueada por la sesión del
+  // mapa; D1 la cerró, así que resuelve `undefined` como sus vecinas. Un doble
+  // que siguiera resolviendo 200 no rompería nada — la pantalla ya no mira el
+  // valor — y ahí está el problema: sería un doble mintiendo en verde.
   editEvento: (...args: unknown[]) => editEvento(...args),
   deleteEvento: vi.fn().mockResolvedValue(undefined),
   desarchivarEvento: vi.fn().mockResolvedValue(undefined),
-  reabrirEvento: vi.fn().mockResolvedValue(200),
+  reabrirEvento: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: toastError, success: toastSuccess, info: vi.fn() },

@@ -51,8 +51,8 @@ export interface OpcionCiudad extends OpcionSimple {
 /**
  * An observation the caller is going to group by type.
  *
- * Only `/api/evento/opciones` serves this shape. The `obs` block of
- * `/api/reporte/opciones` is a plain `OpcionSimple` — no report groups
+ * Only `/api/evento/options` serves this shape. The `obs` block of
+ * `/api/reporte/options` is a plain `OpcionSimple` — no report groups
  * observations by type, and the two are typed apart here so that a screen which
  * starts doing so fails to compile instead of rendering empty groups that read
  * as "no observations configured".
@@ -97,15 +97,15 @@ export interface OpcionesReporte {
  * comment where each caller handles it.
  */
 export const getOpcionesPoste = (): Promise<OpcionesPoste> =>
-  axios.get(urlApi + urlPoste + "opciones").then((r) => r.data as OpcionesPoste);
+  axios.get(urlApi + urlPoste + "options").then((r) => r.data as OpcionesPoste);
 
 /** Both incident forms' two lists, under `eventos.ver`. */
 export const getOpcionesEvento = (): Promise<OpcionesEvento> =>
-  axios.get(urlApi + urlEvento + "opciones").then((r) => r.data as OpcionesEvento);
+  axios.get(urlApi + urlEvento + "options").then((r) => r.data as OpcionesEvento);
 
 /** The three report screens' six lists, under `reportes.ver`. */
 export const getOpcionesReporte = (): Promise<OpcionesReporte> =>
-  axios.get(urlApi + urlReporte + "opciones").then((r) => r.data as OpcionesReporte);
+  axios.get(urlApi + urlReporte + "options").then((r) => r.data as OpcionesReporte);
 
 /**
  * Whether a rejection was the server refusing this role the permission, rather

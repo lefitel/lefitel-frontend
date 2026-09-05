@@ -1,13 +1,28 @@
 import axios from "axios";
-import { urlBitacora, urlApi } from "./url";
+import { urlBitacora, urlApi, urlUsuario } from "./url";
 import { BitacoraInterface } from "../interfaces/interfaces";
 import { Paginado, pedirListado } from "./listado";
 
+/**
+ * One person's own activity.
+ *
+ * `GET /api/usuario/:id/bitacora` since D1. In a log about people,
+ * `/api/bitacora/:id_usuario` identified the subject and not the log, which
+ * is the rule §3.2 states.
+ *
+ * 🔴 **The profile screen calls this with `.catch(() => [])`**, so a refusal
+ * shows as an empty history and nothing else. The gate behind it lets a
+ * person read their own trail without holding `bitacora.ver`, and that branch
+ * depends on the route parameter being named the way the middleware expects:
+ * `bitacora.self.test.ts` in the API is the only thing that can see it break.
+ *
+ * 🔴 `urlBitacora` stays imported and stays right for the two functions below.
+ */
 export const getBitacora = (
   id_usuario: number,
   limit = 50
 ): Promise<Paginado<BitacoraInterface>> =>
-  pedirListado<BitacoraInterface>(urlApi + urlBitacora + id_usuario, { limit });
+  pedirListado<BitacoraInterface>(`${urlApi}${urlUsuario}${id_usuario}/bitacora`, { limit });
 
 export interface BitacoraFilters {
   id_usuario?: number;
@@ -24,7 +39,7 @@ export interface BitacoraFilters {
 }
 
 /**
- * One author of the log, as `GET /api/bitacora/autores` serves them.
+ * One author of the log, as `GET /api/bitacora/authors` serves them.
  *
  * Its own type and deliberately not `Pick<UsuarioInterface, …>`, because of
  * `id`: on that interface it is optional and nullable, since the same type also
@@ -56,7 +71,7 @@ export interface AutorBitacora {
  * old work is most often looking for, and exactly who the directory leaves out.
  */
 export const getAutoresBitacora = (): Promise<AutorBitacora[]> =>
-  axios.get(urlApi + urlBitacora + "autores").then((r) => r.data);
+  axios.get(urlApi + urlBitacora + "authors").then((r) => r.data);
 
 /**
  * A page of the log.

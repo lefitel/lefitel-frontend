@@ -48,6 +48,6 @@ export const deleteMaterial = (id: number): Promise<void> => {
 
 export const desarchivarMaterial = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlMaterial + id + "/desarchivar", {})
+    .patch(urlApi + urlMaterial + id + "/restore", {})
     .then(() => undefined);
 };

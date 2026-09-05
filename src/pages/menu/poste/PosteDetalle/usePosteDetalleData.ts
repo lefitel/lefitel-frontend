@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { searchPoste } from "../../../../api/Poste.api";
 import { getEvento_poste, reabrirEvento as reabrirEventoApi } from "../../../../api/Evento.api";
+import { mensajeDeError } from "../../../../api/descarga";
 import { EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
 import {  posteExample } from "../../../../data/example";
 
@@ -73,12 +74,12 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
   }, [load]);
 
   const reabrirEvento = async (evento: EventoInterface) => {
-    const status = await reabrirEventoApi(evento.id as number);
-    if (status === 200) {
+    try {
+      await reabrirEventoApi(evento.id as number);
       toast.success("Evento reabierto");
       await load();
-    } else {
-      toast.error("Error al reabrir el evento");
+    } catch (error) {
+      toast.error(mensajeDeError(error, "Error al reabrir el evento"));
     }
   };
 

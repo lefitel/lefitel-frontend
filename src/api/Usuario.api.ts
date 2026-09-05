@@ -168,6 +168,6 @@ export const deleteUsuario = (id: number): Promise<void> => {
 
 export const desarchivarUsuario = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlUsuario + id + "/desarchivar", {})
+    .patch(urlApi + urlUsuario + id + "/restore", {})
     .then(() => undefined);
 };

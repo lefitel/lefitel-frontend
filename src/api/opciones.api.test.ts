@@ -44,7 +44,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** What `/api/poste/opciones` really answers, shapes included. */
+/** What `/api/poste/options` really answers, shapes included. */
 const POSTE = {
   adss: [{ id: 3, name: "Preformado" }],
   material: [{ id: 7, name: "Madera" }],
@@ -77,7 +77,7 @@ describe("getOpcionesPoste", () => {
     // `/api/ciudad/`, `/api/material/`, `/api/propietario/` — carry no
     // permission at all, so a drift back to any of them keeps every screen
     // working for every seeded role and quietly undoes the whole task.
-    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/poste\/opciones$/);
+    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/poste\/options$/);
     expect(get.mock.calls[0][1]).toBeUndefined();
   });
 
@@ -117,7 +117,7 @@ describe("getOpcionesEvento", () => {
 
     await getOpcionesEvento();
 
-    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/evento\/opciones$/);
+    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/evento\/options$/);
   });
 
   it("keeps the type each observation belongs to", async () => {
@@ -145,7 +145,7 @@ describe("getOpcionesReporte", () => {
 
     await getOpcionesReporte();
 
-    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/reporte\/opciones$/);
+    expect(String(get.mock.calls[0][0])).toMatch(/\/api\/reporte\/options$/);
     expect(get.mock.calls[0][1]).toBeUndefined();
   });
 

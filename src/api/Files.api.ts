@@ -1,7 +1,5 @@
 import axios from "axios";
-import { urlApi } from "./url";
-
-const urlFiles = "files/";
+import { urlApi, urlFiles } from "./url";
 
 export interface FileInfo {
   name: string;

@@ -70,7 +70,7 @@ describe("the two questions it asks", () => {
 
     await waitFor(() => expect(getOpcionesEvento).toHaveBeenCalledTimes(1));
     expect(getObs, "la ficha volvió a pedir /api/obs/").not.toHaveBeenCalled();
-    expect(getTipoObs, "la ficha volvió a pedir /api/tipoObs/").not.toHaveBeenCalled();
+    expect(getTipoObs, "la ficha volvió a pedir /api/tipo-obs/").not.toHaveBeenCalled();
   });
 
   it("still asks for the pole register separately, which is C3's to change", async () => {

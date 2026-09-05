@@ -42,7 +42,7 @@ const LOGOUT_URL = `${urlApi}auth/logout`;
  *
  * **What this does not notice, declared rather than left to be discovered.**
  * It compares role *ids*, so it sees a person moved to another role and
- * nothing else. `PUT /api/permisos/:id_rol` changes what a role may do without
+ * nothing else. `PUT /api/permiso/:id_rol` changes what a role may do without
  * changing anybody's id, so granting rol 2 the `generador` module leaves every
  * rol 2 with the ERP already open on the old menu, and `ModuleRoute` in
  * `App.tsx` bounces them back if they type the URL by hand — with nothing on

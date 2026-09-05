@@ -48,6 +48,6 @@ export const deletePropietario = (id: number): Promise<void> => {
 
 export const desarchivarPropietario = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlPropietario + id + "/desarchivar", {})
+    .patch(urlApi + urlPropietario + id + "/restore", {})
     .then(() => undefined);
 };

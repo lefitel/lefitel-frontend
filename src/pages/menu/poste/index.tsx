@@ -93,7 +93,7 @@ const PostePage = () => {
      * This load used to end in `.catch(() => {})` with a comment saying the
      * dropdowns just would not populate. That was survivable while the lists
      * came from two ungated endpoints; now they come from
-     * `/api/poste/opciones`, which asks for `postes.ver`. **This screen is
+     * `/api/poste/options`, which asks for `postes.ver`. **This screen is
      * itself behind `postes.ver`** — `<ModuleRoute modulo="postes">` redirects
      * without it — so the refusal is not reachable from here; what is reachable
      * is every other failure, and a silent catch turned any of them into a menu
@@ -266,16 +266,21 @@ const PostePage = () => {
         ));
 
         const payload: PosteInterface = { ...poste, id_material: newMaterialId };
-        const res = await editPoste(payload);
-        setSavingMaterialIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
-
-        if (Number(res.status) === 200 || Number(res.status) === 201) {
+        // 🔴 El revert vive en el `catch` y el identificador de «guardando» en el
+        // `finally`, y las dos cosas son necesarias desde que `editPoste`
+        // propaga. Mientras se tragaba el fallo esto no tenía `try` ninguno:
+        // hoy, sin él, un rechazo del servidor dejaría la fila mostrando el
+        // material que no se guardó y el desplegable girando para siempre.
+        try {
+            await editPoste(payload);
             toast.success("Material actualizado");
-        } else {
-            toast.error("No se pudo actualizar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo actualizar"));
             setList((curr) => (curr ?? []).map((p) =>
                 p.id === poste.id ? { ...p, id_material: poste.id_material } : p
             ));
+        } finally {
+            setSavingMaterialIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
         }
     }, [materialList]);
 
@@ -289,16 +294,17 @@ const PostePage = () => {
         ));
 
         const payload: PosteInterface = { ...poste, id_propietario: newPropId };
-        const res = await editPoste(payload);
-        setSavingPropietarioIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
-
-        if (Number(res.status) === 200 || Number(res.status) === 201) {
+        // Igual que el de arriba, y por lo mismo. Ver el comentario allí.
+        try {
+            await editPoste(payload);
             toast.success("Propietario actualizado");
-        } else {
-            toast.error("No se pudo actualizar");
+        } catch (error) {
+            toast.error(mensajeDeError(error, "No se pudo actualizar"));
             setList((curr) => (curr ?? []).map((p) =>
                 p.id === poste.id ? { ...p, id_propietario: poste.id_propietario } : p
             ));
+        } finally {
+            setSavingPropietarioIds((prev) => { const next = new Set(prev); next.delete(poste.id as number); return next; });
         }
     }, [propietarioList]);
 

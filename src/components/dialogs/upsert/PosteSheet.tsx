@@ -11,6 +11,7 @@ import {
 import { getAdssPoste } from "../../../api/AdssPoste.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { createPoste, editPoste } from "../../../api/Poste.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { posteExample, latExample, lngExample } from "../../../data/example";
 import { url } from "../../../api/url";
 import { DatePicker } from "../../ui/date-picker";
@@ -69,7 +70,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
    * **"Sin ADSS registradas"**, a sentence that states as fact something the
    * screen has no idea about.
    *
-   * The lists now come from `/api/poste/opciones`, which asks for `postes.ver`.
+   * The lists now come from `/api/poste/options`, which asks for `postes.ver`.
    * From `/app/postes` and `/app/postes/:id` that is already guaranteed —
    * `<ModuleRoute modulo="postes">` redirects without it — so the refusal is
    * reachable from exactly one place: **the home screen**, which requires
@@ -123,7 +124,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     }
 
     // Silent when the catalogues were already refused: since C5 both this and
-    // `/api/poste/opciones` ask for `postes.ver`, so one refusal produces both
+    // `/api/poste/options` ask for `postes.ver`, so one refusal produces both
     // failures, and the sentence the sheet already shows on screen — "no tiene
     // permiso para consultar los catálogos de postes" — is the true one. A
     // second toast contradicting it would be this file answering a question
@@ -214,20 +215,22 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       }
 
       if (isEditing) {
-        const res = await editPoste(payload);
-        if (Number(res.status) !== 200) { toast.error("No se pudo guardar"); return; }
+        await editPoste(payload);
         toast.success("Poste actualizado");
       } else {
         payload = { ...payload, id_usuario: sesion.usuario.id ?? 0 };
-        const res = await createPoste(payload);
-        if (Number(res.status) !== 200) { toast.error("No se pudo crear el poste"); return; }
+        await createPoste(payload);
         toast.success("Poste creado correctamente");
       }
 
       handleClose();
       onSuccess();
-    } catch {
-      toast.error("Ocurrió un error al guardar");
+    } catch (error) {
+      // Una sola salida para las dos ramas, y con la frase del servidor: el
+      // rechazo típico aquí es un nombre de poste ya usado en esa ciudad, y
+      // «Ocurrió un error al guardar» mandaba a la persona a revisar el
+      // formulario entero sin decirle qué campo mirar.
+      toast.error(mensajeDeError(error, "Ocurrió un error al guardar"));
     } finally {
       setSaving(false);
     }

@@ -53,6 +53,6 @@ export const deleteObs = (id: number): Promise<void> => {
 
 export const desarchivarObs = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlObs + id + "/desarchivar", {})
+    .patch(urlApi + urlObs + id + "/restore", {})
     .then(() => undefined);
 };

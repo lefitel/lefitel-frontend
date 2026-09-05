@@ -44,7 +44,7 @@ function cuando(iso: Date | string | null | undefined): string {
  * renders this. That route is behind the Seguridad module, which most accounts
  * do not have, so the link would have been dead for exactly the people who
  * cannot see their history any other way. The list is cheaper than the link
- * and works for everyone: `GET /bitacora/:id_usuario` is behind
+ * and works for everyone: `GET /usuario/:id/bitacora` is behind
  * `requireSelfOrPermission`, so asking about yourself always passes.
  *
  * **No links out of the rows,** unlike `UsuarioDetallePage`'s version, for the

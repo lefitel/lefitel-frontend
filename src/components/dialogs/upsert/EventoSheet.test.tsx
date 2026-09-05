@@ -99,7 +99,7 @@ describe("where the observations come from", () => {
 
     await waitFor(() => expect(getOpcionesEvento).toHaveBeenCalledTimes(1));
     expect(getObs, "la ficha volvió a pedir /api/obs/").not.toHaveBeenCalled();
-    expect(getTipoObs, "la ficha volvió a pedir /api/tipoObs/").not.toHaveBeenCalled();
+    expect(getTipoObs, "la ficha volvió a pedir /api/tipo-obs/").not.toHaveBeenCalled();
   });
 
   it("groups each observation under its own type", async () => {

@@ -70,7 +70,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
   /**
    * Why the observation accordion is empty, when it is.
    *
-   * The two lists now come from `/api/evento/opciones`, which asks for
+   * The two lists now come from `/api/evento/options`, which asks for
    * `eventos.ver`. This sheet has five mount points across four files, and
    * three of them are outside anything that guarantees that permission: the
    * pole list (`postes.crear` on the trigger) and both on the pole detail page

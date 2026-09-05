@@ -2,7 +2,7 @@ import axios from "axios";
 import { nombreDeFichero } from "./descarga";
 import { urlApi } from "./url";
 
-const urlGenerador = "generador/";
+const urlGenerador = "generator/";
 
 // ─── Catalog ─────────────────────────────────────────────────────────────────
 
@@ -188,10 +188,10 @@ export interface SaveReportPayload {
 // ─── Calls ───────────────────────────────────────────────────────────────────
 
 export const getCatalogo = (): Promise<Catalog> =>
-  axios.get(urlApi + urlGenerador + "catalogo").then((r) => r.data);
+  axios.get(urlApi + urlGenerador + "catalog").then((r) => r.data);
 
 export const runReporte = (config: ReportConfig): Promise<ReportResult> =>
-  axios.post(urlApi + urlGenerador + "consulta", config).then((r) => r.data);
+  axios.post(urlApi + urlGenerador + "query", config).then((r) => r.data);
 
 /**
  * How many rows the report would return, without reading any of them.
@@ -207,7 +207,7 @@ export const contarReporte = (
   signal?: AbortSignal,
 ): Promise<{ total: number }> =>
   axios
-    .post(urlApi + urlGenerador + "conteo", config, { signal })
+    .post(urlApi + urlGenerador + "count", config, { signal })
     .then((r) => r.data);
 
 export const getReportesGuardados = (
@@ -232,7 +232,7 @@ export const eliminarReporte = (id: number): Promise<{ message: string }> =>
   axios.delete(urlApi + urlGenerador + `reportes/${id}`).then((r) => r.data);
 
 export const duplicarReporte = (id: number): Promise<SavedReport> =>
-  axios.post(urlApi + urlGenerador + `reportes/${id}/duplicar`, {}).then((r) => r.data);
+  axios.post(urlApi + urlGenerador + `reportes/${id}/duplicate`, {}).then((r) => r.data);
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
@@ -291,7 +291,7 @@ export const exportarReporte = async (
   extras: { signal?: AbortSignal; onProgress?: (received: number, total?: number) => void } = {},
 ): Promise<ExportedFile> => {
   const response = await axios.post(
-    urlApi + urlGenerador + "exportar",
+    urlApi + urlGenerador + "export",
     { config, ...options },
     {
       responseType: "blob",

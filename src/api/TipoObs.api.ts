@@ -48,6 +48,6 @@ export const deleteTipoObs = (id: number): Promise<void> => {
 
 export const desarchivarTipoObs = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlTipoObs + id + "/desarchivar", {})
+    .patch(urlApi + urlTipoObs + id + "/restore", {})
     .then(() => undefined);
 };

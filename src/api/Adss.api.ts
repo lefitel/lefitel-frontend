@@ -47,6 +47,6 @@ export const deleteAdss = (id: number): Promise<void> => {
 
 export const desarchivarAdss = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlAdss + id + "/desarchivar", {})
+    .patch(urlApi + urlAdss + id + "/restore", {})
     .then(() => undefined);
 };

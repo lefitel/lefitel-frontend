@@ -16,7 +16,7 @@ import logoUrl from "../../assets/images/logo.png";
  * and a name to print in a column header.
  *
  * Narrower on purpose than the five interfaces these parameters used to name.
- * Since C2 the lists arrive from `/api/reporte/opciones`, projected to exactly
+ * Since C2 the lists arrive from `/api/reporte/options`, projected to exactly
  * these two columns, and a signature demanding a `description` or an `image`
  * that this file never reads would have forced the screen to cast — which is
  * how a projection ends up typed as something it is not. `id` stays optional to

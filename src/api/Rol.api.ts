@@ -49,6 +49,6 @@ export const archiveRol = (id: number): Promise<void> => {
 
 export const desarchivarRol = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlRol + id + "/desarchivar", {})
+    .patch(urlApi + urlRol + id + "/restore", {})
     .then(() => undefined);
 };

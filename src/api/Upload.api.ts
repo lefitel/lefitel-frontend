@@ -1,6 +1,6 @@
 import axios from "axios";
 import imageCompression from "browser-image-compression";
-import { urlApi, urlUpload } from "./url";
+import { urlApi, urlFiles } from "./url";
 
 const MAX_MB = 4;
 
@@ -51,13 +51,26 @@ export const uploadImage = async (data: File): Promise<UploadResult> => {
     }
     const formData = new FormData();
     formData.append("file", file);
-    const response = await axios.post(urlApi + urlUpload, formData);
+    // `POST /api/files/` since D1. It was `POST /api/upload/` — a verb mounted
+    // as a root resource, next to the noun that manages the same files.
+    //
+    // 🔴 On the server this is the one route in that router **without** a
+    // permission gate, and deliberately: it serves an incident photograph, a
+    // pole photograph and your own portrait at once, so tying it to the
+    // `archivos` module would stop a Cliente changing their own picture. If it
+    // ever starts answering 403 here, that is what happened.
+    const response = await axios.post(urlApi + urlFiles, formData);
     const path = response.data?.path;
     if (typeof path !== "string" || path === "") {
       // A success with nothing usable in it. Rare, and worth refusing here
       // rather than letting an empty `image` reach a row. No status is compared:
       // this route answers 201 since C4 and would have answered 200 before, and
       // either way what matters is whether a path came back.
+      //
+      // 🔴 `path` is the contract, and the move did not change it: the server
+      // still answers `{ path }`. Aligning it with the `name` the rest of
+      // `Files.api.ts` uses would break every upload in the application with a
+      // message blaming the server, and no test would see it.
       return { ok: false, message: "El servidor no devolvió la imagen guardada." };
     }
     return { ok: true, path };

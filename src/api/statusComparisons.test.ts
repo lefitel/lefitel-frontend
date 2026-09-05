@@ -115,35 +115,27 @@ const AUTENTICACION = {
 } as const;
 
 /**
- * What C4 could not finish, and exactly why.
+ * The debt C4 left, and it is closed.
  *
- * Three files are being rewritten by the map migration right now, and the rule
- * in this tree is that a file mixing two sessions' work stays out of the commit.
- * So five functions in `src/api` still return a number — `createCiudad`,
- * `editCiudad`, `createPoste`, `editPoste`, `reabrirEvento` — each with a note
- * in its own source saying so, and each resolving **200 on success whatever the
- * server really answered**, which is what keeps these eleven comparisons true
- * instead of turning every successful create into a reported failure.
+ * There was a second list here — eleven comparisons across six screens, held
+ * open because five functions in `src/api` still returned a number:
+ * `createCiudad`, `editCiudad`, `createPoste`, `editPoste` and `reabrirEvento`.
+ * Their call sites lived in files the map migration was rewriting, and the rule
+ * in this tree is that a file mixing two sessions' work stays out of a commit.
+ * That work landed, and D1 converted all five together with the six screens.
  *
- * Four of the eleven are not in a blocked file: `evento/index.tsx` and
- * `usePosteDetalleData.ts` call `reabrirEvento`, and the function cannot change
- * shape while `EventoDetallePage.tsx` is holding it. The other two,
- * `poste/index.tsx`, call `editPoste` and are held by `PosteSheet.tsx` the same
- * way.
+ * The list is gone rather than emptied, because an empty list invites the next
+ * person to fill it. What replaces it is the rule below, with no exceptions:
+ * **no function in `src/api` may swallow its rejection into a number**, outside
+ * the authentication module §2 puts beyond this arc. Three shapes are named
+ * there and the count is zero.
  *
- * **This list must shrink to nothing.** When the map work lands, the five
- * functions become `Promise<void>` or `Promise<T>` like their neighbours and
- * these entries go with them.
+ * The one thing worth carrying over: `poste/index.tsx` edits a pole from inside
+ * the table and paints the row before asking. While `editPoste` swallowed the
+ * failure that code needed no `try` at all; now the revert lives in a `catch`
+ * and the "saving" id is cleared in a `finally`. Without both, a refused edit
+ * leaves the row showing what was never saved and its dropdown spinning.
  */
-const PENDIENTE_MAPLIBRE = {
-  "components/dialogs/upsert/CiudadSheet.tsx": 2,
-  "components/dialogs/upsert/PosteSheet.tsx": 2,
-  "pages/menu/evento/EventoDetallePage.tsx": 1,
-  "pages/menu/evento/index.tsx": 1,
-  "pages/menu/poste/PosteDetalle/usePosteDetalleData.ts": 1,
-  // Four on two lines: both inline edits accept `200 || 201`.
-  "pages/menu/poste/index.tsx": 4,
-} as const;
 
 describe("el registro de comparaciones contra un código de estado", () => {
   const encontrado = inventario();
@@ -158,7 +150,7 @@ describe("el registro de comparaciones contra un código de estado", () => {
   });
 
   it("clasifica cada comparación, y cada entrada clasificada existe", () => {
-    const permitido: Record<string, number> = { ...AUTENTICACION, ...PENDIENTE_MAPLIBRE };
+    const permitido: Record<string, number> = { ...AUTENTICACION };
 
     const sinClasificar = Object.keys(encontrado).filter((f) => !(f in permitido));
     expect(
@@ -175,7 +167,7 @@ describe("el registro de comparaciones contra un código de estado", () => {
   });
 
   it("cuenta cuántas hay en cada uno, así que una nueva no se cuela en un fichero que ya estaba", () => {
-    const permitido: Record<string, number> = { ...AUTENTICACION, ...PENDIENTE_MAPLIBRE };
+    const permitido: Record<string, number> = { ...AUTENTICACION };
     const desviados = Object.entries(encontrado)
       .filter(([f, n]) => permitido[f] !== undefined && permitido[f] !== n)
       .map(([f, n]) => `${f}: la lista dice ${permitido[f]}, hay ${n}`);
@@ -183,15 +175,20 @@ describe("el registro de comparaciones contra un código de estado", () => {
     expect(desviados, `la cuenta cambió:\n  ${desviados.join("\n  ")}`).toEqual([]);
   });
 
-  it("mantiene a la vista la deuda que dejó el trabajo del mapa", () => {
-    // Eleven comparisons on nine lines — the pole list holds two per line. The
-    // number is here so that closing part of the debt and leaving the rest
-    // reads as unfinished rather than as done.
-    const deuda = Object.values(PENDIENTE_MAPLIBRE).reduce((a, b) => a + b, 0);
-    expect(deuda, "quedan comparaciones esperando a que MapLibre suelte sus tres ficheros").toBe(11);
+  it("no deja ninguna pantalla comparando fuera del módulo de autenticación", () => {
+    // The other direction of the ledger above, said as a property rather than
+    // as a count: every file that still compares against a status number is in
+    // `AUTENTICACION`, which §2 of the standard puts outside this arc. When that
+    // session converts its screens the entries leave, and the "fantasmas"
+    // assertion above is what makes them leave rather than linger.
+    const fuera = Object.keys(encontrado).filter((f) => !(f in AUTENTICACION));
+    expect(
+      fuera,
+      `estas pantallas comparan contra un código de estado y no son de autenticación:\n  ${fuera.join("\n  ")}`,
+    ).toEqual([]);
   });
 
-  it("no deja ninguna función de negocio de src/api tragándose el fallo salvo esas cinco", () => {
+  it("no deja ninguna función de negocio de src/api tragándose el fallo", () => {
     // "de negocio", and the qualifier is load-bearing: about thirty functions
     // in `Login.api.ts`, `Mfa.api.ts`, `Webauthn.api.ts`, `Permisos.api.ts` and
     // the rescue half of `Usuario.api.ts` also swallow their rejection into a
@@ -205,7 +202,18 @@ describe("el registro de comparaciones contra un código de estado", () => {
     // typed as a real entity, so a caller reading `.data` after a failure got a
     // pole that does not exist. Looking only for the first shape is how the
     // first count of this came out at 37 instead of 41.
-    const TRAGA = /\.catch\(\(\) => \(?\{? ?status: 400|\.catch\(\(\) => 400\)/;
+    // Three shapes, not two. The third — `.then(() => 200)` — is the most
+    // deceptive: it reports success for a status nobody looked at, so a server
+    // answering 201 or 204 still reads as 200 and the screen believes it. Three
+    // of the five functions C4 left unfinished resolved that way; the other two
+    // resolved `{status: 200, data}`, which the first branch catches.
+    //
+    // 🔴 Written once with the second `|` escaped, which turned it into a
+    // literal bar: the expression then matched **one** shape instead of three,
+    // and the one it stopped matching was the one that already worked. It passed
+    // — there is nothing to find today — and would have gone on passing while
+    // the pattern came back. Both new branches are mutation-checked.
+    const TRAGA = /\.catch\(\(\) => \(?\{? ?status: 400|\.catch\(\(\) => 400\)|\.then\(\(\) => 200\)/;
     const culpables: string[] = [];
     for (const ruta of ficheros(join(src, "api"))) {
       readFileSync(ruta, "utf8").split("\n").forEach((linea, i) => {
@@ -214,6 +222,6 @@ describe("el registro de comparaciones contra un código de estado", () => {
         culpables.push(`${relative(src, ruta).replace(/\\/g, "/")}:${i + 1}`);
       });
     }
-    expect(culpables.length, `quedan estas:\n  ${culpables.join("\n  ")}`).toBe(5);
+    expect(culpables.length, `quedan estas:\n  ${culpables.join("\n  ")}`).toBe(0);
   });
 });

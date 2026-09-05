@@ -5,6 +5,7 @@ import { SonarMarker } from "../../map/SonarMarker";
 import MapSearch from "../../map/MapSearch";
 import { createCiudad, editCiudad } from "../../../api/Ciudad.api";
 import { uploadImage } from "../../../api/Upload.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { url } from "../../../api/url";
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { latExample, lngExample } from "../../../data/example";
@@ -68,24 +69,20 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
       }
 
       if (isEditing) {
-        const result = await editCiudad({ ...ciudad!, name, lat, lng, image: imagePath });
-        if (result === 200) {
-          toast.success("Ciudad actualizada");
-          handleClose();
-          onSuccess();
-        } else {
-          toast.error("No se pudo guardar los cambios");
-        }
+        await editCiudad({ ...ciudad!, name, lat, lng, image: imagePath });
+        toast.success("Ciudad actualizada");
       } else {
-        const result = await createCiudad({ name, image: imagePath, lat, lng });
-        if (Number(result) === 200) {
-          toast.success("Ciudad creada");
-          handleClose();
-          onSuccess();
-        } else {
-          toast.error("No se pudo crear la ciudad");
-        }
+        await createCiudad({ name, image: imagePath, lat, lng });
+        toast.success("Ciudad creada");
       }
+      handleClose();
+      onSuccess();
+    } catch (error) {
+      // La frase del servidor, no una nuestra. Aquí importa más que en casi
+      // ningún sitio: la causa habitual de un rechazo es un nombre repetido o
+      // unas coordenadas fuera de rango, y «No se pudo guardar los cambios» no
+      // dice cuál de las dos ni deja arreglarlo sin adivinar.
+      toast.error(mensajeDeError(error, isEditing ? "No se pudo guardar los cambios" : "No se pudo crear la ciudad"));
     } finally {
       setSaving(false);
     }

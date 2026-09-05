@@ -1,12 +1,24 @@
 import axios from "axios";
-import { urlRevision, urlApi } from "./url";
+import { urlRevision, urlApi, urlEvento } from "./url";
 import { todasLasFilas } from "./listado";
 import { RevisionInterface } from "../interfaces/interfaces";
 
+/**
+ * The inspections carried out on one incident.
+ *
+ * `GET /api/evento/:id/revisiones` since D1. At its old address,
+ * `GET /api/revision/5` returned the inspections **of incident 5** and not
+ * inspection 5 — the parameter named the parent — which is the confusion §3.2
+ * exists to remove.
+ *
+ * 🔴 `urlRevision` is still imported and still right for `createRevision`
+ * below: `POST /api/revision/` did not move. Renaming the constant would
+ * break recording an inspection.
+ */
 export const getRevision = (
   id_evento: number
 ): Promise<RevisionInterface[]> =>
-  todasLasFilas<RevisionInterface>(urlApi + urlRevision + id_evento);
+  todasLasFilas<RevisionInterface>(`${urlApi}${urlEvento}${id_evento}/revisiones`);
 
 /**
  * Records one inspection, and lets the failure travel.

@@ -1,7 +1,6 @@
 import axios from "axios";
 import { urlPoste, urlApi } from "./url";
 import { PosteInterface } from "../interfaces/interfaces";
-import { posteExample } from "../data/example";
 import { comoParametros, ListParams, Paginado, pedirListado, todasLasFilas } from "./listado";
 import { descargarListado, type FormatoDescarga } from "./descarga";
 
@@ -56,7 +55,7 @@ export const getPosteByCiudad = (ciudadId: number): Promise<PosteInterface[]> =>
 
 // `TramoPair` and `getTramos` used to live here, calling `GET /api/poste/tramos`
 // for `useTramoNeighbors`. The pairs now travel in the `tramos` block of
-// `/api/reporte/opciones`, which the three report screens already request, so
+// `/api/reporte/options`, which the three report screens already request, so
 // the function lost its only caller and the route lost its only client — both
 // are gone. The type moved to `opciones.api.ts`, next to the response it
 // describes.
@@ -75,26 +74,11 @@ export const getPosteByTramo = (
 ): Promise<PosteInterface[]> =>
   todasLasFilas<PosteInterface>(urlApi + urlPoste, { ciudadA, ciudadB });
 
-/**
- * Nota de C4, y es temporal.
- *
- * Ésta es una de las cinco funciones de esta carpeta que siguen devolviendo un
- * número en vez de propagar el fallo. No por criterio: su único llamante es
- * `PosteSheet.tsx`, y esa sesión está reescribiendo ese fichero ahora mismo,
- * así que tocarlo metería su trabajo a medias en este commit.
- *
- * Mientras tanto, **un éxito resuelve 200 sea cual sea el código real**. Sin
- * esa línea, en cuanto el servidor conteste 201 la pantalla diría «no se pudo»
- * sobre algo que sí se hizo, y la persona lo reintentaría. Cuando el otro
- * trabajo aterrice, esto pasa a `Promise<PosteInterface>` como sus vecinas.
- */
-export const createPoste = (
-  data: PosteInterface
-): Promise<{ status: number; data: PosteInterface }> => {
+/** Registra un poste y deja viajar el fallo. Contesta 201 desde C4. */
+export const createPoste = (data: PosteInterface): Promise<PosteInterface> => {
   return axios
-    .post(urlApi + urlPoste, data)
-    .then((response) => ({ status: 200, data: response.data as PosteInterface }))
-    .catch(() => ({ status: 400, data: posteExample }));
+    .post<PosteInterface>(urlApi + urlPoste, data)
+    .then((response) => response.data);
 };
 
 export const searchPoste = (dataId: number): Promise<PosteInterface> => {
@@ -104,28 +88,20 @@ export const searchPoste = (dataId: number): Promise<PosteInterface> => {
 };
 
 /**
- * Nota de C4, y es temporal.
+ * Edita un poste y deja viajar el fallo.
  *
- * Ésta es un `PUT` y el servidor le contesta 200 hoy y después de C4, así que
- * el atajo no la salva de ningún cambio de código: va con `createPoste` porque
- * comparte pantalla, `PosteSheet.tsx`, que es de la sesión del mapa.
- *
- * **Tiene tres llamantes, no uno.** Además de la hoja, `poste/index.tsx` la usa
- * dos veces para cambiar el material y el propietario **desde la propia
- * tabla**, pintando la fila antes de preguntar. Esos dos sitios no tienen
- * `try` ninguno: hoy da igual porque esta función se traga el fallo, pero el
- * día que pase a `Promise<PosteInterface>` hay que mover el revert al `catch`
- * y limpiar el identificador de «guardando» en un `finally`, o la fila se
- * queda con el material que el servidor rechazó y el desplegable deshabilitado
- * para siempre.
+ * 🔴 **Tiene tres llamantes y dos de ellos pintan la fila antes de preguntar.**
+ * `poste/index.tsx` la usa dos veces para cambiar el material y el propietario
+ * desde la propia tabla. Mientras esta función se tragaba el fallo, aquello no
+ * tenía `try` ninguno; ahora el revert vive en un `catch` y el identificador de
+ * «guardando» se limpia en un `finally`. Sin las dos cosas, un rechazo del
+ * servidor deja la fila con el material que no se guardó y el desplegable
+ * deshabilitado para siempre.
  */
-export const editPoste = (
-  data: PosteInterface
-): Promise<{ status: number; data: PosteInterface }> => {
+export const editPoste = (data: PosteInterface): Promise<PosteInterface> => {
   return axios
-    .put(urlApi + urlPoste + data.id, data)
-    .then((response) => ({ status: 200, data: response.data as PosteInterface }))
-    .catch(() => ({ status: 400, data: posteExample }));
+    .put<PosteInterface>(urlApi + urlPoste + data.id, data)
+    .then((response) => response.data);
 };
 
 export const deletePoste = (id: number): Promise<void> => {
@@ -136,6 +112,6 @@ export const deletePoste = (id: number): Promise<void> => {
 
 export const desarchivarPoste = (id: number): Promise<void> => {
   return axios
-    .patch(urlApi + urlPoste + id + "/desarchivar", {})
+    .patch(urlApi + urlPoste + id + "/restore", {})
     .then(() => undefined);
 };

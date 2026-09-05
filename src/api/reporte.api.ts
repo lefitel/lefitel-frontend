@@ -102,7 +102,7 @@ export const getObsFrecuencia = (
   filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<ObsFrecuenciaRow[]> => {
   return axios
-    .get(urlApi + urlReporte + "obs-frecuencia", { params: filtro })
+    .get(urlApi + urlReporte + "frecuencia-obs", { params: filtro })
     .then((r) => r.data);
 };
 
@@ -110,6 +110,6 @@ export const getTiemposResumen = (
   filtro: { fechaInicial: Date; fechaFinal: Date }
 ): Promise<TiemposResumen> => {
   return axios
-    .get(urlApi + urlReporte + "tiempos-resumen", { params: filtro })
+    .get(urlApi + urlReporte + "resumen-tiempos", { params: filtro })
     .then((r) => r.data);
 };

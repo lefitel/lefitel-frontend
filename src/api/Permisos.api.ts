@@ -25,7 +25,7 @@ export interface MatrizPermisos {
 
 export const getMatrizPermisos = (): Promise<MatrizPermisos> =>
   axios
-    .get(urlApi + "permisos")
+    .get(urlApi + "permiso")
     .then((r) => r.data as MatrizPermisos);
 
 export const savePermisos = (
@@ -33,7 +33,7 @@ export const savePermisos = (
   permisos: Partial<Record<Modulo, Partial<Record<Accion, boolean>>>>,
 ): Promise<{ status: number; message?: string }> =>
   axios
-    .put(urlApi + "permisos/" + id_rol, { permisos })
+    .put(urlApi + "permiso/" + id_rol, { permisos })
     .then((r) => ({ status: r.status }))
     .catch((e) => ({
       status: e.response?.status ?? 500,

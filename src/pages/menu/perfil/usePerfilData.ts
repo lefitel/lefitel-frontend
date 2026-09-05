@@ -64,11 +64,14 @@ export interface PerfilData {
  *
  * None of the four needs a permission the caller might not have, and since C5
  * two of them say so by construction rather than by being open.
- * `GET /bitacora/:id_usuario` and `GET /evento/usuario/:id` are both behind
+ * `GET /usuario/:id/bitacora` and `GET /usuario/:id/eventos` are both behind
  * `requireSelfOrPermission`, so asking about yourself always passes — provided
- * each route hands that middleware the name of its own parameter, which is a
- * defect that has shipped before and now has `evento.self.test.ts` measuring
- * it. `GET /auth/sessions` reads the caller's id off the session and takes
+ * that middleware is reading the parameter the route really declares. That
+ * defect has shipped before, and D1 turned it around: both routes moved under
+ * `/api/usuario/:id`, so the middleware's default is now the right one and the
+ * mistake would be **passing** the old `"id_usuario"` rather than omitting it.
+ * `evento.self.test.ts` and `bitacora.self.test.ts` are the two files that
+ * measure it, one per route. `GET /auth/sessions` reads the caller's id off the session and takes
  * nothing from the request, so there is no other person's list it could return.
  *
  * That is why the swallow below is a swallow and not a report: on this screen a

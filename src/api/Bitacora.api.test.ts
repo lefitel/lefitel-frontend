@@ -38,7 +38,7 @@ describe("getAutoresBitacora", () => {
     expect(get).toHaveBeenCalledTimes(1);
     // Anchored at the end: `/api/usuario/` is the address this replaced and the
     // one a tidy-up would drift back to, and it needs a different permission.
-    expect(String(get.mock.calls[0][0])).toMatch(/\/bitacora\/autores$/);
+    expect(String(get.mock.calls[0][0])).toMatch(/\/bitacora\/authors$/);
   });
 
   it("sends no filters, because the list is not a page of anything", async () => {
