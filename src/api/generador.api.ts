@@ -60,9 +60,31 @@ export interface CatalogLimits {
   maxFilterValue: number;
 }
 
+/**
+ * A report somebody can press instead of building one.
+ *
+ * Comes from the server with the catalog, not from a constant here: a template
+ * is a handful of catalog paths, and a copy of those in this repo is the same
+ * duplication that put two spellings of "máximo" and two copies of the caps on
+ * two sides. The server prunes each one to whoever is asking, so what arrives is
+ * always runnable, and a test there refuses any template the builder cannot
+ * build.
+ */
+export interface ReportTemplate {
+  key: string;
+  name: string;
+  description: string;
+  config: ReportConfig;
+}
+
 export interface Catalog {
   roots: CatalogRoot[];
   limits: CatalogLimits;
+  /**
+   * Optional because an older server does not send it. The gallery simply does
+   * not appear rather than the page failing to load.
+   */
+  templates?: ReportTemplate[];
 }
 
 // ─── Report configuration ────────────────────────────────────────────────────

@@ -16,6 +16,7 @@ import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "../../../components/ui/table";
 import { columnHeader, columnKind } from "../../../lib/reportConfig";
+import PageHelp from "./PageHelp";
 
 /**
  * Bar widths that look like text without looking like a pattern.
@@ -198,7 +199,13 @@ export const PageSkeleton = () => (
 
     <div className="flex flex-wrap items-start justify-between gap-2">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
+        {/* Real, like the heading beside it: the help panel is written into the
+            page and needs no catalog, so hiding it until one arrives would put
+            a control on screen a moment after the reader started reading. */}
+        <div className="flex items-center gap-1.5">
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
+          <PageHelp />
+        </div>
         <p className="text-muted-foreground">
           Arme el reporte que necesite: elija las columnas, filtre y agrupe. Guárdelo para volver a generarlo cuando quiera.
         </p>

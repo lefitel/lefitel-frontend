@@ -13,7 +13,7 @@ import {
   runReporte,
   type AggFn, type Catalog, type CatalogField, type CatalogRoot, type ExportFormat,
   type FilterCondition,
-  type ReportConfig, type ReportResult, type SavedReport,
+  type ReportConfig, type ReportResult, type ReportTemplate, type SavedReport,
 } from "../../../api/generador.api";
 import {
   addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
@@ -45,9 +45,11 @@ import { Textarea } from "../../../components/ui/textarea";
 import ColumnList from "./ColumnList";
 import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
+import PageHelp from "./PageHelp";
 import PreviewTable from "./PreviewTable";
 import SavedReports from "./SavedReports";
 import ShapePreview from "./ShapePreview";
+import TemplateGallery from "./TemplateGallery";
 import { PageSkeleton, ResultSkeleton } from "./Skeletons";
 
 const GeneradorPage = () => {
@@ -305,7 +307,9 @@ const GeneradorPage = () => {
       // a header describing a different one is a lie on screen.
       //
       // It is wrong for a page. The failure there is usually transient — a
-      // timeout, or the thirty-a-minute limit reached by holding "Siguiente" —
+      // timeout, or the thirty-a-minute limit reached by holding "Siguiente"
+      // (a budget shared with the six fixed reports since B3, so it may also
+      // have been spent on the Informes screen) —
       // and clearing threw away the table the person was reading, disabled both
       // export buttons, and left them re-running the very query that had just
       // timed out. The page they asked for did not arrive; the one they had is
@@ -353,10 +357,14 @@ const GeneradorPage = () => {
    * longer matches — `sameQuery` ignores the page, so paging never re-triggers
    * it.
    *
-   * The limit is thirty runs a minute per person. Somebody editing steadily
-   * commits maybe a dozen changes in that minute, and if the limit is reached
-   * anyway the refusal keeps the table it had (`keepOnError`) and the banner
-   * comes back with its button — which is what the button is still there for.
+   * The limit is thirty runs a minute per person, and since B3 it is **one
+   * budget with the six fixed reports** on the Informes screen: a run here and
+   * a Generar there spend the same thirty. Somebody editing steadily commits
+   * maybe a dozen changes in that minute, and if the limit is reached anyway
+   * the refusal keeps the table it had (`keepOnError`) and the banner comes
+   * back with its button — which is what the button is still there for. The
+   * other direction is the one to remember when a 429 shows up on Informes:
+   * this auto-run can have spent it.
    */
   useEffect(() => {
     if (!auto || result === null || problems.length > 0) return;
@@ -636,6 +644,30 @@ const GeneradorPage = () => {
     }
   };
 
+  /**
+   * Loads a template into the builder.
+   *
+   * Deliberately not `handleOpen`. A template is not a saved report: `current`
+   * stays null, so the save button goes on saying "Guardar" and cannot
+   * overwrite anything — pressing "Actualizar" over a template would be
+   * overwriting a report the reader never made. The name is pre-filled as a
+   * courtesy and can be typed over; nothing is written until they save.
+   *
+   * No pruning here: the server already fitted the template to this viewer
+   * before sending it, and refuses to send one it could not fit whole.
+   */
+  const handlePickTemplate = (template: ReportTemplate) => {
+    retireInFlight();
+    setConfig({ ...template.config, offset: 0 });
+    setCurrent(null);
+    setSaveName(template.name);
+    setSaveDescription(template.description);
+    setSaveShared(false);
+    setResult(null);
+    setResultConfig(null);
+    toast.info(`«${template.name}» cargado. Cámbielo a su gusto y pulse Generar.`);
+  };
+
   const handleToggleFavorite = async (report: SavedReport) => {
     try {
       await actualizarReporte(report.id, { favorite: !report.favorite });
@@ -770,7 +802,10 @@ const GeneradorPage = () => {
     <div className="@container/card w-full space-y-4 px-6 pt-4 pb-6 animate-in fade-in duration-500 md:px-8 md:pb-8">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
+          <div className="flex items-center gap-1.5">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
+            <PageHelp />
+          </div>
           <p className="text-muted-foreground">
             Arme el reporte que necesite: elija las columnas, filtre y agrupe. Guárdelo para volver a generarlo cuando quiera.
           </p>
@@ -914,7 +949,25 @@ const GeneradorPage = () => {
                 />
               </div>
             </CardHeader>
-            <CardContent className="pt-4">
+            <CardContent className="space-y-3 pt-4">
+              {/*
+                The rule, said before it is broken instead of after.
+
+                Grouping is the hardest idea on this screen: it turns a listing
+                into one row per distinct value, and from that moment every
+                column has to be grouped or summarised or the report is refused.
+                Until now the only place that rule appeared was in the refusal
+                itself — after somebody had chosen the columns, pressed Generar
+                and been told no. It shows only while the report actually groups,
+                so it is an explanation of what is on screen and not a manual.
+              */}
+              {isSummary(config) && (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                  Este reporte <strong className="font-medium text-foreground">agrupa</strong>: cada
+                  fila será un valor distinto, no un registro. Por eso toda columna tiene que estar
+                  agrupada o llevar un resumen —Conteo, Suma, Mínimo…—; las que no, hay que quitarlas.
+                </p>
+              )}
               <ColumnList
                 config={config}
                 root={root}
@@ -1202,6 +1255,19 @@ const GeneradorPage = () => {
                   columns={config.columns}
                   root={root}
                   grouped={isSummary(config)}
+                />
+              ) : (catalog.templates?.length ?? 0) > 0 ? (
+                /*
+                  The emptiest part of the screen, which is also where somebody
+                  who does not know what to do is looking. It used to hold one
+                  sentence telling them to go choose columns — sound advice for
+                  anyone who already knows the data, and an empty room for the
+                  role that is literally called "Cliente".
+                */
+                <TemplateGallery
+                  templates={catalog.templates ?? []}
+                  roots={catalog.roots}
+                  onPick={handlePickTemplate}
                 />
               ) : (
                 <p className="py-16 text-center text-sm text-muted-foreground">

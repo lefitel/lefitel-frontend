@@ -210,6 +210,21 @@ const FieldPicker = ({
             );
           })}
         </div>
+
+        {/*
+          The Σ already tells the two kinds of entry apart, and "Contar" reads
+          as a verb rather than as a field. What neither says is *what* they
+          are, which is the thing people ask about: "Nº de revisiones" is a
+          number that sits in no table and exists only while the report runs.
+          Shown only when one is on the list, so the picker does not carry an
+          explanation of something not in front of the reader.
+        */}
+        {entries.some((entry) => entry.kind === "aggregate") && (
+          <p className="flex items-start gap-1.5 border-t px-3 py-2 text-xs text-muted-foreground">
+            <SigmaIcon className="mt-0.5 h-3 w-3 shrink-0" />
+            <span>Los «Contar…» no son un dato guardado: se cuentan al generar el reporte.</span>
+          </p>
+        )}
       </PopoverContent>
     </Popover>
   );

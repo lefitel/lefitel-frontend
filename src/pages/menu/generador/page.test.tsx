@@ -95,6 +95,36 @@ const catalog: Catalog = {
       aggregateOnly: [],
     },
   ],
+  // The real server sends these with the catalog, so the fixture does too.
+  // Without them every test here started on a screen the server no longer
+  // serves — the empty right-hand panel — and nothing exercised the gallery
+  // that now stands there.
+  templates: [
+    {
+      key: "todos-los-eventos",
+      name: "Todos los eventos",
+      description: "Cada evento con su descripción y si está resuelto.",
+      config: {
+        root: "evento",
+        columns: [{ path: "description" }, { path: "state" }],
+        filters: { op: "and", conditions: [] },
+        groupBy: [],
+        sort: [],
+      },
+    },
+    {
+      key: "listado-de-postes",
+      name: "Listado de postes",
+      description: "El número de cada poste dado de alta en el sistema.",
+      config: {
+        root: "poste",
+        columns: [{ path: "name" }],
+        filters: { op: "and", conditions: [] },
+        groupBy: [],
+        sort: [],
+      },
+    },
+  ],
 };
 
 /**
@@ -1081,12 +1111,14 @@ describe("what the screen shows while it waits", () => {
 });
 
 describe("the report taking shape while it is built", () => {
-  it("has nothing to show until a column is chosen", async () => {
-    // The invitation now means one thing only: nothing has been picked yet.
+  it("offers reports to open before anything has been chosen", async () => {
+    // What stands in the empty panel now. The bare invitation is the fallback
+    // for a server that sends no templates, covered below.
     renderPage();
     await ready();
 
-    expect(screen.getByText(/Elija las columnas en el panel de configuración/)).toBeInTheDocument();
+    expect(screen.getByText("Todos los eventos")).toBeInTheDocument();
+    expect(screen.getByText("Listado de postes")).toBeInTheDocument();
     expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
   });
 
@@ -1229,5 +1261,149 @@ describe("the table scrolls, not the page", () => {
       if (/overflow-x-auto|overflow-auto/.test(el.className)) { scrolls = true; break; }
     }
     expect(scrolls).toBe(true);
+  });
+});
+
+describe("something to start from", () => {
+  it("says what each one is, and what a row of it will be", async () => {
+    // Six names on their own are six guesses. The description is what somebody
+    // chooses between them by, and the row meaning comes from the catalog —
+    // which is also the quietest way to teach the level of detail.
+    renderPage();
+    await ready();
+
+    // Asserted on the row itself, not on the page: "Una fila por evento" is
+    // also the label of the level-of-detail option, and finding it somewhere
+    // would pass with an empty gallery.
+    expect(screen.getByRole("button", { name: /Todos los eventos/ }))
+      .toHaveTextContent(/Cada evento con su descripción.*Una fila por evento/s);
+    expect(screen.getByRole("button", { name: /Listado de postes/ }))
+      .toHaveTextContent("Una fila por poste");
+  });
+
+  it("loads the report when it is pressed", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: /Todos los eventos/ }));
+
+    // The columns are in the builder, and the preview is already drawing them.
+    await waitFor(() => expect(screen.getAllByRole("columnheader").map((h) => h.textContent))
+      .toEqual(["Descripción", "Resuelto"]));
+    expect(screen.getByText(/Vista previa/)).toBeInTheDocument();
+  });
+
+  it("carries the level of detail, not just the columns", async () => {
+    // A template on another root is the case that breaks if only the columns
+    // are copied: "Nº de poste" does not exist on the evento root, so the whole
+    // configuration has to travel.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: /Listado de postes/ }));
+
+    await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
+      .toHaveTextContent("Una fila por poste"));
+  });
+
+  it("cannot overwrite a saved report, because it is not one", async () => {
+    // The trap this avoids. Opening a saved report makes the save button read
+    // "Actualizar", and pressing it overwrites that report — for the team too,
+    // if it was shared. A template is nobody's saved report, so the button has
+    // to go on saying "Guardar" or the first press writes over whichever report
+    // happened to be open before.
+    const user = userEvent.setup();
+    api.getReportesGuardados.mockResolvedValue(savedPage([
+      { id: 4, name: "El mío", description: null, visibility: "private", id_usuario: 7,
+        config: { root: "evento", columns: [{ path: "description" }], filters: { op: "and", conditions: [] } } },
+    ]));
+    renderPage();
+    await ready();
+
+    // `^` because the archive button beside it is named "Archivar «El mío»".
+    await user.click(screen.getByRole("button", { name: /^El mío/ }));
+    expect(await screen.findByRole("button", { name: /^Actualizar$/ })).toBeInTheDocument();
+
+    // Not through "Nuevo": that clears the open report on its own, so it would
+    // hide whether picking a template clears it. The path that actually reaches
+    // the defence is emptying the report — the gallery comes back while the
+    // saved report is still open, and from there one press would otherwise
+    // write a template over somebody's saved report.
+    await user.click(screen.getByRole("button", { name: "Quitar Descripción" }));
+    await user.click(await screen.findByRole("button", { name: /Todos los eventos/ }));
+
+    expect(await screen.findByRole("button", { name: /^Guardar$/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Actualizar$/ })).not.toBeInTheDocument();
+  });
+
+  it("falls back to the plain invitation when the server sends none", async () => {
+    // An older server has no templates to send. The page loses the gallery, not
+    // its ability to load.
+    api.getCatalogo.mockResolvedValue({ ...catalog, templates: undefined });
+    renderPage();
+    await ready();
+
+    expect(screen.getByText(/Elija las columnas en el panel de configuración/)).toBeInTheDocument();
+    expect(screen.queryByText("Todos los eventos")).not.toBeInTheDocument();
+  });
+});
+
+describe("the explanations that sit next to what they explain", () => {
+  it("states the grouping rule while the report groups, and not before", async () => {
+    // Until now the only place this rule appeared was the refusal — after the
+    // columns were chosen, Generar was pressed, and the answer was no.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    expect(screen.queryByText(/toda columna tiene que estar agrupada/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
+
+    expect(await screen.findByText(/toda columna tiene que estar agrupada/)).toBeInTheDocument();
+  });
+
+  it("says what a «Contar…» is, in the picker that offers them", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getAllByRole("button", { name: /añadir columna/i })[0]);
+
+    expect(await screen.findByText(/no son un dato guardado/)).toBeInTheDocument();
+  });
+
+  it("does not explain counters on a level of detail that has none", async () => {
+    // The poste root has no to-many relation in this fixture, so the picker
+    // offers no "Contar…" and must not carry an explanation of something the
+    // reader cannot see.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await user.click(screen.getByRole("button", { name: /Listado de postes/ }));
+    await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
+      .toHaveTextContent("Una fila por poste"));
+
+    await user.click(screen.getAllByRole("button", { name: /añadir columna/i })[0]);
+
+    expect(await screen.findByPlaceholderText("Buscar campo…")).toBeInTheDocument();
+    expect(screen.queryByText(/no son un dato guardado/)).not.toBeInTheDocument();
+  });
+
+  it("has a help panel that names the one thing nothing else on the screen says", async () => {
+    // The PDF drops photographs and no control admits it: the only hint is a
+    // switch reading "Fotos en el Excel", and the column comes out of the PDF
+    // as a column of "Sí".
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: "Cómo funciona el generador" }));
+
+    expect(await screen.findByText(/no lleva/)).toBeInTheDocument();
+    expect(document.body.textContent).toMatch(/fotograf/i);
   });
 });
