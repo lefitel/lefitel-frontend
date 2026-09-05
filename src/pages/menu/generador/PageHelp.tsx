@@ -26,6 +26,13 @@ const STEPS: { title: string; body: string }[] = [
       "que no exista en el nivel nuevo, y le avisa antes.",
   },
   {
+    title: "Abrir uno que ya existe",
+    body:
+      "El selector «Reporte» de la barra de arriba abre lo que usted guardó, lo que el equipo " +
+      "compartió y seis plantillas ya armadas. Escriba para buscar entre todo ello. Abrir una " +
+      "plantilla no toca ningún reporte guardado.",
+  },
+  {
     title: "Columnas",
     body:
       "Lo que se ve, en el orden en que se verá. Puede renombrar la cabecera, moverla y ordenar " +
@@ -73,8 +80,8 @@ const PageHelp = () => (
     </PopoverTrigger>
     <PopoverContent align="start" className="max-h-[70vh] w-96 overflow-y-auto">
       <p className="text-sm">
-        Arme la tabla que necesite y expórtela. Se construye de arriba abajo por el panel de la
-        izquierda, y el resultado se va viendo a la derecha.
+        Arme la tabla que necesite y expórtela. Se construye de arriba abajo por la barra y los
+        paneles de arriba, y el resultado se va viendo debajo.
       </p>
 
       <dl className="mt-3 space-y-3">

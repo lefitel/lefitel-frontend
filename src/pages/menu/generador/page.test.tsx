@@ -194,13 +194,15 @@ const ready = async () => {
 };
 
 /**
- * The templates live in one place: the "Plantillas" tab of the configuration
- * panel. Reaching one is always a click on that tab first — only the active tab
- * is rendered at all — and the tests say so rather than pretending the list is
- * simply on screen.
+ * Saved reports and templates live in one place: the picker on the strip above
+ * the panels. Nothing of either list is on screen until it is opened, so every
+ * test that reaches one opens it first rather than pretending otherwise.
+ *
+ * Found by a name that does not change: the control's text is the name of
+ * whatever report is open, so its accessible name is written separately.
  */
-const openTemplatesTab = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(screen.getByRole("tab", { name: "Plantillas" }));
+const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByRole("button", { name: /^Reporte abierto:/ }));
 };
 /**
  * A row of that list. Matched on a prefix because the row's accessible name is
@@ -506,6 +508,7 @@ describe("saving", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     await user.click(await screen.findByText("De Ana"));
 
     // The action reads "Guardar", never "Actualizar", for a report that is not ours.
@@ -530,6 +533,7 @@ describe("saving", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     await user.click(await screen.findByText("Con campos ajenos"));
 
     // "que ya no están disponibles", not "que su perfil no puede consultar":
@@ -566,6 +570,7 @@ describe("saving", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     await user.click(await screen.findByText("Con filtro avanzado"));
 
     expect(toasts[toasts.length - 1]?.text).toMatch(/cargado/);
@@ -589,6 +594,7 @@ describe("saving", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     await user.click(await screen.findByText("Podado por el servidor"));
 
     expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 3 elementos/);
@@ -614,6 +620,7 @@ describe("the list of saved reports", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
 
     expect(await screen.findByText(/Mostrando 1 reportes de 2/)).toBeInTheDocument();
 
@@ -741,7 +748,7 @@ describe("changing the detail level", () => {
     await ready();
 
     const control = screen.getByLabelText("Nivel de detalle");
-    const band = document.querySelector('[class*="xl:grid-cols-"]');
+    const band = document.querySelector('[class*="md:grid-cols-"]');
     expect(band).not.toBeNull();
     expect(band).not.toContainElement(control as HTMLElement);
     expect(control.compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING)
@@ -793,6 +800,7 @@ describe("a request the user has moved on from", () => {
     await user.click(screen.getByRole("button", { name: /generar/i }));
 
     // The person gives up on it and opens something else.
+    await openPicker(user);
     await user.click(await screen.findByText("Otro reporte"));
     land();
 
@@ -860,9 +868,15 @@ describe("what the matrix says this role may do", () => {
       config: { root: "evento", columns: [{ path: "description" }] },
     }]));
 
+    const user = userEvent.setup();
     renderPage();
     await ready();
-    await screen.findByText("De alguien");
+    // Opened, because the three now act on the report in hand rather than on a
+    // row of a list. Which is also the point of asserting it here: they moved,
+    // and a permission that stopped being checked on the way would look exactly
+    // like a button that simply is not drawn any more.
+    await openPicker(user);
+    await user.click(await screen.findByText("De alguien"));
 
     expect(screen.queryByRole("button", { name: /duplicar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /archivar/i })).not.toBeInTheDocument();
@@ -878,11 +892,15 @@ describe("what the matrix says this role may do", () => {
       config: { root: "evento", columns: [{ path: "description" }] },
     }]));
 
+    const user = userEvent.setup();
     renderPage();
     await ready();
-    await screen.findByText("Mío");
+    await openPicker(user);
+    await user.click(await screen.findByText("Mío"));
 
-    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+    // "Actualizar" and not "Guardar": it is open, it is theirs, and they hold
+    // `editar`, which is the whole of what that word means here.
+    expect(await screen.findByRole("button", { name: /^actualizar$/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /duplicar/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /archivar/i })).toBeInTheDocument();
   });
@@ -1005,8 +1023,10 @@ describe("when the saved list cannot be read", () => {
     // data made out of a failed request. Forty saved reports, told to build
     // their first.
     api.getReportesGuardados.mockRejectedValue(new Error("500"));
+    const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
 
     expect(await screen.findByText(/No se pudieron cargar sus reportes guardados/)).toBeInTheDocument();
     expect(screen.queryByText(/Todavía no hay reportes guardados/)).not.toBeInTheDocument();
@@ -1017,6 +1037,7 @@ describe("when the saved list cannot be read", () => {
     api.getReportesGuardados.mockRejectedValueOnce(new Error("500"));
     renderPage();
     await ready();
+    await openPicker(user);
     await screen.findByText(/No se pudieron cargar sus reportes guardados/);
 
     api.getReportesGuardados.mockResolvedValue({ rows: [], total: 0, limit: 100, offset: 0 });
@@ -1040,7 +1061,7 @@ describe("what the screen shows while it waits", () => {
     // The heading and the four card titles are written into this page, not
     // fetched, so they are already readable while the fields travel.
     expect(await screen.findByRole("heading", { name: "Generador de reportes" })).toBeInTheDocument();
-    for (const title of ["Abrir un reporte", "Nivel de detalle", "Columnas", "Filtros", "Resultado"]) {
+    for (const title of ["Nivel de detalle", "Reporte", "Columnas", "Filtros", "Resultado"]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
     // And it is announced as busy, not just drawn as busy.
@@ -1053,8 +1074,12 @@ describe("what the screen shows while it waits", () => {
     // panel rendered with an empty array and stated, as a fact about somebody
     // who may have forty of them, that they had never saved one.
     api.getReportesGuardados.mockReturnValue(pending());
+    const user = userEvent.setup();
     renderPage();
     await ready();
+    // Opened, or this proves nothing: with the list behind a control, every
+    // sentence it could wrongly state is absent because nothing is drawn.
+    await openPicker(user);
 
     expect(screen.queryByText(/Todavía no hay reportes guardados/)).not.toBeInTheDocument();
     // Nor is it the failure state, which is a different claim again.
@@ -1062,16 +1087,20 @@ describe("what the screen shows while it waits", () => {
   });
 
   it("says there are none once the answer is actually in", async () => {
-    // The skeleton must not outlive its request, or the panel waits forever.
+    // The skeleton must not outlive its request, or the list waits forever.
+    const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     expect(await screen.findByText(/Todavía no hay reportes guardados/)).toBeInTheDocument();
   });
 
   it("releases the skeleton when the list fails, so the error can be seen", async () => {
     api.getReportesGuardados.mockRejectedValue(new Error("500"));
+    const user = userEvent.setup();
     renderPage();
     await ready();
+    await openPicker(user);
     expect(await screen.findByText(/No se pudieron cargar sus reportes guardados/)).toBeInTheDocument();
   });
 
@@ -1156,9 +1185,21 @@ describe("the report taking shape while it is built", () => {
     renderPage();
     await ready();
 
-    await openTemplatesTab(user);
+    await openPicker(user);
     expect(templateRow("Todos los eventos")).toBeInTheDocument();
     expect(templateRow("Listado de postes")).toBeInTheDocument();
+  });
+
+  it("points at itself when there is nothing saved yet", async () => {
+    // Somebody who has saved nothing is told where to start rather than what
+    // they do not have. The panel this replaced said it in a whole empty state;
+    // here it has to fit in the control, because the control is all there is
+    // until it is opened.
+    renderPage();
+    await ready();
+
+    expect(await screen.findByRole("button", { name: "Reporte abierto: Empiece por una plantilla" }))
+      .toBeInTheDocument();
   });
 
   it("does not list them anywhere else", async () => {
@@ -1287,10 +1328,10 @@ describe("the table scrolls, not the page", () => {
     await ready();
     await addColumn(user, /Descripción/);
 
-    const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
+    const band = document.querySelector<HTMLElement>('[class*="md:grid-cols-"]');
     expect(band).not.toBeNull();
     const panels = Array.from(band!.children) as HTMLElement[];
-    expect(panels).toHaveLength(3);
+    expect(panels).toHaveLength(2);
     for (const panel of panels) expect(panel.className).toContain("min-w-0");
   });
 
@@ -1307,9 +1348,9 @@ describe("the table scrolls, not the page", () => {
     await ready();
     await addColumn(user, /Descripción/);
 
-    const band = document.querySelector<HTMLElement>('[class*="xl:grid-cols-"]');
+    const band = document.querySelector<HTMLElement>('[class*="md:grid-cols-"]');
     const capped = Array.from(band!.querySelectorAll('[data-slot="card-content"]'));
-    expect(capped).toHaveLength(3);
+    expect(capped).toHaveLength(2);
     for (const content of capped) {
       expect(content.className).toContain("max-h-");
       expect(content.className).toContain("overflow-y-auto");
@@ -1336,23 +1377,109 @@ describe("the table scrolls, not the page", () => {
 });
 
 describe("something to start from", () => {
-  it("switches the two lists from the heading, above what scrolls", async () => {
+  it("reaches both lists from one control, and that control is not a panel", async () => {
+    // These two lists were a panel of the band, then a panel with two tabs in
+    // its heading. They are one dropdown on the strip now, and two things have
+    // to stay true through that.
+    //
+    // First, that opening it reaches both: a saved report and a template are
+    // two ways into the same act, and splitting them across two controls is
+    // exactly what took three passes to undo.
+    //
+    // Second, that it is not in the band. A panel is what four sets of controls
+    // deserve; this was one list read once at the start of a report, and it was
+    // spending a third of the band's width on every screen.
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
+      id: 3, name: "Mi reporte de siempre", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]));
+
+    const user = userEvent.setup();
     renderPage();
     await ready();
 
-    const strip = screen.getByRole("tab", { name: "Guardados" }).closest('[role="tablist"]');
-    expect(strip).not.toBeNull();
+    const control = screen.getByRole("button", { name: /^Reporte abierto:/ });
+    expect(document.querySelector('[class*="md:grid-cols-"]')).not.toContainElement(control);
 
-    // In the heading, beside the name of the card it belongs to.
-    const heading = strip?.closest('[data-slot="card-header"]');
-    expect(heading).not.toBeNull();
-    expect(heading).toHaveTextContent("Abrir un reporte");
+    await openPicker(user);
+    expect(await screen.findByText("Mi reporte de siempre")).toBeInTheDocument();
+    expect(templateRow("Todos los eventos")).toBeInTheDocument();
+  });
 
-    // And out of the body, which is the whole point rather than a matter of
-    // taste: the body caps its height and scrolls, so a switch inside it slid
-    // out of sight along with the list it names.
-    expect(strip?.closest('[data-slot="card-content"]')).toBeNull();
-    expect(screen.getByRole("tabpanel").closest('[data-slot="card-content"]')).not.toBeNull();
+  it("names the report that is open, which the page never used to say", async () => {
+    // Opening one changed everything on screen except any statement of what had
+    // been opened. The only clue was the save button turning into "Actualizar",
+    // and on somebody else's report that mattered more than a label: saving it
+    // makes a copy, and that was explained inside the save popover, after it
+    // had been opened.
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
+      id: 4, name: "Revisiones de agosto", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    expect(screen.getByRole("button", { name: "Reporte abierto: Ningún reporte abierto" }))
+      .toBeInTheDocument();
+
+    await openPicker(user);
+    await user.click(await screen.findByText("Revisiones de agosto"));
+
+    await waitFor(() => expect(
+      screen.getByRole("button", { name: "Reporte abierto: Revisiones de agosto" }),
+    ).toBeInTheDocument());
+  });
+
+  it("filters both lists as the reader types", async () => {
+    // The reason this is an improvement and not a swap. With three saved
+    // reports a list on screen beats a dropdown; with forty-seven it does not,
+    // and the panel had no way to search at all.
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
+      id: 5, name: "Postes de la ciudad", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+
+    await user.type(screen.getByLabelText("Buscar un reporte"), "postes");
+
+    expect(screen.getByText("Postes de la ciudad")).toBeInTheDocument();
+    // The template list is filtered by the same words, and "Todos los eventos"
+    // is not one of them.
+    expect(screen.queryByText("Todos los eventos")).not.toBeInTheDocument();
+
+    // And the count under the list does not go on counting the whole of it: a
+    // search that matched one of forty-seven would otherwise read as
+    // forty-six more matches waiting behind "cargar más".
+    expect(screen.queryByText(/Mostrando .* de /)).not.toBeInTheDocument();
+  });
+
+  it("does not tell someone with saved reports that they have none", async () => {
+    // The empty state belongs to the account, not to the search. Somebody with
+    // reports who typed three letters that matched nothing was told they had
+    // never saved one.
+    api.getReportesGuardados.mockResolvedValue(savedPage([{
+      id: 6, name: "Postes de la ciudad", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    }]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.type(screen.getByLabelText("Buscar un reporte"), "zzzzz");
+
+    expect(screen.queryByText(/Todavía no hay reportes guardados/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Nada coincide con/)).toBeInTheDocument();
   });
 
   it("says what each one is, and what a row of it will be", async () => {
@@ -1362,7 +1489,7 @@ describe("something to start from", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
-    await openTemplatesTab(user);
+    await openPicker(user);
 
     // Asserted on the row itself, not on the page: "Una fila por evento" is
     // also the label of the level-of-detail option, and finding it somewhere
@@ -1377,7 +1504,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await openTemplatesTab(user);
+    await openPicker(user);
     await user.click(templateRow("Todos los eventos"));
 
     // The columns are in the builder, and the preview is already drawing them.
@@ -1394,7 +1521,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    await openTemplatesTab(user);
+    await openPicker(user);
     await user.click(templateRow("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
@@ -1415,17 +1542,19 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    // `^` because the archive button beside it is named "Archivar «El mío»".
+    await openPicker(user);
+    // `^` because the archive button that appears once it is open is named
+    // "Archivar El mío".
     await user.click(screen.getByRole("button", { name: /^El mío/ }));
     expect(await screen.findByRole("button", { name: /^Actualizar$/ })).toBeInTheDocument();
 
-    // From the panel, with the saved report still open and its columns intact.
-    // Not through "Nuevo": that clears the open report by itself and would hide
-    // whether picking a template clears it. This is now the ordinary path —
-    // the panel list is on screen the whole time — and without the defence one
-    // press writes a template over somebody's saved report, and over the team's
-    // copy if it was shared.
-    await openTemplatesTab(user);
+    // With the saved report still open and its columns intact. Not through
+    // "Nuevo": that clears the open report by itself and would hide whether
+    // picking a template clears it. This is the ordinary path — both lists are
+    // one control away at any moment — and without the defence one press writes
+    // a template over somebody's saved report, and over the team's copy if it
+    // was shared.
+    await openPicker(user);
     await user.click(templateRow("Todos los eventos"));
 
     expect(await screen.findByRole("button", { name: /^Guardar$/ })).toBeInTheDocument();
@@ -1436,11 +1565,19 @@ describe("something to start from", () => {
     // An older server has no templates to send. The page loses the gallery, not
     // its ability to load.
     api.getCatalogo.mockResolvedValue({ ...catalog, templates: undefined });
+    const user = userEvent.setup();
     renderPage();
     await ready();
 
     expect(screen.getByText(/Elija las columnas en el panel de configuración/)).toBeInTheDocument();
+    // Opened, because with the picker closed "no templates on screen" is true
+    // of every page and proves nothing about this one.
+    await openPicker(user);
     expect(screen.queryByText("Todos los eventos")).not.toBeInTheDocument();
+    expect(screen.queryByText("Plantillas")).not.toBeInTheDocument();
+    // The rest of it still works: an older server costs the templates, not the
+    // way into a saved report.
+    expect(screen.getByText(/Todavía no hay reportes guardados/)).toBeInTheDocument();
   });
 });
 
@@ -1477,7 +1614,7 @@ describe("the explanations that sit next to what they explain", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
-    await openTemplatesTab(user);
+    await openPicker(user);
     await user.click(templateRow("Listado de postes"));
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
       .toHaveTextContent("Una fila por poste"));
@@ -1515,7 +1652,7 @@ describe("the way back to a template", () => {
     await addColumn(user, /Descripción/);
     expect(screen.queryByText(/Empiece por uno de estos/)).not.toBeInTheDocument();
 
-    await openTemplatesTab(user);
+    await openPicker(user);
     await user.click(templateRow("Listado de postes"));
 
     await waitFor(() => expect(screen.getByLabelText("Nivel de detalle"))
@@ -1530,7 +1667,7 @@ describe("the way back to a template", () => {
     const user = userEvent.setup();
     renderPage();
     await ready();
-    await openTemplatesTab(user);
+    await openPicker(user);
 
     const row = templateRow("Todos los eventos").closest("li");
     expect(row).not.toBeNull();
@@ -1599,7 +1736,7 @@ describe("the controls that were missing", () => {
     renderPage();
     await ready();
 
-    await openTemplatesTab(user);
+    await openPicker(user);
     await user.click(templateRow("Todos los eventos"));
     await user.click(screen.getByRole("button", { name: "Generar" }));
 

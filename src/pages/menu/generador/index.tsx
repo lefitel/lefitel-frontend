@@ -1,12 +1,13 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangleIcon, DownloadIcon, FilePlus2Icon, FileTextIcon, Loader2Icon,
-  PlayIcon, RefreshCwIcon, SaveIcon,
+  AlertTriangleIcon, CopyIcon, DownloadIcon, FilePlus2Icon, FileTextIcon, Loader2Icon,
+  LockIcon, PlayIcon, RefreshCwIcon, SaveIcon, StarIcon, Trash2Icon, UsersIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
+import { cn } from "../../../lib/utils";
 import {
   actualizarReporte, contarReporte, crearReporte, duplicarReporte, eliminarReporte,
   exportarReporte, getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync,
@@ -30,6 +31,7 @@ import { saveAs } from "file-saver";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogTrigger,
 } from "../../../components/ui/alert-dialog";
 import { Button } from "../../../components/ui/button";
 import {
@@ -42,7 +44,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Switch } from "../../../components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { Textarea } from "../../../components/ui/textarea";
@@ -53,9 +54,8 @@ import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
 import PageHelp from "./PageHelp";
 import PreviewTable from "./PreviewTable";
-import SavedReports from "./SavedReports";
+import ReportPicker from "./ReportPicker";
 import ShapePreview from "./ShapePreview";
-import TemplateGallery from "./TemplateGallery";
 import { PageSkeleton, ResultSkeleton } from "./Skeletons";
 
 const GeneradorPage = () => {
@@ -239,6 +239,10 @@ const GeneradorPage = () => {
   const filterCount = config.filters?.conditions?.length ?? 0;
 
   const isMine = current === null || current.id_usuario === currentUserId;
+  /** Written the same way the list writes it, so one report reads one way. */
+  const author = current?.usuario?.name
+    ? `${current.usuario.name} ${current.usuario.lastname ?? ""}`.trim()
+    : null;
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -893,7 +897,8 @@ const GeneradorPage = () => {
         decision the other three are made under. Changing it discards columns
         and filters, and the panels it invalidates are the ones directly below.
       */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2">
         <div className="flex items-center gap-1.5">
           <span className="text-sm font-medium text-foreground">Nivel de detalle</span>
           <CardHelp label="el nivel de detalle">
@@ -945,6 +950,146 @@ const GeneradorPage = () => {
             ))}
           </SelectContent>
         </Select>
+        </div>
+
+        {/*
+          The report being worked on, which the page never used to name. Opening
+          one from the list changed everything on screen except any statement of
+          what had been opened: the only clue was the save button turning into
+          "Actualizar". On somebody else's report that mattered more than a
+          label — saving makes a copy, and that was explained inside the save
+          popover, after it had been opened.
+        */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-medium text-foreground">Reporte</span>
+            <CardHelp label="abrir un reporte">
+                <p>
+                  <strong className="font-medium text-foreground">Guardados</strong> son los suyos
+                  y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
+                  seis reportes ya armados: se abren, se tocan y se generan.
+                </p>
+                <p className="mt-2">
+                  Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
+                  cuando usted quiera.
+                </p>
+            </CardHelp>
+          </div>
+
+          <ReportPicker
+            reports={saved}
+            total={savedTotal}
+            onLoadMore={() => loadSaved(true)}
+            templates={catalog.templates ?? []}
+            roots={catalog.roots}
+            current={current}
+            currentUserId={currentUserId}
+            // Opening and running are `ver`, which this page already required
+            // to load at all. The three below are not.
+            onOpen={handleOpen}
+            onPickTemplate={handlePickTemplate}
+            loading={loadingSaved}
+            failed={savedFailed}
+            onRetry={refreshSaved}
+          />
+
+          {current && (
+            <div className="flex shrink-0 items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {current.visibility === "shared"
+                    ? <UsersIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    : <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {current.visibility === "shared" ? "Compartido con el equipo" : "Privado"}
+                </TooltipContent>
+              </Tooltip>
+
+              {/*
+                Whose it is, said before anything is pressed rather than after.
+                Saving somebody else's report creates a copy of it, and until
+                now that was stated inside the save popover.
+              */}
+              {!isMine && author && (
+                <span className="ml-1 truncate text-xs text-muted-foreground">
+                  De {author}
+                </span>
+              )}
+
+              {/* The same three the list rows carried, behind the same three
+                  permissions — and now usable on the report while it is open,
+                  which the list could never do. */}
+              {isMine && mayEdit && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      aria-label={current.favorite
+                        ? `Quitar ${current.name} de favoritos`
+                        : `Marcar ${current.name} como favorito`}
+                      aria-pressed={current.favorite}
+                      onClick={() => handleToggleFavorite(current)}
+                    >
+                      <StarIcon className={cn(
+                        "h-3.5 w-3.5",
+                        current.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
+                      )} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {current.favorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {mayCreate && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                      aria-label={`Duplicar ${current.name}`}
+                      onClick={() => handleDuplicate(current)}
+                    >
+                      <CopyIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Duplicar</TooltipContent>
+                </Tooltip>
+              )}
+
+              {isMine && mayArchive && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      aria-label={`Archivar ${current.name}`}
+                    >
+                      <Trash2Icon className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Archivar «{current.name}»?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        El reporte dejará de estar disponible para usted y para el resto del
+                        equipo, y no podrá recuperarlo desde el sistema. Los datos que consulta no
+                        se tocan: sólo se archiva este reporte guardado.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDelete(current)}>
+                        Archivar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/*
@@ -967,135 +1112,9 @@ const GeneradorPage = () => {
         the grid, the grid outgrows the page, and the application's `<main>` —
         which is `overflow-auto` — takes a horizontal scrollbar.
       */}
-      <div className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid items-start gap-4 md:grid-cols-2">
         {/* ── Configuration ─────────────────────────────────────────────── */}
         <>
-          {/*
-            First, not last. It used to sit under the filter list, which can be
-            a hundred rows tall, so the most frequent task in the page — running
-            a report that already exists — was the one furthest from the top.
-          */}
-          {/*
-            One card, two named groups, because both hold reports you open and
-            neither is the other. A template has no owner, cannot be archived,
-            favourited or shared, and its row therefore carries none of the three
-            buttons a saved report's does — mixed into one list they would be
-            rows that look alike and behave differently, which is the same
-            defect as two picker entries reading identically. Keeping them apart
-            also keeps two true statements true: the footer counts the reader's
-            own reports, and "todavía no hay reportes guardados" goes on meaning
-            exactly that.
-
-            The card is no longer titled "Reportes guardados": half of what is
-            in it is not saved and not the reader's.
-          */}
-          <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
-            {/*
-              `Tabs` wraps the heading as well as the body, and it has to: the
-              strip and the panels it switches read the same root, so a strip
-              beside the title means the root starts above the title.
-
-              Spacing them becomes its job in the process — `Card` separates its
-              children with a flex gap, and it now has one child where it had
-              two — hence the gap restated here. Left alone, the twelve pixels
-              under the rule quietly became eight.
-            */}
-            <Tabs defaultValue="guardados" className="gap-3">
-              <CardHeader className="border-b border-border/40 pb-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    <CardTitle className="truncate text-base">Abrir un reporte</CardTitle>
-                    <CardHelp label="Abrir un reporte">
-                      <p>
-                        <strong className="font-medium text-foreground">Guardados</strong> son los suyos
-                        y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
-                        seis reportes ya armados: se abren, se tocan y se generan.
-                      </p>
-                      <p className="mt-2">
-                        Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
-                        cuando usted quiera.
-                      </p>
-                    </CardHelp>
-                  </div>
-
-                  {/*
-                    Up here rather than in the body, which is not only where it
-                    looks better: the body caps its height and scrolls, so from
-                    inside it the strip slid out of sight along with the list it
-                    was labelling.
-
-                    Held to 28 pixels against the 36 the control asks for, with
-                    `!` because the height it wants arrives through a variant
-                    that a plain `h-7` cannot outrank. This heading was cut down
-                    on purpose two changes ago and a full-size control would
-                    hand back most of what that saved.
-
-                    Hidden outright when this reader's catalog offers no
-                    template: a segmented control with one segment is a button
-                    that does nothing.
-                  */}
-                  {(catalog.templates?.length ?? 0) > 0 && (
-                    <TabsList className="h-7! shrink-0">
-                      <TabsTrigger value="guardados" className="px-2.5 text-xs">
-                        Guardados
-                      </TabsTrigger>
-                      <TabsTrigger value="plantillas" className="px-2.5 text-xs">
-                        Plantillas
-                      </TabsTrigger>
-                    </TabsList>
-                  )}
-                </div>
-              </CardHeader>
-              {/*
-                No top padding here, and that is deliberate: `Card` already sets
-                a flex `gap` between its header and its content equal to its own
-                side padding — twelve pixels compact, sixteen otherwise. Adding
-                `pt-4` on top of it made the space under the rule twenty-eight
-                against twelve at the sides, which reads as the header floating
-                away from what it names.
-
-                Each panel caps itself rather than the band capping all four:
-                the headings stay visible and only the list that is actually
-                long — sixty columns, a hundred filters — moves. The selects and
-                pickers inside portal out of here, so nothing they open is
-                clipped by it.
-
-                One list at a time, and the difference is not cosmetic: with
-                both on screen an empty page showed the same six templates here
-                and again in the gallery on the right. The other one is a click
-                away instead of a scroll away.
-              */}
-              <CardContent className="max-h-72 overflow-y-auto">
-                <TabsContent value="guardados">
-                  <SavedReports
-                    reports={saved}
-                    total={savedTotal}
-                    onLoadMore={() => loadSaved(true)}
-                    currentId={current?.id ?? null}
-                    currentUserId={currentUserId}
-                    onOpen={handleOpen}
-                    // Opening and running are `ver`, which this page already
-                    // required to load at all. The three that write are not.
-                    onToggleFavorite={mayEdit ? handleToggleFavorite : undefined}
-                    onDuplicate={mayCreate ? handleDuplicate : undefined}
-                    onDelete={mayArchive ? handleDelete : undefined}
-                    failed={savedFailed}
-                    onRetry={refreshSaved}
-                    loading={loadingSaved}
-                  />
-                </TabsContent>
-
-                <TabsContent value="plantillas">
-                  <TemplateGallery
-                    templates={catalog.templates ?? []}
-                    roots={catalog.roots}
-                    onPick={handlePickTemplate}
-                  />
-                </TabsContent>
-              </CardContent>
-            </Tabs>
-          </Card>
-
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               <div className="flex items-center justify-between gap-2">
@@ -1540,14 +1559,14 @@ const GeneradorPage = () => {
                   The templates used to be listed here as well, and on an empty
                   page that put the same six on screen twice — once in the panel
                   and once here — which reads as the page repeating itself. They
-                  live in the panel, behind their own tab, and this says where
-                  rather than showing them again.
+                  live in the picker on the strip, and this says where rather
+                  than showing them again.
                 */
                 <p className="py-16 text-center text-sm text-muted-foreground">
                   Elija las columnas en el panel de configuración para ir viendo aquí cómo queda el
                   reporte
                   {(catalog.templates?.length ?? 0) > 0
-                    ? ", o abra una de las plantillas de «Abrir un reporte»."
+                    ? ", o abra una de las plantillas desde «Reporte», arriba."
                     : "."}
                 </p>
               )}
