@@ -212,17 +212,6 @@ const templateRow = (name: string) =>
   screen.getByRole("button", { name: new RegExp(`^${name}.+`, "s") });
 
 /**
- * Opens one column's settings.
- *
- * A column is a pill now: it shows its header, its summary and whether it
- * groups or sorts, and everything that *edits* it — the header box, the summary
- * select, the group and sort buttons — is behind this press.
- */
-const openColumn = async (user: ReturnType<typeof userEvent.setup>, label: string) => {
-  await user.click(screen.getByRole("button", { name: `Ajustes de ${label}` }));
-};
-
-/**
  * How many columns the report has, read off the screen.
  *
  * Counted by each pill's drag handle: it is one per column and nothing else on
@@ -332,7 +321,7 @@ describe("running a report", () => {
     release(resultFor({ root: "evento", columns: [{ path: "description" }] }));
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Ajustes de Resuelto" })).toBeInTheDocument();
+      expect(screen.getByLabelText("Nombre de la columna Resuelto")).toBeInTheDocument();
     });
   });
 
@@ -1393,7 +1382,6 @@ describe("the report taking shape while it is built", () => {
     await screen.findByText(/Vista previa/);
     const listing = screen.getAllByRole("row").length;
 
-    await openColumn(user, "Descripción");
     await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
 
     await waitFor(() => expect(screen.getAllByRole("row").length).toBeLessThan(listing));
@@ -1684,7 +1672,6 @@ describe("the explanations that sit next to what they explain", () => {
 
     expect(screen.queryByText(/toda columna tiene que estar agrupada/)).not.toBeInTheDocument();
 
-    await openColumn(user, "Descripción");
     await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
 
     expect(await screen.findByText(/toda columna tiene que estar agrupada/)).toBeInTheDocument();

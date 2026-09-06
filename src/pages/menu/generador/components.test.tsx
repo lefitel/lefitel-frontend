@@ -191,43 +191,40 @@ describe("ColumnList", () => {
     expect(onRemove).toHaveBeenCalledWith(1);
   });
 
-  it("shows the catalog label as placeholder until renamed", async () => {
-    const user = userEvent.setup();
+  it("shows the catalog label as placeholder until renamed", () => {
     wrap(
       <ColumnList
         config={config} root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    await user.click(screen.getByRole("button", { name: "Ajustes de Descripción" }));
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveAttribute("placeholder", "Descripción");
   });
 
-  it("says what a column is without being opened", () => {
-    // The reason the pill exists. A column used to be a two-line row with a
-    // text box, a select and three buttons in it; sixty of them were a hundred
-    // and twenty lines to scroll and to read one at a time. A pill states its
-    // header and its summary, and marks grouping and sorting, so the shape of
-    // the whole report reads at a glance.
+  it("puts every control on the pill itself", () => {
+    // They sat behind a press for a while, because the panel was a quarter of
+    // the configuration band and a row had around 260 pixels to fit a text box,
+    // a select and three buttons into. The band is two panels wide now, so a
+    // pill has around 640 — and a control you can see and reach beats a control
+    // one press away, every time.
     wrap(
       <ColumnList
-        config={{
-          ...config,
-          columns: [{ path: "description" }, { path: "poste.tramo", agg: "count" }],
-          groupBy: ["description"],
-        }}
-        root={root}
+        config={config} root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
 
-    // The summary is on the face of the pill, not behind it.
-    expect(screen.getByRole("button", { name: "Ajustes de Tramo" }))
-      .toHaveTextContent(/Tramo.*Conteo/s);
-    // And nothing that edits is: those are one press away, which is what buys
-    // the space back.
-    expect(screen.queryByLabelText(/Nombre de la columna/)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/^Resumen de /)).not.toBeInTheDocument();
+    // Asserted inside the one pill, not on the page: with two columns on
+    // screen, "there is a sort button somewhere" would pass while this pill had
+    // none of its own.
+    const pill = screen.getByLabelText("Nombre de la columna Descripción").closest("li");
+    expect(pill).not.toBeNull();
+    const on = within(pill as HTMLElement);
+    expect(on.getByLabelText("Resumen de Descripción")).toBeInTheDocument();
+    expect(on.getByRole("button", { name: "Ordenar por Descripción" })).toBeInTheDocument();
+    expect(on.getByRole("button", { name: "Agrupar por Descripción" })).toBeInTheDocument();
+    expect(on.getByRole("button", { name: "Quitar Descripción" })).toBeInTheDocument();
+    expect(on.getByRole("button", { name: "Mover Descripción" })).toBeInTheDocument();
   });
 
   it("lets a header be typed, not just its first letter", async () => {
@@ -254,7 +251,6 @@ describe("ColumnList", () => {
 
     const user = userEvent.setup();
     wrap(<Harness />);
-    await user.click(screen.getByRole("button", { name: "Ajustes de Descripción" }));
 
     const box = screen.getByLabelText("Nombre de la columna Descripción");
     await user.click(box);
@@ -263,20 +259,14 @@ describe("ColumnList", () => {
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveValue("Detalle");
   });
 
-  it("marks a grouped column as pressed and hides its aggregate selector", async () => {
-    const user = userEvent.setup();
+  it("marks a grouped column as pressed and hides its aggregate selector", () => {
     wrap(
       <ColumnList
         config={{ ...config, groupBy: ["poste.tramo"] }} root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    // The rule stays on the list itself: it explains something happening right
-    // now, to every column, and putting it behind a press would hide it from
-    // the person it is warning.
     expect(screen.getByText(/cada columna no agrupada necesita un resumen/i)).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Ajustes de Tramo" }));
     expect(screen.getByRole("button", { name: /dejar de agrupar/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Resumen de Tramo")).not.toBeInTheDocument();
   });
