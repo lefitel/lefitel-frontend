@@ -757,7 +757,11 @@ describe("changing the detail level", () => {
 });
 
 describe("starting over", () => {
-  it("clears the configuration and the saved report identity", async () => {
+  it("asks first, then clears the configuration and the report identity", async () => {
+    // It used to empty everything on the press and say so afterwards, in a
+    // message that disappears on its own. That was survivable while the button
+    // sat alone in a corner of the header; it now sits beside the one that
+    // saves, where a press meant for one is a press away from the other.
     const user = userEvent.setup();
     renderPage();
     await ready();
@@ -765,8 +769,42 @@ describe("starting over", () => {
 
     await user.click(screen.getByRole("button", { name: /^nuevo$/i }));
 
-    expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
+    // Nothing is gone yet, and the number is the one this page counts with
+    // everywhere else.
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent(/Se descartará 1 elemento/);
+    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+
+    await user.click(screen.getByRole("button", { name: /^empezar en blanco$/i }));
+
+    expect(await screen.findByText(/sin columnas todavía/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^guardar$/i })).toBeInTheDocument();
+  });
+
+  it("keeps everything when the question is refused", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+
+    await user.click(screen.getByRole("button", { name: /^nuevo$/i }));
+    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
+
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+  });
+
+  it("does not ask when there is nothing to lose", async () => {
+    // A confirmation on an empty page is how people learn to confirm without
+    // reading, and then the one that mattered gets confirmed the same way.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: /^nuevo$/i }));
+
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
   });
 });
 

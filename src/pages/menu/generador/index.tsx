@@ -90,6 +90,8 @@ const GeneradorPage = () => {
   /** A level-of-detail change waiting to be confirmed, and what it would cost. */
   /** Confirmation for emptying a filter list long enough to be worth rebuilding. */
   const [clearingFilters, setClearingFilters] = useState(false);
+  /** The "Nuevo" confirmation, open only when there is something to discard. */
+  const [discarding, setDiscarding] = useState(false);
   /**
    * How much of the report the exported file holds.
    *
@@ -612,13 +614,33 @@ const GeneradorPage = () => {
     setRunning(false);
   };
 
-  const handleNew = () => {
+  const applyNew = () => {
     retireInFlight();
     setConfig(emptyConfig(root?.key ?? catalog?.roots[0]?.key ?? "evento"));
     setResult(null);
     setResultConfig(null);
     resetForm();
     toast.info("Reporte nuevo en blanco");
+  };
+
+  /**
+   * Asked, not announced — the same treatment the level of detail was given,
+   * and for the same reason.
+   *
+   * This empties the configuration, closes whatever report was open and throws
+   * away the table, and it used to say so *afterwards*, in a message that
+   * disappears on its own. It now sits beside the button that saves, where a
+   * press meant for one is a press away from the other.
+   *
+   * Nothing is asked when there is nothing to lose: a confirmation on an empty
+   * page is how people learn to confirm without reading.
+   */
+  const handleNew = () => {
+    if (elementCount(config) > 0 || current !== null) {
+      setDiscarding(true);
+      return;
+    }
+    applyNew();
   };
 
   const handleSave = async () => {
@@ -1111,10 +1133,77 @@ const GeneradorPage = () => {
             </div>
           </div>
 
-          <Button variant="outline" size="sm" onClick={handleNew}>
-            <FilePlus2Icon className="mr-1.5 h-4 w-4" />
-            Nuevo
-          </Button>
+          {/*
+            The two verbs that act on the report as a thing that is kept, next
+            to the report itself and to the three buttons that already act on
+            it. Saving stores the configuration, never the rows — a saved report
+            is generated again when it is opened — so it belongs with what
+            builds that configuration and not with the table it produced. It sat
+            in the results heading, which had seven controls and now has six,
+            each of them about the table.
+          */}
+          <div className="flex items-center gap-2">
+            {/* Updating your own report needs `editar` and everything
+                else creates a row and needs `crear` — but holding only
+                `crear` must not lose the button the moment one of your
+                own reports is open: `handleSave` already falls back to
+                creating a copy, and the alternative was telling someone
+                to press Nuevo and rebuild what they wanted to keep. */}
+            {(mayCreate || (current !== null && isMine && mayEdit)) && (
+            <Popover open={saveOpen} onOpenChange={setSaveOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <SaveIcon className="mr-1.5 h-4 w-4" />
+                  {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-80 space-y-3">
+                {current && isMine && mayEdit && (
+                  <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                    Se sobrescribirá «{current.name}».
+                  </p>
+                )}
+                {current && (!isMine || !mayEdit) && (
+                  <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                    «{current.name}» se guardará como una copia suya.
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-nombre">Nombre</Label>
+                  <Input
+                    id="rep-nombre"
+                    value={saveName}
+                    onChange={(e) => setSaveName(e.target.value)}
+                    placeholder="Eventos pendientes por tramo"
+                    maxLength={120}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="rep-desc">Descripción <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                  <Textarea
+                    id="rep-desc"
+                    value={saveDescription}
+                    onChange={(e) => setSaveDescription(e.target.value)}
+                    rows={2}
+                    maxLength={500}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="rep-shared" className="cursor-pointer">Compartir con el equipo</Label>
+                  <Switch id="rep-shared" checked={saveShared} onCheckedChange={setSaveShared} />
+                </div>
+                <Button className="w-full" onClick={handleSave} disabled={saving}>
+                  {saving && <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />}
+                  {current && isMine && mayEdit ? "Actualizar reporte" : "Guardar reporte"}
+                </Button>
+              </PopoverContent>
+            </Popover>
+            )}
+            <Button variant="outline" size="sm" onClick={handleNew}>
+              <FilePlus2Icon className="mr-1.5 h-4 w-4" />
+              Nuevo
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -1305,63 +1394,6 @@ const GeneradorPage = () => {
                   <CardDescription className="truncate">{description}</CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {/* Updating your own report needs `editar` and everything
-                      else creates a row and needs `crear` — but holding only
-                      `crear` must not lose the button the moment one of your
-                      own reports is open: `handleSave` already falls back to
-                      creating a copy, and the alternative was telling someone
-                      to press Nuevo and rebuild what they wanted to keep. */}
-                  {(mayCreate || (current !== null && isMine && mayEdit)) && (
-                  <Popover open={saveOpen} onOpenChange={setSaveOpen}>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <SaveIcon className="mr-1.5 h-4 w-4" />
-                        {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="w-80 space-y-3">
-                      {current && isMine && mayEdit && (
-                        <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
-                          Se sobrescribirá «{current.name}».
-                        </p>
-                      )}
-                      {current && (!isMine || !mayEdit) && (
-                        <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
-                          «{current.name}» se guardará como una copia suya.
-                        </p>
-                      )}
-                      <div className="space-y-1.5">
-                        <Label htmlFor="rep-nombre">Nombre</Label>
-                        <Input
-                          id="rep-nombre"
-                          value={saveName}
-                          onChange={(e) => setSaveName(e.target.value)}
-                          placeholder="Eventos pendientes por tramo"
-                          maxLength={120}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label htmlFor="rep-desc">Descripción <span className="text-xs text-muted-foreground">(opcional)</span></Label>
-                        <Textarea
-                          id="rep-desc"
-                          value={saveDescription}
-                          onChange={(e) => setSaveDescription(e.target.value)}
-                          rows={2}
-                          maxLength={500}
-                        />
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="rep-shared" className="cursor-pointer">Compartir con el equipo</Label>
-                        <Switch id="rep-shared" checked={saveShared} onCheckedChange={setSaveShared} />
-                      </div>
-                      <Button className="w-full" onClick={handleSave} disabled={saving}>
-                        {saving && <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />}
-                        {current && isMine && mayEdit ? "Actualizar reporte" : "Guardar reporte"}
-                      </Button>
-                    </PopoverContent>
-                  </Popover>
-                  )}
-
                   {hasPhotoColumns && (
                     <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
                       <Switch
@@ -1599,6 +1631,41 @@ const GeneradorPage = () => {
             </CardContent>
           </Card>
       </div>
+
+      <AlertDialog open={discarding} onOpenChange={setDiscarding}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Empezar un reporte en blanco?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {/*
+                The same two facts the level-of-detail confirmation states: how
+                much is at stake, counted the way the page counts it everywhere
+                else, and what is left standing afterwards. "Lo guardado no se
+                toca" is the sentence that makes this safe to press — without it
+                somebody with a report open has to guess whether this deletes
+                it.
+              */}
+              {elementCount(config) > 0 && (
+                <>
+                  Se descartará{elementCount(config) === 1 ? "" : "n"} {elementCount(config)}{" "}
+                  {elementCount(config) === 1 ? "elemento" : "elementos"} del reporte
+                  —columnas, filtros, orden o agrupación—{current ? " " : ". "}
+                </>
+              )}
+              {current && (
+                <>
+                  y se cerrará «{current.name}». El reporte guardado no se toca: se cierra
+                  aquí, no se borra.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={applyNew}>Empezar en blanco</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={clearingFilters} onOpenChange={setClearingFilters}>
         <AlertDialogContent>
