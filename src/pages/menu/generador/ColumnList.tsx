@@ -3,9 +3,10 @@ import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
-import { restrictToParentElement } from "@dnd-kit/modifiers";
+import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
-  SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
+  SortableContext, sortableKeyboardCoordinates, useSortable,
+  verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -51,12 +52,16 @@ interface ChipProps {
  * it is summarised, whether it groups, whether it sorts — could only be learned
  * by reading every row.
  *
- * As pills they wrap: a dozen columns are three lines instead of twenty-four,
- * and the state of all of them reads at a glance, because a pill carries its
+ * As pills, stacked one per line, sixty columns are sixty lines instead of a
+ * hundred and twenty, and each one reads at a glance: a pill carries its
  * header, its summary, and the grouping and sorting marks. Everything that
  * edits sits in a popover behind it. The one thing that costs is renaming by
  * typing straight into the list — now a press and then typing, which is the
  * trade for a list that can be taken in at all.
+ *
+ * One per line rather than wrapped into a cloud, because this order is the
+ * order of the columns in the file: down a column it is unarguable, and across
+ * wrapped rows somebody has to work out where the reading resumes.
  *
  * Memoised because the parent re-renders on every keystroke of any rename or
  * filter value, and sixty of these re-reconciling with their selects on each
@@ -280,15 +285,15 @@ const ColumnList = ({
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        // Only within itself: without this a pill can be dragged out over the
-        // rest of the page, which reads as a bug. The vertical restriction the
-        // old list carried went with the list — pills wrap, so a drag now
-        // travels in both directions.
-        modifiers={[restrictToParentElement]}
+        // Up and down, and only within itself: the pills are stacked, so a drag
+        // that wanders sideways or out over the rest of the page reads as a bug.
+        modifiers={[restrictToVerticalAxis, restrictToParentElement]}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={ids} strategy={rectSortingStrategy}>
-          <ul className="flex flex-wrap gap-1.5">
+        <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+          {/* `items-start` so a pill is as wide as what it says: stretched to
+              the panel they stop reading as pills and go back to being rows. */}
+          <ul className="flex flex-col items-start gap-1.5">
             {config.columns.map((column, index) => {
               const field = findField(root, column.path);
               const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
