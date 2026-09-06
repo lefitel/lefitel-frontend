@@ -3,10 +3,9 @@ import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
-import { restrictToParentElement, restrictToVerticalAxis } from "@dnd-kit/modifiers";
+import { restrictToParentElement } from "@dnd-kit/modifiers";
 import {
-  SortableContext, sortableKeyboardCoordinates, useSortable,
-  verticalListSortingStrategy,
+  SortableContext, rectSortingStrategy, sortableKeyboardCoordinates, useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -16,14 +15,15 @@ import {
 import type { AggFn, CatalogRoot, ColumnSpec, ReportConfig } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import { Label } from "../../../components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { AGG_LABEL, columnKey, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
+import { AGG_LABEL, columnKeys, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
 import { cn } from "../../../lib/utils";
 
-interface RowProps {
+interface ChipProps {
   column: ColumnSpec;
   index: number;
   label: string;
@@ -33,7 +33,7 @@ interface RowProps {
   canGroup: boolean;
   isGrouped: boolean;
   sortDir: "asc" | "desc" | undefined;
-  /** Identity that survives a reorder; see `columnKey`. */
+  /** Identity that survives a reorder and a rename; see `columnKeys`. */
   id: string;
   onRemove: (index: number) => void;
   onRename: (index: number, label: string) => void;
@@ -43,16 +43,29 @@ interface RowProps {
 }
 
 /**
- * One column row.
+ * One column, as a pill.
+ *
+ * It was a full-width row carrying a text box, a select and three icon buttons,
+ * on two lines because that stopped fitting the panel's width. Sixty columns
+ * were a hundred and twenty lines of scrolling, and what each one *was* — how
+ * it is summarised, whether it groups, whether it sorts — could only be learned
+ * by reading every row.
+ *
+ * As pills they wrap: a dozen columns are three lines instead of twenty-four,
+ * and the state of all of them reads at a glance, because a pill carries its
+ * header, its summary, and the grouping and sorting marks. Everything that
+ * edits sits in a popover behind it. The one thing that costs is renaming by
+ * typing straight into the list — now a press and then typing, which is the
+ * trade for a list that can be taken in at all.
  *
  * Memoised because the parent re-renders on every keystroke of any rename or
- * filter value, and a 60-column report re-reconciles 60 rows with their Radix
- * selects each time — measured at over half a second per keypress.
+ * filter value, and sixty of these re-reconciling with their selects on each
+ * was measured at over half a second per keypress.
  */
-const ColumnRow = memo(function ColumnRow({
+const ColumnChip = memo(function ColumnChip({
   column, index, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir,
   id, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
-}: RowProps) {
+}: ChipProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id });
   const sortLabel =
@@ -65,140 +78,135 @@ const ColumnRow = memo(function ColumnRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex flex-col gap-1 px-2 py-1.5",
-        // Lifted while it travels, so the row being moved is never confused
-        // with the ones it is passing over.
-        isDragging && "relative z-10 rounded-md bg-accent shadow-md",
+        "flex max-w-full items-center gap-0.5 rounded-full border py-0.5 pr-0.5 pl-1",
+        // A grouped column is a different kind of thing — it defines the rows
+        // rather than describing them — and in a wrapped cloud that has to show
+        // without anything being opened.
+        isGrouped ? "border-primary/40 bg-primary/10" : "bg-background",
+        isDragging && "relative z-10 shadow-md",
       )}
     >
       {/*
-        Two lines, and the split is what makes the name box usable.
+        The handle, and the only thing that starts a drag. The pill's body opens
+        a popover, so a draggable pill would fight every press.
 
-        Everything used to share one: handle, name, summary select and three
-        icon buttons. That fitted while the configuration was a 400-pixel column
-        down the left side of the page. Since it became one of four panels in a
-        band across the top, a row is around 260 pixels wide and the fixed-width
-        parts claim almost all of it — the name box was left a couple of
-        characters wide, which is a box you cannot read what you are typing in.
-
-        So the name takes the first line on its own, and what describes the
-        column — where the field comes from, how it is summarised — goes below
-        it.
+        `listeners` also carry the keyboard: focus this, press space, move with
+        the arrows, press space again. Without it a keyboard cannot reorder
+        anything at all.
       */}
-      <div className="flex items-center gap-2">
-        {/*
-          The handle, and the only thing that starts a drag: the row holds a text
-          box you have to be able to select inside, so making the whole row
-          draggable would fight every rename.
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={`Mover ${label}`}
+        className="shrink-0 cursor-grab touch-none rounded-full text-muted-foreground hover:text-foreground active:cursor-grabbing"
+      >
+        <GripVerticalIcon className="h-3.5 w-3.5" />
+      </button>
 
-          `listeners` also carry the keyboard: focus this and press space, then
-          the arrow keys, then space again. That is not a nicety — it replaced the
-          two ↑↓ buttons that used to live here, and without it a keyboard has no
-          way to reorder anything at all.
-        */}
-        <button
-          type="button"
-          {...attributes}
-          {...listeners}
-          aria-label={`Mover ${label}`}
-          className="shrink-0 cursor-grab touch-none text-muted-foreground hover:text-foreground active:cursor-grabbing"
-        >
-          <GripVerticalIcon className="h-3.5 w-3.5" />
-        </button>
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label={`Ajustes de ${label}`}
+            className="flex min-w-0 items-center gap-1 rounded-full px-1 py-0.5 text-sm hover:bg-accent/60"
+          >
+            <span className="truncate">{column.label || label}</span>
 
-        <Input
-          value={column.label ?? ""}
-          placeholder={label}
-          aria-label={`Nombre de la columna ${label}`}
-          onChange={(e) => onRename(index, e.target.value)}
-          maxLength={120}
-          className="h-7 min-w-0 flex-1 border-0 px-1 shadow-none focus-visible:ring-1"
-        />
+            {/* What a pill has to say without being opened: how it is
+                summarised, and whether it groups or sorts. */}
+            {column.agg && (
+              <span className="shrink-0 text-xs text-muted-foreground">
+                · {AGG_LABEL[column.agg]}
+              </span>
+            )}
+            {isGrouped && <LayersIcon className="h-3 w-3 shrink-0 text-primary" />}
+            {sortDir === "asc" && <ArrowUpNarrowWideIcon className="h-3 w-3 shrink-0" />}
+            {sortDir === "desc" && <ArrowDownNarrowWideIcon className="h-3 w-3 shrink-0" />}
+          </button>
+        </PopoverTrigger>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={sortDir ? "secondary" : "ghost"}
-              size="icon"
-              className="h-7 w-7 shrink-0"
-              aria-label={sortLabel}
-              // The aggregate travels with the path. Without it the server
-              // refuses every sort in a grouped report — a column that is not
-              // grouped has to say how it is summarised — and two rows of the
-              // same field could not be sorted apart.
-              onClick={() => onToggleSort(column.path, column.agg)}
-            >
-              {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
-                : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
-                : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{sortLabel}</TooltipContent>
-        </Tooltip>
+        <PopoverContent align="start" className="w-64 space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`col-name-${id}`} className="text-xs">Cabecera</Label>
+            <Input
+              id={`col-name-${id}`}
+              value={column.label ?? ""}
+              placeholder={label}
+              aria-label={`Nombre de la columna ${label}`}
+              onChange={(e) => onRename(index, e.target.value)}
+              maxLength={120}
+              className="h-8"
+            />
+            {/* Where the field comes from. It used to sit under the box in the
+                list, which was a line of height per column for something read
+                once, when two fields of the same name have to be told apart. */}
+            <p className="truncate text-xs text-muted-foreground">{group}</p>
+          </div>
 
-        {canGroup && (
-          <Tooltip>
-            <TooltipTrigger asChild>
+          {available.length > 0 && !isGrouped && (
+            <div className="space-y-1.5">
+              <Label className="text-xs">Resumen</Label>
+              <Select
+                value={column.agg ?? "none"}
+                onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
+              >
+                <SelectTrigger className="h-8 text-xs" aria-label={`Resumen de ${label}`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
+                  {available.map((agg) => (
+                    <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            {canGroup && (
               <Button
-                variant={isGrouped ? "default" : "ghost"}
-                size="icon"
-                className="h-7 w-7 shrink-0"
+                variant={isGrouped ? "default" : "outline"}
+                size="sm"
+                className="h-8 flex-1 text-xs"
                 aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
                 aria-pressed={isGrouped}
                 onClick={() => onToggleGroup(index)}
               >
-                <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+                <LayersIcon className="mr-1 h-3.5 w-3.5" />
+                {isGrouped ? "Agrupando" : "Agrupar"}
               </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              {/*
-                One string for both, like the sort button in this same row. The
-                tooltip used to state a status ("Agrupando por esta columna")
-                while the accessible name offered the inverse action ("Dejar de
-                agrupar por X"): in the pressed state the two said opposite
-                things, and a sighted person and a screen-reader user could not
-                talk about the same control.
-              */}
-              {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
-            </TooltipContent>
-          </Tooltip>
-        )}
+            )}
+            <Button
+              variant={sortDir ? "secondary" : "outline"}
+              size="sm"
+              className="h-8 flex-1 text-xs"
+              aria-label={sortLabel}
+              // The aggregate travels with the path. Without it the server
+              // refuses every sort in a grouped report — a column that is not
+              // grouped has to say how it is summarised — and two pills of the
+              // same field could not be sorted apart.
+              onClick={() => onToggleSort(column.path, column.agg)}
+            >
+              {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="mr-1 h-3.5 w-3.5" />
+                : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="mr-1 h-3.5 w-3.5" />
+                : <ArrowUpDownIcon className="mr-1 h-3.5 w-3.5" />}
+              {sortDir === "asc" ? "Ascendente" : sortDir === "desc" ? "Descendente" : "Ordenar"}
+            </Button>
+          </div>
+        </PopoverContent>
+      </Popover>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-          aria-label={`Quitar ${label}`}
-          onClick={() => onRemove(index)}
-        >
-          <XIcon className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/*
-        The second line, indented to start where the name does: the handle is
-        fourteen pixels and the gap beside it eight.
-      */}
-      <div className="flex items-center gap-2 pl-[1.375rem]">
-        <p className="min-w-0 flex-1 truncate px-1 text-xs text-muted-foreground">{group}</p>
-
-        {available.length > 0 && !isGrouped && (
-          <Select
-            value={column.agg ?? "none"}
-            onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
-          >
-            <SelectTrigger className="h-7 w-28 shrink-0 text-xs" aria-label={`Resumen de ${label}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
-              {available.map((agg) => (
-                <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-5 w-5 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+        aria-label={`Quitar ${label}`}
+        onClick={() => onRemove(index)}
+      >
+        <XIcon className="h-3 w-3" />
+      </Button>
     </li>
   );
 });
@@ -206,7 +214,7 @@ const ColumnRow = memo(function ColumnRow({
 interface Props {
   config: ReportConfig;
   root: CatalogRoot | undefined;
-  /** Both ends named by `columnKey`, never by position: position is what moves. */
+  /** Both ends named by `columnKeys`, never by position: position is what moves. */
   onReorder: (from: string, to: string) => void;
   onRemove: (index: number) => void;
   onRename: (index: number, label: string) => void;
@@ -218,9 +226,9 @@ interface Props {
 /**
  * The chosen columns, in output order.
  *
- * Grouping and sorting are toggled from the column itself rather than a
- * separate panel: both decisions belong next to the column they describe, and
- * it keeps the lists from drifting apart.
+ * Grouping and sorting are set from the column itself rather than a separate
+ * panel: both decisions belong to the column they describe, and it keeps the
+ * two lists from drifting apart.
  */
 const ColumnList = ({
   config, root, onReorder, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
@@ -228,14 +236,13 @@ const ColumnList = ({
   /**
    * Pointer and keyboard, both wired.
    *
-   * The keyboard one is not optional politeness: it replaced the two ↑↓ buttons
+   * The keyboard one is not optional politeness: it replaced two ↑↓ buttons
    * that used to sit in every row, and they were the only way to reorder
-   * without a mouse. Focus the handle, press space, move with the arrows, press
-   * space again.
+   * without a mouse.
    *
-   * The pointer sensor waits for 6 pixels of travel before it calls something a
-   * drag, so a plain click on the handle is still a click and not a jerk of the
-   * list.
+   * The pointer sensor waits for six pixels of travel before calling something
+   * a drag, so a press on the handle is still a press and not a jerk of the
+   * cloud.
    */
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -244,17 +251,17 @@ const ColumnList = ({
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    // `over` is null when the drop lands outside the list, and equal to
-    // `active` when the row was picked up and put back. Neither is a move.
+    // `over` is null when the drop lands outside, and equal to `active` when a
+    // pill was picked up and put back. Neither is a move.
     if (!over || active.id === over.id) return;
     onReorder(String(active.id), String(over.id));
   };
 
   const summary = isSummary(config);
   const grouped = new Set(config.groupBy ?? []);
-  // Keyed by column, not by field: the minimum and the maximum of the same
-  // date are two columns, and keyed by path alone one arrow lit both of them
-  // while only one could ever be sorted.
+  // Keyed by column, not by field: the minimum and the maximum of the same date
+  // are two columns, and keyed by path alone one arrow lit both of them while
+  // only one could ever be sorted.
   const sortKey = (path: string, agg?: AggFn) => `${path}|${agg ?? ""}`;
   const sortByColumn = new Map((config.sort ?? []).map((s) => [sortKey(s.path, s.agg), s.dir]));
 
@@ -266,70 +273,69 @@ const ColumnList = ({
     );
   }
 
-  const ids = config.columns.map(columnKey);
+  const ids = columnKeys(config);
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={closestCenter}
-      // A column list only moves up and down, and only within itself: without
-      // these a row can be dragged out over the rest of the page, which reads
-      // as a bug in a panel that is now one of four side by side.
-      modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-      onDragEnd={handleDragEnd}
-    >
-      <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <ul className="divide-y rounded-md border">
-      {config.columns.map((column, index) => {
-        const field = findField(root, column.path);
-        const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
-        const relation = root?.aggregateOnly.find((a) => column.path === a.path);
-        const label = fieldLabel(root, column.path);
-        const group = field?.group ?? relation?.group ?? "Resumen";
+    <div className="space-y-2">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        // Only within itself: without this a pill can be dragged out over the
+        // rest of the page, which reads as a bug. The vertical restriction the
+        // old list carried went with the list — pills wrap, so a drag now
+        // travels in both directions.
+        modifiers={[restrictToParentElement]}
+        onDragEnd={handleDragEnd}
+      >
+        <SortableContext items={ids} strategy={rectSortingStrategy}>
+          <ul className="flex flex-wrap gap-1.5">
+            {config.columns.map((column, index) => {
+              const field = findField(root, column.path);
+              const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
+              const relation = root?.aggregateOnly.find((a) => column.path === a.path);
+              const label = fieldLabel(root, column.path);
+              const group = field?.group ?? relation?.group ?? "Resumen";
 
-        return (
-          <ColumnRow
-            // Keyed by identity, not position: keying by index remounted every
-            // row on a move and threw keyboard focus back to the document.
-            //
-            // The renamed header is part of that identity. Two columns of the
-            // same field kept apart only by their header survive grouping —
-            // rightly, someone put them both there — and without the label in
-            // the key they arrived as two children with one key, which leaves
-            // reconciliation undefined: an edit lands on the wrong twin, or
-            // focus jumps out of the box being typed in.
-            key={ids[index]}
-            id={ids[index]}
-            column={column}
-            index={index}
-            label={label}
-            group={group}
-            // A to-many relation can only be counted: the server needs a field
-            // for any other aggregate, and the interface has no way to pick one.
-            available={isAggregateOnly ? ["count"] : field?.aggregates ?? []}
-            isAggregateOnly={isAggregateOnly}
-            // A count cannot define groups; the server rejects it, and the
-            // catalog now says which fields are already summaries.
-            canGroup={!isAggregateOnly && !field?.aggregate}
-            isGrouped={grouped.has(column.path)}
-            sortDir={sortByColumn.get(sortKey(column.path, column.agg))}
-            onRemove={onRemove}
-            onRename={onRename}
-            onSetAgg={onSetAgg}
-            onToggleGroup={onToggleGroup}
-            onToggleSort={onToggleSort}
-          />
-        );
-      })}
+              return (
+                <ColumnChip
+                  // Keyed by identity, not position: keying by index rebuilt
+                  // every pill on a move and threw keyboard focus back to the
+                  // document. The header is not part of that identity, and that
+                  // is what makes typing in the rename box possible at all.
+                  key={ids[index]}
+                  id={ids[index]}
+                  column={column}
+                  index={index}
+                  label={label}
+                  group={group}
+                  // A to-many relation can only be counted: the server needs a
+                  // field for any other aggregate, and there is no way to pick
+                  // one here.
+                  available={isAggregateOnly ? ["count"] : field?.aggregates ?? []}
+                  isAggregateOnly={isAggregateOnly}
+                  // A count cannot define groups; the server rejects it, and the
+                  // catalog says which fields are already summaries.
+                  canGroup={!isAggregateOnly && !field?.aggregate}
+                  isGrouped={grouped.has(column.path)}
+                  sortDir={sortByColumn.get(sortKey(column.path, column.agg))}
+                  onRemove={onRemove}
+                  onRename={onRename}
+                  onSetAgg={onSetAgg}
+                  onToggleGroup={onToggleGroup}
+                  onToggleSort={onToggleSort}
+                />
+              );
+            })}
+          </ul>
+        </SortableContext>
+      </DndContext>
 
       {summary && (
-        <li className="bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
           Reporte agrupado: cada columna no agrupada necesita un resumen.
-        </li>
+        </p>
       )}
-        </ul>
-      </SortableContext>
-    </DndContext>
+    </div>
   );
 };
 

@@ -1,9 +1,10 @@
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { CatalogRoot, ReportConfig, ReportResult, SavedReport } from "../../../api/generador.api";
-import { emptyConfig } from "../../../lib/reportConfig";
+import { emptyConfig, renameColumn } from "../../../lib/reportConfig";
 
 import ColumnList from "./ColumnList";
 import FieldPicker from "./FieldPicker";
@@ -190,49 +191,94 @@ describe("ColumnList", () => {
     expect(onRemove).toHaveBeenCalledWith(1);
   });
 
-  it("shows the catalog label as placeholder until renamed", () => {
+  it("shows the catalog label as placeholder until renamed", async () => {
+    const user = userEvent.setup();
     wrap(
       <ColumnList
         config={config} root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
+    await user.click(screen.getByRole("button", { name: "Ajustes de Descripción" }));
     expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveAttribute("placeholder", "Descripción");
   });
 
-  it("keeps the name on a line of its own, above the summary", () => {
-    // Four panels across a band leaves a row about 260 pixels wide. With the
-    // handle, the name box, the summary select and three icon buttons all
-    // sharing one line, the fixed-width parts claimed nearly all of it and the
-    // name box came out a couple of characters wide — unusable, and the reason
-    // this split exists.
-    //
-    // Nothing here measures anything: the environment draws nothing. What it
-    // can state is that the two no longer share a line and are still the same
-    // column, which is what stops the squeeze coming back.
+  it("says what a column is without being opened", () => {
+    // The reason the pill exists. A column used to be a two-line row with a
+    // text box, a select and three buttons in it; sixty of them were a hundred
+    // and twenty lines to scroll and to read one at a time. A pill states its
+    // header and its summary, and marks grouping and sorting, so the shape of
+    // the whole report reads at a glance.
     wrap(
       <ColumnList
-        config={config} root={root}
+        config={{
+          ...config,
+          columns: [{ path: "description" }, { path: "poste.tramo", agg: "count" }],
+          groupBy: ["description"],
+        }}
+        root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
 
-    const name = screen.getByLabelText("Nombre de la columna Descripción");
-    const summary = screen.getByLabelText("Resumen de Descripción");
-    expect(name.parentElement).not.toContainElement(summary as HTMLElement);
-    expect(name.closest("li")).toContainElement(summary as HTMLElement);
+    // The summary is on the face of the pill, not behind it.
+    expect(screen.getByRole("button", { name: "Ajustes de Tramo" }))
+      .toHaveTextContent(/Tramo.*Conteo/s);
+    // And nothing that edits is: those are one press away, which is what buys
+    // the space back.
+    expect(screen.queryByLabelText(/Nombre de la columna/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Resumen de /)).not.toBeInTheDocument();
   });
 
-  it("marks a grouped column as pressed and hides its aggregate selector", () => {
+  it("lets a header be typed, not just its first letter", async () => {
+    // This was broken, and quietly: a column's identity used to include its
+    // header, the list used that identity as its React key, so every keystroke
+    // produced a new key, React threw the row away and built another, and the
+    // box lost focus. Renaming a column was impossible — only the first letter
+    // ever landed — and nothing on screen said so.
+    //
+    // It needs the state to be real, which is why this drives a small harness
+    // rather than a stub: with `onRename` mocked the value never changes and
+    // the bug cannot happen.
+    const Harness = () => {
+      const [live, setLive] = useState<ReportConfig>(config);
+      return (
+        <ColumnList
+          config={live} root={root}
+          onReorder={vi.fn()} onRemove={vi.fn()}
+          onRename={(i, label) => setLive((c) => renameColumn(c, i, label))}
+          onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
+        />
+      );
+    };
+
+    const user = userEvent.setup();
+    wrap(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Ajustes de Descripción" }));
+
+    const box = screen.getByLabelText("Nombre de la columna Descripción");
+    await user.click(box);
+    await user.keyboard("Detalle");
+
+    expect(screen.getByLabelText("Nombre de la columna Descripción")).toHaveValue("Detalle");
+  });
+
+  it("marks a grouped column as pressed and hides its aggregate selector", async () => {
+    const user = userEvent.setup();
     wrap(
       <ColumnList
         config={{ ...config, groupBy: ["poste.tramo"] }} root={root}
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
+    // The rule stays on the list itself: it explains something happening right
+    // now, to every column, and putting it behind a press would hide it from
+    // the person it is warning.
+    expect(screen.getByText(/cada columna no agrupada necesita un resumen/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ajustes de Tramo" }));
     expect(screen.getByRole("button", { name: /dejar de agrupar/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Resumen de Tramo")).not.toBeInTheDocument();
-    expect(screen.getByText(/cada columna no agrupada necesita un resumen/i)).toBeInTheDocument();
   });
 });
 

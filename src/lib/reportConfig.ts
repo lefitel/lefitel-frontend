@@ -249,16 +249,32 @@ export function moveColumn(config: ReportConfig, from: number, to: number): Repo
 }
 
 /**
- * A column's identity, stable across a reorder.
+ * A stable identity for every column, in the order they appear.
  *
- * Dragging needs to name rows by something that is not their position — the
- * position is the thing changing — and two columns can share a path: the
- * minimum and the maximum of the same date are two columns, and so are two
- * copies of one field kept apart only by their headers. All three parts are
- * needed, which is also why the list keys on exactly this.
+ * Dragging has to name columns by something that is not their position, since
+ * the position is the thing changing. Two columns can share a path — the
+ * minimum and the maximum of the same date — and two can share the path and the
+ * aggregate as well, kept apart only by their headers.
+ *
+ * The header is deliberately not part of it, and that is a bug worth naming.
+ * The identity used to include it, and the list used the identity as its React
+ * key, so every keystroke in a rename box produced a new key, React discarded
+ * the row and built another, and the box lost focus after one character.
+ * Renaming a column was impossible: only the first letter ever landed.
+ *
+ * What tells duplicates apart instead is which duplicate it is — a number that
+ * changes only when the columns themselves are added, removed or reordered,
+ * which is exactly when a fresh identity is wanted.
  */
-export const columnKey = (column: ColumnSpec): string =>
-  `${column.path}|${column.agg ?? ""}|${column.label ?? ""}`;
+export function columnKeys(config: ReportConfig): string[] {
+  const seen = new Map<string, number>();
+  return config.columns.map((column) => {
+    const base = `${column.path}|${column.agg ?? ""}`;
+    const nth = seen.get(base) ?? 0;
+    seen.set(base, nth + 1);
+    return `${base}|${nth}`;
+  });
+}
 
 /**
  * Moves the column named `from` to where the column named `to` sits.
@@ -271,9 +287,9 @@ export const columnKey = (column: ColumnSpec): string =>
  */
 export function moveColumnByKey(config: ReportConfig, from: string, to: string): ReportConfig {
   if (from === to) return config;
-  const at = (key: string) => config.columns.findIndex((c) => columnKey(c) === key);
-  const source = at(from);
-  const target = at(to);
+  const keys = columnKeys(config);
+  const source = keys.indexOf(from);
+  const target = keys.indexOf(to);
   if (source === -1 || target === -1) return config;
   return moveColumn(config, source, target);
 }

@@ -5,7 +5,7 @@ import {
   MAX_SORTS,
   addColumn,
   columnHeader,
-  columnKey,
+  columnKeys,
   columnKind,
   columnLimitReached,
   filterLimitReached,
@@ -930,7 +930,7 @@ describe("moving a column by dragging it", () => {
       { path: "state", label: "¿Listo?" },
     ],
   };
-  const keys = () => config.columns.map(columnKey);
+  const keys = () => columnKeys(config);
 
   it("puts the dragged column where the one it was dropped on sits", () => {
     const [first, , third] = keys();
@@ -947,14 +947,26 @@ describe("moving a column by dragging it", () => {
     expect(moved.columns.map((c) => c.agg)).toEqual([undefined, "max", "min", undefined]);
   });
 
-  it("tells two copies of one field apart by their headers", () => {
+  it("tells two copies of one field apart", () => {
+    // Same path, same aggregate, kept apart only by their headers. What
+    // separates them here is which copy it is, and deliberately not the header:
+    // the header is editable, the list used this as its React key, and every
+    // keystroke in a rename box therefore produced a new key, rebuilt the row
+    // and threw the focus away. Only the first letter of a rename ever landed.
     const twins: ReportConfig = {
       ...emptyConfig("evento"),
       columns: [{ path: "description" }, { path: "description", label: "Detalle" }],
     };
-    const [plain, renamed] = twins.columns.map(columnKey);
+    const [plain, renamed] = columnKeys(twins);
     expect(plain).not.toBe(renamed);
     expect(moveColumnByKey(twins, renamed, plain).columns[0].label).toBe("Detalle");
+  });
+
+  it("gives a column the same identity before and after it is renamed", () => {
+    // The bug above, stated as the rule that prevents it.
+    const before = columnKeys(config);
+    const after = columnKeys(renameColumn(config, 0, "Otro nombre"));
+    expect(after).toEqual(before);
   });
 
   it("does nothing when a column is dropped on itself", () => {

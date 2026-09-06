@@ -211,6 +211,30 @@ const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
 const templateRow = (name: string) =>
   screen.getByRole("button", { name: new RegExp(`^${name}.+`, "s") });
 
+/**
+ * Opens one column's settings.
+ *
+ * A column is a pill now: it shows its header, its summary and whether it
+ * groups or sorts, and everything that *edits* it — the header box, the summary
+ * select, the group and sort buttons — is behind this press.
+ */
+const openColumn = async (user: ReturnType<typeof userEvent.setup>, label: string) => {
+  await user.click(screen.getByRole("button", { name: `Ajustes de ${label}` }));
+};
+
+/**
+ * How many columns the report has, read off the screen.
+ *
+ * Counted by each pill's drag handle: it is one per column and nothing else on
+ * the page is named "Mover". The header boxes this used to count exist only
+ * while a pill is open.
+ *
+ * By label and not by role, because a modal dialog hides the rest of the page
+ * from the accessibility tree — and two of the callers count columns precisely
+ * while a confirmation is open, to prove nothing has been discarded yet.
+ */
+const columnCount = () => screen.queryAllByLabelText(/^Mover /).length;
+
 const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
   await user.click(screen.getAllByRole("button", { name: /añadir columna/i })[0]);
   await user.click(screen.getByRole("option", { name }));
@@ -308,7 +332,7 @@ describe("running a report", () => {
     release(resultFor({ root: "evento", columns: [{ path: "description" }] }));
 
     await waitFor(() => {
-      expect(screen.getByLabelText("Nombre de la columna Resuelto")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Ajustes de Resuelto" })).toBeInTheDocument();
     });
   });
 
@@ -540,7 +564,7 @@ describe("saving", () => {
     // a field can also be gone from the catalog, and blaming permissions sends
     // people to ask for one that would not bring the column back.
     expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 2 elementos/);
-    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+    expect(columnCount()).toBe(1);
   });
 
   it("keeps an advanced filter that the catalog still offers", async () => {
@@ -773,7 +797,7 @@ describe("starting over", () => {
     // everywhere else.
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent(/Se descartará 1 elemento/);
-    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+    expect(columnCount()).toBe(1);
 
     await user.click(screen.getByRole("button", { name: /^empezar en blanco$/i }));
 
@@ -791,7 +815,7 @@ describe("starting over", () => {
     await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
+    expect(columnCount()).toBe(1);
   });
 
   it("is off entirely when there is nothing to clear", async () => {
@@ -992,12 +1016,12 @@ describe("changing the level of detail", () => {
     // Nothing has changed yet: it asks first, and it says what it would cost.
     const dialog = await screen.findByRole("alertdialog");
     expect(dialog).toHaveTextContent(/Se descartarán 2 elementos/);
-    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(2);
+    expect(columnCount()).toBe(2);
 
     await user.click(screen.getByRole("button", { name: /dejarlo como está/i }));
 
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
-    expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(2);
+    expect(columnCount()).toBe(2);
   });
 
   it("changes and drops when accepted", async () => {
@@ -1013,7 +1037,7 @@ describe("changing the level of detail", () => {
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
     // `description` does not exist under the pole root, so it is gone — and the
     // level of detail did change.
-    expect(screen.queryAllByLabelText(/Nombre de la columna/)).toHaveLength(0);
+    expect(columnCount()).toBe(0);
   });
 
   it("does not ask when there is nothing to lose", async () => {
@@ -1369,6 +1393,7 @@ describe("the report taking shape while it is built", () => {
     await screen.findByText(/Vista previa/);
     const listing = screen.getAllByRole("row").length;
 
+    await openColumn(user, "Descripción");
     await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
 
     await waitFor(() => expect(screen.getAllByRole("row").length).toBeLessThan(listing));
@@ -1659,6 +1684,7 @@ describe("the explanations that sit next to what they explain", () => {
 
     expect(screen.queryByText(/toda columna tiene que estar agrupada/)).not.toBeInTheDocument();
 
+    await openColumn(user, "Descripción");
     await user.click(screen.getByRole("button", { name: "Agrupar por Descripción" }));
 
     expect(await screen.findByText(/toda columna tiene que estar agrupada/)).toBeInTheDocument();
