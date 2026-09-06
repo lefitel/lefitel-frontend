@@ -83,7 +83,7 @@ const ColumnChip = memo(function ColumnChip({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex max-w-full items-center gap-0.5 rounded-full border py-0.5 pr-0.5 pl-1",
+        "flex w-full items-center gap-0.5 rounded-full border py-0.5 pr-0.5 pl-1",
         // A grouped column is a different kind of thing — it defines the rows
         // rather than describing them — and in a wrapped cloud that has to show
         // without anything being opened.
@@ -114,7 +114,7 @@ const ColumnChip = memo(function ColumnChip({
           <button
             type="button"
             aria-label={`Ajustes de ${label}`}
-            className="flex min-w-0 items-center gap-1 rounded-full px-1 py-0.5 text-sm hover:bg-accent/60"
+            className="flex min-w-0 flex-1 items-center gap-1 rounded-full px-1 py-0.5 text-left text-sm hover:bg-accent/60"
           >
             <span className="truncate">{column.label || label}</span>
 
@@ -291,9 +291,7 @@ const ColumnList = ({
         onDragEnd={handleDragEnd}
       >
         <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-          {/* `items-start` so a pill is as wide as what it says: stretched to
-              the panel they stop reading as pills and go back to being rows. */}
-          <ul className="flex flex-col items-start gap-1.5">
+          <ul className="flex flex-col gap-1.5">
             {config.columns.map((column, index) => {
               const field = findField(root, column.path);
               const isAggregateOnly = root?.aggregateOnly.some((a) => column.path === a.path) ?? false;
