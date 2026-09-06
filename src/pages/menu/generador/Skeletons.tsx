@@ -197,7 +197,7 @@ const CardSkeleton = ({
  *
  * It replaced a spinner alone in the middle of an empty page, which told the
  * reader that something was happening and nothing about what. This is the page
- * that is coming: two columns, four cards on the left, the result on the right.
+ * that is coming: one header, two panels in a band, and the table under them.
  * Nothing here moves once the catalog lands except the parts that were unknown.
  *
  * The heading and the introduction are not skeletons for the same reason the
@@ -213,8 +213,13 @@ export const PageSkeleton = () => (
     {/* Only for anyone listening rather than looking; the bars say it visually. */}
     <span className="sr-only">Cargando los campos disponibles…</span>
 
-    <div className="flex flex-wrap items-start justify-between gap-2">
-      <div>
+    {/* One header, the same one the page has: heading and a line under it on
+        the left, the page's own controls on the right. Both labels there are
+        fixed strings that never waited on the catalog, so a grey bar over
+        either would hide text already in hand — only what the catalog fills is
+        drawn as a bar. */}
+    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+      <div className="min-w-0">
         {/* Real, like the heading beside it: the help panel is written into the
             page and needs no catalog, so hiding it until one arrives would put
             a control on screen a moment after the reader started reading. */}
@@ -222,33 +227,32 @@ export const PageSkeleton = () => (
           <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
           <PageHelp />
         </div>
-        <p className="text-muted-foreground">
-          Arme el reporte que necesite: elija las columnas, filtre y agrupe. Guárdelo para volver a generarlo cuando quiera.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Arme la tabla que necesite, guárdela y expórtela.
         </p>
       </div>
-      <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
-    </div>
 
-    {/* The same shape the page will have, down to the containment: a strip and
-        two panels above a full-width table, `min-w-0` on each so a card wider
-        than its share cannot widen the grid. It is repeated here rather than
-        left out because the skeleton has to sit in the same box the page will,
-        or the layout jumps the moment the catalog lands. */}
-    {/* The level of detail, which is a strip and not a panel: one select, and
-        the heading beside it is a fixed string that never waited on the
-        catalog, so drawing a grey bar over it would hide text already in
-        hand. */}
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">Nivel de detalle</span>
-        <Skeleton className="h-8 w-52 rounded-md" />
-      </div>
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-medium text-foreground">Reporte</span>
-        <Skeleton className="h-8 w-56 rounded-md" />
+      {/* Both controls are pills on the real page, so both bars are round:
+          a square bar turning into a pill is a shape change on arrival, which
+          is exactly what this component exists to avoid. */}
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Nivel de detalle</span>
+          <Skeleton className="h-8 w-52 rounded-full" aria-hidden="true" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Reporte</span>
+          <Skeleton className="h-8 w-56 rounded-full" aria-hidden="true" />
+        </div>
+        <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
       </div>
     </div>
 
+    {/* The same shape the page will have, down to the containment: two panels
+        above a full-width table, `min-w-0` on each so a card wider than its
+        share cannot widen the grid. It is repeated here rather than left out
+        because the skeleton has to sit in the same box the page will, or the
+        layout jumps the moment the catalog lands. */}
     <div className="grid items-start gap-4 md:grid-cols-2">
       <CardSkeleton title="Columnas" lines={3} />
       <CardSkeleton title="Filtros" lines={2} />

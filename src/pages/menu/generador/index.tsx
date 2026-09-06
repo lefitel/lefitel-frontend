@@ -868,102 +868,120 @@ const GeneradorPage = () => {
 
   return (
     <div className="@container/card w-full space-y-4 px-6 pt-4 pb-6 animate-in fade-in duration-500 md:px-8 md:pb-8">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
+      {/*
+        One header, which is what every other page in this application has: a
+        heading, one line under it, and the page's own controls on the right of
+        that same row.
+
+        This page had two. The heading with its paragraph, and then a bordered
+        strip under it — two bands of chrome before anything anybody came here
+        to do. The strip's border, its tint and the gap above it were sixty
+        pixels spent saying "these controls belong together", which is already
+        said by their sitting together.
+
+        The level of detail leads because it is the decision the rest are made
+        under: changing it discards columns and filters. Then the way into a
+        report that already exists, then the way to abandon one.
+      */}
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
           <div className="flex items-center gap-1.5">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
             <PageHelp />
           </div>
-          <p className="text-muted-foreground">
-            Arme el reporte que necesite: elija las columnas, filtre y agrupe. Guárdelo para volver a generarlo cuando quiera.
+          {/* One line, like every other page's. It was three sentences saying
+              what the help panel says at length two centimetres to the left. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            Arme la tabla que necesite, guárdela y expórtela.
           </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleNew}>
-          <FilePlus2Icon className="mr-1.5 h-4 w-4" />
-          Nuevo
-        </Button>
-      </div>
-
-      {/*
-        The level of detail, on a strip of its own rather than in a card.
-
-        A card is the right container for a panel of controls, and the other
-        three are that. This one held a single select, so a quarter of the band
-        — permanently, on every screen — went on one control that is touched
-        once per report. On a strip it costs around forty pixels instead of a
-        hundred and twenty.
-
-        Above the panels rather than beside them, which is also what it is: the
-        decision the other three are made under. Changing it discards columns
-        and filters, and the panels it invalidates are the ones directly below.
-      */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-muted/60 bg-muted/30 px-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-        <div className="flex items-center gap-1.5">
-          <span className="text-sm font-medium text-foreground">Nivel de detalle</span>
-          <CardHelp label="el nivel de detalle">
-            <p>
-              Define qué representa cada fila del reporte, y es la decisión que manda sobre
-              todas las demás: los mismos datos dan tablas distintas según sea una fila por
-              evento o una por revisión.
-            </p>
-            <p className="mt-2">
-              Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
-              hacerlo.
-            </p>
-          </CardHelp>
-        </div>
-
-        <Select
-          value={config.root}
-          onValueChange={(value) => {
-            const next = catalog.roots.find((r) => r.key === value);
-            if (!next || next.key === config.root) return;
-            // Outside the updater. A state updater must be pure — React
-            // calls it twice in development on purpose — so every one of
-            // these warnings appeared twice, and in concurrent rendering
-            // the double call is not a development-only courtesy.
-            const cleaned = changeRoot(config, next);
-            const lost = elementCount(config) - elementCount(cleaned);
-            // Asked, not announced. This is the most destructive control
-            // on the page dressed as a preference: it throws away columns
-            // and filters, and it used to say so afterwards in a message
-            // that disappears on its own. Somebody who wanted to look at
-            // the other level of detail for a second lost twenty minutes
-            // of work and was told about it by a toast.
-            if (lost > 0) {
-              setPendingRoot({ root: next, cleaned, lost });
-              return;
-            }
-            applyRoot(cleaned);
-          }}
-        >
-          <SelectTrigger
-            className="h-8 w-auto min-w-[13rem] text-sm"
-            aria-label="Nivel de detalle"
-          >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {catalog.roots.map((r) => (
-              <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         </div>
 
         {/*
-          The report being worked on, which the page never used to name. Opening
-          one from the list changed everything on screen except any statement of
-          what had been opened: the only clue was the save button turning into
-          "Actualizar". On somebody else's report that mattered more than a
-          label — saving makes a copy, and that was explained inside the save
-          popover, after it had been opened.
+          `items-end` so the controls sit on one line however tall their labels
+          are, and "Nuevo" — which has no label of its own — lines up with them
+          instead of floating in the middle of the row.
         */}
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-sm font-medium text-foreground">Reporte</span>
-            <CardHelp label="abrir un reporte">
+        <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              {/* Above its control, not beside it: at the size a header gives
+                  them, a label to the left of one box and another to the left
+                  of the next read as one long line of words with boxes in it,
+                  and neither label looked attached to anything. */}
+              <span className="text-xs font-medium text-muted-foreground">Nivel de detalle</span>
+              <CardHelp label="el nivel de detalle">
+                <p>
+                  Define qué representa cada fila del reporte, y es la decisión que manda sobre
+                  todas las demás: los mismos datos dan tablas distintas según sea una fila por
+                  evento o una por revisión.
+                </p>
+                <p className="mt-2">
+                  Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
+                  hacerlo.
+                </p>
+              </CardHelp>
+            </div>
+
+            <Select
+              value={config.root}
+              onValueChange={(value) => {
+                const next = catalog.roots.find((r) => r.key === value);
+                if (!next || next.key === config.root) return;
+                // Outside the updater. A state updater must be pure — React
+                // calls it twice in development on purpose — so every one of
+                // these warnings appeared twice, and in concurrent rendering
+                // the double call is not a development-only courtesy.
+                const cleaned = changeRoot(config, next);
+                const lost = elementCount(config) - elementCount(cleaned);
+                // Asked, not announced. This is the most destructive control
+                // on the page dressed as a preference: it throws away columns
+                // and filters, and it used to say so afterwards in a message
+                // that disappears on its own. Somebody who wanted to look at
+                // the other level of detail for a second lost twenty minutes
+                // of work and was told about it by a toast.
+                if (lost > 0) {
+                  setPendingRoot({ root: next, cleaned, lost });
+                  return;
+                }
+                applyRoot(cleaned);
+              }}
+            >
+              {/*
+                A pill rather than a boxed select. What it holds is a statement
+                about the report — "una fila por evento" — and not a field being
+                filled in, and the header it now sits in reads better for the
+                difference: two bordered boxes side by side looked like a form
+                somebody had left half filled.
+
+                It hugs its text instead of holding a fixed width, so the pill
+                is as long as what it says.
+              */}
+              <SelectTrigger
+                className="h-8 w-auto rounded-full border-transparent bg-muted px-3 text-sm font-medium shadow-none"
+                aria-label="Nivel de detalle"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {catalog.roots.map((r) => (
+                  <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/*
+            The report being worked on, which the page never used to name. Opening
+            one from the list changed everything on screen except any statement of
+            what had been opened: the only clue was the save button turning into
+            "Actualizar". On somebody else's report that mattered more than a
+            label — saving makes a copy, and that was explained inside the save
+            popover, after it had been opened.
+          */}
+          <div className="flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">Reporte</span>
+              <CardHelp label="abrir un reporte">
                 <p>
                   <strong className="font-medium text-foreground">Guardados</strong> son los suyos
                   y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
@@ -973,122 +991,130 @@ const GeneradorPage = () => {
                   Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
                   cuando usted quiera.
                 </p>
-            </CardHelp>
-          </div>
+              </CardHelp>
+            </div>
 
-          <ReportPicker
-            reports={saved}
-            total={savedTotal}
-            onLoadMore={() => loadSaved(true)}
-            templates={catalog.templates ?? []}
-            roots={catalog.roots}
-            current={current}
-            currentUserId={currentUserId}
-            // Opening and running are `ver`, which this page already required
-            // to load at all. The three below are not.
-            onOpen={handleOpen}
-            onPickTemplate={handlePickTemplate}
-            loading={loadingSaved}
-            failed={savedFailed}
-            onRetry={refreshSaved}
-          />
+            <div className="flex min-w-0 items-center gap-2">
+              <ReportPicker
+                reports={saved}
+                total={savedTotal}
+                onLoadMore={() => loadSaved(true)}
+                templates={catalog.templates ?? []}
+                roots={catalog.roots}
+                current={current}
+                currentUserId={currentUserId}
+                // Opening and running are `ver`, which this page already required
+                // to load at all. The three below are not.
+                onOpen={handleOpen}
+                onPickTemplate={handlePickTemplate}
+                loading={loadingSaved}
+                failed={savedFailed}
+                onRetry={refreshSaved}
+              />
 
-          {current && (
-            <div className="flex shrink-0 items-center gap-0.5">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  {current.visibility === "shared"
-                    ? <UsersIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    : <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
-                </TooltipTrigger>
-                <TooltipContent>
-                  {current.visibility === "shared" ? "Compartido con el equipo" : "Privado"}
-                </TooltipContent>
-              </Tooltip>
+              {current && (
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      {current.visibility === "shared"
+                        ? <UsersIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        : <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {current.visibility === "shared" ? "Compartido con el equipo" : "Privado"}
+                    </TooltipContent>
+                  </Tooltip>
 
-              {/*
-                Whose it is, said before anything is pressed rather than after.
-                Saving somebody else's report creates a copy of it, and until
-                now that was stated inside the save popover.
-              */}
-              {!isMine && author && (
-                <span className="ml-1 truncate text-xs text-muted-foreground">
-                  De {author}
-                </span>
-              )}
+                  {/*
+                    Whose it is, said before anything is pressed rather than after.
+                    Saving somebody else's report creates a copy of it, and until
+                    now that was stated inside the save popover.
+                  */}
+                  {!isMine && author && (
+                    <span className="ml-1 truncate text-xs text-muted-foreground">
+                      De {author}
+                    </span>
+                  )}
 
-              {/* The same three the list rows carried, behind the same three
-                  permissions — and now usable on the report while it is open,
-                  which the list could never do. */}
-              {isMine && mayEdit && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7"
-                      aria-label={current.favorite
-                        ? `Quitar ${current.name} de favoritos`
-                        : `Marcar ${current.name} como favorito`}
-                      aria-pressed={current.favorite}
-                      onClick={() => handleToggleFavorite(current)}
-                    >
-                      <StarIcon className={cn(
-                        "h-3.5 w-3.5",
-                        current.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
-                      )} />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {current.favorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                  </TooltipContent>
-                </Tooltip>
-              )}
+                  {/* The same three the list rows carried, behind the same three
+                      permissions — and now usable on the report while it is open,
+                      which the list could never do. */}
+                  {isMine && mayEdit && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost" size="icon" className="h-7 w-7"
+                          aria-label={current.favorite
+                            ? `Quitar ${current.name} de favoritos`
+                            : `Marcar ${current.name} como favorito`}
+                          aria-pressed={current.favorite}
+                          onClick={() => handleToggleFavorite(current)}
+                        >
+                          <StarIcon className={cn(
+                            "h-3.5 w-3.5",
+                            current.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
+                          )} />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {current.favorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
 
-              {mayCreate && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-                      aria-label={`Duplicar ${current.name}`}
-                      onClick={() => handleDuplicate(current)}
-                    >
-                      <CopyIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Duplicar</TooltipContent>
-                </Tooltip>
-              )}
+                  {mayCreate && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                          aria-label={`Duplicar ${current.name}`}
+                          onClick={() => handleDuplicate(current)}
+                        >
+                          <CopyIcon className="h-3.5 w-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Duplicar</TooltipContent>
+                    </Tooltip>
+                  )}
 
-              {isMine && mayArchive && (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost" size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      aria-label={`Archivar ${current.name}`}
-                    >
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>¿Archivar «{current.name}»?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        El reporte dejará de estar disponible para usted y para el resto del
-                        equipo, y no podrá recuperarlo desde el sistema. Los datos que consulta no
-                        se tocan: sólo se archiva este reporte guardado.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => handleDelete(current)}>
-                        Archivar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                  {isMine && mayArchive && (
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button
+                          variant="ghost" size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          aria-label={`Archivar ${current.name}`}
+                        >
+                          <Trash2Icon className="h-3.5 w-3.5" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Archivar «{current.name}»?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            El reporte dejará de estar disponible para usted y para el resto del
+                            equipo, y no podrá recuperarlo desde el sistema. Los datos que consulta no
+                            se tocan: sólo se archiva este reporte guardado.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(current)}>
+                            Archivar
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  )}
+                </div>
               )}
             </div>
-          )}
+          </div>
+
+          <Button variant="outline" size="sm" onClick={handleNew}>
+            <FilePlus2Icon className="mr-1.5 h-4 w-4" />
+            Nuevo
+          </Button>
         </div>
       </div>
 

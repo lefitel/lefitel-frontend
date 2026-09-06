@@ -96,7 +96,12 @@ const ReportPicker = ({
         // refer to the control itself. The label names the control and carries
         // the state after it.
         aria-label={`Reporte abierto: ${label}`}
-        className="flex h-8 min-w-0 max-w-[18rem] flex-1 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring"
+        // A pill, like the level of detail beside it. Neither is a field being
+        // filled in: one states what a row of the report is, the other names
+        // the report. Capped rather than sized, because a report's name is
+        // whatever somebody typed and a long one would push everything else
+        // off the header.
+        className="flex h-8 min-w-0 max-w-[18rem] items-center justify-between gap-2 rounded-full border border-transparent bg-muted px-3 text-sm font-medium outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring"
       >
         <span className={`truncate ${current ? "" : "text-muted-foreground"}`}>{label}</span>
         <ChevronsUpDownIcon className="h-3.5 w-3.5 shrink-0 opacity-50" />
