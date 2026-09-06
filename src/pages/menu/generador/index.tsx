@@ -241,6 +241,17 @@ const GeneradorPage = () => {
   const filterCount = config.filters?.conditions?.length ?? 0;
 
   const isMine = current === null || current.id_usuario === currentUserId;
+  /**
+   * Whether "Nuevo" has anything to do.
+   *
+   * On a page that is already blank it clears nothing, closes nothing and
+   * announces "Reporte nuevo en blanco" — which was the only evidence anything
+   * had happened, about a change that had not. Both the button's state and the
+   * confirmation read this, so the two can never disagree: if there is nothing
+   * to discard the button is off, and if the button is on there is something
+   * to ask about.
+   */
+  const somethingToDiscard = elementCount(config) > 0 || current !== null;
   /** Written the same way the list writes it, so one report reads one way. */
   const author = current?.usuario?.name
     ? `${current.usuario.name} ${current.usuario.lastname ?? ""}`.trim()
@@ -636,7 +647,7 @@ const GeneradorPage = () => {
    * page is how people learn to confirm without reading.
    */
   const handleNew = () => {
-    if (elementCount(config) > 0 || current !== null) {
+    if (somethingToDiscard) {
       setDiscarding(true);
       return;
     }
@@ -1151,12 +1162,36 @@ const GeneradorPage = () => {
                 to press Nuevo and rebuild what they wanted to keep. */}
             {(mayCreate || (current !== null && isMine && mayEdit)) && (
             <Popover open={saveOpen} onOpenChange={setSaveOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm">
-                  <SaveIcon className="mr-1.5 h-4 w-4" />
-                  {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
-                </Button>
-              </PopoverTrigger>
+              <Tooltip>
+                {/*
+                  A span between the tooltip and the button, because a disabled
+                  button receives no pointer events — and the tooltip here is
+                  the only place the reason for being disabled is written.
+                */}
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <PopoverTrigger asChild>
+                      {/*
+                        Off while the configuration cannot be saved at all. The
+                        form behind this asks for a name, a description and a
+                        decision about sharing, and then refused the whole thing
+                        with "el reporte necesita al menos una columna" — work
+                        asked for before saying it was impossible.
+                      */}
+                      <Button variant="outline" size="sm" disabled={problems.length > 0}>
+                        <SaveIcon className="mr-1.5 h-4 w-4" />
+                        {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
+                      </Button>
+                    </PopoverTrigger>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>
+                  {problems.length > 0 ? problems[0]
+                    : current && isMine && mayEdit
+                      ? `Sobrescribe «${current.name}», también para el equipo si está compartido`
+                      : "Guarda la configuración, no los datos: al abrirlo se vuelve a generar"}
+                </TooltipContent>
+              </Tooltip>
               <PopoverContent align="end" className="w-80 space-y-3">
                 {current && isMine && mayEdit && (
                   <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
@@ -1199,10 +1234,25 @@ const GeneradorPage = () => {
               </PopoverContent>
             </Popover>
             )}
-            <Button variant="outline" size="sm" onClick={handleNew}>
-              <FilePlus2Icon className="mr-1.5 h-4 w-4" />
-              Nuevo
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex">
+                  <Button
+                    variant="outline" size="sm"
+                    onClick={handleNew}
+                    disabled={!somethingToDiscard}
+                  >
+                    <FilePlus2Icon className="mr-1.5 h-4 w-4" />
+                    Nuevo
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                {somethingToDiscard
+                  ? "Vacía la configuración y cierra el reporte abierto"
+                  : "Ya está en blanco"}
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
       </div>

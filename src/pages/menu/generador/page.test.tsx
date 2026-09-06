@@ -794,17 +794,46 @@ describe("starting over", () => {
     expect(screen.getAllByLabelText(/Nombre de la columna/)).toHaveLength(1);
   });
 
-  it("does not ask when there is nothing to lose", async () => {
-    // A confirmation on an empty page is how people learn to confirm without
-    // reading, and then the one that mattered gets confirmed the same way.
+  it("is off entirely when there is nothing to clear", async () => {
+    // On a blank page it clears nothing, closes nothing, and used to announce
+    // "Reporte nuevo en blanco" — which was the only evidence anything had
+    // happened, about a change that had not.
+    //
+    // Asserted as disabled rather than by pressing it and looking for the
+    // absence of a dialog: with the button off, that absence is true of every
+    // page and would go on being true if the guard were removed.
     const user = userEvent.setup();
     renderPage();
     await ready();
 
-    await user.click(screen.getByRole("button", { name: /^nuevo$/i }));
+    expect(screen.getByRole("button", { name: /^nuevo$/i })).toBeDisabled();
 
-    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-    expect(screen.getByText(/sin columnas todavía/i)).toBeInTheDocument();
+    // And on the moment it has something to do, it is on and it asks.
+    await addColumn(user, /Descripción/);
+    expect(screen.getByRole("button", { name: /^nuevo$/i })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: /^nuevo$/i }));
+    expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
+  });
+});
+
+describe("a button that cannot do anything is not offered as if it could", () => {
+  it("will not open the save form for a report that cannot be saved", async () => {
+    // The form asks for a name, a description and a decision about sharing,
+    // and then refused the lot with "el reporte necesita al menos una columna".
+    // Work asked for before saying it was impossible.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    const save = screen.getByRole("button", { name: /^guardar$/i });
+    expect(save).toBeDisabled();
+
+    // The reason is written down, not left to be guessed from a grey button.
+    await user.hover(save.parentElement as HTMLElement);
+    expect(await screen.findByText(/necesita al menos una columna/i)).toBeInTheDocument();
+
+    await addColumn(user, /Descripción/);
+    expect(screen.getByRole("button", { name: /^guardar$/i })).toBeEnabled();
   });
 });
 
