@@ -71,7 +71,7 @@ const ColumnChip = memo(function ColumnChip({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex w-full items-center gap-1 rounded-full border py-0.5 pr-0.5 pl-1.5",
+        "flex w-full items-center gap-1 rounded-lg border py-1 pr-0.5 pl-1.5",
         // A grouped column is a different kind of thing — it defines the rows
         // rather than describing them — and that shows on the pill itself, not
         // only on the button that set it.
@@ -93,24 +93,32 @@ const ColumnChip = memo(function ColumnChip({
         {...attributes}
         {...listeners}
         aria-label={`Mover ${label}`}
-        className="shrink-0 cursor-grab touch-none rounded-full text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        className="shrink-0 cursor-grab touch-none rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
       >
         <GripVerticalIcon className="h-3.5 w-3.5" />
       </button>
 
-      <Input
-        value={column.label ?? ""}
-        placeholder={label}
-        aria-label={`Nombre de la columna ${label}`}
-        onChange={(e) => onRename(index, e.target.value)}
-        maxLength={120}
-        className="h-7 min-w-0 flex-1 rounded-full border-0 bg-transparent px-2 shadow-none focus-visible:ring-1"
-      />
-
-      {/* Where the field comes from, which is how two fields of the same name
-          are told apart. It gives way first when the pill runs out of room:
-          it is read once, and everything to its right is a control. */}
-      <span className="min-w-0 shrink truncate text-xs text-muted-foreground">{group}</span>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/*
+          Where the field comes from, above the header rather than beside it.
+          It is the only thing in the pill that is not a control, and in the
+          row it sat between the header box and the summary select, reading as
+          another value somebody had set. Above it, it labels what it belongs
+          to — which is also what it is for: telling two fields of the same
+          name apart.
+        */}
+        <span className="truncate px-2 text-[11px] leading-tight text-muted-foreground">
+          {group}
+        </span>
+        <Input
+          value={column.label ?? ""}
+          placeholder={label}
+          aria-label={`Nombre de la columna ${label}`}
+          onChange={(e) => onRename(index, e.target.value)}
+          maxLength={120}
+          className="h-6 min-w-0 rounded-md border-0 bg-transparent px-2 shadow-none focus-visible:ring-1"
+        />
+      </div>
 
       {available.length > 0 && !isGrouped && (
         <Select
@@ -118,7 +126,7 @@ const ColumnChip = memo(function ColumnChip({
           onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
         >
           <SelectTrigger
-            className="h-7 w-28 shrink-0 rounded-full text-xs"
+            className="h-7 w-28 shrink-0 rounded-md text-xs"
             aria-label={`Resumen de ${label}`}
           >
             <SelectValue />
@@ -137,7 +145,7 @@ const ColumnChip = memo(function ColumnChip({
           <Button
             variant={sortDir ? "secondary" : "ghost"}
             size="icon"
-            className="h-7 w-7 shrink-0 rounded-full"
+            className="h-7 w-7 shrink-0 rounded-md"
             aria-label={sortLabel}
             // The aggregate travels with the path. Without it the server
             // refuses every sort in a grouped report — a column that is not
@@ -159,7 +167,7 @@ const ColumnChip = memo(function ColumnChip({
             <Button
               variant={isGrouped ? "default" : "ghost"}
               size="icon"
-              className="h-7 w-7 shrink-0 rounded-full"
+              className="h-7 w-7 shrink-0 rounded-md"
               aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
               aria-pressed={isGrouped}
               onClick={() => onToggleGroup(index)}
@@ -184,7 +192,7 @@ const ColumnChip = memo(function ColumnChip({
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 shrink-0 rounded-full text-muted-foreground hover:text-destructive"
+        className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
         aria-label={`Quitar ${label}`}
         onClick={() => onRemove(index)}
       >
