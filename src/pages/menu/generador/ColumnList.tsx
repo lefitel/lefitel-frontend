@@ -77,7 +77,12 @@ const ColumnChip = memo(function ColumnChip({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "flex w-full items-center gap-1 rounded-lg border py-1 pr-0.5 pl-1.5",
+        // Eight pixels, not four. The origin line sits at the top of the pill,
+        // and `leading-tight` on eleven-pixel text leaves almost no room above
+        // the glyphs themselves — so four pixels of padding read as none. The
+        // right side was on two, which put the remove button against the
+        // border.
+        "flex w-full items-center gap-1 rounded-lg border py-2 pr-1 pl-2",
         // A grouped column is a different kind of thing — it defines the rows
         // rather than describing them — and that shows on the pill itself, not
         // only on the button that set it.
