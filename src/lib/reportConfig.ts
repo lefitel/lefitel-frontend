@@ -429,6 +429,60 @@ export function toggleSort(
 export const sortLimitReached = (config: ReportConfig, limits?: Limits): boolean =>
   (config.sort ?? []).length >= maxSorts(limits);
 
+/**
+ * A sort criterion's identity, which is its column and how that column is
+ * summarised. The direction is not part of it: flipping a sort does not make it
+ * a different one.
+ */
+export const sortKey = (sort: SortSpec): string => `${sort.path}|${sort.agg ?? ""}`;
+
+/**
+ * Moves one sort criterion to where another sits.
+ *
+ * The order of this list is the report's tie-breaking order — the server writes
+ * `ORDER BY` straight from it — and until now the only way to change it was to
+ * switch every sort off and back on in the sequence you wanted. The position of
+ * a criterion was decided by the order somebody happened to press the buttons
+ * in, permanently.
+ */
+export function moveSortByKey(config: ReportConfig, from: string, to: string): ReportConfig {
+  if (from === to) return config;
+  const current = config.sort ?? [];
+  const keys = current.map(sortKey);
+  const source = keys.indexOf(from);
+  const target = keys.indexOf(to);
+  if (source === -1 || target === -1) return config;
+  const sort = [...current];
+  const [moved] = sort.splice(source, 1);
+  sort.splice(target, 0, moved);
+  return { ...config, sort };
+}
+
+/**
+ * Turns one sort criterion around, without the "off" step `toggleSort` has.
+ *
+ * The button on a column cycles ascending, descending, off, which is what a
+ * table header does. Somewhere that lists the criteria already chosen, that
+ * cycle is wrong: turning one around should not be able to delete it.
+ */
+export function flipSort(config: ReportConfig, key: string): ReportConfig {
+  const current = config.sort ?? [];
+  if (!current.some((s) => sortKey(s) === key)) return config;
+  return {
+    ...config,
+    sort: current.map((s) =>
+      sortKey(s) === key ? { ...s, dir: s.dir === "asc" ? ("desc" as const) : ("asc" as const) } : s,
+    ),
+  };
+}
+
+/** Drops one sort criterion, leaving the rest in their order. */
+export function removeSort(config: ReportConfig, key: string): ReportConfig {
+  const current = config.sort ?? [];
+  if (!current.some((s) => sortKey(s) === key)) return config;
+  return { ...config, sort: current.filter((s) => sortKey(s) !== key) };
+}
+
 // ─── Filters ─────────────────────────────────────────────────────────────────
 
 export const isFilterGroup = (node: unknown): node is FilterGroup =>

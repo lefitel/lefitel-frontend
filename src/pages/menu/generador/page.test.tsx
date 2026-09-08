@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { SesionContext } from "../../../context/SesionContext";
@@ -767,6 +767,79 @@ describe("changing the detail level", () => {
     expect(control.compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING)
       .toBeTruthy();
   });
+});
+
+describe("the order the report is sorted in", () => {
+  /** The strip that appears under the columns once two of them sort. */
+  const strip = () => screen.getByText(/Orden del reporte/).closest("div") as HTMLElement;
+
+  it("says nothing with one criterion and states the priority with two", async () => {
+    // The priority decided the result from the first day — the server writes
+    // ORDER BY straight from this list — and was written down nowhere. A pill
+    // showed an arrow, the table header showed an arrow, and with two columns
+    // sorted there was no way to tell which one won.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+
+    await user.click(screen.getByRole("button", { name: "Ordenar por Descripción" }));
+    // One criterion wins by being alone: a strip explaining a decision nobody
+    // has to make is one more thing to read past.
+    expect(screen.queryByText(/Orden del reporte/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Ordenar por Resuelto" }));
+
+    await screen.findByText(/Orden del reporte/);
+    const ranked = within(strip()).getAllByRole("listitem").map((li) => li.textContent ?? "");
+    expect(ranked[0]).toMatch(/^1\..*Descripción/);
+    expect(ranked[1]).toMatch(/^2\..*Resuelto/);
+
+    // And the same number is on the column itself, so the two never disagree.
+    expect(screen.getByRole("button", { name: /^Ordenando por Descripción/ }))
+      .toHaveTextContent("Orden 1");
+  });
+
+  it("turns one criterion around without dropping it", async () => {
+    // The button on the column cycles ascending, descending, off, which is what
+    // a table header does. In a list of the criteria already chosen that cycle
+    // is wrong: turning one around must not delete it.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+    await user.click(screen.getByRole("button", { name: "Ordenar por Descripción" }));
+    await user.click(screen.getByRole("button", { name: "Ordenar por Resuelto" }));
+
+    await user.click(await screen.findByRole("button", { name: /^Cambiar Descripción a descendente/ }));
+
+    expect(within(strip()).getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /^Cambiar Descripción a ascendente/ })).toBeInTheDocument();
+  });
+
+  it("drops one criterion and takes the strip away with it", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+    await user.click(screen.getByRole("button", { name: "Ordenar por Descripción" }));
+    await user.click(screen.getByRole("button", { name: "Ordenar por Resuelto" }));
+
+    await user.click(await screen.findByRole("button", { name: "Dejar de ordenar por Resuelto" }));
+
+    // Back to one criterion, so there is no priority left to state — and the
+    // one that stayed is still sorting.
+    await waitFor(() => expect(screen.queryByText(/Orden del reporte/)).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: /^Ordenando por Descripción/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ordenar por Resuelto" })).toBeInTheDocument();
+  });
+
+  // Dragging the criteria into another order is `moveSortByKey`, tested in
+  // reportConfig.test.ts: the gesture measures real geometry and this
+  // environment draws nothing.
 });
 
 describe("starting over", () => {

@@ -20,6 +20,7 @@ import {
   addColumn, addFilter, changeRoot, columnLimitReached, describeConfig, elementCount,
   emptyConfig, filterLimitReached, isSummary, maxColumns, maxConditions, maxSorts,
   moveColumnByKey,
+  moveSortByKey, flipSort, removeSort,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
   clearFilters,
@@ -56,6 +57,7 @@ import PageHelp from "./PageHelp";
 import PreviewTable from "./PreviewTable";
 import ReportPicker from "./ReportPicker";
 import ShapePreview from "./ShapePreview";
+import SortOrder from "./SortOrder";
 import { PageSkeleton, ResultSkeleton } from "./Skeletons";
 
 const GeneradorPage = () => {
@@ -537,6 +539,24 @@ const GeneradorPage = () => {
    */
   const handleReorder = useCallback((from: string, to: string) => {
     setConfig((c) => moveColumnByKey(c, from, to));
+  }, []);
+
+  /**
+   * The three that act on the sort order once there is more than one criterion.
+   *
+   * The order of that list is what the server writes `ORDER BY` from, and until
+   * now it was whatever sequence the buttons happened to be pressed in, with no
+   * way to see it and no way to change it short of switching every sort off and
+   * back on.
+   */
+  const handleSortReorder = useCallback((from: string, to: string) => {
+    setConfig((c) => moveSortByKey(c, from, to));
+  }, []);
+  const handleSortFlip = useCallback((key: string) => {
+    setConfig((c) => flipSort(c, key));
+  }, []);
+  const handleSortRemove = useCallback((key: string) => {
+    setConfig((c) => removeSort(c, key));
   }, []);
 
   const handleRemoveColumn = useCallback((index: number) => {
@@ -1359,6 +1379,18 @@ const GeneradorPage = () => {
                 onSetAgg={handleSetAgg}
                 onToggleGroup={handleToggleGroup}
                 onToggleSort={handleToggleSort}
+              />
+
+              {/*
+                Under the columns, because it is about them and it only exists
+                once two of them sort. It draws nothing at all with fewer.
+              */}
+              <SortOrder
+                config={config}
+                root={root}
+                onReorder={handleSortReorder}
+                onFlip={handleSortFlip}
+                onRemove={handleSortRemove}
               />
             </CardContent>
           </Card>

@@ -33,6 +33,12 @@ interface ChipProps {
   canGroup: boolean;
   isGrouped: boolean;
   sortDir: "asc" | "desc" | undefined;
+  /**
+   * Where this column sits in the report's tie-breaking order, 1-based, and
+   * only when more than one column sorts. With a single criterion there is no
+   * priority to read: it wins by being alone.
+   */
+  sortRank: number | undefined;
   /** Identity that survives a reorder and a rename; see `columnKeys`. */
   id: string;
   onRemove: (index: number) => void;
@@ -56,7 +62,7 @@ interface ChipProps {
  * was measured at over half a second per keypress.
  */
 const ColumnChip = memo(function ColumnChip({
-  column, index, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir,
+  column, index, label, group, available, isAggregateOnly, canGroup, isGrouped, sortDir, sortRank,
   id, onRemove, onRename, onSetAgg, onToggleGroup, onToggleSort,
 }: ChipProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -146,8 +152,8 @@ const ColumnChip = memo(function ColumnChip({
         <TooltipTrigger asChild>
           <Button
             variant={sortDir ? "secondary" : "ghost"}
-            size="icon"
-            className="h-7 w-7 shrink-0 rounded-md"
+            size="sm"
+            className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
             aria-label={sortLabel}
             // The aggregate travels with the path. Without it the server
             // refuses every sort in a grouped report — a column that is not
@@ -158,6 +164,17 @@ const ColumnChip = memo(function ColumnChip({
             {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
               : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
               : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
+            {/*
+              A word and not only an arrow. Somebody who has used this screen
+              for days read the arrow as a filter, which it is not: sorting does
+              not remove a single row. An icon whose meaning has to be guessed
+              is a tooltip nobody hovered.
+
+              The number is the report's tie-breaking order, and it only appears
+              when there is one to read. It decided the result from the first
+              day and was written down nowhere.
+            */}
+            {sortDir === undefined ? "Ordenar" : sortRank ? `Orden ${sortRank}` : "Ordenado"}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{sortLabel}</TooltipContent>
@@ -168,13 +185,14 @@ const ColumnChip = memo(function ColumnChip({
           <TooltipTrigger asChild>
             <Button
               variant={isGrouped ? "default" : "ghost"}
-              size="icon"
-              className="h-7 w-7 shrink-0 rounded-md"
+              size="sm"
+              className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
               aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
               aria-pressed={isGrouped}
               onClick={() => onToggleGroup(index)}
             >
               <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+              {isGrouped ? "Agrupando" : "Agrupar"}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -259,8 +277,14 @@ const ColumnList = ({
   // Keyed by column, not by field: the minimum and the maximum of the same date
   // are two columns, and keyed by path alone one arrow lit both of them while
   // only one could ever be sorted.
-  const sortKey = (path: string, agg?: AggFn) => `${path}|${agg ?? ""}`;
-  const sortByColumn = new Map((config.sort ?? []).map((s) => [sortKey(s.path, s.agg), s.dir]));
+  const columnSortKey = (path: string, agg?: AggFn) => `${path}|${agg ?? ""}`;
+  const sorts = config.sort ?? [];
+  const sortByColumn = new Map(sorts.map((s) => [columnSortKey(s.path, s.agg), s.dir]));
+  // Ranks only once there is a tie to break. With one criterion the number
+  // would be a "1" that never becomes anything else.
+  const rankByColumn = new Map(
+    sorts.length > 1 ? sorts.map((s, i) => [columnSortKey(s.path, s.agg), i + 1]) : [],
+  );
 
   if (config.columns.length === 0) {
     return (
@@ -312,7 +336,8 @@ const ColumnList = ({
                   // catalog says which fields are already summaries.
                   canGroup={!isAggregateOnly && !field?.aggregate}
                   isGrouped={grouped.has(column.path)}
-                  sortDir={sortByColumn.get(sortKey(column.path, column.agg))}
+                  sortDir={sortByColumn.get(columnSortKey(column.path, column.agg))}
+                  sortRank={rankByColumn.get(columnSortKey(column.path, column.agg))}
                   onRemove={onRemove}
                   onRename={onRename}
                   onSetAgg={onSetAgg}

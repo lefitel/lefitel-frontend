@@ -20,6 +20,9 @@ import {
   isSummary,
   moveColumn,
   moveColumnByKey,
+  moveSortByKey,
+  flipSort,
+  removeSort,
   removeColumn,
   removeFilter,
   renameColumn,
@@ -980,5 +983,64 @@ describe("moving a column by dragging it", () => {
     const [first] = keys();
     expect(moveColumnByKey(config, first, "no-existe|")).toBe(config);
     expect(moveColumnByKey(config, "no-existe|", first)).toBe(config);
+  });
+});
+
+describe("the order the report is sorted in", () => {
+  // Three criteria, in the order somebody pressed the buttons in. That order is
+  // the report's tie-breaking order: the server writes ORDER BY straight from
+  // this list, so the first entry decides and the rest break its ties.
+  const sorted: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [{ path: "description" }, { path: "date" }, { path: "state" }],
+    sort: [
+      { path: "description", dir: "asc" },
+      { path: "date", dir: "desc" },
+      { path: "state", dir: "asc" },
+    ],
+  };
+  const order = (c: ReportConfig) => (c.sort ?? []).map((s) => s.path);
+
+  it("moves a criterion to where another one sits", () => {
+    // Until this existed the only way to change the priority was to switch
+    // every sort off and back on in the sequence you wanted, because position
+    // was decided by the order the buttons happened to be pressed in.
+    const moved = moveSortByKey(sorted, "state|", "description|");
+    expect(order(moved)).toEqual(["state", "description", "date"]);
+    // And the directions travel with their criteria rather than with the slots.
+    expect(moved.sort?.map((s) => s.dir)).toEqual(["asc", "asc", "desc"]);
+  });
+
+  it("leaves the list alone when an end is unknown or is itself", () => {
+    expect(moveSortByKey(sorted, "date|", "date|")).toBe(sorted);
+    expect(moveSortByKey(sorted, "date|", "no-existe|")).toBe(sorted);
+    expect(moveSortByKey(sorted, "no-existe|", "date|")).toBe(sorted);
+  });
+
+  it("tells apart two sorts of the same field summarised differently", () => {
+    // The minimum and the maximum of one date are two criteria, and the server
+    // needs the aggregate to know which is which.
+    const twins: ReportConfig = {
+      ...emptyConfig("evento"),
+      sort: [{ path: "date", agg: "min", dir: "asc" }, { path: "date", agg: "max", dir: "asc" }],
+    };
+    expect(order(moveSortByKey(twins, "date|max", "date|min"))).toEqual(["date", "date"]);
+    expect(moveSortByKey(twins, "date|max", "date|min").sort?.map((s) => s.agg))
+      .toEqual(["max", "min"]);
+  });
+
+  it("turns a criterion around without being able to delete it", () => {
+    // The button on a column cycles ascending, descending, off — which is what
+    // a table header does. Where the criteria already chosen are listed, that
+    // cycle is wrong: turning one around must not be able to remove it.
+    expect(flipSort(sorted, "description|").sort?.[0].dir).toBe("desc");
+    expect(flipSort(flipSort(sorted, "description|"), "description|").sort?.[0].dir).toBe("asc");
+    expect(flipSort(sorted, "description|").sort).toHaveLength(3);
+    expect(flipSort(sorted, "no-existe|")).toBe(sorted);
+  });
+
+  it("drops one criterion and leaves the rest in their order", () => {
+    expect(order(removeSort(sorted, "date|"))).toEqual(["description", "state"]);
+    expect(removeSort(sorted, "no-existe|")).toBe(sorted);
   });
 });
