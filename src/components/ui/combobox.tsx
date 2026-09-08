@@ -19,6 +19,14 @@ interface ComboboxProps {
     placeholder?: string
     searchPlaceholder?: string
     className?: string
+    /**
+     * Accessible name for the trigger.
+     *
+     * The trigger shows the chosen value and nothing else, so on a screen with
+     * several of these — a filter per row — every one of them is called the
+     * same thing, or nothing at all, to anybody not looking at the layout.
+     */
+    ariaLabel?: string
 }
 
 export function Combobox({
@@ -28,6 +36,7 @@ export function Combobox({
     placeholder = "Seleccionar...",
     searchPlaceholder = "Buscar...",
     className,
+    ariaLabel,
 }: ComboboxProps) {
     const [search, setSearch] = useState("")
     const inputRef = useRef<HTMLInputElement>(null)
@@ -40,6 +49,7 @@ export function Combobox({
     return (
         <Popover onOpenChange={(open) => { if (open) { setSearch(""); setTimeout(() => inputRef.current?.focus(), 0) } }}>
             <PopoverTrigger
+                aria-label={ariaLabel}
                 className={cn(
                     "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring aria-invalid:border-destructive aria-invalid:outline-destructive active:translate-y-0",
                     !selected && "text-muted-foreground",

@@ -38,6 +38,15 @@ export interface CatalogField {
   semantic?: FieldSemantic;
   /** Already a summary of its own row (a count); grouping by it is rejected. */
   aggregate?: boolean;
+  /**
+   * Names the list of values this field can hold, when it has a closed one —
+   * the owners, the materials, the cities. Look it up in `Catalog.optionLists`.
+   *
+   * **A key with no list there is normal and means a text box**: the list may
+   * have outgrown the server's cap, or the server may be an older one that does
+   * not send them at all.
+   */
+  optionList?: string;
 }
 
 export interface CatalogRoot {
@@ -85,6 +94,16 @@ export interface Catalog {
    * not appear rather than the page failing to load.
    */
   templates?: ReportTemplate[];
+  /**
+   * The values each closed-list field can hold, keyed by what a field's
+   * `optionList` names. One entry per list and not per path, because the same
+   * list is reached by many: an owner hangs off a pole, off an event's pole and
+   * off a revision's event's pole.
+   *
+   * Optional for the same reason as the templates, and missing entries are
+   * normal even when it arrives — see `CatalogField.optionList`.
+   */
+  optionLists?: Record<string, string[]>;
 }
 
 // ─── Report configuration ────────────────────────────────────────────────────

@@ -385,6 +385,171 @@ describe("FilterBuilder — the list operator", () => {
   });
 });
 
+describe("FilterBuilder — the fields whose values are a closed list", () => {
+  // A filter compares strings exactly, so a lowercase "tigo" or one trailing
+  // space matches nothing and the report comes back empty — indistinguishable
+  // from data that genuinely has none. These fields hand over the list instead.
+  const conLista: CatalogRoot = {
+    ...root,
+    fields: [
+      ...root.fields,
+      {
+        path: "poste.propietario.name", label: "Propietario", kind: "string",
+        group: "Evento › Poste", operators: ["eq", "neq", "like", "in", "isnull"],
+        aggregates: ["count"], optionList: "propietario.name",
+      },
+    ],
+  };
+  const listas = { "propietario.name": ["Cotas", "Entel", "Tigo"] };
+
+  const filtro = (operator: string, value?: unknown): ReportConfig => ({
+    ...emptyConfig("evento"),
+    filters: {
+      op: "and",
+      conditions: [{
+        path: "poste.propietario.name",
+        operator: operator as "eq",
+        ...(value !== undefined ? { value } : {}),
+      }],
+    },
+  });
+
+  it("se elige de una lista en vez de teclearse", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("eq")} root={conLista} optionLists={listas}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+
+    const boton = screen.getByLabelText("Valor para Propietario");
+    // Both halves matter: that the picker is there, and that there is no box to
+    // mistype into. The second assertion alone passes on a component that
+    // rendered nothing at all.
+    expect(boton).toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Valor para Propietario" })).not.toBeInTheDocument();
+
+    await user.click(boton);
+    await user.click(screen.getByText("Tigo"));
+    expect(onUpdate).toHaveBeenCalledWith(0, { value: "Tigo" });
+  });
+
+  it("se puede buscar dentro de la lista", async () => {
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("eq")} root={conLista} optionLists={listas}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByLabelText("Valor para Propietario"));
+    await user.type(screen.getByPlaceholderText("Buscar…"), "ent");
+    expect(screen.getByText("Entel")).toBeInTheDocument();
+    expect(screen.queryByText("Tigo")).not.toBeInTheDocument();
+  });
+
+  it("un valor guardado que ya no está en la lista se sigue viendo", () => {
+    // A saved report can name an owner archived since. Dropping it would leave
+    // the box reading "Elija un valor" over a filter that is set and running.
+    wrap(
+      <FilterBuilder
+        config={filtro("eq", "Viva")} root={conLista} optionLists={listas}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Viva \(ya no está en la lista\)/)).toBeInTheDocument();
+    expect(screen.queryByText("Elija un valor")).not.toBeInTheDocument();
+  });
+
+  it("«contiene» sigue siendo una caja de texto", () => {
+    // It searches for a fragment on purpose: a whole value off a list is the
+    // one thing nobody is trying to type there.
+    wrap(
+      <FilterBuilder
+        config={filtro("like", "ti")} root={conLista} optionLists={listas}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "Valor para Propietario" })).toHaveValue("ti");
+  });
+
+  it("sin listas del servidor se queda la caja de texto de siempre", () => {
+    // An older server sends no lists at all, and a list can also be missing
+    // because it outgrew the cap. Both mean the field the generator had before.
+    wrap(
+      <FilterBuilder
+        config={filtro("eq", "Tigo")} root={conLista}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("textbox", { name: "Valor para Propietario" })).toHaveValue("Tigo");
+  });
+
+  it("«está en la lista» pasa a ser casillas, y no la caja de comas", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("in", ["Cotas"])} root={conLista} optionLists={listas}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+
+    // The comma box is gone, and what replaced it is not a box at all.
+    expect(screen.queryByPlaceholderText(/separe los valores con comas/i)).not.toBeInTheDocument();
+    await user.click(screen.getByLabelText("Valores para Propietario"));
+
+    const tigo = screen.getByRole("checkbox", { name: "Tigo" });
+    expect(screen.getByRole("checkbox", { name: "Cotas" })).toBeChecked();
+    expect(tigo).not.toBeChecked();
+
+    await user.click(tigo);
+    expect(onUpdate).toHaveBeenCalledWith(0, { value: ["Cotas", "Tigo"] });
+  });
+
+  it("desmarcar quita el valor", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("in", ["Cotas", "Tigo"])} root={conLista} optionLists={listas}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByLabelText("Valores para Propietario"));
+    await user.click(screen.getByRole("checkbox", { name: "Cotas" }));
+    expect(onUpdate).toHaveBeenCalledWith(0, { value: ["Tigo"] });
+  });
+
+  it("el botón dice cuántos hay elegidos", () => {
+    wrap(
+      <FilterBuilder
+        config={filtro("in", ["Cotas", "Tigo"])} root={conLista} optionLists={listas}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Valores para Propietario")).toHaveTextContent("2 valores");
+  });
+
+  it("un valor elegido que ya no se ofrece se puede desmarcar", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("in", ["Viva"])} root={conLista} optionLists={listas}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByLabelText("Valores para Propietario"));
+    const viva = screen.getByRole("checkbox", { name: "Viva" });
+    expect(viva).toBeChecked();
+    await user.click(viva);
+    expect(onUpdate).toHaveBeenCalledWith(0, { value: [] });
+  });
+});
+
 describe("PreviewTable", () => {
   const result: ReportResult = {
     columns: [

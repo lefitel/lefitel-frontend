@@ -1590,6 +1590,7 @@ const GeneradorPage = () => {
               <FilterBuilder
                 config={config}
                 root={root}
+                optionLists={catalog.optionLists}
                 onUpdate={handleUpdateFilter}
                 onRemove={handleRemoveFilter}
                 onSetJoin={handleSetJoin}

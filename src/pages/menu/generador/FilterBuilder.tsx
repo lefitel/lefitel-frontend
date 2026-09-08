@@ -1,16 +1,20 @@
 import { memo, useState } from "react";
-import { XIcon } from "lucide-react";
+import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import type {
   CatalogField, CatalogRoot, FilterCondition, Operator, ReportConfig,
 } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
+import { Checkbox } from "../../../components/ui/checkbox";
+import { Combobox, type ComboboxOption } from "../../../components/ui/combobox";
 import { Input } from "../../../components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import {
   findField, isExists, isFilterGroup, operatorNeedsTwoValues, operatorNeedsValue,
 } from "../../../lib/reportConfig";
+import { cn } from "../../../lib/utils";
 
 const OPERATOR_LABEL: Record<Operator, string> = {
   eq: "es igual a",
@@ -29,10 +33,35 @@ const OPERATOR_LABEL: Record<Operator, string> = {
 interface Props {
   config: ReportConfig;
   root: CatalogRoot | undefined;
+  /**
+   * The value lists the server published, keyed by what a field's `optionList`
+   * names. Absent against an older server, and a field may name a list that is
+   * not in here — see `CatalogField.optionList`. Both cases mean the same
+   * thing on screen: the box the filter had before.
+   */
+  optionLists?: Record<string, string[]>;
   onUpdate: (index: number, patch: Partial<FilterCondition>) => void;
   onRemove: (index: number) => void;
   onSetJoin: (op: "and" | "or") => void;
 }
+
+/**
+ * The offered values, plus whatever the configuration already holds if it is
+ * not among them.
+ *
+ * A saved report can name an owner that has since been archived, and the list
+ * only carries the live ones. Dropping the stored value would leave the box
+ * reading "Elija un valor" over a filter that is set and running — the screen
+ * saying the opposite of what the report does. So it stays, named as what it
+ * is, and can be replaced or unpicked like any other.
+ */
+const withCurrent = (options: string[], current: string): ComboboxOption[] => {
+  const list = options.map((v) => ({ value: v, label: v }));
+  if (current !== "" && !options.includes(current)) {
+    list.unshift({ value: current, label: `${current} (ya no está en la lista)` });
+  }
+  return list;
+};
 
 /**
  * Input shaped by the field type.
@@ -43,13 +72,34 @@ interface Props {
  * Validation flags a value that never becomes a number.
  */
 const ValueInput = ({
-  field, value, onChange, ariaLabel,
+  field, value, onChange, ariaLabel, options,
 }: {
   field: CatalogField | undefined;
   value: unknown;
   onChange: (v: unknown) => void;
   ariaLabel: string;
+  /** The closed list of values, when this field has one. */
+  options?: string[];
 }) => {
+  // A list beats a box, and not for comfort: the comparison is exact, so a
+  // lowercase "tigo" or one trailing space matches nothing, and an empty report
+  // reads the same whether the filter is misspelled or the data really holds no
+  // such row. Not letting the value be typed is what removes the question.
+  if (options) {
+    const current = typeof value === "string" ? value : "";
+    return (
+      <Combobox
+        className="h-8 flex-1"
+        ariaLabel={ariaLabel}
+        placeholder="Elija un valor"
+        searchPlaceholder="Buscar…"
+        options={withCurrent(options, current)}
+        value={current}
+        onValueChange={onChange}
+      />
+    );
+  }
+
   if (field?.kind === "boolean") {
     return (
       <Select
@@ -152,38 +202,125 @@ const ListInput = ({
   );
 };
 
+/**
+ * "Está en la lista", when the values are known.
+ *
+ * Nothing is typed and nothing is parsed, which is what makes it different from
+ * the box above: both failures documented there — the comma eaten as it was
+ * typed, and two values merged into one by a backspace — were failures of
+ * turning text into a list. There is no text here.
+ *
+ * Behind a popover rather than laid out in the row: 98 cities is the largest of
+ * these lists, and a filter row cannot be 98 lines tall.
+ */
+const ListPicker = ({
+  options, value, onChange, ariaLabel,
+}: {
+  options: string[];
+  value: unknown;
+  onChange: (v: unknown) => void;
+  ariaLabel: string;
+}) => {
+  const [q, setQ] = useState("");
+  const chosen = Array.isArray(value) ? value.map(String) : [];
+  // Stored values that are no longer offered come first and stay visible, so a
+  // filter naming an archived owner can be seen and unpicked. Same reason as
+  // `withCurrent` above.
+  const all = [...chosen.filter((v) => !options.includes(v)), ...options];
+  const needle = q.trim().toLowerCase();
+  const shown = needle === "" ? all : all.filter((v) => v.toLowerCase().includes(needle));
+
+  const toggle = (v: string) =>
+    onChange(chosen.includes(v) ? chosen.filter((x) => x !== v) : [...chosen, v]);
+
+  // The count and not the values once there is more than one: the trigger is
+  // one line wide inside a filter row, and three truncated names read worse
+  // than a number that is exact.
+  const label = chosen.length === 0
+    ? "Elija los valores"
+    : chosen.length === 1 ? chosen[0] : `${chosen.length} valores`;
+
+  return (
+    <Popover onOpenChange={(open) => { if (open) setQ(""); }}>
+      <PopoverTrigger
+        aria-label={ariaLabel}
+        className={cn(
+          "flex h-8 flex-1 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring",
+          chosen.length === 0 && "text-muted-foreground",
+        )}
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDownIcon className="h-4 w-4 shrink-0 opacity-50" />
+      </PopoverTrigger>
+      <PopoverContent className="w-(--anchor-width) p-0" align="start">
+        <div className="flex items-center border-b border-border px-3">
+          <SearchIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar…"
+            aria-label={`Buscar en ${ariaLabel.toLowerCase()}`}
+            className="flex h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+        </div>
+        <div className="max-h-60 overflow-y-auto p-1">
+          {shown.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">Sin resultados</p>
+          ) : (
+            shown.map((v) => (
+              <label
+                key={v}
+                className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent hover:text-accent-foreground"
+              >
+                <Checkbox checked={chosen.includes(v)} onCheckedChange={() => toggle(v)} />
+                <span className="truncate">{v}</span>
+              </label>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
 interface RowProps {
   condition: FilterCondition;
   index: number;
   field: CatalogField | undefined;
+  /**
+   * The closed list of values for this field, when it has one.
+   *
+   * Read out of the catalog and handed down rather than looked up here, so the
+   * reference is the same on every render — this row is memoised, and a fresh
+   * array each time would defeat that on every keystroke anywhere in the panel.
+   */
+  options?: string[];
   onUpdate: (index: number, patch: Partial<FilterCondition>) => void;
   onRemove: (index: number) => void;
 }
 
 /** Memoised: the parent re-renders on every keystroke anywhere in the builder. */
-const FilterRow = memo(function FilterRow({ condition, index, field, onUpdate, onRemove }: RowProps) {
+const FilterRow = memo(function FilterRow({
+  condition, index, field, options, onUpdate, onRemove,
+}: RowProps) {
   const label = field?.label ?? condition.path;
   const operators = field?.operators ?? ["eq"];
   const range = operatorNeedsTwoValues(condition.operator);
   const pair = Array.isArray(condition.value) ? condition.value : ["", ""];
+  // Every operator a list field takes gets the list, except this one:
+  // "contiene" searches for a fragment, so a whole value picked from a list is
+  // the one thing you are not trying to type there.
+  const listed = condition.operator === "like" ? undefined : options;
 
   return (
     <li className="space-y-1.5 px-2 py-2">
+      {/*
+        Which field this is about, and the way out of it. Nothing else: the
+        title is a name, not a control, and the ✕ is the only thing here that
+        undoes rather than adjusts.
+      */}
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-sm font-medium">{label}</span>
-        <Select
-          value={condition.operator}
-          onValueChange={(v) => onUpdate(index, { operator: v as Operator })}
-        >
-          <SelectTrigger className="h-8 w-44 text-xs" aria-label={`Operador para ${label}`}>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {operators.map((op) => (
-              <SelectItem key={op} value={op}>{OPERATOR_LABEL[op]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         <Button
           variant="ghost" size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-destructive"
@@ -194,45 +331,83 @@ const FilterRow = memo(function FilterRow({ condition, index, field, onUpdate, o
         </Button>
       </div>
 
-      {operatorNeedsValue(condition.operator) && (
-        <div className="flex items-center gap-2 pl-1">
-          {condition.operator === "in" ? (
-            <ListInput
-              value={condition.value}
-              ariaLabel={`Valores para ${label}`}
-              onChange={(v) => onUpdate(index, { value: v })}
-            />
-          ) : range ? (
-            <>
+      {/*
+        The condition itself, on one line, because it is one sentence: "es igual
+        a" and what it is equal to. Split across two rows the comparison sat
+        beside the field name and its value a line below, so the two halves that
+        only mean anything together were the two furthest apart.
+        `flex-wrap` and the minimum on the value keep that honest when there is
+        no room — a range is two boxes and a "y" — by dropping the value to its
+        own line rather than crushing it to nothing.
+      */}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={condition.operator}
+          onValueChange={(v) => onUpdate(index, { operator: v as Operator })}
+        >
+          <SelectTrigger
+            className="h-8 w-44 shrink-0 text-xs"
+            aria-label={`Operador para ${label}`}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {operators.map((op) => (
+              <SelectItem key={op} value={op}>{OPERATOR_LABEL[op]}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {operatorNeedsValue(condition.operator) && (
+          <div className="flex min-w-48 flex-1 items-center gap-2">
+            {condition.operator === "in" ? (
+              listed ? (
+                <ListPicker
+                  options={listed}
+                  value={condition.value}
+                  ariaLabel={`Valores para ${label}`}
+                  onChange={(v) => onUpdate(index, { value: v })}
+                />
+              ) : (
+                <ListInput
+                  value={condition.value}
+                  ariaLabel={`Valores para ${label}`}
+                  onChange={(v) => onUpdate(index, { value: v })}
+                />
+              )
+            ) : range ? (
+              <>
+                <ValueInput
+                  field={field}
+                  value={pair[0]}
+                  ariaLabel={`Desde, ${label}`}
+                  onChange={(v) => onUpdate(index, { value: [v, pair[1]] })}
+                />
+                <span className="text-xs text-muted-foreground">y</span>
+                <ValueInput
+                  field={field}
+                  value={pair[1]}
+                  ariaLabel={`Hasta, ${label}`}
+                  onChange={(v) => onUpdate(index, { value: [pair[0], v] })}
+                />
+              </>
+            ) : (
               <ValueInput
                 field={field}
-                value={pair[0]}
-                ariaLabel={`Desde, ${label}`}
-                onChange={(v) => onUpdate(index, { value: [v, pair[1]] })}
+                options={listed}
+                value={condition.value}
+                ariaLabel={`Valor para ${label}`}
+                onChange={(v) => onUpdate(index, { value: v })}
               />
-              <span className="text-xs text-muted-foreground">y</span>
-              <ValueInput
-                field={field}
-                value={pair[1]}
-                ariaLabel={`Hasta, ${label}`}
-                onChange={(v) => onUpdate(index, { value: [pair[0], v] })}
-              />
-            </>
-          ) : (
-            <ValueInput
-              field={field}
-              value={condition.value}
-              ariaLabel={`Valor para ${label}`}
-              onChange={(v) => onUpdate(index, { value: v })}
-            />
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </li>
   );
 });
 
-const FilterBuilder = ({ config, root, onUpdate, onRemove, onSetJoin }: Props) => {
+const FilterBuilder = ({ config, root, optionLists, onUpdate, onRemove, onSetJoin }: Props) => {
   const conditions = config.filters?.conditions ?? [];
 
   if (conditions.length === 0) {
@@ -278,12 +453,14 @@ const FilterBuilder = ({ config, root, onUpdate, onRemove, onSetJoin }: Props) =
           }
 
           const condition = node as FilterCondition;
+          const field = findField(root, condition.path);
           return (
             <FilterRow
               key={`${condition.path}-${index}`}
               condition={condition}
               index={index}
-              field={findField(root, condition.path)}
+              field={field}
+              options={field?.optionList ? optionLists?.[field.optionList] : undefined}
               onUpdate={onUpdate}
               onRemove={onRemove}
             />
