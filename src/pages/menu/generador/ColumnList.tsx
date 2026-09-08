@@ -98,7 +98,9 @@ const ColumnChip = memo(function ColumnChip({
         <GripVerticalIcon className="h-3.5 w-3.5" />
       </button>
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* `gap-1`: with the two stacked and nothing between them the origin
+          read as part of the box below it rather than as a label over it. */}
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
         {/*
           Where the field comes from, above the header rather than beside it.
           It is the only thing in the pill that is not a control, and in the
