@@ -61,9 +61,12 @@ const Criterion = ({ sort, rank, label, onFlip, onRemove }: CriterionProps) => {
         {...attributes}
         {...listeners}
         aria-label={`Mover ${label} en el orden`}
-        className="shrink-0 cursor-grab touch-none rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        // Bigger than it was, and still smaller than the one on a column: these
+        // chips are a third the height, and a handle that dominates its chip is
+        // the same mistake in the other direction.
+        className="flex h-5 w-4 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
       >
-        <GripVerticalIcon className="h-3 w-3" />
+        <GripVerticalIcon className="h-4 w-4" />
       </button>
 
       {/* The rank, which is the whole point of this strip. Not a control: the

@@ -99,9 +99,12 @@ const ColumnChip = memo(function ColumnChip({
         {...attributes}
         {...listeners}
         aria-label={`Mover ${label}`}
-        className="shrink-0 cursor-grab touch-none rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
+        // A real target, not just an icon: this is the whole of the reorder for
+        // a pointer, it is what a finger goes for on a touch screen, and at
+        // fourteen pixels inside a pill twice that tall it read as decoration.
+        className="flex h-8 w-5 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:text-foreground active:cursor-grabbing"
       >
-        <GripVerticalIcon className="h-3.5 w-3.5" />
+        <GripVerticalIcon className="h-5 w-5" />
       </button>
 
       {/* `gap-1`: with the two stacked and nothing between them the origin
