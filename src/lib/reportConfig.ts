@@ -650,6 +650,29 @@ export function sameQuery(a: ReportConfig, b: ReportConfig): boolean {
 }
 
 /**
+ * The same question as a string, because an effect needs a primitive to depend
+ * on: what decides which rows come back.
+ *
+ * Two things are left out on purpose. The page — `offset` and `limit` — because
+ * asking for the next hundred rows is not a different report. And the column
+ * labels, because renaming a header changes what the table says and not one row
+ * of what it holds; keyed on those, the screen spent a query on a rename.
+ *
+ * Built with `canonical` for the reason `canonical` exists. This lived in the
+ * generator page as a hand-written `JSON.stringify`, which writes keys in
+ * insertion order — so the same report, with an aggregate set and set back,
+ * came out as two different strings. Every one of those differences was a
+ * refresh and a count nobody asked for.
+ */
+export const signatureOf = (config: ReportConfig): string => {
+  const { offset: _offset, limit: _limit, ...rest } = config;
+  return canonical({
+    ...rest,
+    columns: rest.columns.map((c) => ({ path: c.path, agg: c.agg })),
+  });
+};
+
+/**
  * A stable string for a configuration, whatever order its keys were built in.
  *
  * `JSON.stringify` writes keys in insertion order, and the builders do not

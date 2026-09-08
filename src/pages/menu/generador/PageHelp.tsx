@@ -54,8 +54,10 @@ const STEPS: { title: string; body: string }[] = [
   {
     title: "Generar",
     body:
-      "El único botón que trae datos. Con «Auto» encendido la tabla se refresca sola; apáguelo si " +
-      "su reporte tarda. El número de filas que ve al lado se calcula antes de pedirlas.",
+      "El único botón que trae datos, salvo el orden: cambiar por qué columna se ordena rehace la " +
+      "tabla al momento. «Auto», al lado, viene apagado: enciéndalo y la tabla se rehace sola tras " +
+      "cada cambio, cómodo para ir probando y caro si su reporte tarda. El número de filas que ve " +
+      "al lado se calcula antes de pedirlas, y ese sí se actualiza solo.",
   },
   {
     title: "Guardar",

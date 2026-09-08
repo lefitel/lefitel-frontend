@@ -190,8 +190,16 @@ export interface SaveReportPayload {
 export const getCatalogo = (): Promise<Catalog> =>
   axios.get(urlApi + urlGenerador + "catalog").then((r) => r.data);
 
-export const runReporte = (config: ReportConfig): Promise<ReportResult> =>
-  axios.post(urlApi + urlGenerador + "query", config).then((r) => r.data);
+/**
+ * The rows themselves. Takes a signal for the same reason the count does: this
+ * is the expensive one, and a query nobody is waiting for any more should stop
+ * being worked on rather than merely stop being read.
+ */
+export const runReporte = (
+  config: ReportConfig,
+  signal?: AbortSignal,
+): Promise<ReportResult> =>
+  axios.post(urlApi + urlGenerador + "query", config, { signal }).then((r) => r.data);
 
 /**
  * How many rows the report would return, without reading any of them.

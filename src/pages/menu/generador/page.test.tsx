@@ -229,6 +229,30 @@ const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp)
   await user.click(screen.getByRole("option", { name }));
 };
 
+/** The switch that lets the table follow the configuration, off until asked. */
+const turnAutoOn = async (user: ReturnType<typeof userEvent.setup>) => {
+  await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
+};
+
+/**
+ * A filter with its value filled in.
+ *
+ * It is the only edit left that changes the rows, keeps the table's shape and
+ * does not run anything by itself — a column changes the shape and an order
+ * runs immediately — so it is what the staleness tests are driven with. The
+ * value matters: a filter without one is a problem, and the banner then says
+ * something else entirely.
+ */
+const addFilterOn = async (
+  user: ReturnType<typeof userEvent.setup>,
+  name: RegExp,
+  value: string,
+) => {
+  await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+  await user.click(screen.getByRole("option", { name }));
+  await user.type(screen.getByLabelText(/^Valor para /), value);
+};
+
 /**
  * One page of saved reports, as the endpoint answers now.
  *
@@ -242,6 +266,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   toasts.length = 0;
   downloaded.length = 0;
+  // The Auto switch is remembered per browser, and jsdom keeps one storage for
+  // the whole file. Without this, a test that turns it on decides how every
+  // test after it behaves — which is exactly the kind of order-dependence that
+  // makes a suite lie.
+  localStorage.clear();
   olvidarPermisos();
   grantGenerador();
   api.getCatalogo.mockResolvedValue(catalog);
@@ -325,13 +354,16 @@ describe("running a report", () => {
     });
   });
 
-  it("catches the table up by itself instead of asking to be told", async () => {
-    // Every change used to leave the table describing a report nobody was
-    // asking for, with a banner saying so and a button to press: twenty
-    // variants were forty actions, half of them the same button.
+  it("catches the table up by itself once the switch asks it to", async () => {
+    // What the switch buys: every change used to leave the table describing a
+    // report nobody was asking for, with a banner saying so and a button to
+    // press — twenty variants were forty actions, half of them the same button.
+    // It is off until turned on, because the other half of the trade is a full
+    // query per pause out of a budget shared with Informes.
     const user = userEvent.setup();
     renderPage();
     await ready();
+    await turnAutoOn(user);
     await addColumn(user, /Descripción/);
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
@@ -355,15 +387,16 @@ describe("running a report", () => {
   });
 
   it("says the table is behind when nothing is going to fix it", async () => {
-    // With the switch off the table stays where it is, and then the warning is
-    // the only thing telling the reader the header above no longer describes
-    // the rows below.
+    // With the switch off — which is how it arrives — the table stays where it
+    // is, and then the warning is the only thing telling the reader the header
+    // above no longer describes the rows below.
     //
-    // The change here is a sort, which leaves every column exactly where it
+    // The change here is a filter, which leaves every column exactly where it
     // was. That matters: this banner only exists for edits the table on screen
     // can survive, and an edit that changes the shape retires the table instead
     // (the test below). Driving this one with a new column stopped exercising
-    // the banner at all.
+    // the banner at all, and driving it with an order stopped too the day an
+    // order started running on its own.
     const user = userEvent.setup();
     renderPage();
     await ready();
@@ -371,10 +404,16 @@ describe("running a report", () => {
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
-    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
+    await addFilterOn(user, /Descripción/, "poste");
 
     expect(await screen.findByText(/Cambió la configuración/)).toBeInTheDocument();
+    // "Nothing is going to fix it" is the claim, so it is the thing to prove:
+    // past the refresh's own delay, with the switch as it arrives, no second
+    // query went out. Without this the test passed with the switch defaulting
+    // to on — the banner shows either way for the first seven hundred
+    // milliseconds, and every assertion below lands inside them.
+    expect(screen.getByLabelText("Actualizar la tabla automáticamente")).not.toBeChecked();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     // The rows are still there: they are real, and a different order is still a
     // fair picture of the same columns.
     expect(screen.getByText("fila")).toBeInTheDocument();
@@ -393,7 +432,6 @@ describe("running a report", () => {
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
 
-    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
     await addColumn(user, /Resuelto/);
 
     expect(await screen.findByText(/Vista previa/)).toBeInTheDocument();
@@ -444,6 +482,11 @@ describe("running a report", () => {
   it("sorts by clicking the column, which is where every table sorts", async () => {
     // It used to be a button in the left panel, several hundred pixels from the
     // column it ordered, while the table itself responded to nothing.
+    //
+    // And it orders the table there and then, with Auto off, which is how the
+    // screen arrives. Waiting for the automatic refresh to notice was invisible
+    // while that refresh was on for everybody; on its own it is a click that
+    // moves an arrow, raises a banner and leaves every row where it was.
     const user = userEvent.setup();
     renderPage();
     await ready();
@@ -456,6 +499,8 @@ describe("running a report", () => {
     await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(2), { timeout: 3000 });
     const sorted = api.runReporte.mock.calls[1][0] as ReportConfig;
     expect(sorted.sort).toEqual([{ path: "description", dir: "asc" }]);
+    // Page 1: page 3 of a different order is nobody's page 3.
+    expect(sorted.offset).toBe(0);
     // And the header says so, so the arrow and the query cannot disagree.
     expect(await screen.findByRole("button", { name: /Ordenando la tabla por .*ascendente/ })).toBeInTheDocument();
   });
@@ -471,18 +516,215 @@ describe("running a report", () => {
     await user.click(screen.getByRole("button", { name: /generar/i }));
     await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
 
-    // Edit after generating, then page. The edit is a sort and the switch goes
-    // off first, both on purpose: the table has to still be on screen for there
-    // to be a Siguiente to press, and nothing else may fire a run in between.
-    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
-    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
+    // Edit after generating, then page. The edit is a filter on purpose: the
+    // table has to still be on screen for there to be a Siguiente to press,
+    // and nothing else may fire a run in between.
+    await addFilterOn(user, /Descripción/, "poste");
     await user.click(screen.getByRole("button", { name: /siguiente/i }));
 
     const paged = api.runReporte.mock.calls[api.runReporte.mock.calls.length - 1]?.[0] as ReportConfig;
     expect(paged.offset).toBe(100);
-    // The configuration that was run, which had no sort on it.
-    expect(paged.sort ?? []).toHaveLength(0);
+    // The configuration that was run, which had no filter on it.
+    expect(paged.filters?.conditions ?? []).toHaveLength(0);
     expect(paged.columns).toHaveLength(1);
+  });
+  it("arrives with the switch off, and remembers it once flicked", async () => {
+    // It used to be on for everyone on every visit, with a tooltip asking the
+    // reader to turn it off "si el reporte tarda" — advice for somebody who
+    // cannot know that yet, and who came back the next morning to find it on
+    // again. A switch that forgets is one the people it costs the most have to
+    // flick every session.
+    const user = userEvent.setup();
+    const first = renderPage();
+    await ready();
+
+    const flick = () => screen.getByLabelText("Actualizar la tabla automáticamente");
+    expect(flick()).not.toBeChecked();
+
+    await user.click(flick());
+    expect(flick()).toBeChecked();
+
+    // Gone and back: a new visit to the screen, which is where the old one
+    // forgot.
+    first.unmount();
+    renderPage();
+    await ready();
+    expect(screen.getByLabelText("Actualizar la tabla automáticamente")).toBeChecked();
+  });
+
+  it("hangs up on the query it supersedes, rather than only ignoring it", async () => {
+    // Discarding the late answer was all the screen needed and none of what the
+    // database needed: the superseded query ran to completion, so two edits a
+    // second apart put two of them on the server and used one.
+    //
+    // Driven through the automatic refresh because that is the only thing that
+    // can supersede a query in flight — while one is running, Generar, the
+    // pager, the page size and the table's own headers are all disabled. The
+    // panel is not, which is the whole hazard: you keep editing, and it keeps
+    // asking.
+    const signals: (AbortSignal | undefined)[] = [];
+    const hang = () => new Promise<ReportResult>(() => {});
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await turnAutoOn(user);
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(screen.queryByRole("table")).toBeInTheDocument());
+
+    // From here on nothing comes back, so both refreshes are in flight at once
+    // — which is the state the abort exists for.
+    api.runReporte.mockImplementation((_config: ReportConfig, signal?: AbortSignal) => {
+      signals.push(signal);
+      return hang();
+    });
+
+    await addFilterOn(user, /Descripción/, "a");
+    await waitFor(() => expect(signals).toHaveLength(1), { timeout: 3000 });
+
+    await user.type(screen.getByLabelText(/^Valor para /), "b");
+    await waitFor(() => expect(signals).toHaveLength(2), { timeout: 3000 });
+
+    expect(signals[0]?.aborted).toBe(true);
+    expect(signals[1]?.aborted).toBe(false);
+  });
+
+  it("refuses to order a table the panel has already moved past", async () => {
+    // An order runs the configuration in the panel, and only when the order is
+    // the one thing outstanding in it. The first version of this ran the report
+    // *on screen* with the panel's order grafted on — two halves nobody ever
+    // validated together. An order carries the aggregate of its column, the
+    // server refuses an aggregated order in a report that does not summarise,
+    // and a grouping added since the last run lives in one half only: the
+    // mixture came back as a red error about a report that was on screen and
+    // perfectly legal.
+    //
+    // Driven with a column added since the last run, which is the same gate and
+    // the cheapest to see: the query would have ordered by a column the table
+    // being asked for does not contain.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
+
+    await addColumn(user, /Resuelto/);
+    await user.click(screen.getByRole("button", { name: "Ordenar por Resuelto" }));
+
+    // The arrow moved and the panel knows it; nothing was asked of the server.
+    expect(await screen.findByLabelText("Ordenando por Resuelto, ascendente")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(api.runReporte).toHaveBeenCalledTimes(1);
+    expect(toasts.some((t) => t.kind === "error")).toBe(false);
+  });
+
+  it("re-orders from the strip too, not only from the column arrow", async () => {
+    // The strip under the columns changes the same ORDER BY. Leaving it behind
+    // was the worse half of a half-done change: the arrow on the pill re-orders
+    // the table and the control directly beneath it, which says "dejar de
+    // ordenar por Resuelto", moves an arrow and leaves every row where it was.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await addColumn(user, /Resuelto/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(1));
+
+    // Two criteria, which is when the strip appears at all.
+    await user.click(screen.getByRole("button", { name: "Ordenar por Descripción" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(2));
+    await user.click(screen.getByRole("button", { name: "Ordenar por Resuelto" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(3));
+
+    await user.click(screen.getByRole("button", { name: "Cambiar Descripción a descendente" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(4));
+    expect((api.runReporte.mock.calls[3][0] as ReportConfig).sort?.[0])
+      .toEqual({ path: "description", dir: "desc" });
+
+    await user.click(screen.getByRole("button", { name: "Dejar de ordenar por Descripción" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(5));
+    expect((api.runReporte.mock.calls[4][0] as ReportConfig).sort)
+      .toEqual([{ path: "state", dir: "asc" }]);
+  });
+
+  it("keeps the page you asked for over the refresh you did not", async () => {
+    // The armed-timer branch of the cancel helper, which nothing covered before
+    // or after the change: with Auto on, editing and then paging within the
+    // same second used to give you the page you asked for and replace it a
+    // moment later with page 1 of a different report.
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      Promise.resolve(resultFor(config, { total: 250, rows: [{ c0: "x" }] })));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await turnAutoOn(user);
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
+
+    // The edit arms the refresh; the click has to beat it and keep it beaten.
+    await addFilterOn(user, /Descripción/, "poste");
+    await user.click(screen.getByRole("button", { name: /siguiente/i }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(2));
+    expect((api.runReporte.mock.calls[1][0] as ReportConfig).offset).toBe(100);
+
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(api.runReporte).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/Cambió la configuración/)).toBeInTheDocument();
+  });
+
+  it("hangs up on the query nobody is waiting for any more", async () => {
+    // Leaving the screen mid-query is the other half of the same argument: the
+    // reader is gone and the statement is still running.
+    const signals: (AbortSignal | undefined)[] = [];
+    api.runReporte.mockImplementation((_config: ReportConfig, signal?: AbortSignal) => {
+      signals.push(signal);
+      return new Promise<ReportResult>(() => {});
+    });
+
+    const user = userEvent.setup();
+    const page = renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(signals).toHaveLength(1));
+
+    page.unmount();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
+  it("does not ask twice for a report it has just re-ordered", async () => {
+    // With the switch on, an order runs immediately *and* changes the
+    // configuration the armed refresh is watching. Left alone, a report slower
+    // than the seven hundred milliseconds was asked for twice — the expensive
+    // kind of duplicate, and precisely on the reports that can least afford it.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await turnAutoOn(user);
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: /generar/i }));
+    await waitFor(() => expect(screen.queryByRole("table")).toBeInTheDocument());
+
+    // Slower than the refresh's own delay, and that is the whole test: with an
+    // instant answer the refresh disarms itself when the result lands, so a
+    // fast fixture proves nothing about the report this protects.
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      new Promise<ReportResult>((resolve) => {
+        setTimeout(() => resolve(resultFor(config)), 900);
+      }));
+
+    await user.click(screen.getByRole("button", { name: /^Ordenar la tabla por/ }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalledTimes(2));
+
+    // Past the refresh's own delay, which is where the second one would land.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(api.runReporte).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -1129,9 +1371,8 @@ describe("what the screen tells you to press", () => {
     await ready();
     await addColumn(user, /Descripción/);
 
-    // Auto off, so whatever is left on screen is the one thing telling the
+    // Auto is off, so whatever is left on screen is the one thing telling the
     // reader what to do next.
-    await user.click(screen.getByLabelText("Actualizar la tabla automáticamente"));
     await user.click(screen.getByRole("button", { name: "Generar" }));
     await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
 

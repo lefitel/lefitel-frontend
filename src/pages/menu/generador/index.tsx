@@ -22,6 +22,7 @@ import {
   moveColumnByKey,
   moveSortByKey, flipSort, removeSort,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
+  signatureOf,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
   clearFilters,
   withPageSize,
@@ -59,6 +60,45 @@ import ReportPicker from "./ReportPicker";
 import ShapePreview from "./ShapePreview";
 import SortOrder from "./SortOrder";
 import { PageSkeleton, ResultSkeleton } from "./Skeletons";
+
+/**
+ * Whether the table refreshes itself, remembered per browser.
+ *
+ * It used to be `useState(true)`: on for everyone, every time, and the tooltip
+ * asked the reader to turn it off "si el reporte tarda" — advice for somebody
+ * who cannot know that yet and who, having found out the hard way, arrived the
+ * next morning with it on again. A switch that forgets is a switch that has to
+ * be flicked every session by the people it costs the most.
+ *
+ * So the default is the cheap one. A refresh is a real query — rows, joins, up
+ * to fifteen seconds — against a budget of thirty a minute shared with the
+ * fixed reports on Informes, and nobody asked for it out loud. What tells you a
+ * filter is working is the row count beside the button, which is a different
+ * endpoint, four times the budget, and reads no rows at all.
+ *
+ * Per browser and not per account: it is about how this person works on this
+ * screen, and it is not worth a column in the database. Storage refuses
+ * outright in a private window or with site data blocked, and both ends are
+ * wrapped: failing to read means the safe default, failing to write means the
+ * choice lasts the session.
+ */
+const AUTO_KEY = "osefi-generador-auto";
+
+const readAutoPreference = (): boolean => {
+  try {
+    return localStorage.getItem(AUTO_KEY) === "1";
+  } catch {
+    return false;
+  }
+};
+
+const writeAutoPreference = (value: boolean): void => {
+  try {
+    localStorage.setItem(AUTO_KEY, value ? "1" : "0");
+  } catch {
+    // In memory only: the switch holds for this session and forgets on reload.
+  }
+};
 
 const GeneradorPage = () => {
   const { sesion } = useContext(SesionContext);
@@ -110,12 +150,16 @@ const GeneradorPage = () => {
   /**
    * Whether the table follows the configuration on its own.
    *
-   * On by default and switchable, because the two ways of working are real: for
-   * a report being explored, refreshing itself is the whole point, and for one
-   * that takes eight seconds over a year of events it is a tax. The switch is
-   * next to the button it replaces.
+   * Both ways of working are real: for a report being explored, refreshing
+   * itself is the whole point, and for one that takes eight seconds over a year
+   * of events it is a tax. Off until asked for, and then remembered — see
+   * `readAutoPreference`. The switch is next to the button it replaces.
    */
-  const [auto, setAuto] = useState(true);
+  const [auto, setAutoState] = useState(readAutoPreference);
+  const setAuto = useCallback((next: boolean) => {
+    setAutoState(next);
+    writeAutoPreference(next);
+  }, []);
   const [saved, setSaved] = useState<SavedReport[]>([]);
   const [savedTotal, setSavedTotal] = useState(0);
   const [savedFailed, setSavedFailed] = useState(false);
@@ -145,6 +189,8 @@ const GeneradorPage = () => {
 
   /** Discards responses from a request the user has already superseded. */
   const runSeq = useRef(0);
+  /** And hangs up on it, so the server stops working on the answer. */
+  const runAbort = useRef<AbortController | null>(null);
   /** The armed refresh, so an explicit click can cancel it. */
   const autoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The last configuration the automatic refresh has dealt with. */
@@ -189,16 +235,40 @@ const GeneradorPage = () => {
    *
    * `sameQuery` compares two configurations and is what the staleness banner
    * uses; this is the same idea as a dependency, so the count effect re-runs on
-   * a new filter and not on a renamed header.
+   * a new filter and not on a renamed header. It lives beside `sameQuery` now,
+   * where it can be built the same way and read by the handlers below.
    */
-  const signature = useMemo(() => {
-    const { offset: _offset, limit: _limit, ...rest } = config;
-    return JSON.stringify({
-      ...rest,
-      columns: rest.columns.map((c) => ({ path: c.path, agg: c.agg })),
-    });
-  }, [config]);
+  const signature = useMemo(() => signatureOf(config), [config]);
+
+  /**
+   * The configuration on screen and the current signature, readable from the
+   * handlers that never change — same reason as `configRef`.
+   */
+  const resultConfigRef = useRef(resultConfig);
+  resultConfigRef.current = resultConfig;
+  const signatureRef = useRef(signature);
+  signatureRef.current = signature;
+
+  /**
+   * Disarms a refresh that has not gone out yet, and stops it re-arming.
+   *
+   * Every control that runs something itself calls this first: an explicit
+   * click beats a refresh that is still counting down. Without it, editing and
+   * then paging within the same second gave you the page you asked for and
+   * replaced it a moment later with page 1 of a different report. Marking the
+   * signature as dealt with is what stops the effect arming it straight back.
+   */
+  const cancelAutoRefresh = useCallback(() => {
+    if (autoTimer.current === null) return;
+    clearTimeout(autoTimer.current);
+    autoTimer.current = null;
+    autoDone.current = signatureRef.current;
+    setAutoPending(false);
+  }, []);
   const problems = useMemo(() => validateConfig(config, root, limits), [config, root, limits]);
+  /** Read by the ordering handlers, which never change identity. */
+  const problemsRef = useRef(problems);
+  problemsRef.current = problems;
   const chosen = useMemo(() => new Set(config.columns.map((c) => c.path)), [config.columns]);
   const description = useMemo(() => describeConfig(config, root), [config, root]);
 
@@ -330,9 +400,21 @@ const GeneradorPage = () => {
    */
   const run = useCallback(async (target: ReportConfig, keepOnError = false) => {
     const seq = ++runSeq.current;
+    // Hanging up on the one it supersedes, not merely ignoring its answer.
+    //
+    // `runSeq` already threw the late reply away, which is all the screen
+    // needed and none of what the database needed: the query itself ran to
+    // completion, so three edits a second apart put three of them on the server
+    // at once and used one. They are the expensive kind — rows, joins, up to
+    // fifteen seconds each — and the cost lands on everyone, not on the person
+    // editing. `abort` closes the socket; the connection goes back and the
+    // statement dies with it.
+    runAbort.current?.abort();
+    const controller = new AbortController();
+    runAbort.current = controller;
     setRunning(true);
     try {
-      const data = await runReporte(target);
+      const data = await runReporte(target, controller.signal);
       if (seq !== runSeq.current) return;   // a newer request already went out
       setResult(data);
       setResultConfig(target);
@@ -348,6 +430,10 @@ const GeneradorPage = () => {
       }
     } catch (error) {
       if (seq !== runSeq.current) return;
+      // A cancellation is this screen's own doing — a newer run, or the reader
+      // leaving the page — and the only one that reaches here is the leaving:
+      // a superseded run has an older sequence and returned on the line above.
+      if (axios.isCancel(error)) return;
       toast.error(mensajeDeError(error, "No se pudo generar el reporte"));
       // Clearing is right for Generar: rows from a previous configuration under
       // a header describing a different one is a lie on screen.
@@ -365,9 +451,15 @@ const GeneradorPage = () => {
         setResultConfig(null);
       }
     } finally {
-      if (seq === runSeq.current) setRunning(false);
+      if (seq === runSeq.current) {
+        setRunning(false);
+        runAbort.current = null;
+      }
     }
   }, []);
+
+  /** Nobody is waiting for it once the screen is gone. */
+  useEffect(() => () => runAbort.current?.abort(), []);
 
   /**
    * Adopts a new level of detail, once there is nothing to lose or the loss has
@@ -484,18 +576,9 @@ const GeneradorPage = () => {
   /** Paging must run the configuration that produced the current page. */
   const handlePage = (offset: number) => {
     if (!resultConfig) return;
-    // An explicit click beats a refresh that has not gone out yet. Without
-    // this, editing and then paging within the same second gave you the page
-    // you asked for and replaced it a moment later with page 1 of a different
-    // report. Cancelling here also stops it re-arming, so the configuration
-    // stays un-run — and the banner below says so, which is the honest state:
-    // you chose to keep reading this table.
-    if (autoTimer.current !== null) {
-      clearTimeout(autoTimer.current);
-      autoTimer.current = null;
-      autoDone.current = signature;
-      setAutoPending(false);
-    }
+    // The configuration stays un-run — and the banner below says so, which is
+    // the honest state: you chose to keep reading this table.
+    cancelAutoRefresh();
     void run({ ...resultConfig, offset }, true);
   };
 
@@ -511,14 +594,7 @@ const GeneradorPage = () => {
   const handlePageSize = (limit: number) => {
     setConfig((c) => ({ ...c, limit }));
     if (!resultConfig) return;
-    // Same reason as in `handlePage`: an explicit click beats a refresh that
-    // has not gone out yet, and cancelling here stops it re-arming.
-    if (autoTimer.current !== null) {
-      clearTimeout(autoTimer.current);
-      autoTimer.current = null;
-      autoDone.current = signature;
-      setAutoPending(false);
-    }
+    cancelAutoRefresh();
     void run({ ...resultConfig, limit, offset: 0 }, true);
   };
 
@@ -549,15 +625,70 @@ const GeneradorPage = () => {
    * way to see it and no way to change it short of switching every sort off and
    * back on.
    */
+  /**
+   * Re-orders the table on screen, when a change of order is all that is asked.
+   *
+   * Ordering used to only edit the configuration and wait for the automatic
+   * refresh to notice. That was invisible while the refresh was on for
+   * everybody, and it is the whole behaviour of the control now that it is not:
+   * clicking an arrow that says "ordenar la tabla por Fecha" would move the
+   * arrow, raise a banner, and leave every row exactly where it was.
+   *
+   * Two conditions, and both are about honesty rather than caution.
+   *
+   * It runs `next` — the whole configuration — and never the order grafted onto
+   * the one that produced the table. That graft is how paging works and it is
+   * wrong here: an order carries the aggregate of the column it sorts, the
+   * server refuses an aggregated order in a report that does not summarise
+   * (`sqlBuilder`), and a grouping added since the last run lives in one of the
+   * two halves. The mixture is a configuration nobody validated, and it comes
+   * back as a red error about a report that is on screen and perfectly legal.
+   *
+   * So it only runs when the order is the *only* thing outstanding. With edits
+   * waiting in the panel, an order is not permission to apply them — that is
+   * what Generar is for, and what the banner already says. The reader keeps the
+   * table they were reading.
+   */
+  const runOrderNow = useCallback((next: ReportConfig) => {
+    const shown = resultConfigRef.current;
+    if (!shown) return;                            // nothing on screen to order
+    if (problemsRef.current.length > 0) return;    // and nothing runnable to send
+    if (!sameQuery({ ...next, sort: shown.sort }, shown)) return;
+
+    cancelAutoRefresh();
+    // The query going out *is* the configuration, so the refresh has nothing
+    // left to do. Saying so is what stops a slow report being asked for twice:
+    // the timer would otherwise arm behind this run and fire before it landed.
+    autoDone.current = signatureOf(next);
+    void run({ ...next, offset: 0 }, true);
+  }, [cancelAutoRefresh, run]);
+
+  /*
+   * The other three ordering controls, in the strip under the column list.
+   *
+   * They change the same ORDER BY as the arrow on a column, so they run the
+   * same way — through `runOrderNow`, which decides whether the table can be
+   * re-ordered where it stands. Leaving them behind would have been the worse
+   * half of a half-done change: the arrow on the pill re-orders the table, and
+   * the control directly beneath it that says "dejar de ordenar por Resuelto"
+   * moves an arrow and leaves every row where it was. Reordering the criteria
+   * is the one that changes the answer most, and it was the most inert.
+   */
   const handleSortReorder = useCallback((from: string, to: string) => {
-    setConfig((c) => moveSortByKey(c, from, to));
-  }, []);
+    const next = moveSortByKey(configRef.current, from, to);
+    setConfig(next);
+    runOrderNow(next);
+  }, [runOrderNow]);
   const handleSortFlip = useCallback((key: string) => {
-    setConfig((c) => flipSort(c, key));
-  }, []);
+    const next = flipSort(configRef.current, key);
+    setConfig(next);
+    runOrderNow(next);
+  }, [runOrderNow]);
   const handleSortRemove = useCallback((key: string) => {
-    setConfig((c) => removeSort(c, key));
-  }, []);
+    const next = removeSort(configRef.current, key);
+    setConfig(next);
+    runOrderNow(next);
+  }, [runOrderNow]);
 
   const handleRemoveColumn = useCallback((index: number) => {
     setConfig((c) => removeColumn(c, index));
@@ -600,8 +731,10 @@ const GeneradorPage = () => {
         ` de una columna ya ordenada, hasta apagarla, para liberar uno.`,
       );
     }
-    setConfig(toggleSort(current, path, agg, limitsRef.current));
-  }, []);
+    const next = toggleSort(current, path, agg, limitsRef.current);
+    setConfig(next);
+    runOrderNow(next);
+  }, [runOrderNow]);
 
   const handleUpdateFilter = useCallback((index: number, patch: Partial<FilterCondition>) => {
     setConfig((c) => updateFilter(c, index, patch));
@@ -636,6 +769,12 @@ const GeneradorPage = () => {
    */
   const retireInFlight = () => {
     runSeq.current += 1;
+    // And hangs up, for the same reason `run` does when it supersedes one:
+    // opening a saved report while a fifteen-second query is running used to
+    // leave that query holding a connection to the end, for an answer this
+    // screen had already promised itself to throw away.
+    runAbort.current?.abort();
+    runAbort.current = null;
     // And release the spinner it was holding. `run` clears `running` only when
     // its own sequence is still current — which was safe while `run` was the
     // only writer, because a superseding run set the flag again and cleared it
@@ -1601,7 +1740,8 @@ const GeneradorPage = () => {
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       Rehace la tabla sola cuando cambia algo, medio segundo después de que pare de
-                      tocar. No arranca hasta el primer Generar. Apáguelo si el reporte tarda.
+                      tocar. Viene apagado porque cada refresco es una consulta entera: enciéndalo
+                      para ir probando variantes y se queda encendido en este navegador.
                     </TooltipContent>
                   </Tooltip>
 
