@@ -12,6 +12,8 @@ import {
   DropdownMenuRadioItem, DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { ChevronDownIcon, Loader2Icon } from "lucide-react";
+import { chooserTrigger } from "../../../components/ui/control-surface";
+import { cn } from "../../../lib/utils";
 import { toast } from "sonner";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
 
@@ -104,7 +106,7 @@ const ReportObsFrecuenciaSec = () => {
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">Tipo:</span>
                     <DropdownMenu>
-                      <DropdownMenuTrigger className="flex h-8 items-center gap-1.5 rounded-md border border-input bg-background px-3 text-sm hover:bg-muted transition-colors">
+                      <DropdownMenuTrigger className={cn(chooserTrigger, "h-8 w-auto gap-1.5")}>
                         {tipoFiltro === "all" ? "Todos" : tipoFiltro}
                         <ChevronDownIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       </DropdownMenuTrigger>

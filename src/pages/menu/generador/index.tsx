@@ -1145,11 +1145,13 @@ const GeneradorPage = () => {
                 difference: two bordered boxes side by side looked like a form
                 somebody had left half filled.
 
-                It hugs its text instead of holding a fixed width, so the pill
-                is as long as what it says.
+                The borderless fill that made that work is every select's now,
+                so only what is particular to this one is left here: it is round
+                rather than square, and it hugs its text instead of holding a
+                fixed width, so the pill is as long as what it says.
               */}
               <SelectTrigger
-                className="h-8 w-auto rounded-full border-transparent bg-muted px-3 text-sm font-medium shadow-none"
+                className="h-8 w-auto rounded-full px-3 text-sm font-medium"
                 aria-label="Nivel de detalle"
               >
                 <SelectValue />

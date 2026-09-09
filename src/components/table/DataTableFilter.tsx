@@ -12,6 +12,8 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChevronDownIcon, XIcon } from "lucide-react";
+import { chooserTrigger } from "@/components/ui/control-surface";
+import { cn } from "@/lib/utils";
 
 interface DynamicColumnFilterProps<TData extends RowData> {
     table: Tbl<TData>;
@@ -66,7 +68,13 @@ function DynamicColumnFilter<TData extends RowData>({ table, placeholder }: Dyna
 
             <div className="flex gap-1 w-full">
                 <DropdownMenu>
-                    <DropdownMenuTrigger className="inline-flex h-8 w-36 shrink-0 items-center justify-between gap-1 rounded-lg border border-input bg-transparent px-2.5 text-sm text-foreground transition-colors hover:bg-muted focus-visible:border-ring focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+                    {/*
+                      A menu dressed as a select — you pick which column the
+                      search applies to — so it wears what a select wears. Its
+                      own copy of the outlined skin was the one on screen most
+                      often in the whole application: every table has this bar.
+                    */}
+                    <DropdownMenuTrigger className={cn(chooserTrigger, "h-8 w-36 shrink-0 rounded-lg px-2.5")}>
                         <span className="truncate">
                             {selectedColumn ? getColumnLabel(selectedColumn) : "Columna"}
                         </span>

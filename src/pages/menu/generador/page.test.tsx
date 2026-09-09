@@ -1039,8 +1039,10 @@ describe("the order the report is sorted in", () => {
     expect(ranked[1]).toMatch(/^2\..*Resuelto/);
 
     // And the same number is on the column itself, so the two never disagree.
+    // The button is an icon now and the word "Orden" went with the rest of the
+    // text; the digit is the half that carries information the arrow cannot.
     expect(screen.getByRole("button", { name: /^Ordenando por Descripción/ }))
-      .toHaveTextContent("Orden 1");
+      .toHaveTextContent("1");
   });
 
   it("turns one criterion around without dropping it", async () => {

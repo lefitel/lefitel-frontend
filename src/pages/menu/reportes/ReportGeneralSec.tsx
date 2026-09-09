@@ -10,7 +10,7 @@ import {
 import { EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
 import { url } from "../../../api/url";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
-import { Button } from "../../../components/ui/button";
+import { Button, buttonVariants } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Combobox } from "../../../components/ui/combobox";
@@ -36,6 +36,7 @@ import { getEventCriticality } from "../../../lib/criticality";
 import { exportExcelGeneral, exportCsvGeneral, exportPdfGeneral, latestRevision } from "../../../lib/exports/reportGeneral";
 import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { cn } from "../../../lib/utils";
 
 // ─── Row color helpers ────────────────────────────────────────────────────────
 
@@ -583,8 +584,15 @@ const ReportGeneralSec = () => {
                 initialColumnVisibility={{ createdAt: false, updatedAt: false, deletedAt: false }}
                 actions={
                   <DropdownMenu>
+                    {/*
+                      A button and not a chooser: it holds no value, it offers
+                      three things to do. So it wears what the other menu on
+                      this same table bar wears — `buttonVariants` — rather
+                      than the skin of a select, which would say it remembers
+                      what you last exported.
+                    */}
                     <DropdownMenuTrigger
-                      className="inline-flex items-center gap-1.5 h-8 rounded-md border border-border bg-background px-3 text-sm font-medium text-foreground shadow-xs hover:bg-muted transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                      className={cn(buttonVariants({ variant: "outline" }), "h-8 gap-1.5 px-3 text-sm font-medium")}
                       disabled={exporting}
                     >
                       {exporting

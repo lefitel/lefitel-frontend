@@ -15,6 +15,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/
 import DataTable from "../../../components/table/DataTable";
 import { ACTION_LABELS } from "../../../constants/bitacora";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { chooserTrigger } from "../../../components/ui/control-surface";
+import { cn } from "../../../lib/utils";
 
 const ENTITIES = ["Evento", "Poste", "Ciudad", "Material", "Propietario", "Obs", "TipoObs", "Solución", "Revisión", "Usuario", "Adss", "Rol", "File"];
 
@@ -187,8 +189,13 @@ const avisar = (mensaje: string) => (error: unknown) => {
   if (status !== 401) toast.error(mensaje);
 };
 
-const DROPDOWN_TRIGGER_CLS =
-  "flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:ring-1 focus-visible:ring-ring";
+/**
+ * The three filters here are menus dressed as selects, so they wear what a
+ * select wears. This was a copy of the skin, written out in this page and gone
+ * stale the day the shared one changed — which is the whole reason
+ * `chooserTrigger` exists. All that is left local is the height.
+ */
+const DROPDOWN_TRIGGER_CLS = cn(chooserTrigger, "h-8");
 
 const BitacoraPage = () => {
   const navigate = useNavigate();

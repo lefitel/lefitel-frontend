@@ -298,15 +298,71 @@ describe("FilterBuilder", () => {
     expect(onUpdate).toHaveBeenCalledWith(0, { value: "r" });
   });
 
-  it("shows two inputs for a range", () => {
+  it("shows a range of dates as one span, in the reader's own notation", () => {
+    // One control for both ends, not two calendars side by side: choosing a
+    // period is a single act, and split in two there was no moment where the
+    // span itself was on screen. What carries the value is what the trigger
+    // says — and it says it the way it is read here, not the way it travels.
     wrap(
       <FilterBuilder
         config={withFilter(["2026-01-01", "2026-06-30"], "between")}
         root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Desde, Fecha del evento")).toHaveValue("2026-01-01");
-    expect(screen.getByLabelText("Hasta, Fecha del evento")).toHaveValue("2026-06-30");
+
+    const trigger = screen.getByLabelText("Rango para Fecha del evento");
+    expect(trigger).toHaveTextContent("01/01/2026");
+    expect(trigger).toHaveTextContent("30/06/2026");
+    // And the pair of boxes it replaced is gone, rather than both being drawn.
+    expect(screen.queryByLabelText("Desde, Fecha del evento")).not.toBeInTheDocument();
+  });
+
+  it("keeps two boxes for a range of numbers, which has no picker", () => {
+    // The range picker is for dates. "Entre 5 y 20" is two facts and stays two
+    // boxes — the branch is on the field's kind, not on the operator alone.
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      filters: {
+        op: "and",
+        conditions: [{ path: "description", operator: "between", value: ["5", "20"] }],
+      },
+    };
+    wrap(
+      <FilterBuilder config={config} root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()} />,
+    );
+    expect(screen.getByLabelText("Desde, Descripción")).toHaveValue("5");
+    expect(screen.getByLabelText("Hasta, Descripción")).toHaveValue("20");
+  });
+
+  it("writes a picked date back the way the server reads it", async () => {
+    // The wire format is the one thing that must not change with the control:
+    // a plain "yyyy-MM-dd". And it must be the day that was clicked — building
+    // the Date from the stored string with `new Date()` lands on UTC midnight,
+    // which is the day before for anybody west of Greenwich, and every open of
+    // the calendar would walk the filter one day back.
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      filters: {
+        op: "and",
+        conditions: [{ path: "date", operator: "gte", value: "2026-03-15" }],
+      },
+    };
+    wrap(
+      <FilterBuilder
+        config={config}
+        root={root} onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+
+    const trigger = screen.getByLabelText("Valor para Fecha del evento");
+    expect(trigger).toHaveTextContent("15/03/2026");
+
+    await user.click(trigger);
+    await user.click(await screen.findByRole("button", { name: /20 de marzo de 2026/ }));
+
+    expect(onUpdate).toHaveBeenCalledWith(0, { value: "2026-03-20" });
   });
 
   it("hides the value input for is-empty filters", () => {

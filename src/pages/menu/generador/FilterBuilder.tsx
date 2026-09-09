@@ -1,4 +1,6 @@
 import { memo, useState } from "react";
+import { format, isValid, parseISO } from "date-fns";
+import type { DateRange } from "react-day-picker";
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import type {
   CatalogField, CatalogRoot, FilterCondition, Operator, ReportConfig,
@@ -6,6 +8,9 @@ import type {
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Combobox, type ComboboxOption } from "../../../components/ui/combobox";
+import { chooserTrigger } from "../../../components/ui/control-surface";
+import { DatePicker } from "../../../components/ui/date-picker";
+import { DateRangePicker } from "../../../components/ui/date-range-picker";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import {
@@ -64,6 +69,38 @@ const withCurrent = (options: string[], current: string): ComboboxOption[] => {
 };
 
 /**
+ * The two directions a date travels between the calendar and the report.
+ *
+ * The wire format is a plain "yyyy-MM-dd" — what the browser's own date box
+ * used to write and what the server reads — and both of these stay in local
+ * time on purpose. Building the Date with `new Date("2026-03-15")` lands on
+ * UTC midnight, which is the day before for anybody west of Greenwich: every
+ * open of the calendar would walk the filter one day back.
+ */
+const asDay = (value: unknown): Date | undefined => {
+  if (typeof value !== "string" || value === "") return undefined;
+  const parsed = parseISO(value);
+  return isValid(parsed) ? parsed : undefined;
+};
+
+const asIsoDay = (date: Date | undefined): string | undefined =>
+  date ? format(date, "yyyy-MM-dd") : undefined;
+
+/**
+ * The pair the configuration holds, as the range picker wants it.
+ *
+ * Undefined rather than an empty range when neither end is set, so the trigger
+ * shows its placeholder instead of a dash between two blanks. Half a range is
+ * passed through as it is: the calendar draws the one end that exists, and
+ * `validateConfig` is what says the filter is not finished.
+ */
+const rangeValue = (pair: unknown[]): DateRange | undefined => {
+  const from = asDay(pair[0]);
+  const to = asDay(pair[1]);
+  return from || to ? { from, to } : undefined;
+};
+
+/**
  * Input shaped by the field type.
  *
  * Numbers are kept as text while being edited rather than coerced on every
@@ -117,14 +154,25 @@ const ValueInput = ({
     );
   }
 
+  // The browser's own date box, which is a different control in every browser
+  // — a spinner in one, three tiny boxes in another, and a calendar you cannot
+  // reach without a mouse in a third — while six dialogs in this app already
+  // open the same Spanish calendar with a year picker in it. There was no
+  // reason for the filters to be the one place that did not.
+  //
+  // The wire format does not change: a plain "yyyy-MM-dd", which is what the
+  // box wrote and what the server reads. `parseISO` and `format` are both
+  // local-time here, so the round trip cannot move the day — building a Date
+  // from that string with `new Date()` would put it at UTC midnight and hand
+  // back the day before, for anybody west of Greenwich.
   if (field?.kind === "date") {
     return (
-      <Input
-        type="date"
-        aria-label={ariaLabel}
+      <DatePicker
         className="h-8 flex-1"
-        value={value === undefined || value === null ? "" : String(value)}
-        onChange={(e) => onChange(e.target.value)}
+        ariaLabel={ariaLabel}
+        placeholder="Elija una fecha"
+        value={asDay(value)}
+        onSelect={(d) => onChange(asIsoDay(d))}
       />
     );
   }
@@ -244,8 +292,11 @@ const ListPicker = ({
     <Popover onOpenChange={(open) => { if (open) setQ(""); }}>
       <PopoverTrigger
         aria-label={ariaLabel}
+        // Third copy of the same skin, now shared: it opens a list to choose
+        // from, exactly like the select beside it. See `chooserTrigger`.
         className={cn(
-          "flex h-8 flex-1 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring",
+          chooserTrigger,
+          "h-8 flex-1",
           chosen.length === 0 && "text-muted-foreground",
         )}
       >
@@ -375,6 +426,26 @@ const FilterRow = memo(function FilterRow({
                   onChange={(v) => onUpdate(index, { value: v })}
                 />
               )
+            ) : range && field?.kind === "date" ? (
+              /*
+                One control for both ends, not two calendars side by side.
+                Choosing a period is a single act — you look at a month and
+                drag your eye from one day to another — and split in two it was
+                two popovers, two months to navigate, and no moment where the
+                span itself was on screen. The range picker shows both months
+                at once and reads back "01/01/2026 — 30/06/2026".
+                A range of numbers keeps its two boxes below: there is no
+                picker for those, and "entre 5 y 20" is two facts anyway.
+              */
+              <DateRangePicker
+                className="h-8 flex-1"
+                ariaLabel={`Rango para ${label}`}
+                placeholder="Elija el período"
+                value={rangeValue(pair)}
+                onChange={(r) => onUpdate(index, {
+                  value: [asIsoDay(r?.from), asIsoDay(r?.to)],
+                })}
+              />
             ) : range ? (
               <>
                 <ValueInput

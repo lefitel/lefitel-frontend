@@ -8,22 +8,37 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { ChevronDownIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { chooserTrigger } from "./control-surface"
 
 interface DatePickerProps {
     value?: Date
     onSelect?: (date: Date | undefined) => void
     placeholder?: string
     className?: string
+    /**
+     * Accessible name for the trigger.
+     *
+     * Without one, the button is named by what it says — a date, or the word
+     * "Seleccionar fecha" — which tells somebody listening what it holds and
+     * never which field it belongs to. Every caller that sits in a labelled
+     * form row can leave it out; the ones that stand alone in a filter row
+     * cannot.
+     */
+    ariaLabel?: string
 }
 
 const currentYear = new Date().getFullYear()
 
-export function DatePicker({ value, onSelect, placeholder = "Seleccionar fecha", className }: DatePickerProps) {
+export function DatePicker({ value, onSelect, placeholder = "Seleccionar fecha", className, ariaLabel }: DatePickerProps) {
     return (
         <Popover>
             <PopoverTrigger
+                aria-label={ariaLabel}
+                // Same skin as the select and the combobox: it opens something
+                // to choose from, so it is one of those. It carried its own
+                // copy of the old outlined one — see `chooserTrigger`.
                 className={cn(
-                    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring aria-invalid:border-destructive aria-invalid:outline-destructive active:translate-y-0",
+                    chooserTrigger,
                     !value && "text-muted-foreground",
                     className
                 )}

@@ -16,6 +16,22 @@ const PopoverContent = React.forwardRef<
   <PopoverPrimitive.Portal>
     <PopoverPrimitive.Content
       ref={ref}
+      // Not decoration: things inside a popover ask for this by name.
+      //
+      // `Calendar` paints its own `bg-background` and turns it off with
+      // `in-data-[slot=popover-content]:bg-transparent` — its way of saying
+      // "unless somebody else is already painting behind me". Without the
+      // attribute the escape never fired, so the calendar laid an opaque
+      // square of a *different* colour over this panel: `--background` against
+      // `--popover`, which is 0.976 against pure white in the light theme and
+      // 0.215 against 0.288 in the dark one. It covered the rounded corners
+      // too, which is why the date picker was the one popup in the app with
+      // square edges.
+      //
+      // `card.tsx` has always carried its half of the same contract
+      // (`data-slot="card-content"`), which is why a calendar inside a card
+      // looked right and this one did not.
+      data-slot="popover-content"
       align={align}
       sideOffset={sideOffset}
       className={cn(

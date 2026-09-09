@@ -5,6 +5,7 @@ import {
     PopoverTrigger,
 } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
+import { chooserTrigger } from "./control-surface"
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
 
 export interface ComboboxOption {
@@ -50,8 +51,12 @@ export function Combobox({
         <Popover onOpenChange={(open) => { if (open) { setSearch(""); setTimeout(() => inputRef.current?.focus(), 0) } }}>
             <PopoverTrigger
                 aria-label={ariaLabel}
+                // The same skin as the select it stands in for: this is a
+                // select with a search box, and the two sit in the same filter
+                // row. It carried its own copy of the old outlined one — see
+                // `chooserTrigger`.
                 className={cn(
-                    "flex h-9 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring aria-invalid:border-destructive aria-invalid:outline-destructive active:translate-y-0",
+                    chooserTrigger,
                     !selected && "text-muted-foreground",
                     className
                 )}

@@ -12,14 +12,20 @@ interface DateRangePickerProps {
   onChange?: (range: DateRange | undefined) => void
   placeholder?: string
   className?: string
+  /**
+   * Accessible name for the trigger. Same reason as `DatePicker`'s: what the
+   * button says is the range it holds, never the field it belongs to.
+   */
+  ariaLabel?: string
 }
 
-export function DateRangePicker({ value, onChange, placeholder = "Seleccionar rango", className }: DateRangePickerProps) {
+export function DateRangePicker({ value, onChange, placeholder = "Seleccionar rango", className, ariaLabel }: DateRangePickerProps) {
   return (
     <Popover>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
+          aria-label={ariaLabel}
           className={cn("justify-start gap-2 font-normal", !value?.from && "text-muted-foreground", className)}
         >
           <CalendarIcon className="h-4 w-4 shrink-0" />

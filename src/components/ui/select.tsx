@@ -3,6 +3,7 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { chooserTrigger } from "./control-surface"
 
 const Select = SelectPrimitive.Root
 const SelectGroup = SelectPrimitive.Group
@@ -17,7 +18,16 @@ function SelectTrigger({
     <SelectPrimitive.Trigger
       data-slot="select-trigger"
       className={cn(
-        "flex h-9 w-full items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-1 text-sm whitespace-nowrap shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring aria-invalid:border-destructive aria-invalid:outline-destructive disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+        // Quiet by default: filled, not outlined. Almost every one of the
+        // thirty-odd selects in this app is a control in a toolbar or a
+        // configuration panel, several to a row, and a row of outlined boxes
+        // reads as a form to fill in rather than as choices already made. The
+        // generator's header pill was written this way by hand first; that is
+        // what it proved, and `chooserTrigger` is where it lives now — shared
+        // with the three other controls that open something to choose from,
+        // with the whole argument beside it.
+        chooserTrigger,
+        "placeholder:text-muted-foreground [&>span]:line-clamp-1",
         className
       )}
       {...props}

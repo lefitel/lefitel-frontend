@@ -57,6 +57,11 @@ interface ChipProps {
  * has around 640 and they all fit on one line — and a control you can see and
  * reach beats a control one press away, every time.
  *
+ * The two that act rather than describe — order and group — are icons alone,
+ * with the tooltip carrying what they do. They spelt themselves out in words
+ * until the row had a select in it too and the whole pill read as a sentence
+ * nobody was reading.
+ *
  * Memoised because the parent re-renders on every keystroke of any rename or
  * filter value, and sixty of these re-reconciling with their selects on each
  * was measured at over half a second per keypress.
@@ -86,8 +91,18 @@ const ColumnChip = memo(function ColumnChip({
         // A grouped column is a different kind of thing — it defines the rows
         // rather than describing them — and that shows on the pill itself, not
         // only on the button that set it.
-        isGrouped ? "border-primary/40 bg-primary/10" : "bg-background",
-        isDragging && "relative z-10 shadow-md",
+        //
+        // Ungrouped it paints nothing, which is how the filter rows beside it
+        // have always looked: they are one bordered box with hairlines between
+        // them and no fill of their own. `bg-background` was a second tone on
+        // top of the card — 0.976 against white in the light theme, 0.215
+        // against 0.288 in the dark one — so the two lists read as two
+        // materials for no reason anybody could name.
+        isGrouped ? "border-primary/40 bg-primary/10" : "bg-transparent",
+        // Except while it is being dragged: dnd-kit translates the pill over
+        // its neighbours, and a transparent one would show them straight
+        // through the thing you are holding.
+        isDragging && "relative z-10 bg-card shadow-md",
       )}
     >
       {/*
@@ -161,7 +176,9 @@ const ColumnChip = memo(function ColumnChip({
           <Button
             variant={sortDir ? "secondary" : "ghost"}
             size="sm"
-            className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
+            // `min-w-7` and not `w-7`: the rank widens it by a digit when there
+            // is one, and a fixed square would crop it.
+            className="h-7 min-w-7 shrink-0 gap-0.5 rounded-md px-1 text-xs"
             aria-label={sortLabel}
             // The aggregate travels with the path. Without it the server
             // refuses every sort in a grouped report — a column that is not
@@ -173,16 +190,20 @@ const ColumnChip = memo(function ColumnChip({
               : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
               : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
             {/*
-              A word and not only an arrow. Somebody who has used this screen
-              for days read the arrow as a filter, which it is not: sorting does
-              not remove a single row. An icon whose meaning has to be guessed
-              is a tooltip nobody hovered.
+              The number stays when the word goes: it is the report's
+              tie-breaking order, it only appears when there is more than one
+              criterion to rank, and it decided the result from the first day
+              while being written down nowhere. The strip below says the same
+              thing at more length; this is the half you can see without
+              looking away from the column.
 
-              The number is the report's tie-breaking order, and it only appears
-              when there is one to read. It decided the result from the first
-              day and was written down nowhere.
+              It is not a label — the arrow already says "order", and the state
+              is in the arrow's direction and the button's fill. Losing the word
+              costs the person who read the arrow as a filter, which is why
+              every one of these carries a tooltip and an accessible name that
+              spell the whole thing out.
             */}
-            {sortDir === undefined ? "Ordenar" : sortRank ? `Orden ${sortRank}` : "Ordenado"}
+            {sortRank && <span className="tabular-nums">{sortRank}</span>}
           </Button>
         </TooltipTrigger>
         <TooltipContent>{sortLabel}</TooltipContent>
@@ -193,14 +214,13 @@ const ColumnChip = memo(function ColumnChip({
           <TooltipTrigger asChild>
             <Button
               variant={isGrouped ? "default" : "ghost"}
-              size="sm"
-              className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
+              size="icon"
+              className="h-7 w-7 shrink-0 rounded-md"
               aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
               aria-pressed={isGrouped}
               onClick={() => onToggleGroup(index)}
             >
               <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
-              {isGrouped ? "Agrupando" : "Agrupar"}
             </Button>
           </TooltipTrigger>
           <TooltipContent>
