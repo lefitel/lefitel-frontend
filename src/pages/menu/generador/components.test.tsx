@@ -19,6 +19,7 @@ const root: CatalogRoot = {
   fields: [
     { path: "description", label: "Descripción", kind: "string", group: "Evento", operators: ["like", "eq", "isnull"], aggregates: ["count"] },
     { path: "date", label: "Fecha del evento", kind: "date", group: "Evento", operators: ["between", "gte"], aggregates: ["count", "min", "max"] },
+    { path: "altura", label: "Altura", kind: "number", group: "Evento", operators: ["between", "gte"], aggregates: ["count", "sum"] },
     { path: "state", label: "Resuelto", kind: "boolean", group: "Evento", operators: ["eq"], aggregates: ["count"] },
     { path: "poste.tramo", label: "Tramo", kind: "string", group: "Evento › Poste", operators: ["eq"], aggregates: ["count"], calculated: true },
   ],
@@ -310,11 +311,11 @@ describe("FilterBuilder", () => {
       />,
     );
 
-    const trigger = screen.getByLabelText("Rango para Fecha del evento");
+    const trigger = screen.getByLabelText(/^Rango para Fecha del evento/);
     expect(trigger).toHaveTextContent("01/01/2026");
     expect(trigger).toHaveTextContent("30/06/2026");
     // And the pair of boxes it replaced is gone, rather than both being drawn.
-    expect(screen.queryByLabelText("Desde, Fecha del evento")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Desde, Fecha del evento/)).not.toBeInTheDocument();
   });
 
   it("keeps two boxes for a range of numbers, which has no picker", () => {
@@ -324,14 +325,15 @@ describe("FilterBuilder", () => {
       ...emptyConfig("evento"),
       filters: {
         op: "and",
-        conditions: [{ path: "description", operator: "between", value: ["5", "20"] }],
+        conditions: [{ path: "altura", operator: "between", value: ["5", "20"] }],
       },
     };
     wrap(
       <FilterBuilder config={config} root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()} />,
     );
-    expect(screen.getByLabelText("Desde, Descripción")).toHaveValue("5");
-    expect(screen.getByLabelText("Hasta, Descripción")).toHaveValue("20");
+    expect(screen.getByLabelText("Desde, Altura")).toHaveValue("5");
+    expect(screen.getByLabelText("Hasta, Altura")).toHaveValue("20");
+    expect(screen.queryByLabelText(/^Rango para/)).not.toBeInTheDocument();
   });
 
   it("writes a picked date back the way the server reads it", async () => {
@@ -356,7 +358,7 @@ describe("FilterBuilder", () => {
       />,
     );
 
-    const trigger = screen.getByLabelText("Valor para Fecha del evento");
+    const trigger = screen.getByLabelText(/^Valor para Fecha del evento/);
     expect(trigger).toHaveTextContent("15/03/2026");
 
     await user.click(trigger);

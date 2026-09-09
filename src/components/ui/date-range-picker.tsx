@@ -2,8 +2,8 @@ import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { CalendarIcon } from "lucide-react"
 import { type DateRange } from "react-day-picker"
-import { Button } from "@/components/ui/button"
 import { Calendar } from "@/components/ui/calendar"
+import { chooserTrigger } from "@/components/ui/control-surface"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
 
@@ -19,30 +19,55 @@ interface DateRangePickerProps {
   ariaLabel?: string
 }
 
+const day = (d: Date) => format(d, "dd/MM/yyyy", { locale: es })
+
 export function DateRangePicker({ value, onChange, placeholder = "Seleccionar rango", className, ariaLabel }: DateRangePickerProps) {
+  const label = !value?.from
+    ? placeholder
+    : value.to ? `${day(value.from)} — ${day(value.to)}` : day(value.from)
+
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          aria-label={ariaLabel}
-          className={cn("justify-start gap-2 font-normal", !value?.from && "text-muted-foreground", className)}
+        {/*
+          The same skin as the select it sits beside, not a button's. It wore
+          `variant="outline"` — `--gradient-surface`, built from `--card` — so
+          in a filter row the operator and the range were 1.17:1 apart while
+          being the same kind of control, and on a white card the trigger's own
+          top edge was 1.00:1 against the surface behind it: no border, no
+          contrast, only a drop shadow.
+
+          And the name carries the span, for the reason spelled out in
+          `DatePicker`: `aria-label` replaces the text, and the text is the
+          value.
+        */}
+        <button
+          type="button"
+          aria-label={ariaLabel && `${ariaLabel}: ${label}`}
+          className={cn(chooserTrigger, "justify-start font-normal", !value?.from && "text-muted-foreground", className)}
         >
           <CalendarIcon className="h-4 w-4 shrink-0" />
-          {value?.from ? (
-            value.to ? (
-              <span>{format(value.from, "dd/MM/yyyy", { locale: es })} — {format(value.to, "dd/MM/yyyy", { locale: es })}</span>
-            ) : (
-              <span>{format(value.from, "dd/MM/yyyy", { locale: es })}</span>
-            )
-          ) : (
-            <span>{placeholder}</span>
-          )}
-        </Button>
+          <span>{label}</span>
+        </button>
       </PopoverTrigger>
       <PopoverContent className="w-auto p-0" align="start">
         <Calendar
           mode="range"
+          // Two clicks, never one.
+          //
+          // With no minimum, `addToRange` answers the first click with
+          // `{from: X, to: X}` — a complete, validating "entre X y X". A stray
+          // click made a filter look finished, and on a timestamp column that
+          // range matches only the rows at exactly midnight, so the report came
+          // back empty with nothing to say why. With a minimum, one click
+          // leaves the range half made and `validateConfig` says so, which is
+          // what the two separate boxes used to do.
+          //
+          // The cost, and it is real: a single day can no longer be expressed
+          // as "entre el 15 y el 15" here. Clicking the same day twice clears
+          // the range instead. A one-day filter is «es igual a» or a pair of
+          // «mayor o igual» / «menor o igual».
+          min={1}
           defaultMonth={value?.from}
           selected={value}
           onSelect={onChange}

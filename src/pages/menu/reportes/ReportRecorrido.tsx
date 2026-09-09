@@ -322,11 +322,11 @@ const ReportRecorridoSec = () => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
                         <div className="space-y-1.5">
                             <Label>Fecha de inicio</Label>
-                            <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
+                            <DatePicker ariaLabel="Fecha de inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
                         </div>
                         <div className="space-y-1.5">
                             <Label>Fecha de fin</Label>
-                            <DatePicker value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
+                            <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
                         </div>
                         <div className="space-y-1.5">
                             <Label>Tramo desde</Label>

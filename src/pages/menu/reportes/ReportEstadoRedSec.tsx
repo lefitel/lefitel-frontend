@@ -74,11 +74,11 @@ const ReportEstadoRedSec = () => {
           <div className="flex flex-wrap gap-x-2 gap-y-3">
             <div className="space-y-1.5 min-w-36">
               <Label>Fecha de inicio <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
+              <DatePicker ariaLabel="Inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
             </div>
             <div className="space-y-1.5 min-w-36">
               <Label>Fecha de fin <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <DatePicker value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
+              <DatePicker ariaLabel="Fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
           </div>
           <div className="flex gap-2 mt-3 justify-end">

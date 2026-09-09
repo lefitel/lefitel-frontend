@@ -79,11 +79,11 @@ const ReportTiemposSec = () => {
           <div className="flex flex-wrap gap-x-2 gap-y-3">
             <div className="space-y-1.5 min-w-36">
               <Label>Fecha de inicio</Label>
-              <DatePicker value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
+              <DatePicker ariaLabel="Fecha de inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
             </div>
             <div className="space-y-1.5 min-w-36">
               <Label>Fecha de fin</Label>
-              <DatePicker value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
+              <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
           </div>
           <div className="flex gap-2 mt-3 justify-end">

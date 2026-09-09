@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
+import { flatControl } from "../../../components/ui/control-surface";
 
 /** One selectable entry, field or aggregate, flattened for keyboard traversal. */
 interface Entry {
@@ -148,7 +149,7 @@ const FieldPicker = ({
             onKeyDown={onKeyDown}
             placeholder="Buscar campo…"
             aria-label="Buscar campo"
-            className="h-8 border-0 shadow-none focus-visible:ring-0 px-0"
+            className={cn(flatControl, "h-8 px-0 focus-visible:ring-0")}
           />
         </div>
 

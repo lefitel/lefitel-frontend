@@ -36,6 +36,17 @@ export default defineConfig({
     },
   },
   test: {
+    env: {
+      // Pinned, because a date test cannot fail in UTC.
+      //
+      // The generator's filters parse "yyyy-MM-dd" with `parseISO` so the
+      // day cannot shift; `new Date(...)` would read it as UTC midnight and
+      // hand back the day before — west of Greenwich only. The regression
+      // test for that is inert wherever the offset is zero, and the build
+      // that gates deployment runs on a UTC runner: the guard would have
+      // been green on the one machine that matters.
+      TZ: "America/La_Paz",
+    },
     environment: "jsdom",
     globals: true,
     setupFiles: ["./src/test/setup.ts"],

@@ -15,6 +15,8 @@ import { Label } from "../../ui/label";
 import { Loader2Icon } from "lucide-react";
 import { ImageDropzone } from "../../ui/image-dropzone";
 import { Button } from "../../ui/button";
+import { flatControl } from "../../ui/control-surface";
+import { cn } from "../../../lib/utils";
 
 interface Props {
   ciudad?: CiudadInterface | null;
@@ -155,7 +157,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
                     step="0.000001"
                     value={lat}
                     onChange={(e) => { setLat(parseFloat(e.target.value) || 0); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    className="h-5 text-xs border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
                   />
                 </div>
                 <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
@@ -165,7 +167,7 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
                     step="0.000001"
                     value={lng}
                     onChange={(e) => { setLng(parseFloat(e.target.value) || 0); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    className="h-5 text-xs border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
                   />
                 </div>
               </div>

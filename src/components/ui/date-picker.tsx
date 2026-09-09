@@ -33,7 +33,17 @@ export function DatePicker({ value, onSelect, placeholder = "Seleccionar fecha",
     return (
         <Popover>
             <PopoverTrigger
-                aria-label={ariaLabel}
+                // The name carries the value, not only the field.
+                //
+                // `aria-label` wins over the element's own text in the
+                // accessible-name computation, so naming this "Valor para
+                // Fecha del evento" replaced the date it shows: the control it
+                // took over from was an `<input type="date">`, which exposed
+                // the label *and* the value, because an input's value is a
+                // separate property. A button has no such thing. Somebody
+                // listening was left with no way to learn what the filter holds
+                // without opening the calendar and hunting for the marked day.
+                aria-label={ariaLabel && `${ariaLabel}: ${value ? format(value, "dd/MM/yyyy", { locale: es }) : placeholder}`}
                 // Same skin as the select and the combobox: it opens something
                 // to choose from, so it is one of those. It carried its own
                 // copy of the old outlined one — see `chooserTrigger`.

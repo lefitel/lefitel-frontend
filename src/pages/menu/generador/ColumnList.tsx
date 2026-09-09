@@ -22,6 +22,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
 import { AGG_LABEL, columnKeys, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
 import { cn } from "../../../lib/utils";
+import { flatControl } from "../../../components/ui/control-surface";
 
 interface ChipProps {
   column: ColumnSpec;
@@ -147,7 +148,7 @@ const ColumnChip = memo(function ColumnChip({
           aria-label={`Nombre de la columna ${label}`}
           onChange={(e) => onRename(index, e.target.value)}
           maxLength={120}
-          className="h-6 min-w-0 rounded-md border-0 bg-transparent px-2 shadow-none focus-visible:ring-1"
+          className={cn(flatControl, "h-6 min-w-0 rounded-md px-2 focus-visible:ring-1")}
         />
       </div>
 

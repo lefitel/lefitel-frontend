@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
+import { DatePicker } from "./date-picker";
 
 /**
  * One attribute, and a whole panel's appearance hangs off it.
@@ -27,9 +29,21 @@ describe("PopoverContent", () => {
 
     const panel = screen.getByText("contenido");
     expect(panel).toHaveAttribute("data-slot", "popover-content");
-    // And it is the rounded, popover-coloured surface the calendar expects to
-    // find behind it.
-    expect(panel.className).toContain("rounded-md");
-    expect(panel.className).toContain("bg-popover");
+  });
+
+  it("is what a date picker's calendar finds above itself", async () => {
+    // The contract, rather than the attribute: the compiled rule is
+    // `:where([data-slot="popover-content"]) .in-data-\[…\]:bg-transparent`,
+    // which is a plain ancestor relationship and therefore assertable here even
+    // though jsdom computes no styles. Asserting the attribute alone would stay
+    // green if a wrapper or a second portal were ever introduced between the
+    // panel and the calendar — and the square, wrongly-coloured corners would
+    // be back with nothing to say so.
+    const user = userEvent.setup();
+    render(<DatePicker value={new Date(2026, 2, 15)} ariaLabel="Fecha" />);
+    await user.click(screen.getByLabelText(/^Fecha/));
+
+    const grid = await screen.findByRole("grid");
+    expect(grid.closest('[data-slot="popover-content"]')).not.toBeNull();
   });
 });

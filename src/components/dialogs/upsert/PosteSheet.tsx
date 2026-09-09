@@ -33,6 +33,8 @@ import MapSearch from "../../map/MapSearch";
 import { Loader2Icon } from "lucide-react";
 import { SonarMarker } from "../../map/SonarMarker";
 import { ImageDropzone } from "../../ui/image-dropzone";
+import { flatControl } from "../../ui/control-surface";
+import { cn } from "../../../lib/utils";
 
 interface Props {
   poste?: PosteInterface | null;
@@ -489,7 +491,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
                     value={data.lat || ""}
                     onChange={(e) => { setData((d) => ({ ...d, lat: parseFloat(e.target.value) || 0 })); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
                     disabled={isEditing && !canEdit}
-                    className="h-5 text-xs border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
                   />
                 </div>
                 <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
@@ -501,7 +503,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
                     value={data.lng || ""}
                     onChange={(e) => { setData((d) => ({ ...d, lng: parseFloat(e.target.value) || 0 })); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
                     disabled={isEditing && !canEdit}
-                    className="h-5 text-xs border-0 bg-transparent p-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
+                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
                   />
                 </div>
               </div>

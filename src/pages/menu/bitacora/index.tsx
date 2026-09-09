@@ -395,11 +395,11 @@ const BitacoraPage = () => {
         <div className="flex flex-wrap gap-2 items-end">
           <div className="flex flex-col gap-1 flex-1 min-w-36">
             <span className="text-xs text-muted-foreground">Desde</span>
-            <DatePicker value={from} onSelect={setFrom} placeholder="Desde" className="w-full h-8" />
+            <DatePicker ariaLabel="Desde" value={from} onSelect={setFrom} placeholder="Desde" className="w-full h-8" />
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-36">
             <span className="text-xs text-muted-foreground">Hasta</span>
-            <DatePicker value={to} onSelect={setTo} placeholder="Hasta" className="w-full h-8" />
+            <DatePicker ariaLabel="Hasta" value={to} onSelect={setTo} placeholder="Hasta" className="w-full h-8" />
           </div>
           <div className="flex flex-col gap-1 flex-1 min-w-40">
             <span className="text-xs text-muted-foreground">Usuario</span>
