@@ -91,6 +91,33 @@ export default defineConfig(({ mode }) => ({
   define: {
     __APP_VERSION__: JSON.stringify(version),
   },
+  /**
+   * Fail instead of moving to the next free port.
+   *
+   * Vite's default is to shrug: 5173 taken, start on 5174, print the new
+   * address and carry on. That is fine for a static site and wrong here,
+   * because 5173 is not an arbitrary number — it is the one origin the API
+   * grants credentialed access to (`CORS_ORIGIN` in `api/.env`, read by
+   * `allowedOrigins` in `api/src/config/security.ts`).
+   *
+   * A second dev server on 5174 therefore serves an application that can
+   * never authenticate, and does it silently in the worst possible way. The
+   * session cookie still travels — cookies ignore ports — so the API answers
+   * `GET /api/auth/me` with a clean 200 and logs it as one. The browser then
+   * discards that response before any code sees it, because it carries no
+   * `Access-Control-Allow-Origin` for 5174. To the app that is indistinguishable
+   * from a dead server: it asks whether there is a session, hears nothing,
+   * concludes there is none, and shows the login form to somebody who is
+   * logged in. Nothing turns red at either end.
+   *
+   * `strictPort` turns that into "Port 5173 is already in use" at startup,
+   * which is the truth and takes ten seconds to act on. The alternative fix —
+   * adding 5174 to `CORS_ORIGIN` — makes the broken twin work rather than
+   * stopping it from existing, and widens the credentialed origin list to do it.
+   */
+  server: {
+    strictPort: true,
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "./src"),
