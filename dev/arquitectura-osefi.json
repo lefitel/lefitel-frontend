@@ -6,7 +6,7 @@
     "quality_profile": "showcase",
     "viewBox": [
       1280,
-      560
+      558
     ],
     "views": [
       {
@@ -19,17 +19,29 @@
           "api",
           "postgres"
         ],
-        "note": "Del navegador a la base de datos: dos dominios, dos alojamientos distintos."
+        "note": "Del navegador a la base de datos: dos dominios y dos alojamientos distintos."
       },
       {
         "id": "fotografias",
         "label": "Fotografías de campo",
         "focus": [
           "usuarios",
+          "proxy",
           "api",
           "fotos"
         ],
-        "note": "Se guardan en un volumen del host y sólo se sirven con la sesión puesta."
+        "note": "No pasan por Vercel: el navegador las pide al dominio de la API, con la sesión puesta."
+      },
+      {
+        "id": "externos",
+        "label": "Servicios de fuera",
+        "focus": [
+          "vercel",
+          "mapas",
+          "ors",
+          "correo"
+        ],
+        "note": "Cuatro. Solo OpenRouteService pide clave, y esa clave viaja dentro del bundle."
       },
       {
         "id": "despliegue",
@@ -38,7 +50,16 @@
           "build",
           "api"
         ],
-        "note": "La imagen no se publica si fallan el linter o los tests; las migraciones corren antes de arrancar."
+        "note": "Sin linter y tests en verde no hay imagen; las migraciones corren antes de arrancar."
+      },
+      {
+        "id": "sesion",
+        "label": "Detrás de la sesión",
+        "focus": [
+          "api",
+          "fotos"
+        ],
+        "note": "Todo lo de dentro exige cookie de sesión, las fotografías incluidas."
       }
     ]
   },
@@ -48,28 +69,59 @@
       "type": "external",
       "label": "Personal de Osefi",
       "sublabel": "navegador y PWA",
+      "tag": "se instala como app en el móvil",
       "pos": [
-        40,
-        230
+        73,
+        274
       ],
       "size": [
-        150,
-        80
+        142,
+        69
       ]
     },
     {
       "id": "mapas",
       "type": "external",
-      "label": "Mapas y direcciones",
+      "label": "Teselas y direcciones",
       "sublabel": "OpenFreeMap · Nominatim",
-      "tag": "sin clave de API",
+      "tag": "datos de OpenStreetMap, sin clave",
       "pos": [
-        250,
-        60
+        270,
+        22
       ],
       "size": [
-        175,
-        80
+        174,
+        69
+      ]
+    },
+    {
+      "id": "ors",
+      "type": "external",
+      "label": "OpenRouteService",
+      "sublabel": "rutas por carretera",
+      "tag": "clave VITE_ORS_API_KEY en el bundle",
+      "pos": [
+        485,
+        22
+      ],
+      "size": [
+        174,
+        69
+      ]
+    },
+    {
+      "id": "correo",
+      "type": "external",
+      "label": "Cadena de correo",
+      "sublabel": "cinco, sin desplegar",
+      "tag": "cupo diario y reserva del 25%",
+      "pos": [
+        997,
+        22
+      ],
+      "size": [
+        174,
+        69
       ]
     },
     {
@@ -77,30 +129,15 @@
       "type": "cloud",
       "label": "Vercel",
       "sublabel": "www.osefi.net",
-      "tag": "React 19 + Vite",
+      "tag": "React 19 · Vite 8 · reescritura SPA",
       "brand": "vercel",
       "pos": [
-        250,
-        230
+        270,
+        151
       ],
       "size": [
-        175,
-        80
-      ]
-    },
-    {
-      "id": "correo",
-      "type": "external",
-      "label": "Cadena de correo",
-      "sublabel": "Resend + 4 por SMTP",
-      "tag": "cupo diario por proveedor",
-      "pos": [
-        1020,
-        60
-      ],
-      "size": [
-        175,
-        80
+        174,
+        69
       ]
     },
     {
@@ -108,14 +145,14 @@
       "type": "cloud",
       "label": "Proxy de Coolify",
       "sublabel": "termina el TLS",
-      "tag": "trust proxy 1",
+      "tag": "trust proxy 1 · HSTS de 2 años",
       "pos": [
-        510,
-        230
+        521,
+        274
       ],
       "size": [
-        165,
-        80
+        160,
+        69
       ]
     },
     {
@@ -123,30 +160,31 @@
       "type": "backend",
       "label": "API Express 5",
       "sublabel": "api.osefi.net · Node 24",
+      "tag": "pool de 15 · subidas de 5 MB",
       "brand": "node-js",
       "pos": [
-        760,
-        230
+        759,
+        274
       ],
       "size": [
-        175,
-        80
+        174,
+        69
       ]
     },
     {
       "id": "postgres",
       "type": "database",
       "label": "PostgreSQL",
-      "sublabel": "esquema por migraciones",
-      "tag": "DATABASE_URL",
+      "sublabel": "servicio de Coolify",
+      "tag": "esquema solo por migraciones",
       "brand": "postgresql",
       "pos": [
-        1020,
-        230
+        997,
+        274
       ],
       "size": [
-        175,
-        80
+        174,
+        69
       ]
     },
     {
@@ -154,14 +192,15 @@
       "type": "cloud",
       "label": "Imagen Docker",
       "sublabel": "linter y tests",
+      "tag": "node:24-alpine · migra antes",
       "brand": "docker",
       "pos": [
-        510,
-        380
+        521,
+        402
       ],
       "size": [
-        165,
-        84
+        160,
+        73
       ]
     },
     {
@@ -169,14 +208,14 @@
       "type": "database",
       "label": "Fotografías de campo",
       "sublabel": "volumen persistente",
-      "tag": "IMAGES_DIR",
+      "tag": "IMAGES_DIR · sin él, se borran",
       "pos": [
-        760,
-        380
+        759,
+        402
       ],
       "size": [
-        175,
-        84
+        174,
+        73
       ]
     }
   ],
@@ -209,14 +248,35 @@
       "from": "usuarios",
       "to": "vercel",
       "label": "HTTPS",
-      "variant": "emphasis"
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "usuarios-fotos",
+      "from": "usuarios",
+      "to": "proxy",
+      "label": "fotos, sin pasar por Vercel",
+      "fromSide": "right",
+      "toSide": "left"
     },
     {
       "id": "vercel-mapas",
       "from": "vercel",
       "to": "mapas",
       "label": "teselas y búsqueda",
-      "variant": "dashed"
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "vercel-ors",
+      "from": "vercel",
+      "to": "ors",
+      "label": "rutas por carretera",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "bottom"
     },
     {
       "id": "vercel-proxy",
@@ -224,7 +284,8 @@
       "to": "proxy",
       "label": "XHR con cookie de sesión",
       "variant": "emphasis",
-      "labelDy": 64
+      "fromSide": "bottom",
+      "toSide": "top"
     },
     {
       "id": "proxy-api",
@@ -243,7 +304,7 @@
       "from": "api",
       "to": "fotos",
       "label": "guarda y sirve",
-      "labelDy": 55
+      "labelDy": 50
     },
     {
       "id": "api-correo",
@@ -255,8 +316,8 @@
       "toSide": "left",
       "via": [
         [
-          847.5,
-          100
+          846,
+          56.5
         ]
       ]
     },
@@ -274,7 +335,7 @@
       "title": "El borde",
       "items": [
         "Vercel sirve www.osefi.net; toda dirección se reescribe a index.html",
-        "Se instala como app en el móvil; los mapas no gastan clave de API"
+        "Las fotos no pasan por Vercel: el navegador las pide a api.osefi.net"
       ]
     },
     {
@@ -289,7 +350,7 @@
       "dot": "violet",
       "title": "Los datos",
       "items": [
-        "PostgreSQL con Sequelize 6; nada de sync automático al arrancar",
+        "PostgreSQL como servicio de Coolify, en la misma máquina que la API",
         "Las fotos viven en un volumen del host, no dentro de la imagen"
       ]
     },
@@ -297,8 +358,8 @@
       "dot": "rose",
       "title": "La puerta",
       "items": [
-        "Cookie __Host-: sólo por HTTPS y atada a su propio dominio",
-        "Segundo factor: TOTP, passkeys, código por correo y rescate"
+        "Cookie __Host- y HSTS de dos años; 10 intentos por cuenta cada cuarto de hora",
+        "Segundo factor por TOTP, passkeys o correo — el correo, aún sin desplegar"
       ]
     }
   ]

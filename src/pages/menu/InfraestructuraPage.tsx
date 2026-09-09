@@ -19,11 +19,198 @@
  * system: the picture is as true as the day it was generated.
  * `web/dev/arquitectura-osefi.json` is its source — the diagram is rebuilt
  * from it with Archify, and `web/dev/README.md` has the command.
+ *
+ * **Why the table below exists at all.** Archify bounds how much text a node
+ * can carry: a node's fine-detail tag has to fit the node's own width at six
+ * legible pixels, which is about forty-five characters. Everything true about
+ * this system that does not fit in forty-five characters lives here instead,
+ * with the file that proves it named beside it, so a reader can check rather
+ * than believe.
  */
 const DIAGRAM_URL = "/dev/arquitectura-osefi.html";
 
+/** The day every figure below was read off the working tree. */
+const VERIFICADO = "8 de septiembre de 2026";
+
+interface Dato {
+  que: string;
+  detalle: string;
+  fuente: string;
+}
+
+interface Bloque {
+  titulo: string;
+  nota?: string;
+  datos: Dato[];
+}
+
+const BLOQUES: Bloque[] = [
+  {
+    titulo: "Dónde vive cada cosa",
+    datos: [
+      {
+        que: "www.osefi.net",
+        detalle: "Vercel. React 19 y Vite 8, y toda dirección se reescribe a index.html.",
+        fuente: "web/vercel.json",
+      },
+      {
+        que: "api.osefi.net",
+        detalle:
+          "VPS propio gestionado con Coolify. Contenedor Docker sobre node:24-alpine, escuchando en el 3000; el proxy de Coolify termina el TLS por delante.",
+        fuente: "api/Dockerfile",
+      },
+      {
+        que: "PostgreSQL",
+        detalle:
+          "Servicio de Coolify, en la misma máquina que la API. Esto no se puede deducir del código: la confirmó Isaias.",
+        fuente: "confirmado a mano",
+      },
+      {
+        que: "Fotografías de campo",
+        detalle:
+          "Un volumen del host montado por Coolify. No está declarado con VOLUME a propósito: eso crearía un volumen anónimo por arranque, que parece persistencia y no lo es.",
+        fuente: "api/Dockerfile",
+      },
+    ],
+  },
+  {
+    titulo: "Servicios de fuera",
+    nota: "Cuatro, y solo uno pide clave.",
+    datos: [
+      {
+        que: "tiles.openfreemap.org",
+        detalle: "Las teselas del mapa, sobre datos de OpenStreetMap. Sin clave de API.",
+        fuente: "web/public/map-styles/basic.json",
+      },
+      {
+        que: "nominatim.openstreetmap.org",
+        detalle: "Búsqueda de direcciones sobre el mapa. Sin clave.",
+        fuente: "web/src/components/map/MapSearch.tsx",
+      },
+      {
+        que: "api.openrouteservice.org",
+        detalle:
+          "Rutas por carretera entre puntos. Con clave, y la clave la pone el navegador — ver los riesgos, más abajo.",
+        fuente: "web/src/lib/orsRoute.ts",
+      },
+      {
+        que: "Correo",
+        detalle:
+          "Cinco proveedores en cadena con relevo: resend, mailjet, smtp2go, mailtrap y elastic. Cada uno con cupo diario, y un cuarto de ese cupo reservado al código de acceso y a los avisos de seguridad. Hoy no hay ninguno configurado en producción.",
+        fuente: "api/src/config/security.ts",
+      },
+    ],
+  },
+  {
+    titulo: "Lo que el servidor exige para arrancar en producción",
+    nota: "Si falta cualquiera de estas, el proceso escribe cuál falta y se muere. No arranca a medias.",
+    datos: [
+      {
+        que: "Ocho variables",
+        detalle:
+          "CORS_ORIGIN, COOKIE_NAME, COOKIE_SECURE, MAIL_PROVIDERS, MAIL_FROM, MFA_ENCRYPTION_KEY_ACTIVE, WEBAUTHN_RP_ID y WEBAUTHN_ORIGIN.",
+        fuente: "api/src/config/security.ts → requiredEnv",
+      },
+      {
+        que: "Las dos de passkeys",
+        detalle:
+          "WEBAUTHN_RP_ID y WEBAUTHN_ORIGIN están en esa lista por un motivo que ninguna otra tiene: no se pueden corregir después. Una passkey registrada bajo un identificador equivocado deja de existir en cuanto se corrige, y hay que volver a darla de alta en cada dispositivo y por cada persona.",
+        fuente: "api/src/config/security.ts",
+      },
+      {
+        que: "La base de datos",
+        detalle:
+          "DATABASE_URL, o bien las cinco PG_* juntas. Manda la que esté completa, no el NODE_ENV; la elegida se escribe en la primera línea del log.",
+        fuente: "api/src/database/sequelize.ts",
+      },
+      {
+        que: "En Vercel",
+        detalle: "VITE_PROD_API_URL, VITE_DEV_API_URL y VITE_ORS_API_KEY.",
+        fuente: "web/src/api/url.ts",
+      },
+    ],
+  },
+  {
+    titulo: "Las cifras",
+    datos: [
+      {
+        que: "15 conexiones",
+        detalle:
+          "El tope del pool contra Postgres. El de fábrica eran 5, y cinco informes a la vez dejaban sin conexión al resto de la aplicación, login incluido.",
+        fuente: "api/src/database/sequelize.ts",
+      },
+      {
+        que: "5 MB por imagen",
+        detalle: "Máximo por fotografía subida.",
+        fuente: "api/src/routes/files.routes.ts",
+      },
+      {
+        que: "100 y 10, cada 15 minutos",
+        detalle: "Intentos de login por IP, y por la pareja cuenta más IP.",
+        fuente: "api/src/config/security.ts",
+      },
+      {
+        que: "Dos años de HSTS",
+        detalle: "63.072.000 segundos, con subdominios incluidos.",
+        fuente: "api/src/config/security.ts",
+      },
+      {
+        que: "Dos barridos diarios",
+        detalle:
+          "Sesiones caducadas y dispositivos recordados, en dos temporizadores separados para que el fallo de uno no se lleve al otro.",
+        fuente: "api/src/index.ts",
+      },
+    ],
+  },
+  {
+    titulo: "Las puertas del despliegue",
+    datos: [
+      {
+        que: "Linter y tests",
+        detalle:
+          "La imagen no llega a construirse si falla cualquiera de los dos. Los tests corren con un DATABASE_URL y un CORS_ORIGIN falsos que no salen de esa línea del Dockerfile.",
+        fuente: "api/Dockerfile",
+      },
+      {
+        que: "Migraciones",
+        detalle:
+          "Van como comando previo al despliegue, no encadenadas al arranque. Encadenadas, una migración que fallaba dejaba la API caída reiniciándose para siempre; así, el despliegue se aborta y sigue en pie la versión anterior.",
+        fuente: "api/Dockerfile",
+      },
+      {
+        que: "El volumen",
+        detalle: "Sin la persistencia montada, cada despliegue borra las fotografías subidas desde el anterior.",
+        fuente: "api/Dockerfile",
+      },
+    ],
+  },
+];
+
+const RIESGOS: { nivel: "alto" | "medio"; texto: string }[] = [
+  {
+    nivel: "alto",
+    texto:
+      "MAIL_PROVIDERS es obligatoria en producción y hoy no hay correo configurado. El siguiente despliegue del servidor no arrancará hasta que esté puesta, con al menos un proveedor con sus credenciales completas.",
+  },
+  {
+    nivel: "alto",
+    texto:
+      "La clave de OpenRouteService viaja dentro del bundle público. Las variables VITE_* se incrustan literales al compilar, así que cualquiera que abra el JavaScript de www.osefi.net puede leerla y gastar la cuota. Para que sea un secreto, la llamada tiene que pasar por un endpoint propio que ponga la clave del lado del servidor.",
+  },
+  {
+    nivel: "medio",
+    texto:
+      "Copias de seguridad: no consta nada en el repositorio, ni de la base de datos ni del volumen de fotografías. Puede estar configurado en Coolify, que es lo único que queda por mirar.",
+  },
+  {
+    nivel: "medio",
+    texto:
+      "web/public/_redirects es un fichero de Netlify. Vercel no lo lee — quien reescribe las direcciones es vercel.json — así que quien lo edite creyendo que configura algo no configurará nada.",
+  },
+];
+
 const InfraestructuraPage = () => (
-  <div className="flex flex-1 flex-col min-h-0 w-full gap-4 pt-4 px-6 md:px-8 pb-6 md:pb-8 animate-in fade-in duration-500">
+  <div className="flex flex-col w-full gap-8 pt-4 px-6 md:px-8 pb-6 md:pb-8 animate-in fade-in duration-500">
     <div>
       <h1 className="text-2xl font-bold tracking-tight text-foreground">Infraestructura</h1>
       <p className="text-muted-foreground">
@@ -32,18 +219,78 @@ const InfraestructuraPage = () => (
       </p>
     </div>
 
-    {/* `flex-1 min-h-0` so it takes the room the header leaves, and a floor in
-        `rem` so it never collapses to nothing on a short window — the diagram
-        needs real height to stay readable, and `<main>` already scrolls.
+    {/* A fixed height rather than `flex-1`: the page has content underneath now, so a
+        frame that grew to fill the window would push the table off the bottom on every
+        screen. The diagram carries its own zoom, and `<main>` already scrolls.
 
-        The frame carries its own light/dark switch and does not follow the
-        app's: it is a self-contained document with its own viewer inside,
-        which is the same property that lets it be opened straight from disk. */}
+        The frame keeps its own light/dark switch and does not follow the app's: it is a
+        self-contained document with its own viewer inside, which is the same property
+        that lets it be opened straight from disk. */}
     <iframe
       src={DIAGRAM_URL}
       title="Diagrama de la infraestructura de Osefi"
-      className="flex-1 min-h-[40rem] w-full rounded-lg border border-border bg-background"
+      className="h-168 w-full shrink-0 rounded-lg border border-border bg-background"
     />
+
+    <section className="space-y-8">
+      <div>
+        <h2 className="text-lg font-semibold tracking-tight text-foreground">
+          El detalle que no cabe en el dibujo
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Cada dato con el fichero que lo prueba, para que se pueda comprobar en vez de creer.
+        </p>
+      </div>
+
+      {BLOQUES.map((bloque) => (
+        <div key={bloque.titulo} className="space-y-3">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              {bloque.titulo}
+            </h3>
+            {bloque.nota && <p className="text-sm text-foreground/80">{bloque.nota}</p>}
+          </div>
+          <dl className="space-y-3 border-l-2 border-border/60 pl-4">
+            {bloque.datos.map((dato) => (
+              <div key={dato.que} className="grid gap-x-6 gap-y-1 lg:grid-cols-[14rem_1fr]">
+                <dt className="text-sm font-medium text-foreground">{dato.que}</dt>
+                <dd className="text-sm text-muted-foreground">
+                  {dato.detalle}{" "}
+                  <span className="whitespace-nowrap font-mono text-xs text-foreground/50">
+                    {dato.fuente}
+                  </span>
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      ))}
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Lo que falta y lo que preocupa
+        </h3>
+        <ul className="space-y-3 border-l-2 border-border/60 pl-4">
+          {RIESGOS.map((riesgo) => (
+            <li key={riesgo.texto} className="flex gap-3 text-sm">
+              <span
+                className={`mt-1.5 size-1.5 shrink-0 rounded-full ${
+                  riesgo.nivel === "alto" ? "bg-red-500" : "bg-amber-500"
+                }`}
+                aria-hidden
+              />
+              <span className="sr-only">{riesgo.nivel === "alto" ? "Riesgo alto:" : "Riesgo medio:"}</span>
+              <span className="text-muted-foreground">{riesgo.texto}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="border-t border-border/40 pt-4 text-xs text-muted-foreground">
+        Comprobado contra el árbol de trabajo el {VERIFICADO}. Las cifras envejecen en días
+        porque hay varias sesiones tocando estos repositorios: si algo no cuadra, gana el código.
+      </p>
+    </section>
   </div>
 );
 
