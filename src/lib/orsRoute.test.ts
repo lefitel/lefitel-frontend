@@ -23,6 +23,23 @@ describe("fetchOrsRoute", () => {
     expect(res).toEqual([[-16.5, -68.1]]);
   });
 
+  it("recorta los intermedios al tope de ORS y conserva los extremos", async () => {
+    // El servidor rechaza más de cincuenta puntos, que es el límite del
+    // proveedor. Hasta ahora solo el informe de recorrido recortaba: las otras
+    // tres pantallas mandaban el tramo entero, así que un tramo con más de 48
+    // postes NUNCA dibujaba carretera, y nadie sabía por qué. Recortar aquí
+    // dentro es lo que hace imposible olvidarlo en la cuarta pantalla.
+    vi.mocked(axios.post).mockResolvedValue({ data: { coordenadas: [], motivo: null } });
+    const muchos = Array.from({ length: 120 }, (_, i) => [-68 + i * 0.001, -16]);
+
+    await fetchOrsRoute(muchos);
+
+    const enviados = (vi.mocked(axios.post).mock.calls.at(-1)![1] as { waypoints: number[][] }).waypoints;
+    expect(enviados.length).toBeLessThanOrEqual(50);
+    expect(enviados[0]).toEqual(muchos[0]);
+    expect(enviados.at(-1)).toEqual(muchos.at(-1));
+  });
+
   it("devuelve null cuando el servidor dice que no hay trazado", async () => {
     // El servidor contesta 200 con `coordenadas: null` — «no hay ruta» es una
     // respuesta correcta. Las pantallas leen ese null y pintan la recta.

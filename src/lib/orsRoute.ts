@@ -23,13 +23,44 @@ import { urlApi } from "../api/url";
  * @returns          `[lat, lng]` pairs for the map, or `null` when there is no
  *                   route — every caller draws its straight-line fallback then.
  */
+/**
+ * How many poles between the two ends may travel with the request.
+ *
+ * Forty-eight, plus the two ends, is the fifty OpenRouteService accepts per
+ * directions request — the provider's published limit, and the same number the
+ * server checks before spending a call to be told 400.
+ */
+const MAX_INTERMEDIOS = 48;
+
+/**
+ * The tramo as ORS will accept it: both ends, and an even sample of the poles
+ * in between when there are too many.
+ *
+ * **This lived in `ReportRecorrido.tsx` and only there**, which is why the pole
+ * detail, the incident detail and the pole form never drew a real road route
+ * for a tramo of more than forty-eight poles: they sent the lot, ORS refused
+ * the whole request, and the screen fell back to a straight line with nothing
+ * anywhere saying why. Doing it here is what makes it impossible for the next
+ * screen to forget.
+ *
+ * The sampling formula is the report's own, unchanged, so the line that report
+ * has been drawing stays exactly the same line.
+ */
+function recortarIntermedios(waypoints: number[][]): number[][] {
+  if (waypoints.length <= 2) return waypoints;
+  const medio = waypoints.slice(1, -1);
+  if (medio.length <= MAX_INTERMEDIOS) return waypoints;
+  const muestra = medio.filter((_, i) => i % Math.ceil(medio.length / MAX_INTERMEDIOS) === 0);
+  return [waypoints[0], ...muestra, waypoints[waypoints.length - 1]];
+}
+
 export async function fetchOrsRoute(
   waypoints: number[][],
 ): Promise<[number, number][] | null> {
   try {
     const { data } = await axios.post<{ coordenadas: [number, number][] | null }>(
       `${urlApi}ruta/query`,
-      { waypoints },
+      { waypoints: recortarIntermedios(waypoints) },
     );
     return data.coordenadas ?? null;
   } catch {

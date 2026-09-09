@@ -165,8 +165,8 @@ const BLOQUES: Bloque[] = [
       {
         que: "50 puntos por trazado",
         detalle:
-          "El tope documentado de OpenRouteService. El servidor lo comprueba antes de llamar, así que un trazado demasiado largo ya no gasta una petición de la cuota para recibir un 400.",
-        fuente: "api/src/routing/waypoints.ts",
+          "El tope documentado de OpenRouteService: los dos extremos y 48 postes intermedios. El cliente muestrea los intermedios antes de pedir y el servidor lo comprueba antes de llamar. Ese recorte vivía solo en el informe de recorrido, así que las otras tres pantallas mandaban el tramo entero y un tramo de más de 48 postes no dibujaba carretera nunca — sin ningún aviso.",
+        fuente: "web/src/lib/orsRoute.ts · api/src/routing/waypoints.ts",
       },
       {
         que: "Dos años de HSTS",

@@ -239,11 +239,12 @@ const ReportRecorridoSec = () => {
                     [b.lat, b.lng],
                 ];
                 try {
-                    const MAX_INTERMEDIATES = 48;
-                    const intermediates = sorted.length > MAX_INTERMEDIATES
-                        ? sorted.filter((_, i) => i % Math.ceil(sorted.length / MAX_INTERMEDIATES) === 0)
-                        : sorted;
-                    const waypoints = [[a.lng, a.lat], ...intermediates.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
+                    // El recorte a 48 intermedios vivía aquí y solo aquí, que es
+                    // por qué las otras tres pantallas nunca dibujaban carretera
+                    // en un tramo largo. Ahora lo hace `fetchOrsRoute` con esta
+                    // misma fórmula y sobre esta misma lista, así que la línea de
+                    // este informe no cambia.
+                    const waypoints = [[a.lng, a.lat], ...sorted.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
                     const route = await fetchOrsRoute(waypoints);
                     if (seq !== runSeq.current) return;
                     setRoutePath(route ?? fallback);
