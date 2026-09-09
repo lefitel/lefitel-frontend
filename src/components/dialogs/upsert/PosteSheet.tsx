@@ -172,8 +172,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
           [b.lat, b.lng],
         ];
         const waypoints = [[a.lng, a.lat], ...sorted.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
-        const orsKey = import.meta.env.VITE_ORS_API_KEY as string;
-        fetchOrsRoute(waypoints, orsKey)
+        fetchOrsRoute(waypoints)
           .then((route) => setRoutePath(route ?? fallback))
           .catch(() => setRoutePath(fallback));
       })

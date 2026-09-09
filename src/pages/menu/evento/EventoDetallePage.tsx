@@ -109,8 +109,7 @@ export default function EventoDetallePage() {
           ...sorted.map((p) => [p.lng, p.lat]),
           [b.lng, b.lat],
         ];
-        const orsKey = import.meta.env.VITE_ORS_API_KEY as string;
-        return fetchOrsRoute(waypoints, orsKey)
+        return fetchOrsRoute(waypoints)
           .then((route) => setRoutePath(route ?? fallback))
           .catch(() => setRoutePath(fallback));
       })

@@ -75,7 +75,7 @@ const BLOQUES: Bloque[] = [
   },
   {
     titulo: "Servicios de fuera",
-    nota: "Cuatro, y solo uno pide clave.",
+    nota: "Cuatro. Dos los pide el navegador —y no llevan clave— y dos los pide la API, con las claves guardadas en el servidor.",
     datos: [
       {
         que: "tiles.openfreemap.org",
@@ -90,8 +90,8 @@ const BLOQUES: Bloque[] = [
       {
         que: "api.openrouteservice.org",
         detalle:
-          "Rutas por carretera entre puntos. Con clave, y la clave la pone el navegador — ver los riesgos, más abajo.",
-        fuente: "web/src/lib/orsRoute.ts",
+          "Rutas por carretera entre puntos. Con clave, y desde ahora la pone el servidor: el navegador pide POST /api/ruta/query y no sale de aquí. Es el único servicio de fuera que llama la API además del correo.",
+        fuente: "api/src/routing/orsClient.ts",
       },
       {
         que: "Correo",
@@ -118,6 +118,12 @@ const BLOQUES: Bloque[] = [
         fuente: "api/src/config/security.ts",
       },
       {
+        que: "ORS_API_KEY, aparte",
+        detalle:
+          "La clave del trazado por carretera, y a propósito FUERA de la lista de arriba: si falta, el servidor arranca igual y solo /api/ruta/query contesta 503. Una función sin configurar apaga esa función, no el ERP — la misma decisión que el segundo factor por TOTP.",
+        fuente: "api/src/controllers/ruta.controller.ts",
+      },
+      {
         que: "La base de datos",
         detalle:
           "DATABASE_URL, o bien las cinco PG_* juntas. Manda la que esté completa, no el NODE_ENV; la elegida se escribe en la primera línea del log.",
@@ -125,7 +131,8 @@ const BLOQUES: Bloque[] = [
       },
       {
         que: "En Vercel",
-        detalle: "VITE_PROD_API_URL, VITE_DEV_API_URL y VITE_ORS_API_KEY.",
+        detalle:
+          "VITE_PROD_API_URL y VITE_DEV_API_URL. VITE_ORS_API_KEY ya no se usa: bórrala del panel, porque cualquier valor VITE_* acaba escrito en el JavaScript público.",
         fuente: "web/src/api/url.ts",
       },
     ],
@@ -148,6 +155,18 @@ const BLOQUES: Bloque[] = [
         que: "100 y 10, cada 15 minutos",
         detalle: "Intentos de login por IP, y por la pareja cuenta más IP.",
         fuente: "api/src/config/security.ts",
+      },
+      {
+        que: "20 trazados por minuto",
+        detalle:
+          "Y por persona. Cubo propio, no el de las consultas: lo escaso aquí no son filas de la base sino la cuota del proveedor de rutas, que es de la empresa entera.",
+        fuente: "api/src/middleware/limiters.ts",
+      },
+      {
+        que: "50 puntos por trazado",
+        detalle:
+          "El tope documentado de OpenRouteService. El servidor lo comprueba antes de llamar, así que un trazado demasiado largo ya no gasta una petición de la cuota para recibir un 400.",
+        fuente: "api/src/routing/waypoints.ts",
       },
       {
         que: "Dos años de HSTS",
@@ -193,9 +212,9 @@ const RIESGOS: { nivel: "alto" | "medio"; texto: string }[] = [
       "MAIL_PROVIDERS es obligatoria en producción y hoy no hay correo configurado. El siguiente despliegue del servidor no arrancará hasta que esté puesta, con al menos un proveedor con sus credenciales completas.",
   },
   {
-    nivel: "alto",
+    nivel: "medio",
     texto:
-      "La clave de OpenRouteService viaja dentro del bundle público. Las variables VITE_* se incrustan literales al compilar, así que cualquiera que abra el JavaScript de www.osefi.net puede leerla y gastar la cuota. Para que sea un secreto, la llamada tiene que pasar por un endpoint propio que ponga la clave del lado del servidor.",
+      "La clave de OpenRouteService ya no viaja en el bundle: la llamada pasa por POST /api/ruta/query y la clave vive en el servidor. Pero el código no des-publica lo ya publicado. Quedan tres cosas, y son tuyas: revocar la clave vieja en OpenRouteService y sacar una nueva, ponerla como ORS_API_KEY en Coolify, y borrar VITE_ORS_API_KEY de Vercel. Hasta el siguiente despliegue del frontend, el bundle que se sirve sigue llevando la clave antigua dentro.",
   },
   {
     nivel: "medio",

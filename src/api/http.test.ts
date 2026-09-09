@@ -143,12 +143,28 @@ describe("the reach of a global default", () => {
     // that answers `Access-Control-Allow-Origin: *`, which a browser refuses
     // outright: every route on the map would stop drawing, or the place search
     // would stop returning results.
+    // **`lib/orsRoute.ts` used to be on this list and is deliberately off it.**
+    // It called OpenRouteService straight from the browser, which is the whole
+    // reason the provider's key had to ship inside the bundle. It now posts to
+    // `/api/ruta/query` on this application's own API, so axios is not merely
+    // allowed there, it is required: that request needs the session cookie and
+    // the client header like every other. The test below is what keeps the two
+    // halves of that from drifting apart.
     const thirdParty = [
-      join(__dirname, "..", "lib", "orsRoute.ts"),
       join(__dirname, "..", "components", "map", "MapSearch.tsx"),
     ];
     for (const path of thirdParty) {
       expect(readFileSync(path, "utf-8"), path).not.toMatch(/\baxios\b/);
     }
+  });
+
+  it("keeps the road-route call on our own API, where axios belongs", () => {
+    // La otra dirección, y la que de verdad protege el arreglo. Devolver este
+    // fichero a llamar a openrouteservice.org volvería a publicar la clave del
+    // proveedor dentro del bundle, y la lista de arriba —que ya no lo vigila—
+    // no diría absolutamente nada.
+    const orsRoute = readFileSync(join(__dirname, "..", "lib", "orsRoute.ts"), "utf-8");
+    expect(orsRoute).not.toMatch(/openrouteservice\.org/);
+    expect(orsRoute).toMatch(/\baxios\b/);
   });
 });

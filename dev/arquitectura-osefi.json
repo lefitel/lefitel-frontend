@@ -38,10 +38,11 @@
         "focus": [
           "vercel",
           "mapas",
+          "api",
           "ors",
           "correo"
         ],
-        "note": "Cuatro. Solo OpenRouteService pide clave, y esa clave viaja dentro del bundle."
+        "note": "Cuatro. El navegador pide mapas; la API pide rutas y manda correo, con las claves del servidor."
       },
       {
         "id": "despliegue",
@@ -99,13 +100,13 @@
       "type": "external",
       "label": "OpenRouteService",
       "sublabel": "rutas por carretera",
-      "tag": "clave VITE_ORS_API_KEY en el bundle",
+      "tag": "la clave vive en el servidor",
       "pos": [
-        485,
+        700,
         22
       ],
       "size": [
-        174,
+        130,
         69
       ]
     },
@@ -116,11 +117,11 @@
       "sublabel": "cinco, sin desplegar",
       "tag": "cupo diario y reserva del 25%",
       "pos": [
-        997,
+        850,
         22
       ],
       "size": [
-        174,
+        130,
         69
       ]
     },
@@ -270,15 +271,6 @@
       "toSide": "bottom"
     },
     {
-      "id": "vercel-ors",
-      "from": "vercel",
-      "to": "ors",
-      "label": "rutas por carretera",
-      "variant": "dashed",
-      "fromSide": "right",
-      "toSide": "bottom"
-    },
-    {
       "id": "vercel-proxy",
       "from": "vercel",
       "to": "proxy",
@@ -313,13 +305,18 @@
       "label": "código de acceso y avisos",
       "variant": "dashed",
       "fromSide": "top",
-      "toSide": "left",
+      "toSide": "bottom",
       "via": [
         [
           846,
-          56.5
+          225
+        ],
+        [
+          915,
+          225
         ]
-      ]
+      ],
+      "labelDx": 95
     },
     {
       "id": "build-api",
@@ -327,6 +324,25 @@
       "to": "api",
       "label": "publica la versión",
       "variant": "dashed"
+    },
+    {
+      "id": "api-ors",
+      "from": "api",
+      "to": "ors",
+      "label": "rutas por carretera",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "via": [
+        [
+          846,
+          170
+        ],
+        [
+          765,
+          170
+        ]
+      ]
     }
   ],
   "cards": [

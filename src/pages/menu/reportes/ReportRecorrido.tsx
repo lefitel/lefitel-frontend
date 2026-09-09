@@ -244,8 +244,7 @@ const ReportRecorridoSec = () => {
                         ? sorted.filter((_, i) => i % Math.ceil(sorted.length / MAX_INTERMEDIATES) === 0)
                         : sorted;
                     const waypoints = [[a.lng, a.lat], ...intermediates.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
-                    const orsKey = import.meta.env.VITE_ORS_API_KEY as string;
-                    const route = await fetchOrsRoute(waypoints, orsKey);
+                    const route = await fetchOrsRoute(waypoints);
                     if (seq !== runSeq.current) return;
                     setRoutePath(route ?? fallback);
                 } catch {
