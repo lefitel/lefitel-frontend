@@ -1,0 +1,305 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Osefi — infraestructura completa",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1280,
+      560
+    ],
+    "views": [
+      {
+        "id": "camino-principal",
+        "label": "Camino de una petición",
+        "focus": [
+          "usuarios",
+          "vercel",
+          "proxy",
+          "api",
+          "postgres"
+        ],
+        "note": "Del navegador a la base de datos: dos dominios, dos alojamientos distintos."
+      },
+      {
+        "id": "fotografias",
+        "label": "Fotografías de campo",
+        "focus": [
+          "usuarios",
+          "api",
+          "fotos"
+        ],
+        "note": "Se guardan en un volumen del host y sólo se sirven con la sesión puesta."
+      },
+      {
+        "id": "despliegue",
+        "label": "Despliegue",
+        "focus": [
+          "build",
+          "api"
+        ],
+        "note": "La imagen no se publica si fallan el linter o los tests; las migraciones corren antes de arrancar."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "usuarios",
+      "type": "external",
+      "label": "Personal de Osefi",
+      "sublabel": "navegador y PWA",
+      "pos": [
+        40,
+        230
+      ],
+      "size": [
+        150,
+        80
+      ]
+    },
+    {
+      "id": "mapas",
+      "type": "external",
+      "label": "Mapas y direcciones",
+      "sublabel": "OpenFreeMap · Nominatim",
+      "tag": "sin clave de API",
+      "pos": [
+        250,
+        60
+      ],
+      "size": [
+        175,
+        80
+      ]
+    },
+    {
+      "id": "vercel",
+      "type": "cloud",
+      "label": "Vercel",
+      "sublabel": "www.osefi.net",
+      "tag": "React 19 + Vite",
+      "brand": "vercel",
+      "pos": [
+        250,
+        230
+      ],
+      "size": [
+        175,
+        80
+      ]
+    },
+    {
+      "id": "correo",
+      "type": "external",
+      "label": "Cadena de correo",
+      "sublabel": "Resend + 4 por SMTP",
+      "tag": "cupo diario por proveedor",
+      "pos": [
+        1020,
+        60
+      ],
+      "size": [
+        175,
+        80
+      ]
+    },
+    {
+      "id": "proxy",
+      "type": "cloud",
+      "label": "Proxy de Coolify",
+      "sublabel": "termina el TLS",
+      "tag": "trust proxy 1",
+      "pos": [
+        510,
+        230
+      ],
+      "size": [
+        165,
+        80
+      ]
+    },
+    {
+      "id": "api",
+      "type": "backend",
+      "label": "API Express 5",
+      "sublabel": "api.osefi.net · Node 24",
+      "brand": "node-js",
+      "pos": [
+        760,
+        230
+      ],
+      "size": [
+        175,
+        80
+      ]
+    },
+    {
+      "id": "postgres",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "esquema por migraciones",
+      "tag": "DATABASE_URL",
+      "brand": "postgresql",
+      "pos": [
+        1020,
+        230
+      ],
+      "size": [
+        175,
+        80
+      ]
+    },
+    {
+      "id": "build",
+      "type": "cloud",
+      "label": "Imagen Docker",
+      "sublabel": "linter y tests",
+      "brand": "docker",
+      "pos": [
+        510,
+        380
+      ],
+      "size": [
+        165,
+        84
+      ]
+    },
+    {
+      "id": "fotos",
+      "type": "database",
+      "label": "Fotografías de campo",
+      "sublabel": "volumen persistente",
+      "tag": "IMAGES_DIR",
+      "pos": [
+        760,
+        380
+      ],
+      "size": [
+        175,
+        84
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "VPS propio, gestionado con Coolify",
+      "wraps": [
+        "proxy",
+        "api",
+        "postgres",
+        "build",
+        "fotos"
+      ],
+      "pad": 46
+    },
+    {
+      "kind": "security-group",
+      "label": "detrás de la sesión y el segundo factor",
+      "wraps": [
+        "api",
+        "fotos"
+      ],
+      "pad": 20
+    }
+  ],
+  "connections": [
+    {
+      "id": "usuarios-vercel",
+      "from": "usuarios",
+      "to": "vercel",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "vercel-mapas",
+      "from": "vercel",
+      "to": "mapas",
+      "label": "teselas y búsqueda",
+      "variant": "dashed"
+    },
+    {
+      "id": "vercel-proxy",
+      "from": "vercel",
+      "to": "proxy",
+      "label": "XHR con cookie de sesión",
+      "variant": "emphasis",
+      "labelDy": 64
+    },
+    {
+      "id": "proxy-api",
+      "from": "proxy",
+      "to": "api",
+      "label": "puerto 3000"
+    },
+    {
+      "id": "api-postgres",
+      "from": "api",
+      "to": "postgres",
+      "label": "SQL"
+    },
+    {
+      "id": "api-fotos",
+      "from": "api",
+      "to": "fotos",
+      "label": "guarda y sirve",
+      "labelDy": 55
+    },
+    {
+      "id": "api-correo",
+      "from": "api",
+      "to": "correo",
+      "label": "código de acceso y avisos",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "left",
+      "via": [
+        [
+          847.5,
+          100
+        ]
+      ]
+    },
+    {
+      "id": "build-api",
+      "from": "build",
+      "to": "api",
+      "label": "publica la versión",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "El borde",
+      "items": [
+        "Vercel sirve www.osefi.net; toda dirección se reescribe a index.html",
+        "Se instala como app en el móvil; los mapas no gastan clave de API"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "El servidor",
+      "items": [
+        "Express 5 y Node 24 en Docker, sobre un VPS propio con Coolify",
+        "Si fallan el linter o los tests, la imagen no llega a publicarse"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Los datos",
+      "items": [
+        "PostgreSQL con Sequelize 6; nada de sync automático al arrancar",
+        "Las fotos viven en un volumen del host, no dentro de la imagen"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "La puerta",
+      "items": [
+        "Cookie __Host-: sólo por HTTPS y atada a su propio dominio",
+        "Segundo factor: TOTP, passkeys, código por correo y rescate"
+      ]
+    }
+  ]
+}

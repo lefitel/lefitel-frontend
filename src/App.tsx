@@ -28,6 +28,7 @@ import PerfilPage from "./pages/menu/perfil/PerfilPage";
 // routes (`/app/segundo-factor` vs `/segundo-factor`), same class name.
 import ConfigurarSegundoFactorPage from "./pages/menu/segundoFactor/SegundoFactorPage";
 import NovedadesPage from "./pages/menu/NovedadesPage";
+import InfraestructuraPage from "./pages/menu/InfraestructuraPage";
 import SinAccesoPage from "./pages/menu/SinAccesoPage";
 import BitacoraPage from "./pages/menu/bitacora";
 import { TooltipProvider } from "./components/ui/tooltip";
@@ -217,6 +218,21 @@ const App = () => {
                   <Route path="perfil"         element={<PerfilPage />} />
                   <Route path="segundo-factor" element={<ConfigurarSegundoFactorPage />} />
                   <Route path="novedades"      element={<NovedadesPage />} />
+
+                  {/* Development only, and the guard is the whole mechanism:
+                      Vite replaces `import.meta.env.DEV` with the literal
+                      `false` when it builds, so Rollup drops this branch and
+                      the address does not exist in what Vercel serves. The
+                      matching entry in `AppSidebar.tsx` carries the same
+                      guard — hiding only the button would leave the route
+                      reachable by typing it.
+
+                      `<Routes>` skips children that are not elements on
+                      purpose, so the `false` this collapses to in production
+                      is ignored rather than an error. */}
+                  {import.meta.env.DEV && (
+                    <Route path="infraestructura" element={<InfraestructuraPage />} />
+                  )}
 
                   <Route element={<ModuleRoute modulo="postes" />}>
                     <Route path="postes"        element={<PostePage />} />

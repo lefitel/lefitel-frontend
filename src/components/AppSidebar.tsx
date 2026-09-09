@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LogOut,
   ChevronsUpDown,
+  Network,
   Smartphone,
   Sparkles,
   UserCircle,
@@ -177,6 +178,20 @@ export const AppSidebar = () => {
                     </span>
                   </Link>
                 </DropdownMenuItem>
+                {/* Development only. Same guard as the route in `App.tsx`,
+                    and both are needed: Vite turns `import.meta.env.DEV` into
+                    the literal `false` at build time, so Rollup drops this
+                    entry — but an entry dropped without its route would still
+                    leave the screen reachable by typing the address. */}
+                {import.meta.env.DEV && (
+                  <DropdownMenuItem asChild>
+                    <Link to="/app/infraestructura">
+                      <Network className="mr-2" />
+                      Infraestructura
+                      <span className="ml-auto text-xs text-muted-foreground">dev</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setLogoutOpen(true)}>
                   <LogOut className="mr-2" />
