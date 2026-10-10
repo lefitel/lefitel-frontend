@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useMap } from "@vis.gl/react-maplibre";
 import { boundsOf, hasCoords, toLngLat, type LatLng } from "./mapGeo";
 
@@ -8,14 +8,21 @@ interface FitOptions {
   fit: boolean;
   center: LatLng;
   zoom: number;
+  /**
+   * Milliseconds the view takes to travel when what it shows changes. Unset,
+   * it jumps, which is what a map that is only ever placed once wants. The
+   * first placement always jumps: a map should not open mid-flight.
+   */
+  duration?: number;
 }
 
 /**
  * Replaces the four near-identical helper components the screens each had for
  * this: fit the view to a set of points, or fall back to centring on one.
  */
-export function useFitCoords({ coords, fit, center, zoom }: FitOptions): void {
+export function useFitCoords({ coords, fit, center, zoom, duration = 0 }: FitOptions): void {
   const { current: map } = useMap();
+  const placed = useRef(false);
 
   const bounds = boundsOf(coords);
   // The screens rebuild this array on every render, so depending on it would
@@ -25,13 +32,19 @@ export function useFitCoords({ coords, fit, center, zoom }: FitOptions): void {
 
   useEffect(() => {
     if (!map) return;
+    // Somebody who asked their system for less motion gets the jump.
+    const quieto = typeof window.matchMedia === "function"
+      && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ms = placed.current && !quieto ? duration : 0;
 
     if (fit && bounds) {
-      map.fitBounds(bounds, { padding: 40, duration: 0 });
+      map.fitBounds(bounds, { padding: 40, duration: ms });
+      placed.current = true;
       return;
     }
     if (hasCoords(center)) {
-      map.flyTo({ center: toLngLat(center), zoom, duration: 0 });
+      map.flyTo({ center: toLngLat(center), zoom, duration: ms });
+      placed.current = true;
     }
   // `bounds` is derived from `boundsKey` on the same render, so the key covers it.
   // The key only belongs in the list when `fit` is actually going to read it:
@@ -52,6 +65,7 @@ export function FitView(props: {
   fit: boolean;
   center: LatLng;
   zoom: number;
+  duration?: number;
 }): null {
   useFitCoords(props);
   return null;

@@ -40,34 +40,6 @@ describe("the actions of a pole's header", () => {
     expect(screen.getByRole("button", { name: "Refrescar" })).toBeInTheDocument();
   });
 
-  it("walks to the pole either side along the stretch", async () => {
-    const user = userEvent.setup();
-    const onVerPoste = vi.fn();
-    pintar({
-      posicionEnTramo: { index: 2, total: 3 },
-      anterior: { id: 2437, name: "P51" } as unknown as PosteInterface,
-      siguiente: { id: 2439, name: "P53" } as unknown as PosteInterface,
-      onVerPoste,
-    });
-
-    await user.click(screen.getByRole("button", { name: "Poste anterior, P51" }));
-    await user.click(screen.getByRole("button", { name: "Poste siguiente, P53" }));
-
-    expect(onVerPoste.mock.calls).toEqual([[2437], [2439]]);
-    expect(screen.getByText("Posición 2 de 3")).toBeInTheDocument();
-  });
-
-  it("offers no step past the end of the stretch", () => {
-    pintar({
-      posicionEnTramo: { index: 1, total: 2 },
-      anterior: null,
-      siguiente: { id: 2439, name: "P53" } as unknown as PosteInterface,
-    });
-
-    expect(screen.queryByRole("button", { name: /Poste anterior/ })).toBeNull();
-    expect(screen.getByRole("button", { name: "Poste siguiente, P53" })).toBeInTheDocument();
-  });
-
   it("says the pole's state beside its name, and nothing for a role without incidents", () => {
     const { unmount } = render(
       <PosteDetalleHeader

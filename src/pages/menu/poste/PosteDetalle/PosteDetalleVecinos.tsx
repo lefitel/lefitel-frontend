@@ -35,7 +35,7 @@ export default function PosteDetalleVecinos({ loading, postes, posteActualId, on
   return (
     <div>
       <ul className="grid grid-cols-1 gap-2">
-        {postes.map((p, i) => {
+        {postes.map((p) => {
           const isActual = p.id === posteActualId;
           return (
             <li key={p.id as number}>
@@ -50,11 +50,6 @@ export default function PosteDetalleVecinos({ loading, postes, posteActualId, on
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${
-                    isActual ? "bg-primary-fill text-primary-foreground" : "bg-muted text-muted-foreground"
-                  }`}>
-                    {i + 1}
-                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-sm truncate">Poste {p.name}</p>

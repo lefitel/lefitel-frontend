@@ -71,7 +71,11 @@ describe("the screens that draw poles", () => {
     expect(offenders.map((f) => path.relative(SRC, f))).toEqual([]);
   });
 
-  it("the four that ask for a road route filter before they ask", () => {
+  // Each of them used to filter on its own, `.filter(hasCoords)`, before its
+  // own copy of the sort. The filtering and the order now live together in
+  // `ordenarTramo` — whose tests cover a pole with no place — so what a screen
+  // must do is go through it rather than build the waypoints by hand.
+  it("the four that ask for a road route order the stretch first, which filters", () => {
     const routed = sources(SRC).filter((file) => {
       const text = readFileSync(file, "utf8");
       return /fetchOrsRoute\(/.test(text) && !file.endsWith("orsRoute.ts");
@@ -80,7 +84,9 @@ describe("the screens that draw poles", () => {
     // If this stops being four, a screen was added or removed: look at it.
     expect(routed).toHaveLength(4);
     for (const file of routed) {
-      expect(readFileSync(file, "utf8"), path.relative(SRC, file)).toMatch(/\.filter\(hasCoords\)/);
+      const text = readFileSync(file, "utf8");
+      expect(text, path.relative(SRC, file)).toMatch(/ordenarTramo\(/);
+      expect(text, path.relative(SRC, file)).toMatch(/fetchOrsRoute\(tramo\.waypoints\)/);
     }
   });
 });

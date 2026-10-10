@@ -6,7 +6,7 @@ import BaseMap from "../../../components/map/BaseMap";
 import MapPoint from "../../../components/map/MapPoint";
 import MapLine from "../../../components/map/MapLine";
 import { FitView } from "../../../components/map/useFitCoords";
-import { fromLatLngTuple, hasCoords } from "../../../components/map/mapGeo";
+import { fromLatLngTuple } from "../../../components/map/mapGeo";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -20,6 +20,7 @@ import {
 import { getPosteByTramo } from "../../../api/Poste.api";
 import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
+import { extremosCreibles, ordenarTramo } from "../../../lib/tramoOrden";
 import {
     EventoInterface,
     PosteInterface,
@@ -226,27 +227,18 @@ const ReportRecorridoSec = () => {
             const a = listCiudad.find((c) => c.id === tramoInicial)!;
             const b = listCiudad.find((c) => c.id === tramoFinal)!;
             if (a?.lat && a?.lng && b?.lat && b?.lng) {
-                const dx = b.lat - a.lat;
-                const dy = b.lng - a.lng;
-                const sorted = postesTramo
-                    .filter(hasCoords)
-                    .sort((p1, p2) =>
-                        ((p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy) -
-                        ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
-                    );
-                const fallback: [number, number][] = [
-                    [a.lat, a.lng],
-                    ...sorted.map((p): [number, number] => [p.lat, p.lng]),
-                    [b.lat, b.lng],
-                ];
+                // El orden de los postes lo da `ordenarTramo`, la misma función
+                // que usan las otras tres pantallas que dibujan un tramo. Antes
+                // se ordenaba aquí, proyectando sobre la recta entre ciudades,
+                // y con una ciudad mal situada la línea salía enredada.
+                const tramo = ordenarTramo(postesTramo, a, b);
+                const fallback = tramo.linea;
                 try {
                     // El recorte a 48 intermedios vivía aquí y solo aquí, que es
                     // por qué las otras tres pantallas nunca dibujaban carretera
                     // en un tramo largo. Ahora lo hace `fetchOrsRoute` con esta
-                    // misma fórmula y sobre esta misma lista, así que la línea de
-                    // este informe no cambia.
-                    const waypoints = [[a.lng, a.lat], ...sorted.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
-                    const route = await fetchOrsRoute(waypoints);
+                    // misma fórmula.
+                    const route = await fetchOrsRoute(tramo.waypoints);
                     if (seq !== runSeq.current) return;
                     setRoutePath(route ?? fallback);
                 } catch {
@@ -297,8 +289,9 @@ const ReportRecorridoSec = () => {
     const posteMapMarkers = uniquePostes.filter((p) => (p.lat ?? 0) !== 0 && (p.lng ?? 0) !== 0);
 
     const boundsCoords: [number, number][] = [
-        ...(ciudadA?.lat && ciudadA?.lng ? [[ciudadA.lat, ciudadA.lng] as [number, number]] : []),
-        ...(ciudadB?.lat && ciudadB?.lng ? [[ciudadB.lat, ciudadB.lng] as [number, number]] : []),
+        // Solo las ciudades que están cerca del tramo: una guardada con una
+        // posición de relleno haría que el mapa encuadrara medio planeta.
+        ...extremosCreibles(posteMapMarkers, ciudadA, ciudadB).map((c): [number, number] => [c.lat, c.lng]),
         ...eventMapMarkers.map((e) => [e.poste!.lat, e.poste!.lng] as [number, number]),
     ];
 

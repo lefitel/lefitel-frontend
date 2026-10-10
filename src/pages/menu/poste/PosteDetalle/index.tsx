@@ -1,4 +1,4 @@
-import { hasCoords } from "../../../../components/map/mapGeo";
+import { hasCoords, type LatLng } from "../../../../components/map/mapGeo";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
@@ -10,6 +10,7 @@ import PosteSheet from "../../../../components/dialogs/upsert/PosteSheet";
 import CiudadSheet from "../../../../components/dialogs/upsert/CiudadSheet";
 import PermissionGuard from "../../../../components/PermissionGuard";
 import { fetchOrsRoute } from "../../../../lib/orsRoute";
+import { ordenarTramo } from "../../../../lib/tramoOrden";
 import { usePosteDetalleData } from "./usePosteDetalleData";
 import EventoSheet from "../../../../components/dialogs/upsert/EventoSheet";
 import AddRevisionSheet from "../../../../components/dialogs/AddRevisionSheet";
@@ -36,58 +37,51 @@ export default function PosteDetallePage() {
 
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [tramoPosotes, setTramoPosotes] = useState<PosteInterface[]>([]);
+  const [extremos, setExtremos] = useState<LatLng[]>([]);
   const [openEditCiudad, setOpenEditCiudad] = useState(false);
   const [vista, setVista] = useState<VistaPoste>("resumen");
   const [selectedCiudad, setSelectedCiudad] = useState<CiudadInterface | null>(null);
 
-  // Clear map state when navigating to a different poste
+  // The stretch is asked for once per stretch, not once per pole. It used to be
+  // cleared and fetched again on every pole — its poles, and the road route
+  // from the routing service — so stepping to a neighbour wiped the line and
+  // drew the very same one a moment later.
+  const tramoKey = d.poste ? `${d.poste.id_ciudadA}-${d.poste.id_ciudadB}` : null;
+
   useEffect(() => {
     setRoutePath([]);
     setTramoPosotes([]);
-  }, [id]);
+    setExtremos([]);
 
-  useEffect(() => {
     if (!d.poste) return;
     const a = d.poste.ciudadA;
     const b = d.poste.ciudadB;
-    if (!a?.lat || !a?.lng || !b?.lat || !b?.lng || !d.poste.lat || !d.poste.lng) return;
+    if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return;
 
+    // A stretch that answers after the person has moved to another must not
+    // draw itself over the one now on screen.
+    let vigente = true;
     getPosteByTramo(d.poste.id_ciudadA, d.poste.id_ciudadB)
       .then((postes) => {
-        const dx = b.lat - a.lat;
-        const dy = b.lng - a.lng;
-        const sorted = postes
-          .filter(hasCoords)
-          .sort(
-            (p1, p2) =>
-              (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
-              ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
-          );
-
-        setTramoPosotes(sorted);
-
-        const fallback: [number, number][] = [
-          [a.lat, a.lng],
-          ...sorted.map((p): [number, number] => [p.lat, p.lng]),
-          [b.lat, b.lng],
-        ];
-        const waypoints = [
-          [a.lng, a.lat],
-          ...sorted.map((p) => [p.lng, p.lat]),
-          [b.lng, b.lat],
-        ];
-        return fetchOrsRoute(waypoints)
-          .then((route) => setRoutePath(route ?? fallback))
-          .catch(() => setRoutePath(fallback));
+        if (!vigente) return;
+        const tramo = ordenarTramo(postes, a, b);
+        setTramoPosotes(tramo.postes);
+        setExtremos([tramo.inicio, tramo.fin].filter((c) => c !== null));
+        return fetchOrsRoute(tramo.waypoints)
+          .then((route) => { if (vigente) setRoutePath(route ?? tramo.linea); })
+          .catch(() => { if (vigente) setRoutePath(tramo.linea); });
       })
-      .catch(() => toast.warning("No se pudo calcular la ruta del tramo."));
+      .catch(() => { if (vigente) toast.warning("No se pudo calcular la ruta del tramo."); });
+    return () => { vigente = false; };
+  // Keyed by the pair of cities: the pole itself is read only for them.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [d.poste?.id]);
+  }, [tramoKey]);
 
   const located = hasCoords(d.poste);
+  // The cities the line reaches, not the pole's two cities as stored: one kept
+  // at a placeholder position would stretch "Ver tramo" across half the globe.
   const boundsCoords: [number, number][] = [
-    ...(d.poste?.ciudadA?.lat && d.poste.ciudadA.lng ? [[d.poste.ciudadA.lat, d.poste.ciudadA.lng] as [number, number]] : []),
-    ...(d.poste?.ciudadB?.lat && d.poste.ciudadB.lng ? [[d.poste.ciudadB.lat, d.poste.ciudadB.lng] as [number, number]] : []),
+    ...extremos.map((c): [number, number] => [c.lat, c.lng]),
     ...(located ? [[d.poste!.lat, d.poste!.lng] as [number, number]] : []),
     ...tramoPosotes.filter(hasCoords).map((p): [number, number] => [p.lat, p.lng]),
   ];
@@ -104,18 +98,6 @@ export default function PosteDetallePage() {
     onAddRevision: (id) => d.setAddRevisionEventoId(id),
     onResolver: (e) => d.setResolverEvento(e),
   }), [navigate, d]);
-
-  const posicionEnTramo = useMemo(() => {
-    if (!d.poste || tramoPosotes.length === 0) return null;
-    const idx = tramoPosotes.findIndex((p) => p.id === d.poste!.id);
-    if (idx < 0) return null;
-    return { index: idx + 1, total: tramoPosotes.length };
-  }, [d.poste, tramoPosotes]);
-
-  // The stretch is ordered from one city to the other, so the poles either side
-  // of this one in that order are the ones a crew would walk to next.
-  const anterior = posicionEnTramo ? tramoPosotes[posicionEnTramo.index - 2] ?? null : null;
-  const siguiente = posicionEnTramo ? tramoPosotes[posicionEnTramo.index] ?? null : null;
 
   const metrics = useMemo(
     () => (verEventos ? computeMetrics(d.eventos) : null),
@@ -166,15 +148,11 @@ export default function PosteDetallePage() {
           loading={d.loading}
           poste={d.poste}
           status={metrics?.status ?? null}
-          posicionEnTramo={posicionEnTramo}
-          anterior={anterior}
-          siguiente={siguiente}
           canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
           canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
           onNuevoEvento={() => d.setAddEventoOpen(true)}
           onEditarPoste={() => d.setOpenEditPoste(true)}
           onRefrescar={d.load}
-          onVerPoste={(id) => navigate(`/app/postes/${id}`)}
         />
         </Card>
 
@@ -184,8 +162,6 @@ export default function PosteDetallePage() {
               loading={d.loading}
               eventos={d.eventos}
               canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
-              canCreateEventos={can(sesion.usuario.id_rol, "eventos", "crear")}
-              onNuevoEvento={() => d.setAddEventoOpen(true)}
               actions={eventoActions}
             />
           </CollapsibleSection>

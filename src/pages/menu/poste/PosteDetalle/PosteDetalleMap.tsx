@@ -66,7 +66,7 @@ export default function PosteDetalleMap({
   return (
     <Card className="shadow-sm border-muted/60 overflow-hidden h-full py-0">
       <CardContent className="p-0 h-full">
-        {loading ? (
+        {loading && !poste ? (
           <Skeleton className="h-full min-h-64 w-full rounded-none" />
         ) : (
           <div className="isolate h-full relative">
@@ -101,6 +101,7 @@ export default function PosteDetalleMap({
                 fit={fitTramo}
                 center={located ? center : { lat: 0, lng: 0 }}
                 zoom={15}
+                duration={700}
               />
 
               {/* Ciudad A */}

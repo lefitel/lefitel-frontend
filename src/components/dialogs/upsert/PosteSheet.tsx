@@ -2,6 +2,7 @@ import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { getPosteByTramo } from "../../../api/Poste.api";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
+import { extremosCreibles, ordenarTramo } from "../../../lib/tramoOrden";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { PosteInterface } from "../../../interfaces/interfaces";
@@ -177,24 +178,11 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
 
     getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB)
       .then((postes) => {
-        const dx = b.lat - a.lat;
-        const dy = b.lng - a.lng;
-        const sorted = postes
-          .filter(hasCoords)
-          .sort((p1, p2) =>
-            (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
-            ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
-          );
-        setTramoPostes(sorted);
-        const fallback: [number, number][] = [
-          [a.lat, a.lng],
-          ...sorted.map((p): [number, number] => [p.lat, p.lng]),
-          [b.lat, b.lng],
-        ];
-        const waypoints = [[a.lng, a.lat], ...sorted.map((p) => [p.lng, p.lat]), [b.lng, b.lat]];
-        fetchOrsRoute(waypoints)
-          .then((route) => setRoutePath(route ?? fallback))
-          .catch(() => setRoutePath(fallback));
+        const tramo = ordenarTramo(postes, a, b);
+        setTramoPostes(tramo.postes);
+        fetchOrsRoute(tramo.waypoints)
+          .then((route) => setRoutePath(route ?? tramo.linea))
+          .catch(() => setRoutePath(tramo.linea));
       })
       .catch(() => { });
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -269,8 +257,9 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   const ciudadA = listCiudad.find((c) => c.id === (poste?.id_ciudadA ?? data.id_ciudadA));
   const ciudadB = listCiudad.find((c) => c.id === (poste?.id_ciudadB ?? data.id_ciudadB));
   const allCoords: LatLng[] = isEditing ? [
-    ...(ciudadA?.lat && ciudadA?.lng ? [{ lat: ciudadA.lat, lng: ciudadA.lng }] : []),
-    ...(ciudadB?.lat && ciudadB?.lng ? [{ lat: ciudadB.lat, lng: ciudadB.lng }] : []),
+    // Only the cities that lie near the stretch: one kept at a placeholder
+    // position would have the map frame half the globe.
+    ...extremosCreibles(tramoPostes, ciudadA, ciudadB),
     ...(hasCoords(data) ? [{ lat: data.lat, lng: data.lng }] : []),
     ...tramoPostes.filter(hasCoords).map((p) => ({ lat: p.lat, lng: p.lng })),
   ] : [];

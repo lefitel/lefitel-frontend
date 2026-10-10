@@ -12,6 +12,7 @@ import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { getPosteByTramo } from "../../../api/Poste.api";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
+import { ordenarTramo } from "../../../lib/tramoOrden";
 import { useEventoDetalleData } from "./useEventoDetalleData";
 import {
   EventoInterface, PosteInterface, RevisionInterface, SolucionInterface,
@@ -60,6 +61,7 @@ export default function EventoDetallePage() {
   const rol = sesion.usuario.id_rol;
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [tramoPostes, setTramoPostes] = useState<PosteInterface[]>([]);
+  const [extremos, setExtremos] = useState<LatLng[]>([]);
 
   const canAct = can(rol, "eventos", "editar");
   const isPending = d.evento ? !d.evento.state : false;
@@ -86,37 +88,21 @@ export default function EventoDetallePage() {
 
     getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB)
       .then((postes) => {
-        const dx = b.lat - a.lat;
-        const dy = b.lng - a.lng;
-        const sorted = postes
-          .filter(hasCoords)
-          .sort(
-            (p1, p2) =>
-              (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
-              ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
-          );
-        setTramoPostes(sorted);
-        const fallback: [number, number][] = [
-          [a.lat, a.lng],
-          ...sorted.map((p): [number, number] => [p.lat, p.lng]),
-          [b.lat, b.lng],
-        ];
-        const waypoints = [
-          [a.lng, a.lat],
-          ...sorted.map((p) => [p.lng, p.lat]),
-          [b.lng, b.lat],
-        ];
-        return fetchOrsRoute(waypoints)
-          .then((route) => setRoutePath(route ?? fallback))
-          .catch(() => setRoutePath(fallback));
+        const tramo = ordenarTramo(postes, a, b);
+        setTramoPostes(tramo.postes);
+        setExtremos([tramo.inicio, tramo.fin].filter((c) => c !== null));
+        return fetchOrsRoute(tramo.waypoints)
+          .then((route) => setRoutePath(route ?? tramo.linea))
+          .catch(() => setRoutePath(tramo.linea));
       })
       .catch(() => toast.warning("No se pudo calcular la ruta del tramo."));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [poste?.id]);
 
+  // The cities the line reaches, not the pole's two cities as stored: one kept
+  // at a placeholder position would stretch the view across half the globe.
   const boundsCoords: [number, number][] = [
-    ...(poste?.ciudadA?.lat && poste.ciudadA.lng ? [[poste.ciudadA.lat, poste.ciudadA.lng] as [number, number]] : []),
-    ...(poste?.ciudadB?.lat && poste.ciudadB.lng ? [[poste.ciudadB.lat, poste.ciudadB.lng] as [number, number]] : []),
+    ...extremos.map((c): [number, number] => [c.lat, c.lng]),
     ...(located ? [[center.lat, center.lng] as [number, number]] : []),
     ...tramoPostes.filter(hasCoords).map((p): [number, number] => [p.lat, p.lng]),
   ];

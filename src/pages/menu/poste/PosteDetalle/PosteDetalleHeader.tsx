@@ -1,7 +1,7 @@
 import { PosteInterface } from "../../../../interfaces/interfaces";
 import { Button } from "../../../../components/ui/button";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronRightIcon, PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { HealthStatus, STATUS_CONFIG } from "./posteHealth";
 
 interface Props {
@@ -9,26 +9,21 @@ interface Props {
   poste: PosteInterface | null;
   /** `null` for a role that may not see incidents: the state is made of them. */
   status?: HealthStatus | null;
-  posicionEnTramo?: { index: number; total: number } | null;
-  /** The poles either side of this one along the stretch, towards each city. */
-  anterior?: PosteInterface | null;
-  siguiente?: PosteInterface | null;
   canCreateEvento: boolean;
   canEditPoste: boolean;
   onNuevoEvento: () => void;
   onEditarPoste: () => void;
   onRefrescar: () => void;
-  onVerPoste?: (id: number) => void;
 }
 
 /**
  * The first card of the pole's panel, under its photograph: its name, its state, what
- * can be done to it and the way to the poles either side.
+ * can be done to it.
  */
 export default function PosteDetalleHeader({
-  loading, poste, status, posicionEnTramo, anterior, siguiente,
+  loading, poste, status,
   canCreateEvento, canEditPoste,
-  onNuevoEvento, onEditarPoste, onRefrescar, onVerPoste,
+  onNuevoEvento, onEditarPoste, onRefrescar,
 }: Props) {
   const cfg = status ? STATUS_CONFIG[status] : null;
 
@@ -105,42 +100,6 @@ export default function PosteDetalleHeader({
           <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
         </Button>
       </div>
-
-      {!loading && posicionEnTramo && (
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs text-muted-foreground">
-          <div className="min-w-0 justify-self-start">
-            {anterior && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-1.5 gap-0.5 max-w-full"
-                aria-label={`Poste anterior, ${anterior.name}`}
-                onClick={() => onVerPoste?.(anterior.id as number)}
-              >
-                <ChevronLeftIcon className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">{anterior.name}</span>
-              </Button>
-            )}
-          </div>
-          <span className="tabular-nums">
-            Posición {posicionEnTramo.index} de {posicionEnTramo.total}
-          </span>
-          <div className="min-w-0 justify-self-end">
-            {siguiente && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-1.5 gap-0.5 max-w-full"
-                aria-label={`Poste siguiente, ${siguiente.name}`}
-                onClick={() => onVerPoste?.(siguiente.id as number)}
-              >
-                <span className="truncate">{siguiente.name}</span>
-                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -19,13 +19,11 @@ interface Props {
   loading: boolean;
   eventos: EventoInterface[];
   canEditEventos: boolean;
-  canCreateEventos: boolean;
-  onNuevoEvento: () => void;
   actions: EventoActionHandlers;
 }
 
 export default function PosteDetalleEventosAbiertos({
-  loading, eventos, canEditEventos, canCreateEventos, onNuevoEvento, actions,
+  loading, eventos, canEditEventos, actions,
 }: Props) {
   const abiertos = useMemo(
     () => eventos
@@ -58,7 +56,8 @@ export default function PosteDetalleEventosAbiertos({
   if (abiertos.length === 0) {
     return (
       // One line, not a centred block: the panel is short, and "nothing is
-      // wrong" does not need a third of it.
+      // wrong" does not need a third of it. No button either: "Nuevo evento"
+      // sits a finger above this, and a second way into the same form was noise.
       <div className="flex items-center gap-2.5">
         <div className="h-8 w-8 shrink-0 rounded-full bg-emerald-500/10 flex items-center justify-center">
           <CheckCircle2Icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -67,11 +66,6 @@ export default function PosteDetalleEventosAbiertos({
           <p className="text-sm font-medium leading-tight">Sin eventos abiertos</p>
           <p className="text-xs text-muted-foreground">Este poste está operativo.</p>
         </div>
-        {canCreateEventos && (
-          <Button variant="outline" size="sm" onClick={onNuevoEvento} className="h-7 text-xs shrink-0">
-            Reportar
-          </Button>
-        )}
       </div>
     );
   }

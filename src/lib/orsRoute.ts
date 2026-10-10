@@ -57,6 +57,8 @@ function recortarIntermedios(waypoints: number[][]): number[][] {
 export async function fetchOrsRoute(
   waypoints: number[][],
 ): Promise<[number, number][] | null> {
+  // Fewer than two points is not a route, and not worth a request to be told so.
+  if (waypoints.length < 2) return null;
   try {
     const { data } = await axios.post<{ coordenadas: [number, number][] | null }>(
       `${urlApi}ruta/query`,
