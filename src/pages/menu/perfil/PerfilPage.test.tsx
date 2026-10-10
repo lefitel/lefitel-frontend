@@ -1,31 +1,32 @@
-// The profile page changes the three credentials of the account it belongs to,
-// and two of its three editors used to carry a password box that no longer
-// belongs there.
+// The profile page changes the credentials of the account it belongs to, each
+// from a small dialog of its own, and what these tests hold is **what leaves
+// the browser**, not what a toast said: a screen that quietly puts a password
+// back on a payload looks identical from the outside, and the server would
+// simply ignore it.
 //
-// **The history, because the boxes were not gratuitous.** This screen once
-// renamed the account having asked for nothing at all, while
-// `UsuarioDetallePage` asked for a password to do the same thing through the
-// same endpoint — so the confirmation was optional in practice, and a username
-// is half of the credential: change somebody's and they cannot log in, not
-// because they forgot their password but because they no longer know what name
-// to offer it with. The fix was to make the server demand it and have both
-// screens send it.
+// **The history behind the payloads.** This screen once renamed the account
+// having asked for nothing at all, while `UsuarioDetallePage` asked for a
+// password to do the same thing through the same endpoint — so the confirmation
+// was optional in practice, and a username is half of the credential: change
+// somebody's and they cannot log in, not because they forgot their password but
+// because they no longer know what name to offer it with. The demand then moved
+// to the step-up gate in front of these routes, which asks for the password
+// once and then stops asking for ten minutes, and asks for a *factor* instead
+// from an account that has one. With a form still collecting a password of its
+// own, renaming yourself meant typing the same secret twice for one request.
+// That double prompt is what these tests keep from coming back: the rename and
+// the recovery address send no password, and the password change sends the one
+// that was typed.
 //
-// **Why the boxes go now.** The demand moved again, up to the step-up gate that
-// sits in front of these routes — which asks for the password once and then
-// stops asking for ten minutes, and asks for a *factor* instead from an account
-// that has one. With the form still collecting a password of its own, renaming
-// yourself meant typing the same secret twice for one request: once into the
-// page, once into the dialog. That double prompt is what this whole arc exists
-// to remove, and it is the thing these tests now hold.
-//
-// So the assertions below are about **what leaves the browser**, not about what
-// a toast said: a screen that quietly puts a password back on the payload looks
-// identical from the outside, and the server would simply ignore it.
+// **No confirmation dialog on any of them.** Each used to be followed by an
+// "are you sure?"; what it said is now in the dialog's own description, before
+// the button is pressed, and the tests below hold that pressing the button is
+// the whole gesture.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { toast } from "sonner";
 import PerfilPage from "./PerfilPage";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
 import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
@@ -74,12 +75,8 @@ vi.mock("../../../api/Usuario.api", () => ({
   editUserPass: (...args: unknown[]) => editUserPass(...args),
   searchUsuario: (...args: unknown[]) => searchUsuario(...args),
 }));
-// Named and throwing: this screen must not reach the auth API to rename anybody.
-// The password rides on the rename itself, and the server compares it there.
-//
-// There is no `confirmarPassword` in this factory because there is no such export
-// any more — it and its endpoint are retired, and the compiler now refuses a call
-// to it, which is a harder guarantee than a throwing stub was.
+// `loginUsuario` is named and throwing: this screen must not reach the auth API
+// to log anybody in, whatever it is asked to change.
 vi.mock("../../../api/Login.api", () => ({
   loginUsuario: () => {
     throw new Error("esta pantalla no debe iniciar sesión para comprobar una contraseña");
@@ -90,10 +87,10 @@ vi.mock("../../../api/Login.api", () => ({
   endSession: (...args: unknown[]) => endSession(...args),
   logoutAllSessions: (...args: unknown[]) => logoutAllSessions(...args),
 }));
-// The three calls this page makes for context rather than for its own job. They
-// are mocked to resolve empty and left that way for every test here: the
+// The calls this page makes for context rather than for its own job. They are
+// mocked to resolve empty and left that way unless a test is about them: the
 // sections they feed render nothing on an empty list, which keeps the queries
-// below about the forms and not about whatever a fixture happened to contain.
+// below about the dialogs and not about whatever a fixture happened to contain.
 vi.mock("../../../api/Bitacora.api", () => ({
   getBitacora: (...args: unknown[]) => getBitacora(...args),
 }));
@@ -140,59 +137,68 @@ function Harness() {
 /**
  * Wait for the profile to land.
  *
- * The heading, not a form field, because the redesign put every field behind an
- * editor that opens on demand: `findByLabelText("Usuario")` used to double as
- * this gate and now would wait forever on a page that has finished loading
- * perfectly well. The name in the header is the first thing that exists once
- * the record arrives.
+ * The heading in the header, not a form field: every field lives in a dialog
+ * that opens on demand, so there is nothing to look for until one is opened.
+ * The name is the first thing that exists once the record arrives.
  */
 const esperarCarga = () => screen.findByRole("heading", { name: /isaias\s+salas/i });
 
 /**
- * Open one of the three credential editors, or the personal-details one.
- *
- * The buttons that open an editor are named by `aria-label`, not by their
- * visible "Cambiar" — three buttons all reading "Cambiar" would be ambiguous
- * here and useless to a screen reader. These are those labels.
+ * The buttons that open a dialog (or unfold the passkeys panel), by the
+ * `aria-label` they carry. They are named by it and not by their visible
+ * "Cambiar": three buttons all reading "Cambiar" would be ambiguous here and
+ * useless to a screen reader.
  */
 const ABRE = {
   personal: /^editar$/i,
-  usuario: /cambiar nombre de usuario/i,
+  usuario: /^cambiar nombre de usuario$/i,
   password: /^cambiar contraseña$/i,
-  email: /cambiar correo de recuperación/i,
-  llave: /gestionar llaves de acceso/i,
-  totp: /gestionar aplicación de autenticación/i,
-  codigos: /gestionar códigos de recuperación/i,
+  // "Cambiar" with an address on file, "Añadir" without: one row, one button.
+  correo: /^(cambiar|añadir) correo de recuperación$/i,
+  llave: /^gestionar llaves de acceso$/i,
 } as const;
 
-async function abrir(user: ReturnType<typeof userEvent.setup>, cual: keyof typeof ABRE) {
+/** The title each dialog is named by. */
+const DIALOGO = {
+  personal: /^información personal$/i,
+  usuario: /^cambiar nombre de usuario$/i,
+  password: /^cambiar contraseña$/i,
+  correo: /^correo de recuperación$/i,
+} as const;
+
+type Usuario = ReturnType<typeof userEvent.setup>;
+
+/** Press the button that opens a dialog and return the dialog, ready to query. */
+async function abrir(user: Usuario, cual: keyof typeof DIALOGO) {
   await user.click(screen.getByRole("button", { name: ABRE[cual] }));
+  return within(await screen.findByRole("dialog", { name: DIALOGO[cual] }));
 }
 
+/** Replace what a field holds with `texto`. */
+async function escribir(user: Usuario, campo: HTMLElement, texto: string) {
+  await user.clear(campo);
+  if (texto) await user.type(campo, texto);
+}
+
+const guardar = (user: Usuario, dlg: ReturnType<typeof within>, nombre = /^guardar$/i) =>
+  user.click(dlg.getByRole("button", { name: nombre }));
+
 /**
- * Type a new username and press save, stopping at the confirmation dialog.
+ * Open the rename dialog, type a new username and press save.
  *
  * Driven through the real controls: the thing being asserted is what the screen
- * sends given what somebody typed, and both the editor and the dialog are part
- * of that path — the field does not exist until the editor is opened, and the
- * request only leaves after "Sí, cambiar".
+ * sends given what somebody typed, and the dialog is part of that path — the
+ * field does not exist until it is opened.
  */
 async function renombrar(nuevo: string) {
   const user = userEvent.setup();
   render(<Harness />);
   await esperarCarga();
-  await abrir(user, "usuario");
+  const dlg = await abrir(user, "usuario");
 
-  const campoUsuario = screen.getByLabelText("Usuario");
-  await user.clear(campoUsuario);
-  await user.type(campoUsuario, nuevo);
-  await user.click(screen.getByRole("button", { name: /actualizar/i }));
-  return user;
-}
-
-/** Get past the "¿Cambiar nombre de usuario?" dialog. */
-async function confirmar(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("button", { name: /sí, cambiar/i }));
+  await escribir(user, dlg.getByLabelText(/^usuario/i), nuevo);
+  await guardar(user, dlg);
+  return { user, dlg };
 }
 
 /** The single object `editUserName` was called with. */
@@ -200,7 +206,7 @@ const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface & { oldP
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // The three context calls, empty. Their sections then render nothing, which is
+  // The context calls, empty. Their sections then render nothing, which is
   // what they do in production when the request fails — see `usePerfilData`,
   // where only the profile itself is allowed to fail loudly.
   getSessions.mockResolvedValue([]);
@@ -233,28 +239,168 @@ beforeEach(() => {
 });
 
 /**
- * Changing your own password from this screen, which is where everybody does it.
+ * When the profile itself does not arrive.
  *
- * This path was never tested, and it is the one the server's rule now applies to
- * universally. It always sent `oldPass`, so nothing here is a fix — it is the
- * only thing that would notice if the payload were ever tidied up, and after
- * `updateUserPass` started demanding the current password of *everybody* changing
- * their own, dropping it would answer 400 to every password change in the ERP
- * rather than only to the ones made by people without the permission.
+ * It used to draw the cards empty, with a banner claiming there was no recovery
+ * address — a statement about an account the page knew nothing about. Nothing
+ * that depends on the record may render without it.
  */
-describe("changing your own password from the profile page", () => {
-  async function cambiarPassword(actual: string, nueva: string) {
+describe("when the profile does not load", () => {
+  it("says so in one card, with a retry, and draws nothing that needs the record", async () => {
+    searchUsuario.mockRejectedValue(new Error("red caída"));
+    render(<Harness />);
+
+    expect(await screen.findByText("No se pudo cargar tu perfil.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    // The false banner, the cards and their buttons: all of it needs a record.
+    expect(screen.queryByText(/no tienes un correo de recuperación/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ABRE.personal })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: ABRE.password })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /isaias/i })).not.toBeInTheDocument();
+  });
+
+  it("asks for everything again on 'Reintentar' and draws the page when it arrives", async () => {
+    searchUsuario.mockRejectedValueOnce(new Error("red caída"));
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    await user.click(await screen.findByRole("button", { name: "Reintentar" }));
+
+    await esperarCarga();
+    expect(searchUsuario).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("No se pudo cargar tu perfil.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ABRE.personal })).toBeInTheDocument();
+  });
+
+  it("keeps the failure loud only for the profile: a failed log or event list does not take the page down", async () => {
+    getBitacora.mockRejectedValue(new Error("500"));
+    getEvento_usuario.mockRejectedValue(new Error("500"));
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(screen.queryByText("No se pudo cargar tu perfil.")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ABRE.password })).toBeInTheDocument();
+  });
+});
+
+describe("the events counter in the side panel", () => {
+  const eventosAtendidos = () => screen.getByText("Eventos atendidos").nextElementSibling;
+
+  it("shows the number when the events arrive", async () => {
+    getEvento_usuario.mockResolvedValue([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(eventosAtendidos()).toHaveTextContent(/^3$/);
+  });
+
+  it("shows a dash, not a zero, when the request for them failed", async () => {
+    // "We could not count" is not "this person attended none": a technician
+    // with four hundred events must not be told zero by a bad connection.
+    getEvento_usuario.mockRejectedValue(new Error("500"));
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(eventosAtendidos()).toHaveTextContent(/^—$/);
+  });
+});
+
+/**
+ * Personal details, which had no test at all until its editor became a dialog.
+ */
+describe("editing your personal details", () => {
+  it("opens with what the record has", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "password");
 
-    await user.type(screen.getByLabelText(/contraseña actual/i), actual);
-    await user.type(screen.getByLabelText("Nueva contraseña"), nueva);
-    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), nueva);
-    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
-    await user.click(await screen.findByRole("button", { name: /sí, cambiar/i }));
-    return user;
+    const dlg = await abrir(user, "personal");
+
+    expect(dlg.getByLabelText(/^nombres/i)).toHaveValue("Isaias");
+    expect(dlg.getByLabelText(/^apellidos/i)).toHaveValue("Salas");
+    expect(dlg.getByLabelText(/^teléfono/i)).toHaveValue("700");
+  });
+
+  it("sends the whole record with the changed fields, and the card shows the change afterwards", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "personal");
+
+    await escribir(user, dlg.getByLabelText(/^teléfono/i), "71234567");
+    await guardar(user, dlg);
+
+    await waitFor(() => expect(editUsuario).toHaveBeenCalledTimes(1));
+    const payload = editUsuario.mock.calls[0][0] as UsuarioInterface;
+    expect(payload).toMatchObject({ id: YO, name: "Isaias", lastname: "Salas", phone: "71234567", birthday: "1990-01-01" });
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Información actualizada."));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByText("71234567")).toBeInTheDocument();
+  });
+
+  it("refuses an empty name or surname under its field, with no toast and no request", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "personal");
+
+    await escribir(user, dlg.getByLabelText(/^nombres/i), "");
+    await escribir(user, dlg.getByLabelText(/^apellidos/i), "");
+    await guardar(user, dlg);
+
+    // Under each field, tied to it, and nothing sent or toasted.
+    const nombre = dlg.getByLabelText(/^nombres/i);
+    expect(nombre).toHaveAttribute("aria-invalid", "true");
+    expect(within(nombre.parentElement!).getByRole("alert")).toHaveTextContent("El nombre es obligatorio.");
+    expect(dlg.getByText("Los apellidos son obligatorios.")).toBeInTheDocument();
+    expect(editUsuario).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+
+    // And the message goes away by itself as the field is corrected.
+    await userEvent.type(nombre, "I");
+    expect(nombre).not.toHaveAttribute("aria-invalid");
+    expect(dlg.queryByText("El nombre es obligatorio.")).not.toBeInTheDocument();
+    expect(dlg.getByText("Los apellidos son obligatorios.")).toBeInTheDocument();
+  });
+
+  it("keeps the dialog open with what was typed when the server refuses", async () => {
+    editUsuario.mockRejectedValue(new Error("boom"));
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "personal");
+
+    await escribir(user, dlg.getByLabelText(/^teléfono/i), "71234567");
+    await guardar(user, dlg);
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: DIALOGO.personal })).toBeInTheDocument();
+    expect(dlg.getByLabelText(/^teléfono/i)).toHaveValue("71234567");
+  });
+});
+
+/**
+ * Changing your own password from this screen, which is where everybody does it.
+ *
+ * It always sent `oldPass`, so nothing here is a fix — it is the only thing that
+ * would notice if the payload were ever tidied up, and after `updateUserPass`
+ * started demanding the current password of *everybody* changing their own,
+ * dropping it would answer 400 to every password change in the ERP rather than
+ * only to the ones made by people without the permission.
+ */
+describe("changing your own password from the profile page", () => {
+  async function cambiarPassword(actual: string, nueva: string, confirmacion = nueva) {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "password");
+
+    await user.type(dlg.getByLabelText(/^contraseña actual/i), actual);
+    await user.type(dlg.getByLabelText(/^nueva contraseña/i), nueva);
+    await user.type(dlg.getByLabelText(/^confirmar nueva contraseña/i), confirmacion);
+    await guardar(user, dlg);
+    return { user, dlg };
   }
 
   it("sends the current password with the new one", async () => {
@@ -267,6 +413,8 @@ describe("changing your own password from the profile page", () => {
     // fixture for exactly this reason.
     expect(enviado.oldPass).toBe("la-mia");
     expect(enviado.oldPass).not.toBe(usuario.pass);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Contraseña actualizada con éxito."));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
   it("does not send a password the server is going to refuse for being too short", async () => {
@@ -280,28 +428,21 @@ describe("changing your own password from the profile page", () => {
      * the person is locked out of both operations for fifteen minutes.
      *
      * Eleven characters, so this fails against the old rule rather than against
-     * no rule at all.
+     * no rule at all. The rule is told under the field and not in a toast, and
+     * nothing leaves the browser.
      */
-    const user = userEvent.setup();
-    render(<Harness />);
-    await esperarCarga();
-    await abrir(user, "password");
-
     const corta = "a".repeat(PASSWORD_MIN_LENGTH - 1);
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.type(screen.getByLabelText("Nueva contraseña"), corta);
-    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), corta);
-    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
+    const { dlg } = await cambiarPassword("la-mia", corta);
 
-    // Not even the confirmation dialog, so nothing can reach the server behind
-    // it.
-    expect(screen.queryByRole("button", { name: /sí, cambiar/i })).toBeNull();
     expect(editUserPass).not.toHaveBeenCalled();
-    const { toast } = await import("sonner");
-    // And the person is told the actual rule. Matched loosely on purpose: the
-    // number belongs to `lib/password.ts`, which is where it is pinned to the
-    // server's.
-    expect(toast.warning).toHaveBeenCalledWith(expect.stringMatching(/al menos \d+ caracteres/));
+    const nueva = dlg.getByLabelText(/^nueva contraseña/i);
+    expect(nueva).toHaveAttribute("aria-invalid", "true");
+    // Matched loosely on purpose: the number belongs to `lib/password.ts`,
+    // which is where it is pinned to the server's. One alert only: the footer's
+    // "faltan campos" does not appear, because nothing is empty.
+    expect(dlg.getByRole("alert")).toHaveTextContent(/al menos \d+ caracteres/i);
+    expect(toast.warning).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: DIALOGO.password })).toBeInTheDocument();
   });
 
   it("sends a password of exactly the minimum length", async () => {
@@ -314,26 +455,92 @@ describe("changing your own password from the profile page", () => {
     expect((editUserPass.mock.calls[0][0] as UsuarioInterface).pass).toBe(laMinima);
   });
 
-  it("sends nothing when the current password box was left empty", async () => {
+  it("sends nothing when the current password box was left empty, and says so under it", async () => {
+    // An empty attempt would be refused anyway, and it would spend one of the
+    // five confirmations this account gets in a quarter of an hour.
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "password");
+    const dlg = await abrir(user, "password");
 
-    await user.type(screen.getByLabelText("Nueva contraseña"), "una-clave-de-prueba");
-    await user.type(screen.getByLabelText("Confirmar nueva contraseña"), "una-clave-de-prueba");
-    await user.click(screen.getByRole("button", { name: /cambiar clave/i }));
+    await user.type(dlg.getByLabelText(/^nueva contraseña/i), "una-clave-de-prueba");
+    await user.type(dlg.getByLabelText(/^confirmar nueva contraseña/i), "una-clave-de-prueba");
+    await guardar(user, dlg);
 
-    // Not even the confirmation dialog: an empty attempt would be refused
-    // anyway, and it would spend one of the five confirmations this account gets
-    // in a quarter of an hour.
-    expect(screen.queryByRole("button", { name: /sí, cambiar/i })).toBeNull();
     expect(editUserPass).not.toHaveBeenCalled();
+    const actual = dlg.getByLabelText(/^contraseña actual/i);
+    expect(actual).toHaveAttribute("aria-invalid", "true");
+    expect(within(actual.parentElement!).getByRole("alert")).toHaveTextContent("Escribe tu contraseña actual.");
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("sends nothing when the confirmation does not match, and says so under it", async () => {
+    const { dlg } = await cambiarPassword("la-mia", "una-clave-de-prueba", "otra-clave-distinta");
+
+    expect(editUserPass).not.toHaveBeenCalled();
+    const confirmacion = dlg.getByLabelText(/^confirmar nueva contraseña/i);
+    expect(within(confirmacion.parentElement!).getByRole("alert")).toHaveTextContent("Las contraseñas no coinciden.");
+  });
+
+  it("is saved with a single press: no confirmation dialog stands in the way", async () => {
+    await cambiarPassword("la-mia", "una-clave-de-prueba");
+
+    await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  });
+
+  it("tells the password manager which field is which, and for which account", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "password");
+
+    expect(dlg.getByLabelText(/^contraseña actual/i)).toHaveAttribute("autocomplete", "current-password");
+    expect(dlg.getByLabelText(/^nueva contraseña/i)).toHaveAttribute("autocomplete", "new-password");
+    expect(dlg.getByLabelText(/^confirmar nueva contraseña/i)).toHaveAttribute("autocomplete", "new-password");
+    // The account the password belongs to, in a field nobody sees or tabs to.
+    const nombre = dlg.getByDisplayValue("isaias");
+    expect(nombre).toHaveAttribute("autocomplete", "username");
+    expect(nombre).toHaveAttribute("readonly");
+    expect(nombre).toHaveClass("sr-only");
+  });
+
+  it("says nobody, the team included, can read it — as the last thing in the dialog", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "password");
+
+    const frase = dlg.getByText("Nadie, tampoco el equipo de Osefi, puede ver tu contraseña.");
+    const ultimo = frase.closest("[class*='space-y-4']")!.lastElementChild;
+    expect(ultimo).toBe(frase);
+    expect(screen.queryByText(/bcrypt/i)).not.toBeInTheDocument();
+  });
+
+  it("leaves no typed password behind for the next time the dialog opens", async () => {
+    /**
+     * A closed dialog that kept a typed password would leave a credential
+     * sitting in a detached form's state for the rest of the session, and the
+     * person has no way of knowing. Driven the way somebody would meet it: type,
+     * leave (the dialog asks, because it is dirty), come back, find it empty.
+     */
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+
+    const dlg = await abrir(user, "password");
+    await user.type(dlg.getByLabelText(/^contraseña actual/i), "para-el-cambio-de-clave");
+    await user.click(dlg.getByRole("button", { name: /^cancelar$/i }));
+    await user.click(await screen.findByRole("button", { name: /^descartar$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    const otraVez = await abrir(user, "password");
+    expect(otraVez.getByLabelText(/^contraseña actual/i)).toHaveValue("");
   });
 });
 
 describe("renaming your own account from the profile page", () => {
-  it("asks for a name and nothing else — no password box in the editor", async () => {
+  it("asks for a name and nothing else — no password box in the dialog", async () => {
     /**
      * 🔴 The break-it test of this task on the client, and it is written as a
      * query for **any** password field rather than for the one label that used
@@ -341,68 +548,72 @@ describe("renaming your own account from the profile page", () => {
      * would satisfy the narrower version.
      *
      * The username field is asserted present in the same breath, so this
-     * cannot pass because the editor failed to open at all — which is exactly
+     * cannot pass because the dialog failed to open at all — which is exactly
      * how a `queryBy*` returning null lies.
      *
      * `{ selector: "input" }` is not optional: the collapsed password row
-     * further down the same card carries a button whose `aria-label` is
-     * "Cambiar contraseña", so an unscoped query matches that and fails for a
-     * reason that has nothing to do with this editor. What is asserted is the
+     * behind the dialog carries a button whose `aria-label` is "Cambiar
+     * contraseña", and an unscoped query matches that. What is asserted is the
      * absence of a *field*.
      */
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
+    const dlg = await abrir(user, "usuario");
+
+    expect(dlg.getByLabelText(/^usuario/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i, { selector: "input" })).toBeNull();
+  });
+
+  it("says in its description what changes, where the confirmation used to be", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
     await abrir(user, "usuario");
 
-    expect(screen.getByLabelText("Usuario")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/contraseña/i, { selector: "input" })).toBeNull();
+    expect(
+      screen.getByText("Entrarás con este nombre a partir de tu próxima sesión. Tu contraseña no cambia."),
+    ).toBeInTheDocument();
   });
 
   it("sends the rename with no password on the payload at all", async () => {
     /**
-     * The other half, on the wire. `Object.keys` and not `toEqual`: a screen
-     * that kept the state and passed `oldPass: cuenta.userPass` with an empty
-     * string would put the key there, and the server would ignore it while the
-     * person went on typing their password twice per rename.
+     * The wire half. `Object.keys` and not `toEqual`: a screen that kept the
+     * state and passed `oldPass: ""` would put the key there, and the server
+     * would ignore it while the person went on typing their password twice per
+     * rename.
      *
      * `pass` is on the payload and that is not a password anybody typed — the
      * whole loaded record is forwarded and `pass` is the stored hash, which is
      * true of every write this screen makes. What must not be there is a field
      * the form collected, so the assertion names `oldPass`.
      */
-    const user = await renombrar("isalas");
-    await confirmar(user);
+    await renombrar("isalas");
 
     await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
     expect(enviado().user).toBe("isalas");
     expect(Object.keys(enviado())).not.toContain("oldPass");
   });
 
-  it("saves with nothing typed but the name, which is the whole point", async () => {
-    // This used to be "does not even open the dialog when the password box was
-    // left empty" — the screen refused to send a rename with no password,
-    // because the server refused it too and the attempt cost one of five
-    // confirmations. Neither is true now: the gate asks, once, through the
-    // dialog, and the rename itself needs nothing but a name.
-    //
-    // Asserted through to the call and not just to the dialog: "the dialog
-    // opened" would stay green for a screen whose save handler still bailed
-    // out on an empty password.
-    const user = await renombrar("isalas");
-    await confirmar(user);
+  it("saves with nothing typed but the name and a single press, which is the whole point", async () => {
+    // Asserted through to the call and not just to the dialog: a screen whose
+    // save handler still bailed out on an empty password, or still stopped at a
+    // confirmation, would never get here.
+    await renombrar("isalas");
 
     await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
-    const { toast } = await import("sonner");
-    await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Nombre de usuario modificado."));
+    // The row now reads the new name.
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getAllByText("isalas").length).toBeGreaterThan(0);
   });
 
-  it("reports the server's refusal rather than a success", async () => {
+  it("reports the server's refusal rather than a success, and keeps the name typed", async () => {
     // A 403 from the step-up gate when the window is closed and the ceremony
     // was not completed, a 409 for a name somebody else holds, a 429 for too
     // many tries. Each is a different thing to be told, and none of them is a
-    // rename that happened. The 400 and 401 this used to list were the
-    // handler's own answers about `oldPass`, which it no longer compares.
+    // rename that happened.
     for (const respuesta of [
       { status: 403, message: "Cancelaste la confirmación de identidad, así que la operación no se realizó." },
       { status: 409, message: "El nombre de usuario ya está tomado por otra persona." },
@@ -416,101 +627,123 @@ describe("renaming your own account from the profile page", () => {
       searchUsuario.mockResolvedValue(PERFIL_CARGADO);
       editUserName.mockResolvedValue(respuesta);
 
-      const user = await renombrar("isalas");
-      await confirmar(user);
+      const { dlg } = await renombrar("isalas");
 
-      const { toast } = await import("sonner");
       await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message));
       expect(toast.success, JSON.stringify(respuesta)).not.toHaveBeenCalled();
-      expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message);
+      // Still open and still holding what was typed, to correct it.
+      expect(dlg.getByLabelText(/^usuario/i)).toHaveValue("isalas");
     }
   });
 
-  it("leaves no typed password behind in the one editor that still has a box", async () => {
-    /**
-     * What survives of "keep the rename's password separate from the password
-     * change's": there is one password box left on this screen, so there is
-     * nothing left to confuse it with — but the reason the old test existed is
-     * unchanged. A cancelled editor that kept a typed password leaves a
-     * credential sitting in a detached form's state for the rest of the
-     * session, and the person has no way of knowing.
-     *
-     * Driven the way somebody would meet it: type, leave, come back, find it
-     * empty.
-     */
+  it("refuses an empty name under the field, with no toast and no request", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
+    const dlg = await abrir(user, "usuario");
 
-    await abrir(user, "password");
-    await user.type(screen.getByLabelText(/contraseña actual/i), "para-el-cambio-de-clave");
-    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    const campo = dlg.getByLabelText(/^usuario/i);
+    await escribir(user, campo, "");
+    await guardar(user, dlg);
 
-    await abrir(user, "password");
-    expect((screen.getByLabelText(/contraseña actual/i) as HTMLInputElement).value).toBe("");
+    expect(campo).toHaveAttribute("aria-invalid", "true");
+    expect(within(campo.parentElement!).getByRole("alert")).toHaveTextContent("El nombre de usuario no puede estar vacío.");
+    expect(editUserName).not.toHaveBeenCalled();
+    expect(toast.warning).not.toHaveBeenCalled();
+
+    // Clears as the field is corrected, before any new attempt.
+    await user.type(campo, "x");
+    expect(campo).not.toHaveAttribute("aria-invalid");
+    expect(within(campo.parentElement!).queryByRole("alert")).not.toBeInTheDocument();
   });
+});
 
-  it("does not wipe an open editor when the photo is saved from the header", async () => {
+describe("a dialog with something typed in it", () => {
+  it("does not wipe an open dialog when a photo finishes saving behind it", async () => {
     // The one path where two things happen at once on this page: the camera
-    // button sits in the header and works whichever editor is open, so saving a
-    // photo folds a new `image` into the loaded record while somebody is halfway
-    // through typing something else. A screen that re-seeded its forms from that
-    // record would put their boxes back to what the server has — the address
-    // just typed reverting, with no error and nothing to blame.
+    // button sits in the header, so a photo whose upload is still in flight can
+    // finish — and fold a new `image` into the loaded record — while somebody
+    // has opened a dialog and is halfway through typing. A dialog that re-seeded
+    // from that record would put its box back to what the server has: the
+    // address just typed reverting, with no error and nothing to blame.
+    let terminarSubida: (r: { ok: true; path: string }) => void = () => {};
+    uploadImage.mockReturnValue(new Promise((resolve) => { terminarSubida = resolve; }));
     const user = userEvent.setup();
     const { container } = render(<Harness />);
     await esperarCarga();
-    await abrir(user, "email");
-
-    const campo = screen.getByLabelText("Dirección de correo") as HTMLInputElement;
-    await user.clear(campo);
-    await user.type(campo, "nueva@osefi.net");
 
     // Reached through the DOM rather than a label: the input is deliberately
     // `aria-hidden` and out of the tab order, because the camera button is the
     // control and this is only its mechanism.
     const fichero = container.querySelector('input[type="file"]') as HTMLInputElement;
     await user.upload(fichero, new File(["una-foto"], "foto.png", { type: "image/png" }));
+    await waitFor(() => expect(uploadImage).toHaveBeenCalledTimes(1));
 
+    const dlg = await abrir(user, "correo");
+    await user.type(dlg.getByLabelText(/^dirección de correo/i), "nueva@osefi.net");
+
+    terminarSubida({ ok: true, path: "/uploads/una-foto.jpg" });
     await waitFor(() => expect(editUsuario).toHaveBeenCalledTimes(1));
     expect((editUsuario.mock.calls[0][0] as UsuarioInterface).image).toBe("/uploads/una-foto.jpg");
-    expect((screen.getByLabelText("Dirección de correo") as HTMLInputElement).value).toBe("nueva@osefi.net");
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Foto actualizada."));
+
+    expect(dlg.getByLabelText(/^dirección de correo/i)).toHaveValue("nueva@osefi.net");
   });
 
-  it("asks before throwing away what was typed in another editor", async () => {
-    // The other half of "one editor at a time": switching away from a dirty one
-    // must not be silent. Without this, a half-typed rename disappears the
-    // moment somebody clicks the password row to check something.
+  it("asks before closing, and keeps the draft if the person keeps editing", async () => {
+    // `FormDialog` has its own tests for the prompt; this holds that the
+    // profile's dialogs hand it the right `dirty`, so a half-typed rename does
+    // not disappear on a stray Escape or click outside.
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "usuario");
+
+    await escribir(user, dlg.getByLabelText(/^usuario/i), "a-medio-escribir");
+    await user.click(dlg.getByRole("button", { name: /^cancelar$/i }));
+
+    expect(await screen.findByText("¿Descartar los cambios?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /seguir editando/i }));
+    expect(dlg.getByLabelText(/^usuario/i)).toHaveValue("a-medio-escribir");
+
+    await user.click(dlg.getByRole("button", { name: /^cancelar$/i }));
+    await user.click(await screen.findByRole("button", { name: /^descartar$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(editUserName).not.toHaveBeenCalled();
+  });
+
+  it("closes without asking when nothing was changed, and opens again from the record, not the abandoned draft", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
 
-    await abrir(user, "usuario");
-    const campoUsuario = screen.getByLabelText("Usuario");
-    await user.clear(campoUsuario);
-    await user.type(campoUsuario, "a-medio-escribir");
-    await user.click(screen.getByRole("button", { name: ABRE.password }));
+    let dlg = await abrir(user, "usuario");
+    await user.click(dlg.getByRole("button", { name: /^cancelar$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.queryByText("¿Descartar los cambios?")).not.toBeInTheDocument();
 
-    // Still on the rename, and asking.
-    expect(await screen.findByRole("button", { name: /sí, descartar/i })).toBeInTheDocument();
-    expect(screen.getByLabelText("Usuario")).toBeInTheDocument();
+    dlg = await abrir(user, "usuario");
+    await escribir(user, dlg.getByLabelText(/^usuario/i), "abandonado");
+    await user.click(dlg.getByRole("button", { name: /^cancelar$/i }));
+    await user.click(await screen.findByRole("button", { name: /^descartar$/i }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-    await user.click(screen.getByRole("button", { name: /sí, descartar/i }));
-    expect(await screen.findByLabelText(/contraseña actual/i)).toBeInTheDocument();
-    expect(screen.queryByLabelText("Usuario")).toBeNull();
+    dlg = await abrir(user, "usuario");
+    expect(dlg.getByLabelText(/^usuario/i)).toHaveValue("isaias");
   });
 });
 
 /**
- * The recovery email card, Task 8 of `2026-08-25-correo-verificado-y-recuperacion`.
+ * The recovery email, Task 8 of `2026-08-25-correo-verificado-y-recuperacion`.
  *
  * The acceptance criterion that actually matters here is not "the form
  * submits" — it is that the three states (no address, saved-but-unverified,
  * verified) read as three different things without anyone having to study the
  * card. A saved-but-unverified address is exactly as useless as none at all,
  * because `/password/forgot` refuses to act on one — so the tests below
- * assert on the visible badge text and the warning caption, not on internal
- * state, the same way a person reading the screen would tell the states apart.
+ * assert on the visible badge text and the warning, not on internal state, the
+ * same way a person reading the screen would tell the states apart.
  */
 describe("recovery email — the three states", () => {
   it("reads 'Sin configurar' when the account has no address on file", async () => {
@@ -547,111 +780,208 @@ describe("recovery email — the three states", () => {
     expect(screen.queryByText("Sin verificar")).toBeNull();
     expect(screen.queryByText("Sin configurar")).toBeNull();
     expect(screen.queryByText(/no sirve para recuperar tu cuenta/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Añadir correo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reenviar enlace" })).toBeNull();
   });
 
   it("pre-fills the address box with whatever is already on file, unverified or not", async () => {
-    // So resending to the same address is retyping a password, not the address.
+    // So resending to the same address is pressing a button, not retyping it.
     searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "email");
+    const dlg = await abrir(user, "correo");
 
-    expect((screen.getByLabelText("Dirección de correo") as HTMLInputElement).value).toBe("isaias@osefi.net");
+    expect(dlg.getByLabelText(/^dirección de correo/i)).toHaveValue("isaias@osefi.net");
+  });
+});
+
+/**
+ * One warning, the full-width banner, and it says what the next step is. The
+ * address row below carries a badge but no second alert.
+ */
+describe("the recovery-address banner", () => {
+  it("with no address, says there is no way back in and offers to add one", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: null, email_verified_at: null });
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(
+      screen.getByText("No tienes un correo de recuperación. Si olvidas tu contraseña, no habrá forma de volver a entrar."),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Añadir correo" }));
+
+    const dlg = within(await screen.findByRole("dialog", { name: DIALOGO.correo }));
+    expect(dlg.getByLabelText(/^dirección de correo/i)).toHaveValue("");
+  });
+
+  it("with an unverified address, names it, says to open the link, and offers to resend", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(
+      screen.getByText(
+        "Te enviamos un enlace a isaias@osefi.net. Ábrelo desde tu correo para confirmarla; hasta entonces no sirve para recuperar tu cuenta.",
+      ),
+    ).toBeInTheDocument();
+    // The old banner's wording for this state is gone.
+    expect(screen.queryByText(/todavía no confirmaste esta dirección/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Reenviar enlace" }));
+
+    const dlg = within(await screen.findByRole("dialog", { name: DIALOGO.correo }));
+    expect(dlg.getByLabelText(/^dirección de correo/i)).toHaveValue("isaias@osefi.net");
+  });
+
+  it("goes away when the link in the address bar verifies the address", async () => {
+    // The verification and the record are two requests that start together and
+    // finish in either order; whichever order, the page must end up saying
+    // verified.
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
+    window.location.hash = "#verify_email=un-token-opaco";
+    render(<Harness />);
+    await esperarCarga();
+
+    await waitFor(() => expect(screen.queryByText(/no sirve para recuperar tu cuenta/i)).not.toBeInTheDocument());
+    expect(screen.getByText("Verificado")).toBeInTheDocument();
   });
 });
 
 describe("sending a verification email", () => {
-  /** Open the recovery-address editor, fill the address in and press its submit. */
+  /** Open the recovery-address dialog, fill the address in and press its submit. */
   async function intentarEnviar(email: string) {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "email");
+    const dlg = await abrir(user, "correo");
 
-    const campoEmail = screen.getByLabelText("Dirección de correo") as HTMLInputElement;
-    await user.clear(campoEmail);
-    if (email) await user.type(campoEmail, email);
-    await user.click(screen.getByRole("button", { name: /verificar correo|reenviar verificación|guardar y verificar/i }));
-    return user;
+    await escribir(user, dlg.getByLabelText(/^dirección de correo/i), email);
+    await user.click(dlg.getByRole("button", { name: /enviar enlace|reenviar enlace/i }));
+    return { user, dlg };
   }
 
-  it("asks for an address and nothing else - no password box in this editor either", async () => {
-    // The second of the two boxes this task removes. Same reasoning as the
-    // rename: `POST /auth/email/send` sits behind the step-up gate, which asks
-    // for the password itself and reads a field of its own, so a box here is
-    // one secret typed twice for one operation.
+  it("asks for an address and nothing else - no password box in this dialog either", async () => {
+    // `POST /auth/email/send` sits behind the step-up gate, which asks for the
+    // password itself and reads a field of its own, so a box here is one secret
+    // typed twice for one operation.
     //
-    // Queried for any password field rather than for the label that used to be
-    // here, and the address field asserted present in the same breath, so this
-    // cannot pass on an editor that never opened.
-    //
-    // `{ selector: "input" }` for the same reason as the rename's twin test
-    // above: the collapsed password row on this card carries a button whose
-    // `aria-label` is "Cambiar contraseña", and an unscoped query matches
-    // that instead. What is asserted here is the absence of a *field*.
+    // Queried for any password field rather than for a label, and the address
+    // field asserted present in the same breath, so this cannot pass on a
+    // dialog that never opened. `{ selector: "input" }` for the same reason as
+    // the rename's twin test.
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "email");
+    const dlg = await abrir(user, "correo");
 
-    expect(screen.getByLabelText("Dirección de correo")).toBeInTheDocument();
+    expect(dlg.getByLabelText(/^dirección de correo/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/contraseña/i, { selector: "input" })).toBeNull();
   });
 
-  it("does not even open the confirmation dialog with no address at all", async () => {
-    await intentarEnviar("");
+  it("says what the link does, where the confirmation used to be", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "correo");
 
-    expect(screen.queryByRole("button", { name: /sí, enviar/i })).toBeNull();
-    expect(sendVerificationEmail).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(/te enviaremos un enlace; hasta que lo abras, la dirección no sirve para recuperar tu cuenta\./i),
+    ).toBeInTheDocument();
+    // No address on file, so nothing is about to be un-verified.
+    expect(screen.queryByText(/ya verificada, quedará sin verificar/i)).not.toBeInTheDocument();
   });
 
-  it("does not open the dialog for a string that is not shaped like an address", async () => {
-    await intentarEnviar("esto-no-es-un-correo");
+  it("warns that a verified address goes back to unverified until the new one is confirmed", async () => {
+    searchUsuario.mockResolvedValue({
+      ...PERFIL_CARGADO,
+      email: "isaias@osefi.net",
+      email_verified_at: "2026-08-20T00:00:00.000Z",
+    });
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "correo");
 
-    expect(screen.queryByRole("button", { name: /sí, enviar/i })).toBeNull();
-    expect(sendVerificationEmail).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        /tu dirección actual, ya verificada, quedará sin verificar hasta que confirmes la nueva, y avisaremos a esa misma casilla del cambio\./i,
+      ),
+    ).toBeInTheDocument();
   });
 
-  it("sends the trimmed address, and only the address", async () => {
+  it("reads 'Enviar enlace' for a new address and 'Reenviar enlace' only for the unverified one on file", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "isaias@osefi.net", email_verified_at: null });
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    const dlg = await abrir(user, "correo");
+
+    expect(dlg.getByRole("button", { name: "Reenviar enlace" })).toBeInTheDocument();
+    await escribir(user, dlg.getByLabelText(/^dirección de correo/i), "otra@osefi.net");
+    expect(dlg.getByRole("button", { name: "Enviar enlace" })).toBeInTheDocument();
+    expect(dlg.queryByRole("button", { name: "Reenviar enlace" })).not.toBeInTheDocument();
+  });
+
+  it("refuses an empty address under the field, with no request", async () => {
+    const { dlg } = await intentarEnviar("");
+
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+    const campo = dlg.getByLabelText(/^dirección de correo/i);
+    expect(campo).toHaveAttribute("aria-invalid", "true");
+    expect(within(campo.parentElement!).getByRole("alert")).toHaveTextContent("Debes indicar una dirección de correo.");
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("refuses a string that is not shaped like an address, under the field, with no request", async () => {
+    const { dlg } = await intentarEnviar("esto-no-es-un-correo");
+
+    expect(sendVerificationEmail).not.toHaveBeenCalled();
+    const campo = dlg.getByLabelText(/^dirección de correo/i);
+    expect(within(campo.parentElement!).getByRole("alert")).toHaveTextContent("Debes indicar una dirección de correo válida.");
+    expect(toast.warning).not.toHaveBeenCalled();
+  });
+
+  it("sends the trimmed address, and only the address, with a single press", async () => {
     // `toHaveBeenCalledWith` with a single argument fails against a call
     // carrying a second one, which is what makes this the wire-level half of
     // the test above: a screen that kept the state and passed an empty
-    // password would be caught here even though its editor looked right.
-    const user = await intentarEnviar("  nueva@osefi.net  ");
-    await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+    // password would be caught here even though its dialog looked right.
+    const { user } = await intentarEnviar("  nueva@osefi.net  ");
 
     await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
     expect(sendVerificationEmail).toHaveBeenCalledWith("nueva@osefi.net");
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
 
-    const { toast } = await import("sonner");
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-    // A send that worked closes the editor, so the box is read back by
-    // reopening it. The address survives, because resending should not mean
-    // retyping it.
-    await abrir(user, "email");
-    expect((screen.getByLabelText("Dirección de correo") as HTMLInputElement).value).toBe("nueva@osefi.net");
+    // The row now shows the address as sent, unverified, and opening the dialog
+    // again starts from it: resending should not mean retyping.
+    expect(screen.getByText("Sin verificar")).toBeInTheDocument();
+    const otraVez = await abrir(user, "correo");
+    expect(otraVez.getByLabelText(/^dirección de correo/i)).toHaveValue("nueva@osefi.net");
   });
 
   it("turns a 429 into a plain-language wait-and-retry message, whichever limiter actually fired", async () => {
     // The known trap this pair of calls sits on: three different rate-limit
     // buckets can answer this one request (`passwordConfirmLimiter`,
     // `emailSendLimiter` — see `auth.routes.ts`), each with its own wording,
-    // and none of it says "wait" as plainly as this card needs to. The
-    // assertion is on the card's own sentence, not on whichever the mock
+    // and none of it says "wait" as plainly as this screen needs to. The
+    // assertion is on the screen's own sentence, not on whichever the mock
     // happens to send back.
     sendVerificationEmail.mockResolvedValue({
       status: 429,
       message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar.",
     });
-    const user = await intentarEnviar("nueva@osefi.net");
-    await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+    await intentarEnviar("nueva@osefi.net");
 
-    const { toast } = await import("sonner");
     await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/demasiados correos/i)));
     expect(toast.success).not.toHaveBeenCalled();
-    expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/demasiados correos/i));
+    // Refused, so the dialog stays for another try.
+    expect(screen.getByRole("dialog", { name: DIALOGO.correo })).toBeInTheDocument();
   });
 
   it("shows the server's own sentence for a wrong password apart from an inactive account, though both are a 401", async () => {
@@ -667,13 +997,11 @@ describe("sending a verification email", () => {
       searchUsuario.mockResolvedValue(PERFIL_CARGADO);
       sendVerificationEmail.mockResolvedValue(respuesta);
 
-      const user = await intentarEnviar("nueva@osefi.net");
-      await user.click(await screen.findByRole("button", { name: /sí, enviar/i }));
+      await intentarEnviar("nueva@osefi.net");
 
-      const { toast } = await import("sonner");
       await waitFor(() => expect(sendVerificationEmail).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message));
       expect(toast.success, JSON.stringify(respuesta)).not.toHaveBeenCalled();
-      expect(toast.error, JSON.stringify(respuesta)).toHaveBeenCalledWith(respuesta.message);
     }
   });
 });
@@ -694,7 +1022,6 @@ describe("verifying via the link's fragment token", () => {
 
     await waitFor(() => expect(verifyEmailToken).toHaveBeenCalledWith("un-token-opaco"));
     expect(window.location.hash).toBe("");
-    const { toast } = await import("sonner");
     await waitFor(() => expect(toast.success).toHaveBeenCalled());
   });
 
@@ -706,7 +1033,6 @@ describe("verifying via the link's fragment token", () => {
 
     await waitFor(() => expect(verifyEmailToken).toHaveBeenCalledWith("un-token-caducado"));
     expect(window.location.hash).toBe("");
-    const { toast } = await import("sonner");
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Este enlace ya no es válido. Solicite uno nuevo."));
   });
 
@@ -721,14 +1047,14 @@ describe("verifying via the link's fragment token", () => {
 });
 
 /**
- * Passkeys, the authenticator app and the recovery codes, inside this card.
+ * Passkeys, the authenticator app and the recovery codes, inside the access card.
  *
  * They used to be a link to `/app/segundo-factor`, and the complaint that moved
  * them was exact: the option was not on the profile, a button to another page
- * was. So the first thing held here is that there is no such link any more, and
- * the rest is that these rows obey the same one-editor rule as their
- * neighbours, and that what is typed in them is typed in a dialog — the form
- * sitting inside the card was the second complaint.
+ * was. So the first thing held here is that there is no such link any more. The
+ * app and the codes carry their buttons on the row itself; only the passkeys,
+ * which hold a list, unfold a panel. What is typed in any of them is typed in a
+ * dialog — a form sitting inside the card was the second complaint.
  */
 describe("the second-factor rows of the access card", () => {
   it("shows each one's state on the profile itself, with no link to another screen", async () => {
@@ -745,22 +1071,60 @@ describe("the second-factor rows of the access card", () => {
     await esperarCarga();
 
     expect(await screen.findByText("2 registradas")).toBeInTheDocument();
-    expect(await screen.findByText("8 de 10 sin usar")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: ABRE.totp })).toBeInTheDocument();
+    // Twice, and they agree: once on the row and once on the summary panel,
+    // which shows the row's own count.
+    await waitFor(() => expect(screen.getAllByText("8 de 10 sin usar")).toHaveLength(2));
+    expect(screen.getByRole("button", { name: "Configurar aplicación de autenticación" })).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /segundo factor/i })).not.toBeInTheDocument();
   });
 
-  it("opens the passkey row in place, and closes whichever editor was open", async () => {
+  it("gives the app and the codes their buttons on the row, with no 'Gestionar' for them", async () => {
+    render(<Harness />);
+    await esperarCarga();
+    await screen.findByText("Sin códigos disponibles");
+
+    expect(screen.getByRole("button", { name: "Quitar aplicación de autenticación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configurar aplicación de autenticación" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Generar códigos de recuperación nuevos" })).toBeInTheDocument();
+    // The one 'Gestionar' left is the passkeys', which has a list to open.
+    expect(screen.getAllByRole("button", { name: /gestionar/i })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: ABRE.llave })).toBeInTheDocument();
+  });
+
+  it("opens the confirmation for new recovery codes straight from the row", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "password");
-    expect(screen.getByLabelText("Nueva contraseña")).toBeInTheDocument();
+    await screen.findByText("Sin códigos disponibles");
 
-    await abrir(user, "llave");
+    await user.click(screen.getByRole("button", { name: "Generar códigos de recuperación nuevos" }));
 
-    expect(screen.queryByLabelText("Nueva contraseña")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /añadir llave/i })).toBeInTheDocument();
+    expect(await screen.findByText("¿Generar diez códigos nuevos?")).toBeInTheDocument();
+  });
+
+  it("says the codes could not be counted, with a retry, instead of a skeleton for ever", async () => {
+    getRecoveryCodesRemaining.mockResolvedValueOnce({ status: 500, restantes: null });
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 200, restantes: 4 });
+    await user.click(screen.getByRole("button", { name: "Reintentar" }));
+
+    await waitFor(() => expect(screen.getAllByText("4 de 10 sin usar")).toHaveLength(2));
+  });
+
+  it("unfolds the passkeys panel in place, with the way to add a key in its header", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+
+    await user.click(screen.getByRole("button", { name: ABRE.llave }));
+
+    const panel = screen.getByRole("region", { name: "Llaves de acceso" });
+    expect(within(panel).getByRole("button", { name: /añadir llave/i })).toBeInTheDocument();
+    expect(within(panel).queryByRole("heading", { name: "Tus llaves" })).not.toBeInTheDocument();
     // Nothing to type in the card itself: the form is a dialog.
     expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument();
   });
@@ -773,7 +1137,7 @@ describe("the second-factor rows of the access card", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "llave");
+    await user.click(screen.getByRole("button", { name: ABRE.llave }));
 
     await user.click(screen.getByRole("button", { name: /añadir llave/i }));
 
@@ -792,7 +1156,7 @@ describe("the second-factor rows of the access card", () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "llave");
+    await user.click(screen.getByRole("button", { name: ABRE.llave }));
     await user.click(screen.getByRole("button", { name: /añadir llave/i }));
     // jsdom's user agent names no browser, so the name arrives empty and
     // anything typed is a change.
@@ -810,14 +1174,80 @@ describe("the second-factor rows of the access card", () => {
     expect(await screen.findByLabelText(/nombre de la llave/i)).toHaveValue("");
   });
 
-  it("folds a row away with 'Cerrar'", async () => {
+  it("folds the passkeys panel away with 'Cerrar'", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
-    await abrir(user, "codigos");
+    await user.click(screen.getByRole("button", { name: ABRE.llave }));
 
     await user.click(screen.getByRole("button", { name: /^cerrar$/i }));
 
-    expect(screen.getByRole("button", { name: ABRE.codigos })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ABRE.llave })).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Llaves de acceso" })).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The summary panel on the right, in the shape Isaias chose from a mock-up on
+ * 2026-10-10: it talks about what protects the account and nothing else.
+ *
+ * The counts it shows are the access card's own — the rows load them and report
+ * up — so what is held here is that the two cannot disagree, and that the
+ * panel's one button reaches the one dialog that does the job.
+ */
+describe("the security summary panel", () => {
+  const panel = () => screen.getByRole("heading", { name: /seguridad de tu cuenta/i }).parentElement as HTMLElement;
+
+  it("says the address is missing, and offers no second button for it — the banner has the one", async () => {
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(within(panel()).getByText("Falta verificar tu correo")).toBeInTheDocument();
+    expect(within(panel()).queryByRole("button")).not.toBeInTheDocument();
+    // The old ring and its optional items are gone from here.
+    expect(screen.queryByText(/completado/i)).not.toBeInTheDocument();
+    expect(within(panel()).queryByText(/fecha de nacimiento/i)).not.toBeInTheDocument();
+  });
+
+  it("counts the passkeys and the codes the access card loaded, and says the account is protected", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "yo@osefi.net", email_verified_at: "2026-09-01T10:00:00.000Z" });
+    listCredentials.mockResolvedValue({
+      status: 200,
+      credenciales: [{ id: 1, nombre: "mi móvil", created_at: "2026-09-01T10:00:00.000Z", last_used_at: null }],
+    });
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 200, restantes: 8 });
+
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(await within(panel()).findByText("1 llave de acceso")).toBeInTheDocument();
+    expect(await within(panel()).findByText("8 de 10 sin usar")).toBeInTheDocument();
+    expect(within(panel()).getByText("Tu cuenta está protegida")).toBeInTheDocument();
+    expect(within(panel()).queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("warns when few codes are left, and its 'Generar' opens the same confirmation as the row", async () => {
+    searchUsuario.mockResolvedValue({ ...PERFIL_CARGADO, email: "yo@osefi.net", email_verified_at: "2026-09-01T10:00:00.000Z" });
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 200, restantes: 2 });
+    const user = userEvent.setup();
+
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(await within(panel()).findByText("Te quedan pocos códigos")).toBeInTheDocument();
+    // With a verified address and no key, the second step is the emailed code.
+    expect(within(panel()).getByText("Código por correo")).toBeInTheDocument();
+    await user.click(within(panel()).getByRole("button", { name: /generar códigos de recuperación desde el resumen/i }));
+
+    expect(await screen.findByRole("alertdialog", { name: /generar diez códigos nuevos/i })).toBeInTheDocument();
+  });
+
+  it("keeps the codes out of it for an account with nothing to fall back from", async () => {
+    render(<Harness />);
+    await esperarCarga();
+
+    await waitFor(() => expect(getRecoveryCodesRemaining).toHaveBeenCalled());
+    expect(within(panel()).queryByText(/códigos de recuperación/i)).not.toBeInTheDocument();
+    expect(within(panel()).getByText(/opcional/i)).toBeInTheDocument();
   });
 });

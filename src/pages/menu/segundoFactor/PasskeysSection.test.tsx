@@ -5,7 +5,8 @@
 // contraseña: si hay que probar algo lo pide la ventana global del step-up.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import PasskeysSection from "./PasskeysSection";
@@ -40,10 +41,20 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn() },
 }));
 
+// The profile's shape of the section: a row whose "Gestionar" unfolds a panel.
+function FilaDeLlaves() {
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <PasskeysSection
+      fila={{ panel: { abierto, onAbrir: () => setAbierto(true), onCerrar: () => setAbierto(false) } }}
+    />
+  );
+}
+
 const setSesion = vi.fn();
 const logout = vi.fn();
 
-function montar(usuario = usuarioExample) {
+function montar(usuario = usuarioExample, conFila = false) {
   const valor = {
     sesion: { autenticado: true, usuario, permisos: sinPermisos(), estado: "completa" },
     setSesion,
@@ -52,7 +63,7 @@ function montar(usuario = usuarioExample) {
   } as unknown as contextProps;
   return render(
     <SesionContext.Provider value={valor}>
-      <PasskeysSection />
+      {conFila ? <FilaDeLlaves /> : <PasskeysSection />}
     </SesionContext.Provider>,
   );
 }
@@ -124,6 +135,17 @@ describe("la lista", () => {
 
     expect(await screen.findByText(/no se pudo cargar/i)).toBeInTheDocument();
     expect(screen.queryByText(/no tienes ninguna llave/i)).not.toBeInTheDocument();
+  });
+
+  it("ofrece reintentar cuando la lista no volvió, y la enseña si esta vez sí", async () => {
+    listCredentials.mockResolvedValueOnce({ status: 500, credenciales: null });
+    montar();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText("mi móvil")).toBeInTheDocument();
+    expect(listCredentials).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
   });
 });
 
@@ -370,5 +392,65 @@ describe("quitar", () => {
     await quitarMovil();
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Se rompió algo."));
+  });
+});
+
+// The row keeps "Gestionar" and its panel, because it holds a list; what the
+// panel drops is what repeats the panel's own title and the row's summary.
+describe("como fila del perfil", () => {
+  it("shows the summary and 'Gestionar', and nothing of the list until it is opened", async () => {
+    montar(usuarioExample, true);
+
+    expect(await screen.findByText("2 registradas")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Gestionar llaves de acceso" })).toBeInTheDocument();
+    expect(screen.queryByText("mi móvil")).not.toBeInTheDocument();
+  });
+
+  it("opens a panel with the list, without the card's paragraph or its 'Tus llaves' heading", async () => {
+    montar(usuarioExample, true);
+    await screen.findByText("2 registradas");
+
+    await userEvent.click(screen.getByRole("button", { name: "Gestionar llaves de acceso" }));
+
+    const panel = screen.getByRole("region", { name: "Llaves de acceso" });
+    expect(within(panel).getByText("mi móvil")).toBeInTheDocument();
+    expect(within(panel).queryByText(/la huella, la cara o el pin/i)).not.toBeInTheDocument();
+    expect(within(panel).queryByRole("heading", { name: "Tus llaves" })).not.toBeInTheDocument();
+  });
+
+  it("puts 'Añadir llave' in the panel's header, before 'Cerrar'", async () => {
+    montar(usuarioExample, true);
+    await screen.findByText("2 registradas");
+    await userEvent.click(screen.getByRole("button", { name: "Gestionar llaves de acceso" }));
+
+    const anadir = screen.getByRole("button", { name: /añadir llave/i });
+    const cerrar = screen.getByRole("button", { name: "Cerrar" });
+    expect(anadir.compareDocumentPosition(cerrar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // And it is the header's, not one beside the list.
+    expect(anadir.parentElement).toBe(cerrar.parentElement);
+    await userEvent.click(anadir);
+    expect(await screen.findByRole("dialog", { name: /añadir una llave de acceso/i })).toBeInTheDocument();
+  });
+
+  it("offers no 'Añadir llave' in a browser that cannot create one, and still lists the keys", async () => {
+    soporta = false;
+    montar(usuarioExample, true);
+    await screen.findByText("2 registradas");
+
+    await userEvent.click(screen.getByRole("button", { name: "Gestionar llaves de acceso" }));
+
+    expect(screen.queryByRole("button", { name: /añadir llave/i })).not.toBeInTheDocument();
+    expect(screen.getByText("mi móvil")).toBeInTheDocument();
+  });
+
+  it("folds the panel away with 'Cerrar'", async () => {
+    montar(usuarioExample, true);
+    await screen.findByText("2 registradas");
+    await userEvent.click(screen.getByRole("button", { name: "Gestionar llaves de acceso" }));
+
+    await userEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+
+    expect(screen.getByRole("button", { name: "Gestionar llaves de acceso" })).toBeInTheDocument();
+    expect(screen.queryByText("mi móvil")).not.toBeInTheDocument();
   });
 });

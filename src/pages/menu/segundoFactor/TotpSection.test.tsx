@@ -12,6 +12,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import TotpSection from "./TotpSection";
+import { FILA_SIN_PANEL } from "./filaDePerfil";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
 import { usuarioExample } from "../../../data/example";
 import { sinPermisos } from "../../../lib/permissions";
@@ -48,7 +49,7 @@ vi.mock("sonner", () => ({
  *  build its own `SesionContext.Provider`. */
 const setSesion = vi.fn();
 
-function renderTotp(usuario = usuarioExample) {
+function renderTotp(usuario = usuarioExample, fila?: typeof FILA_SIN_PANEL) {
   const value: contextProps = {
     sesion: { usuario, autenticado: true, estado: "onboarding" },
     setSesion,
@@ -57,7 +58,7 @@ function renderTotp(usuario = usuarioExample) {
   };
   return render(
     <SesionContext.Provider value={value}>
-      <TotpSection />
+      <TotpSection fila={fila} />
     </SesionContext.Provider>,
   );
 }
@@ -78,6 +79,11 @@ afterEach(() => {
   vi.clearAllMocks();
   cleanup();
 });
+
+const UA_WINDOWS =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const UA_MAC =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
 
 const OTPAUTH = "otpauth://totp/Osefi:ada?secret=JBSWY3DPEHPK3PXP&issuer=Osefi";
 const SECRETO = "JBSWY3DPEHPK3PXP";
@@ -235,24 +241,52 @@ describe("añadir un factor nuevo", () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(SECRETO));
   });
 
-  it("warns that the copied secret sits in the Windows clipboard history — hallazgo E-13/F15", async () => {
+  it("warns that the copied secret sits in the Windows clipboard history on Windows — hallazgo E-13/F15", async () => {
     // Nothing on this side can stop Win+V from keeping it, or Microsoft
     // account sync from carrying it further — the only lever left is saying
     // so, since a TOTP secret in that history is equivalent to no second
-    // factor at all.
-    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
-    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    renderTotp();
+    // factor at all. The user agent is stubbed: jsdom's own is not Windows.
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(UA_WINDOWS);
+    try {
+      setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await screen.findByText(SECRETO);
+      await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
+      await screen.findByText(SECRETO);
 
-    await user.click(screen.getByRole("button", { name: /copiar código/i }));
+      await user.click(screen.getByRole("button", { name: /copiar código/i }));
 
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles/i)),
-    );
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles \(win\+v\)/i)),
+      );
+    } finally {
+      agente.mockRestore();
+    }
+  });
+
+  it("says nothing about a Windows clipboard history anywhere else, only that it was copied", async () => {
+    // A Mac or Linux user told to open Win+V has been told something false.
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(UA_MAC);
+    try {
+      setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      renderTotp();
+
+      await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
+      await screen.findByText(SECRETO);
+
+      await user.click(screen.getByRole("button", { name: /copiar código/i }));
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      const frase = vi.mocked(toast.success).mock.calls[0][0] as string;
+      expect(frase).toMatch(/^código copiado\. bórralo del portapapeles/i);
+      expect(frase).not.toMatch(/win|historial/i);
+    } finally {
+      agente.mockRestore();
+    }
   });
 
   it("confirms with the code alone — no password field anywhere, before or after the QR", async () => {
@@ -530,5 +564,50 @@ describe("códigos de recuperación al confirmar (Isaias, 2026-09-02)", () => {
     await user.click(screen.getByRole("button", { name: "Ya los guardé, cerrar" }));
 
     await waitFor(() => expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument());
+  });
+});
+
+// The same section as one row of the profile's "Acceso y seguridad": no
+// "Gestionar" and no panel, the two buttons on the row itself. The card-shape
+// tests above are untouched; these only say what the row does differently.
+describe("como fila del perfil", () => {
+  it("shows its summary and two buttons, 'Quitar' first, and no Gestionar", () => {
+    renderTotp(usuarioExample, FILA_SIN_PANEL);
+
+    expect(screen.getByText(/códigos de seis dígitos desde tu teléfono/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /gestionar/i })).not.toBeInTheDocument();
+    const quitar = screen.getByRole("button", { name: "Quitar aplicación de autenticación" });
+    const configurar = screen.getByRole("button", { name: "Configurar aplicación de autenticación" });
+    // Same reasoning as the card's order test: the DOM's own order.
+    expect(quitar.compareDocumentPosition(configurar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(quitar).toHaveTextContent(/^Quitar$/);
+    expect(configurar).toHaveTextContent(/^Configurar$/);
+  });
+
+  it("does not show the lost-phone paragraph that belongs to the card", () => {
+    renderTotp(usuarioExample, FILA_SIN_PANEL);
+
+    expect(screen.queryByText(/¿perdiste el teléfono/i)).not.toBeInTheDocument();
+  });
+
+  it("'Quitar' opens the same confirmation as the card's button", async () => {
+    const user = userEvent.setup();
+    renderTotp(usuarioExample, FILA_SIN_PANEL);
+
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación de autenticación" }));
+
+    expect(await screen.findByText("¿Quitar tu segundo factor?")).toBeInTheDocument();
+    expect(deleteTotp).not.toHaveBeenCalled();
+  });
+
+  it("'Configurar' asks the server for a secret and opens the QR dialog", async () => {
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    const user = userEvent.setup();
+    renderTotp(usuarioExample, FILA_SIN_PANEL);
+
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación de autenticación" }));
+
+    await waitFor(() => expect(setupTotp).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText(SECRETO)).toBeInTheDocument();
   });
 });

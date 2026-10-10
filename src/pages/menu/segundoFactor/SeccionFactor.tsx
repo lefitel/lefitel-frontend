@@ -2,20 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ReadRow } from "../perfil/perfilRows";
-
-/**
- * What the profile hands a section so it can live as one row of "Acceso y
- * seguridad" instead of as a card of its own.
- *
- * Nothing here about drafts, on purpose: every form a section has is a modal
- * dialog, so nothing is ever half typed while the row could be closed or
- * another one opened.
- */
-export interface FilaDePerfil {
-  abierto: boolean;
-  onAbrir: () => void;
-  onCerrar: () => void;
-}
+import type { FilaDePerfil } from "./filaDePerfil";
 
 interface Props {
   /** The card's title, and the open panel's. */
@@ -25,11 +12,21 @@ interface Props {
   fila?: FilaDePerfil;
   /** The row's label in the profile. */
   etiqueta: string;
-  /** What the collapsed row says about the account. */
+  /** What the row says about the account. */
   resumen: React.ReactNode;
-  /** Accessible name of the button that opens the row; the visible text is "Gestionar". */
-  abrirLabel: string;
-  children: React.ReactNode;
+  /**
+   * The row's own buttons. When given, the row has no "Gestionar" and no
+   * panel: everything the section does is already one click away.
+   */
+  accionesFila?: React.ReactNode;
+  /** Accessible name of the button that opens the panel; the visible text is "Gestionar". */
+  abrirLabel?: string;
+  /** Buttons in the open panel's header, beside "Cerrar". */
+  accionesPanel?: React.ReactNode;
+  /** The open panel's body, when it is not the card's `children`. */
+  panel?: React.ReactNode;
+  /** The card's body. */
+  children?: React.ReactNode;
   /** Dialogs, kept apart from `children` so they stay mounted while the row is collapsed. */
   dialogos: React.ReactNode;
 }
@@ -39,11 +36,13 @@ interface Props {
  *
  * The same three sections serve two screens. `/app/segundo-factor` is the one
  * an `onboarding` session can reach — the profile answers 403 to it — and
- * there they are cards. In the profile they are rows of "Acceso y seguridad"
- * that open in place, like the username and the password beside them.
+ * there they are cards. In the profile they are rows of "Acceso y seguridad":
+ * either with their buttons on the row (`accionesFila`), or, when there is a
+ * list to see, with a "Gestionar" that opens a panel in place.
  */
 export function SeccionFactor({
-  titulo, icon: Icon, fila, etiqueta, resumen, abrirLabel, children, dialogos,
+  titulo, icon: Icon, fila, etiqueta, resumen, accionesFila, abrirLabel,
+  accionesPanel, panel, children, dialogos,
 }: Props) {
   if (!fila) {
     return (
@@ -60,15 +59,19 @@ export function SeccionFactor({
     );
   }
 
-  if (!fila.abierto) {
+  const panelFila = fila.panel;
+
+  if (accionesFila || !panelFila?.abierto) {
     return (
       <>
         <ReadRow
           label={etiqueta}
           accion={
-            <Button variant="outline" size="sm" aria-label={abrirLabel} onClick={fila.onAbrir}>
-              Gestionar
-            </Button>
+            accionesFila ?? (panelFila && (
+              <Button variant="outline" size="sm" aria-label={abrirLabel} onClick={panelFila.onAbrir}>
+                Gestionar
+              </Button>
+            ))
           }
         >
           {resumen}
@@ -84,11 +87,14 @@ export function SeccionFactor({
         <div className="flex items-center gap-2 mb-4">
           <Icon className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm font-medium">{titulo}</span>
-          <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={fila.onCerrar}>
-            Cerrar
-          </Button>
+          <div className="ml-auto flex items-center gap-2">
+            {accionesPanel}
+            <Button type="button" variant="ghost" size="sm" onClick={panelFila.onCerrar}>
+              Cerrar
+            </Button>
+          </div>
         </div>
-        {children}
+        {panel ?? children}
       </section>
       {dialogos}
     </>

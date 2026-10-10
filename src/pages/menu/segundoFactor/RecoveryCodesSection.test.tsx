@@ -11,6 +11,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import RecoveryCodesSection from "./RecoveryCodesSection";
+import { FILA_SIN_PANEL } from "./filaDePerfil";
 
 const generateRecoveryCodes = vi.fn();
 const getRecoveryCodesRemaining = vi.fn();
@@ -27,6 +28,10 @@ vi.mock("../../../api/Mfa.api", async (importOriginal) => {
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
+
+const UA_WINDOWS =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+const UA_LINUX = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
 
 const CODIGOS = Array.from({ length: 10 }, (_, i) => `CODE${i}ABCDEFGHJKMNPQRSTUV`.slice(0, 26));
 
@@ -64,6 +69,31 @@ describe("cuántos quedan", () => {
     render(<RecoveryCodesSection />);
 
     expect(await screen.findByText(/sin códigos disponibles/i)).toBeInTheDocument();
+  });
+
+  // The route answers `restantes: null` when the request did not come back.
+  // That used to draw a skeleton for ever; it is a failure, and it says so.
+  it("says it could not load, with a retry, instead of a skeleton that never ends", async () => {
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 500, restantes: null });
+    render(<RecoveryCodesSection />);
+
+    expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+    expect(screen.queryByText(/de 10/i)).not.toBeInTheDocument();
+  });
+
+  it("reads the count again on 'Reintentar' and shows it when this time it arrives", async () => {
+    getRecoveryCodesRemaining
+      .mockResolvedValueOnce({ status: 500, restantes: null })
+      .mockResolvedValueOnce({ status: 200, restantes: 9 });
+    const user = userEvent.setup();
+    render(<RecoveryCodesSection />);
+
+    await user.click(await screen.findByRole("button", { name: "Reintentar" }));
+
+    expect(await screen.findByText(/9 de 10 sin usar/i)).toBeInTheDocument();
+    expect(screen.queryByText("No se pudo cargar")).not.toBeInTheDocument();
+    expect(getRecoveryCodesRemaining).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -184,16 +214,40 @@ describe("la hoja de códigos, mostrada una sola vez", () => {
     expect(texto).toContain(CODIGOS[0].match(/.{1,4}/g)!.join("-"));
   });
 
-  it("warns that the copied codes sit in the Windows clipboard history — hallazgo E-13/F15", async () => {
-    vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    const user = userEvent.setup();
-    await revelar(user);
+  it("warns that the copied codes sit in the Windows clipboard history on Windows — hallazgo E-13/F15", async () => {
+    // The user agent is stubbed: jsdom's own is not Windows.
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(UA_WINDOWS);
+    try {
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      await revelar(user);
 
-    await user.click(screen.getByRole("button", { name: /copiar todos/i }));
+      await user.click(screen.getByRole("button", { name: /copiar todos/i }));
 
-    await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles/i)),
-    );
+      await waitFor(() =>
+        expect(toast.success).toHaveBeenCalledWith(expect.stringMatching(/historial del portapapeles/i)),
+      );
+    } finally {
+      agente.mockRestore();
+    }
+  });
+
+  it("says nothing about a Windows clipboard history anywhere else, only that they were copied", async () => {
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(UA_LINUX);
+    try {
+      vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
+      const user = userEvent.setup();
+      await revelar(user);
+
+      await user.click(screen.getByRole("button", { name: /copiar todos/i }));
+
+      await waitFor(() => expect(toast.success).toHaveBeenCalledTimes(1));
+      const frase = vi.mocked(toast.success).mock.calls[0][0] as string;
+      expect(frase).toMatch(/^códigos copiados\. bórralos del portapapeles/i);
+      expect(frase).not.toMatch(/win|historial/i);
+    } finally {
+      agente.mockRestore();
+    }
   });
 
   it("opens a print window with the codes when 'Imprimir' is pressed", async () => {
@@ -254,5 +308,50 @@ describe("la hoja de códigos, mostrada una sola vez", () => {
     await waitFor(() =>
       expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument(),
     );
+  });
+});
+
+// The same section as one row of the profile: the badge and one button, with no
+// "Gestionar" and no panel. The card-shape tests above are untouched.
+describe("como fila del perfil", () => {
+  it("shows the count and 'Generar nuevos', and no Gestionar", async () => {
+    render(<RecoveryCodesSection fila={FILA_SIN_PANEL} />);
+
+    expect(await screen.findByText(/5 de 10 sin usar/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /gestionar/i })).not.toBeInTheDocument();
+    const boton = screen.getByRole("button", { name: "Generar códigos de recuperación nuevos" });
+    expect(boton).toHaveTextContent(/^Generar nuevos$/);
+  });
+
+  it("'Generar nuevos' opens the confirmation and sends nothing until it is accepted", async () => {
+    const user = userEvent.setup();
+    render(<RecoveryCodesSection fila={FILA_SIN_PANEL} />);
+    await screen.findByText(/5 de 10 sin usar/i);
+
+    await user.click(screen.getByRole("button", { name: "Generar códigos de recuperación nuevos" }));
+
+    expect(screen.getByText("¿Generar diez códigos nuevos?")).toBeInTheDocument();
+    expect(generateRecoveryCodes).not.toHaveBeenCalled();
+  });
+
+  it("reveals the ten codes once the confirmation is accepted, as the card does", async () => {
+    generateRecoveryCodes.mockResolvedValue({ status: 200, message: null, codigos: CODIGOS });
+    const user = userEvent.setup();
+    render(<RecoveryCodesSection fila={FILA_SIN_PANEL} />);
+    await screen.findByText(/5 de 10 sin usar/i);
+
+    await user.click(screen.getByRole("button", { name: "Generar códigos de recuperación nuevos" }));
+    await user.click(screen.getByRole("button", { name: "Sí, generar" }));
+
+    expect(await screen.findByText(/tus códigos de recuperación/i)).toBeInTheDocument();
+    expect(await screen.findByText(/10 de 10 sin usar/i)).toBeInTheDocument();
+  });
+
+  it("says it could not load, with a retry, in the row as well", async () => {
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 500, restantes: null });
+    render(<RecoveryCodesSection fila={FILA_SIN_PANEL} />);
+
+    expect(await screen.findByText("No se pudo cargar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
   });
 });

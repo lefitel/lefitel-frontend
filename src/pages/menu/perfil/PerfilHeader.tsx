@@ -27,7 +27,12 @@ interface Props {
  * way to change your own was to open the user-administration screen, which
  * needs the Seguridad permission most accounts do not have.
  *
- * **No dialog.** Pressing the camera opens the file picker and the chosen
+ * **The whole avatar is the button.** It used to be the 28-pixel camera badge
+ * alone, which is a small thing to hit with a thumb; the badge is still drawn,
+ * as the hint that the photo can be changed, and the 64-pixel circle is what
+ * is pressed.
+ *
+ * **No dialog.** Pressing it opens the file picker and the chosen
  * photo is uploaded and saved on the spot. A confirmation step here would be
  * asking somebody to approve a decision they already made by picking the file,
  * and the operation is its own undo: pick another one. What replaces the
@@ -96,31 +101,35 @@ export default function PerfilHeader({ usuario, loading, onCambiarFoto }: Props)
         tabIndex={-1}
       />
 
-      <div className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => inputRef.current?.click()}
+        disabled={subiendo}
+        aria-label="Cambiar foto de perfil"
+        className="group relative shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2
+                   focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background
+                   disabled:cursor-default"
+      >
         <Avatar className="h-16 w-16 border-2 border-border shadow">
           {usuario?.image && <AvatarImage src={imageUrl(usuario.image) ?? undefined} alt="" />}
           <AvatarFallback className="text-lg font-bold">{iniciales}</AvatarFallback>
         </Avatar>
 
         {subiendo && (
-          <div className="absolute inset-0 rounded-full bg-background/70 flex items-center justify-center">
+          <span className="absolute inset-0 rounded-full bg-background/70 flex items-center justify-center">
             <Loader2Icon className="h-5 w-5 animate-spin text-primary" />
-          </div>
+          </span>
         )}
 
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={subiendo}
-          aria-label="Cambiar foto de perfil"
+        <span
+          aria-hidden="true"
           className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full border border-border bg-card shadow-sm
                      flex items-center justify-center text-foreground transition-colors
-                     hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring
-                     disabled:opacity-50"
+                     group-hover:bg-accent group-disabled:opacity-50"
         >
           <CameraIcon className="h-3.5 w-3.5" />
-        </button>
-      </div>
+        </span>
+      </button>
 
       <div className="min-w-0">
         <h1 className="text-2xl font-bold tracking-tight truncate">

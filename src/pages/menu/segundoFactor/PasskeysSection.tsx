@@ -24,7 +24,8 @@ import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { describirDispositivo } from "../../../lib/dispositivo";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
+import { SeccionFactor } from "./SeccionFactor";
+import type { FilaDePerfil } from "./filaDePerfil";
 
 /** `code` del 500 que significa «la llave se borró, las sesiones no» — copiado
  *  de `api/src/controllers/webauthn.controller.ts`, formato de cable. */
@@ -67,14 +68,20 @@ const fecha = (iso: string | null): string =>
  *
  * **Dos formas, la misma sección**: tarjeta en `/app/segundo-factor`, fila de
  * «Acceso y seguridad» en el perfil cuando llega `fila`. Ver `SeccionFactor`.
+ * Es la única fila con panel —tiene una lista que enseñar—; el panel lleva la
+ * lista y «Añadir llave» en su cabecera, sin el párrafo ni el título de la
+ * tarjeta, que repetirían el título del panel y el resumen de la fila.
  */
 const PasskeysSection = ({
   fila,
   onCodigosEmitidos,
+  onRecuento,
 }: {
   fila?: FilaDePerfil;
   /** El alta acaba de emitir los diez códigos: quien enseñe su recuento debe volver a leerlo. */
   onCodigosEmitidos?: () => void;
+  /** Cuántas llaves hay, cada vez que cambia; `null` mientras no se sabe. */
+  onRecuento?: (llaves: number | null) => void;
 }) => {
   const { sesion, setSesion, logout } = useContext(SesionContext);
   // Una sola vez: es una propiedad del navegador, no cambia durante la vida
@@ -89,6 +96,17 @@ const PasskeysSection = ({
   // ── La lista ─────────────────────────────────────────────────────────────
   const [llaves, setLlaves] = useState<Credencial[] | null>(null);
   const [cargando, setCargando] = useState(true);
+
+  // El callback se reconstruye en cada render de quien lo pasa; el aviso tiene
+  // que salir cuando cambia el recuento, no por eso.
+  const onRecuentoRef = useRef(onRecuento);
+  useEffect(() => {
+    onRecuentoRef.current = onRecuento;
+  });
+  const recuento = cargando || llaves === null ? null : llaves.length;
+  useEffect(() => {
+    onRecuentoRef.current?.(recuento);
+  }, [recuento]);
   // Sólo la última petición de la lista escribe: la del montaje puede seguir en
   // vuelo mientras un alta termina —la ceremonia le da varios segundos de
   // ventaja— y sin esto su respuesta rancia pisaría la lista con la llave
@@ -323,6 +341,74 @@ const PasskeysSection = ({
     </>
   );
 
+  const botonAnadir = soportado && (
+    <Button size="sm" variant="outline" onClick={abrirAlta}>
+      <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
+      Añadir llave
+    </Button>
+  );
+
+  // The list and what stands in for it, the same in the card and in the row's
+  // panel: only what surrounds it differs.
+  const lista = (
+    <>
+      {cargando && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden />
+          Cargando…
+        </p>
+      )}
+
+      {!cargando && llaves === null && (
+        <p className="text-sm text-destructive flex flex-wrap items-center gap-x-3">
+          No se pudo cargar la lista de llaves.
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void cargar()}>
+            Reintentar
+          </Button>
+        </p>
+      )}
+
+      {!cargando && llaves !== null && llaves.length === 0 && (
+        <p className="text-sm text-muted-foreground">No tienes ninguna llave registrada.</p>
+      )}
+
+      {!cargando && llaves !== null && llaves.length > 0 && (
+        <ul className="divide-y divide-border/40 rounded-lg border border-border/60">
+          {llaves.map((llave) => (
+            <li key={llave.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{llave.nombre}</p>
+                {/* Las fechas son lo único que separa dos llaves con el
+                    mismo nombre: no hay unicidad ni renombrado. */}
+                <p className="text-xs text-muted-foreground">
+                  Registrada el {fecha(llave.created_at)} · Último uso: {fecha(llave.last_used_at)}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={() => abrirBaja(llave)}
+                disabled={enviandoBaja}
+                aria-label={`Quitar la llave ${llave.nombre}`}
+              >
+                <Trash2Icon className="h-4 w-4 mr-1.5" aria-hidden />
+                Quitar
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!soportado && (
+        <p className="text-sm text-muted-foreground">
+          Este navegador no puede crear llaves de acceso. Puedes seguir quitando las que ya
+          tienes; para añadir una nueva, entra desde un navegador actual o desde tu móvil.
+        </p>
+      )}
+    </>
+  );
+
   return (
     <SeccionFactor
       titulo="Llaves de acceso"
@@ -331,6 +417,10 @@ const PasskeysSection = ({
       etiqueta="Llave de acceso"
       resumen={resumen()}
       abrirLabel="Gestionar llaves de acceso"
+      // In the panel the title and the row's summary already say what this is,
+      // so it holds the list and nothing else; the way to add one is in its header.
+      accionesPanel={botonAnadir}
+      panel={<div className="space-y-3">{lista}</div>}
       dialogos={dialogos}
     >
       <div className="space-y-5">
@@ -348,63 +438,10 @@ const PasskeysSection = ({
             <h3 id="passkeys-lista-heading" className="text-sm font-medium">
               Tus llaves
             </h3>
-            {soportado && (
-              <Button size="sm" variant="outline" onClick={abrirAlta}>
-                <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
-                Añadir llave
-              </Button>
-            )}
+            {botonAnadir}
           </div>
 
-          {cargando && (
-            <p className="text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2Icon className="h-4 w-4 animate-spin" aria-hidden />
-              Cargando…
-            </p>
-          )}
-
-          {!cargando && llaves === null && (
-            <p className="text-sm text-destructive">No se pudo cargar la lista de llaves.</p>
-          )}
-
-          {!cargando && llaves !== null && llaves.length === 0 && (
-            <p className="text-sm text-muted-foreground">No tienes ninguna llave registrada.</p>
-          )}
-
-          {!cargando && llaves !== null && llaves.length > 0 && (
-            <ul className="divide-y divide-border/40 rounded-lg border border-border/60">
-              {llaves.map((llave) => (
-                <li key={llave.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{llave.nombre}</p>
-                    {/* Las fechas son lo único que separa dos llaves con el
-                        mismo nombre: no hay unicidad ni renombrado. */}
-                    <p className="text-xs text-muted-foreground">
-                      Registrada el {fecha(llave.created_at)} · Último uso: {fecha(llave.last_used_at)}
-                    </p>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => abrirBaja(llave)}
-                    disabled={enviandoBaja}
-                    aria-label={`Quitar la llave ${llave.nombre}`}
-                  >
-                    <Trash2Icon className="h-4 w-4 mr-1.5" aria-hidden />
-                    Quitar
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {!soportado && (
-            <p className="text-sm text-muted-foreground">
-              Este navegador no puede crear llaves de acceso. Puedes seguir quitando las que ya
-              tienes; para añadir una nueva, entra desde un navegador actual o desde tu móvil.
-            </p>
-          )}
+          {lista}
         </section>
       </div>
     </SeccionFactor>

@@ -26,7 +26,9 @@ import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { renderTotpQr } from "./totpQr";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
+import { SeccionFactor } from "./SeccionFactor";
+import type { FilaDePerfil } from "./filaDePerfil";
+import { enWindows } from "./portapapeles";
 
 type FaseAlta = "reposo" | "qr";
 
@@ -86,7 +88,10 @@ type FaseAlta = "reposo" | "qr";
  * "Acceso y seguridad" in the profile when `fila` is passed. See
  * `SeccionFactor`. The row carries no status, unlike its two neighbours:
  * nothing the server answers to a full session says whether a TOTP is
- * registered, and this component has never needed to know.
+ * registered, and this component has never needed to know. Its two buttons sit
+ * on the row itself, in the same order as the card's and for the same reason,
+ * and the paragraph about a lost phone stays on the card: the order of the two
+ * buttons already says "remove first".
  */
 const TotpSection = ({
   fila,
@@ -244,12 +249,15 @@ const TotpSection = ({
     try {
       await navigator.clipboard.writeText(secreto);
       // Hallazgo E-13/F15: this secret is the second factor itself, and it
-      // just went into a system clipboard that Windows 11 keeps a 25-entry
-      // history of (Win+V) — synced to the Microsoft account when that sync
-      // is on. There is no way to mark a clipboard write "sensitive" from a
-      // browser, so the only lever left is saying so.
+      // just went into a system clipboard. On Windows 11 that keeps a 25-entry
+      // history (Win+V), synced to the Microsoft account when that sync is on.
+      // There is no way to mark a clipboard write "sensitive" from a browser,
+      // so the only lever left is saying so — and saying the Windows part only
+      // where it is true.
       toast.success(
-        "Código copiado. Bórralo del historial del portapapeles (Win+V) apenas termines de pegarlo.",
+        enWindows()
+          ? "Código copiado. Bórralo del historial del portapapeles (Win+V) apenas termines de pegarlo."
+          : "Código copiado. Bórralo del portapapeles apenas termines de pegarlo.",
       );
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto y cópialo manualmente.");
@@ -366,7 +374,28 @@ const TotpSection = ({
       fila={fila}
       etiqueta="Aplicación"
       resumen={<span className="text-muted-foreground">Códigos de seis dígitos desde tu teléfono</span>}
-      abrirLabel="Gestionar aplicación de autenticación"
+      accionesFila={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label="Quitar aplicación de autenticación"
+            onClick={() => setConfirmBajaAbierto(true)}
+            disabled={enviandoBaja}
+          >
+            Quitar
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            aria-label="Configurar aplicación de autenticación"
+            onClick={() => void pedirSetup()}
+            disabled={enviandoSetup}
+          >
+            Configurar
+          </Button>
+        </div>
+      }
       dialogos={dialogos}
     >
       <div className="space-y-3">

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { CopyIcon, PrinterIcon } from "lucide-react";
+import { enWindows } from "./portapapeles";
 
 /** Groups of four, the same width `codigo_recuperacion.prefijo` cuts at —
  *  purely a display choice, since `recoveryCodeStore.ts`'s own `normalizar`
@@ -44,26 +45,25 @@ export interface RecoveryCodesRevealDialogProps {
  * once, by whichever screen just minted them.
  *
  * **Extracted out of `RecoveryCodesSection.tsx`'s own reveal dialog**
- * (2026-09-02), so that `TotpSection.tsx` — which, as of this decision, can
- * also mint the account's first ten codes the moment a factor is confirmed —
- * shows them with the exact same presentation instead of a second,
- * independently-drifting copy. `RecoveryCodesSection.tsx` itself still
- * carries its own inline copy of this dialog rather than importing this one:
- * migrating it was out of scope for the task that created this file, and
- * left as a follow-up now that a shared version exists to migrate onto.
+ * (2026-09-02), so that every screen that can mint ten codes — that section,
+ * `TotpSection.tsx` on confirming a factor, `PasskeysSection.tsx` on a first
+ * key — shows them with the exact same presentation instead of independently
+ * drifting copies.
  */
 export const RecoveryCodesRevealDialog = ({ codigos, onAcknowledge, contexto }: RecoveryCodesRevealDialogProps) => {
   const copiarTodos = async () => {
     if (!codigos) return;
     try {
       await navigator.clipboard.writeText(codigos.map(formatearCodigo).join("\n"));
-      // Hallazgo E-13/F15: these ten codes just went into a system clipboard
-      // Windows 11 keeps a 25-entry history of (Win+V), synced to the
+      // Hallazgo E-13/F15: these ten codes just went into a system clipboard,
+      // which on Windows 11 keeps a 25-entry history (Win+V), synced to the
       // Microsoft account when that sync is on — a browser has no way to
       // mark a clipboard write "sensitive", so the only lever left is
-      // saying so.
+      // saying so, and saying the Windows part only where it is true.
       toast.success(
-        "Códigos copiados. Bórralos del historial del portapapeles (Win+V) apenas termines de guardarlos.",
+        enWindows()
+          ? "Códigos copiados. Bórralos del historial del portapapeles (Win+V) apenas termines de guardarlos."
+          : "Códigos copiados. Bórralos del portapapeles apenas termines de guardarlos.",
       );
     } catch {
       toast.error("No se pudo copiar. Selecciona el texto manualmente.");

@@ -25,9 +25,16 @@ const BITACORA_LIMIT = 25;
 export interface PerfilData {
   usuario: UsuarioInterface | null;
   bitacora: BitacoraInterface[];
-  eventos: EventoInterface[];
+  /** `null` when the request failed: "we could not count" is not "zero". */
+  eventos: EventoInterface[] | null;
   sesiones: SesionActivaInterface[];
   loading: boolean;
+  /**
+   * Ask for everything again. For the one failure this hook reports — the
+   * profile itself not arriving — where `loading` ends with `usuario` still
+   * `null`.
+   */
+  recargar: () => void;
   /** Re-read just the session list, after closing one or several. */
   recargarSesiones: () => Promise<void>;
   /**
@@ -60,7 +67,9 @@ export interface PerfilData {
  *
  * So the three secondary calls resolve to empty and their sections render
  * nothing. `getSessions` already swallows its own failures in `Login.api.ts`;
- * the other two are caught here.
+ * the other two are caught here. The exception is the event count: a list that
+ * failed to arrive is `null` rather than `[]`, because the panel would
+ * otherwise print "Eventos atendidos: 0" for somebody it could not count.
  *
  * None of the four needs a permission the caller might not have, and since C5
  * two of them say so by construction rather than by being open.
@@ -75,18 +84,20 @@ export interface PerfilData {
  * nothing from the request, so there is no other person's list it could return.
  *
  * That is why the swallow below is a swallow and not a report: on this screen a
- * failure of any of the three means the section is empty, and an empty section
- * is the truth for somebody with no log, no incidents and one device. The one
- * thing it cannot survive is a *wrong* gate, which would print "Eventos
- * atendidos: 0" to a technician with four hundred — hence the test on the
- * server, where the question can actually be asked.
+ * failure of the log or the sessions means the section is empty, and an empty
+ * section is the truth for somebody with no log and one device. A *wrong* gate
+ * would print "Eventos atendidos: 0" to a technician with four hundred, which
+ * is why the server has the test where that question can actually be asked.
  */
 export function usePerfilData(id: number | null | undefined): PerfilData {
   const [usuario, setUsuario] = useState<UsuarioInterface | null>(null);
   const [bitacora, setBitacora] = useState<BitacoraInterface[]>([]);
-  const [eventos, setEventos] = useState<EventoInterface[]>([]);
+  const [eventos, setEventos] = useState<EventoInterface[] | null>(null);
   const [sesiones, setSesiones] = useState<SesionActivaInterface[]>([]);
   const [loading, setLoading] = useState(true);
+  const [intento, setIntento] = useState(0);
+
+  const recargar = useCallback(() => setIntento((n) => n + 1), []);
 
   const recargarSesiones = useCallback(async () => {
     setSesiones(await getSessions());
@@ -111,7 +122,7 @@ export function usePerfilData(id: number | null | undefined): PerfilData {
       // listing. What the screen shows is deliberately the last few entries,
       // not all of them, so the count that comes with it is not read here.
       getBitacora(id, BITACORA_LIMIT).then((r) => r.data).catch(() => [] as BitacoraInterface[]),
-      getEvento_usuario(id).catch(() => [] as EventoInterface[]),
+      getEvento_usuario(id).catch(() => null),
       getSessions(),
     ])
       .then(([u, b, e, s]) => {
@@ -137,7 +148,7 @@ export function usePerfilData(id: number | null | undefined): PerfilData {
     return () => {
       vigente = false;
     };
-  }, [id]);
+  }, [id, intento]);
 
-  return { usuario, bitacora, eventos, sesiones, loading, recargarSesiones, actualizarUsuario };
+  return { usuario, bitacora, eventos, sesiones, loading, recargar, recargarSesiones, actualizarUsuario };
 }

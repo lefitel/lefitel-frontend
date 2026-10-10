@@ -13,26 +13,19 @@ import { editUsuario, editUserName, editUserPass } from "../../../api/Usuario.ap
 import { sendVerificationEmail, verifyEmailToken, endSession, logoutAllSessions } from "../../../api/Login.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { mensajeDeError } from "../../../api/descarga";
-import { passwordLengthError } from "../../../lib/password";
 import type { SesionActivaInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 import { usePerfilData } from "./usePerfilData";
 import PerfilHeader from "./PerfilHeader";
-import PerfilPersonal, { type DatosPersonales } from "./PerfilPersonal";
-import PerfilAcceso, { type DatosCuenta, type EditorAcceso } from "./PerfilAcceso";
+import PerfilPersonal from "./PerfilPersonal";
+import { datosPersonalesDe, type DatosPersonales } from "./datosPersonales";
+import PerfilAcceso from "./PerfilAcceso";
 import PerfilSesiones from "./PerfilSesiones";
 import PerfilActividad from "./PerfilActividad";
 import PerfilPanel from "./PerfilPanel";
-
-/**
- * The same loose, non-RFC shape check `email.controller.ts` runs server-side
- * (`EMAIL_SHAPE` there). Copied rather than shared — the two repositories
- * cannot import from each other — and kept deliberately loose for the same
- * reason the server's is: this is a cheap filter against an obvious typo, not
- * a security boundary. The server is still the one that decides whether an
- * address is acceptable; this only saves a round trip, a rate-limit charge,
- * and a confirmation dialog the person would have to dismiss.
- */
-const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+import PersonalDialog from "./PersonalDialog";
+import UsuarioDialog from "./UsuarioDialog";
+import PasswordDialog, { type DatosPassword } from "./PasswordDialog";
+import CorreoDialog from "./CorreoDialog";
 
 /**
  * One place to turn a `{status, message}` from `sendVerificationEmail` or
@@ -58,134 +51,65 @@ const describeEmailError = (status: number, message: string | null): string => {
   return message || "Ocurrió un error en el servidor.";
 };
 
-/** Which editor is open. Exactly one, or none. */
-type Editor = "personal" | EditorAcceso;
-
-const CUENTA_VACIA: DatosCuenta = { user: "", oldPass: "", pass: "", confirmPass: "" };
+/** Which dialog is open. One, or none. */
+type Dialogo = "personal" | "usuario" | "password" | "correo";
 
 /**
  * "Mi perfil": who you are, how you get in, and where you are already in.
  *
- * **The shape of this screen, and why it changed.** It used to be four cards of
- * always-open forms in a two-column grid, all weighted the same, so "teléfono"
- * looked exactly as consequential as "cambiar contraseña" and three separate
- * boxes asked for the current password without explaining why there were three.
- * There was no photo, no way to set one, and nothing at all about the account
- * itself — while `UsuarioDetallePage`, the screen an administrator uses to look
- * at *somebody else*, had a face, statistics and a history. Your own profile was
- * the poorer of the two.
+ * **The shape of this screen.** An identity header, then facts that are only
+ * read: each credential has a button that opens a small dialog, and the dialog
+ * owns everything typed in it. This page keeps three things and nothing else —
+ * which dialog is open, the API calls with the session and record updates that
+ * follow them, and the toasts for what the server answers.
  *
- * Now: an identity header, then facts that are read until you open one, one at a
- * time. The three consequential ones keep their confirmation dialogs; the purely
- * informational one lost its, because "Editar → Guardar" already is the
- * confirmation and the data can be typed back.
+ * That is also why there is no "discard your changes?" bookkeeping here: a
+ * dialog is modal, so there is never a second form to switch to, and
+ * `FormDialog` already asks before throwing away what a dirty one holds. Each
+ * dialog seeds its draft from the record every time it opens, so a photo saved
+ * from the header while one is open folds into the record without touching it.
  *
- * **One editor at a time** is not a stylistic choice. Two open forms on one
- * screen is what produced the three-password-boxes problem in the first place,
- * and with a Save button per form it is genuinely unclear which one Enter
- * commits. Opening a second editor over a dirty one asks first, rather than
- * silently discarding what was typed.
+ * Nothing on the page is drawn without the record. If the profile itself does
+ * not arrive, the page says so in one card with a retry, rather than showing
+ * empty cards and a banner claiming there is no recovery address.
  *
- * The state below is deliberately still held here rather than inside each
- * section: the dirty check that guards editor switching has to see every form's
- * value. The three second-factor rows hold none of it: they open to show what
- * the account has, and their forms are modal dialogs that ask for themselves
- * before discarding anything.
+ * The three second-factor rows hold none of this: they type in dialogs of
+ * their own.
  */
 const PerfilPage = () => {
   const { sesion, setSesion, logout } = useContext(SesionContext);
   const user = sesion.usuario;
   const d = usePerfilData(user.id);
 
-  const [editor, setEditor] = useState<Editor | null>(null);
-  /** Where to go once the person agrees to discard what is open. */
-  const [pendiente, setPendiente] = useState<Editor | null>(null);
-
-  const [datos, setDatos] = useState<DatosPersonales>({ name: "", lastname: "", phone: "", birthday: "" });
-  /** What the server has, to compare a draft against. Never edited. */
-  const [datosGuardados, setDatosGuardados] = useState<DatosPersonales>(datos);
+  const [dialogo, setDialogo] = useState<Dialogo | null>(null);
 
   /**
-   * The three credential boxes, of which exactly one is a password the person
-   * types on this screen: `oldPass`, on the password editor.
-   *
-   * There was a second, `userPass`, carried by the rename — kept deliberately
-   * apart from this one so that typing the password to change your password
-   * could not leave the rename already armed with it. That whole problem went
-   * away with the field: renaming asks for nothing here, because the step-up
-   * gate asks once, in a dialog, and then stops asking for ten minutes.
+   * What the summary panel says about security, and the one thing it can ask
+   * for. The counts belong to the second-factor rows of the access card, which
+   * load them; they report here so the panel and the rows cannot disagree.
+   * `pedirCodigos` is a counter because the confirmation it opens lives in
+   * that card: moving it is how the panel's "Generar" presses the same button.
    */
-  const [cuenta, setCuenta] = useState<DatosCuenta>(CUENTA_VACIA);
+  const [llaves, setLlaves] = useState<number | null>(null);
+  const [codigos, setCodigos] = useState<number | null>(null);
+  const [pedirCodigos, setPedirCodigos] = useState(0);
+  const cerrarDialogo = () => setDialogo(null);
 
-  /**
-   * The recovery address as the server currently has it, kept apart from
-   * `emailForm` the same way `cuenta.user` is kept apart from the box that
-   * renames it: one is "what is saved", the other is "what is being typed".
-   * `email: null` and `verifiedAt: null` is the true starting shape — not "no
-   * address yet" as an empty string, which would be indistinguishable from
-   * somebody who cleared the input by hand.
-   */
-  const [recovery, setRecovery] = useState<{ email: string | null; verifiedAt: string | null }>({
-    email: null,
-    verifiedAt: null,
-  });
-  const [emailForm, setEmailForm] = useState({ email: "" });
-
-  const [guardandoPersonal, setGuardandoPersonal] = useState(false);
-  const [guardandoUsuario, setGuardandoUsuario] = useState(false);
-  const [guardandoPassword, setGuardandoPassword] = useState(false);
-  const [guardandoEmail, setGuardandoEmail] = useState(false);
   const [cerrando, setCerrando] = useState<string | null>(null);
   const [cerrandoTodas, setCerrandoTodas] = useState(false);
-
-  const [confirmUsername, setConfirmUsername] = useState(false);
-  const [confirmPass, setConfirmPass] = useState(false);
-  const [confirmEmail, setConfirmEmail] = useState(false);
   const [confirmCerrarTodas, setConfirmCerrarTodas] = useState(false);
 
   /**
-   * Seed every form from the record, **once**, when it first lands.
+   * Set when the address is verified from the link in the page's own URL.
    *
-   * Once, and guarded by a ref rather than left to re-run on every change to
-   * `d.usuario`, because of one path that is easy to miss: the photo button
-   * lives in the header and works no matter which editor is open. Saving a
-   * photo folds the new `image` into the loaded record, and a seeding effect
-   * that re-ran on that would reach straight into an open editor and put its
-   * boxes back to what the server has — somebody typing a new recovery address,
-   * changing their photo, and watching the address they had just typed revert.
-   *
-   * Nothing is lost by seeding once. Every save handler already updates what it
-   * changed (`datosGuardados` after personal details, `recovery` after a send),
-   * and `limpiar` reads the current record rather than this snapshot.
+   * Kept apart from the record because the verification below can resolve
+   * *before* the record does (both start on mount, and neither waits for the
+   * other), and if the read of the database happened a moment before that
+   * UPDATE committed, the record would then say "sin verificar" for an address
+   * that was just verified. `recovery` below trusts whichever source reports it
+   * verified; only `enviarEmail`, which starts a new verification, clears this.
    */
-  const sembradoRef = useRef(false);
-  useEffect(() => {
-    if (!d.usuario || sembradoRef.current) return;
-    sembradoRef.current = true;
-    const cargados: DatosPersonales = {
-      name: d.usuario.name || "",
-      lastname: d.usuario.lastname || "",
-      phone: d.usuario.phone || "",
-      birthday: d.usuario.birthday ? String(d.usuario.birthday).slice(0, 10) : "",
-    };
-    setDatos(cargados);
-    setDatosGuardados(cargados);
-    setCuenta((prev) => ({ ...prev, user: d.usuario!.user || "" }));
-    setEmailForm((prev) => ({ ...prev, email: d.usuario!.email ?? "" }));
-    setRecovery((prev) => ({
-      email: d.usuario!.email ?? null,
-      // `?? prev.verifiedAt`, not a flat overwrite: the hash-verification
-      // effect below can resolve *before* this record does (both start on
-      // mount, and neither waits for the other), and if this read of the
-      // database happened a moment before that UPDATE committed, a flat
-      // assignment would silently put a just-verified address back to "sin
-      // verificar" the instant it arrived. Nothing else here ever moves
-      // `verifiedAt` from a real timestamp back to `null` except `sendEmail`
-      // explicitly starting a new verification, so trusting whichever source
-      // already reported "verified" is always safe.
-      verifiedAt: d.usuario!.email_verified_at ?? prev.verifiedAt,
-    }));
-  }, [d.usuario]);
+  const [verificadoAqui, setVerificadoAqui] = useState<string | null>(null);
 
   /**
    * Redeeming the token from a verification link, if this page was opened
@@ -225,7 +149,7 @@ const PerfilPage = () => {
     verifyEmailToken(token).then((response) => {
       if (response.status === 200) {
         toast.success(response.message || "Correo verificado.");
-        setRecovery((prev) => ({ ...prev, verifiedAt: new Date().toISOString() }));
+        setVerificadoAqui(new Date().toISOString());
       } else {
         toast.error(describeEmailError(response.status, response.message));
       }
@@ -234,72 +158,26 @@ const PerfilPage = () => {
     // browser was opened with, which does not reappear while the tab stays open.
   }, []);
 
+  /**
+   * The recovery address as the record has it. `email: null` and
+   * `verifiedAt: null` is "no address", not an empty string — which would be
+   * indistinguishable from somebody who cleared the box by hand.
+   */
+  const recovery = {
+    email: d.usuario?.email ?? null,
+    verifiedAt: d.usuario?.email_verified_at ?? verificadoAqui,
+  };
   const emailVerificado = recovery.verifiedAt !== null;
 
-  // ── Abrir y cerrar editores ────────────────────────────────────────────────
-
-  /** Whether the open editor holds something that would be lost. */
-  const hayCambios = (cual: Editor | null): boolean => {
-    if (cual === "personal") {
-      return (Object.keys(datos) as (keyof DatosPersonales)[]).some((k) => datos[k] !== datosGuardados[k]);
-    }
-    if (cual === "usuario") return cuenta.user !== (d.usuario?.user ?? "");
-    if (cual === "password") return cuenta.oldPass !== "" || cuenta.pass !== "" || cuenta.confirmPass !== "";
-    if (cual === "email") return emailForm.email.trim() !== (recovery.email ?? "");
-    return false;
-  };
-
-  /**
-   * Put an editor back the way the server has it.
-   *
-   * The password boxes are emptied rather than restored: there is nothing on
-   * the server to restore them to, and a cancelled editor that kept a typed
-   * password would leave a credential sitting in a detached form's state for
-   * the rest of the session. Only the password editor has any now — the other
-   * two are put back to what the server holds.
-   *
-   * The second-factor rows are not here because they have nothing to put
-   * back: what is typed in them lives in a dialog that is gone by then.
-   */
-  const limpiar = (cual: Editor) => {
-    if (cual === "personal") setDatos(datosGuardados);
-    if (cual === "usuario") setCuenta((prev) => ({ ...prev, user: d.usuario?.user ?? "" }));
-    if (cual === "password") setCuenta((prev) => ({ ...prev, oldPass: "", pass: "", confirmPass: "" }));
-    if (cual === "email") setEmailForm({ email: recovery.email ?? "" });
-  };
-
-  const abrir = (cual: Editor) => {
-    if (editor === cual) return;
-    if (editor && hayCambios(editor)) return setPendiente(cual);
-    if (editor) limpiar(editor);
-    setEditor(cual);
-  };
-
-  const cancelar = () => {
-    if (editor) limpiar(editor);
-    setEditor(null);
-  };
-
-  /** Close the editor after a save that worked, without wiping what was saved. */
-  const cerrarTrasGuardar = (cual: Editor) => {
-    if (editor === cual) setEditor(null);
-  };
-
-  const descartarYSeguir = () => {
-    if (editor) limpiar(editor);
-    setEditor(pendiente);
-    setPendiente(null);
-  };
-
   // ── Guardar ────────────────────────────────────────────────────────────────
+  //
+  // Each of these answers whether it worked, and the dialog that called it
+  // closes itself on `true`. A refusal is a toast with the server's own
+  // sentence and a `false`, so the dialog stays open with what was typed.
 
   const base = (): UsuarioInterface => d.usuario ?? user;
 
-  const guardarPersonal = async () => {
-    if (!datos.name.trim() || !datos.lastname.trim()) {
-      return toast.warning("Nombre y apellidos son obligatorios.");
-    }
-    setGuardandoPersonal(true);
+  const guardarPersonal = async (datos: DatosPersonales): Promise<boolean> => {
     try {
       const payload: UsuarioInterface = {
         ...base(),
@@ -311,13 +189,12 @@ const PerfilPage = () => {
       await editUsuario(payload);
       setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, ...payload } }));
       d.actualizarUsuario(payload);
-      setDatosGuardados(datos);
-      cerrarTrasGuardar("personal");
       toast.success("Información actualizada.");
+      return true;
     } catch (error) {
       toast.error(mensajeDeError(error, "Error al actualizar la información."));
+      return false;
     }
-    setGuardandoPersonal(false);
   };
 
   /**
@@ -377,114 +254,60 @@ const PerfilPage = () => {
    * secret twice for one rename. That double prompt is the complaint this work
    * exists to answer.
    */
-  const guardarUsuario = async () => {
-    setGuardandoUsuario(true);
+  const guardarUsuario = async (nuevo: string): Promise<boolean> => {
     try {
-      const response = await editUserName({ ...base(), user: cuenta.user });
+      const response = await editUserName({ ...base(), user: nuevo });
       if (response.status === 200) {
-        setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, user: cuenta.user } }));
-        d.actualizarUsuario({ user: cuenta.user });
-        cerrarTrasGuardar("usuario");
+        setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, user: nuevo } }));
+        d.actualizarUsuario({ user: nuevo });
         toast.success("Nombre de usuario modificado.");
-      } else {
-        toast.error(response.message || "Error al actualizar el usuario. Podría estar en uso.");
+        return true;
       }
+      toast.error(response.message || "Error al actualizar el usuario. Podría estar en uso.");
     } catch {
       toast.error("Ocurrió un error en el servidor.");
     }
-    setGuardandoUsuario(false);
+    return false;
   };
 
-  const guardarPassword = async () => {
-    setGuardandoPassword(true);
+  const guardarPassword = async ({ oldPass, pass }: DatosPassword): Promise<boolean> => {
     try {
-      const response = await editUserPass({ ...base(), pass: cuenta.pass, oldPass: cuenta.oldPass });
+      const response = await editUserPass({ ...base(), pass, oldPass });
       if (response.status === 200) {
-        setCuenta((prev) => ({ ...prev, oldPass: "", pass: "", confirmPass: "" }));
-        cerrarTrasGuardar("password");
         toast.success("Contraseña actualizada con éxito.");
-      } else {
-        toast.error(response.message || "Error al actualizar la contraseña.");
+        return true;
       }
+      toast.error(response.message || "Error al actualizar la contraseña.");
     } catch {
       toast.error("Ocurrió un error en el servidor.");
     }
-    setGuardandoPassword(false);
+    return false;
   };
 
   /**
-   * `email_verified_at` is never set from here — it comes back only from the
-   * server, on the next load or from the verification effect above — because
-   * this call always sends the address off unverified, whatever it was
-   * before. That is not a client choice: the server nulls it on every
+   * `email_verified_at` is only ever cleared from here, never set — a
+   * verified address comes back from the server, on the next load or from the
+   * verification effect above — because this call always sends the address off
+   * unverified, whatever it was before. That is not a client choice: the server nulls it on every
    * successful `/auth/email/send`, even when the address typed in is byte for
    * byte the one already on file, so a "reenviar" click and a genuine change
    * of address are the same request and this function does not need to tell
    * them apart.
    */
-  const enviarEmail = async () => {
-    setGuardandoEmail(true);
+  const enviarEmail = async (direccion: string): Promise<boolean> => {
     try {
-      const direccion = emailForm.email.trim();
       const response = await sendVerificationEmail(direccion);
       if (response.status === 200) {
         toast.success(response.message || "Se envió un enlace de verificación.");
-        setRecovery({ email: direccion, verifiedAt: null });
-        cerrarTrasGuardar("email");
-      } else {
-        toast.error(describeEmailError(response.status, response.message));
+        d.actualizarUsuario({ email: direccion, email_verified_at: null });
+        setVerificadoAqui(null);
+        return true;
       }
+      toast.error(describeEmailError(response.status, response.message));
     } catch {
       toast.error("Ocurrió un error en el servidor.");
     }
-    setGuardandoEmail(false);
-  };
-
-  // ── Puertas antes de cada diálogo ──────────────────────────────────────────
-
-  const pedirGuardarUsuario = () => {
-    if (!cuenta.user) return toast.warning("El nombre de usuario no puede estar vacío");
-    setConfirmUsername(true);
-  };
-
-  const pedirGuardarPassword = () => {
-    if (!cuenta.oldPass) return toast.warning("Debe proporcionar su contraseña actual.");
-    if (!cuenta.pass || !cuenta.confirmPass) return toast.warning("Debe rellenar ambos campos de nueva contraseña.");
-    if (cuenta.pass !== cuenta.confirmPass) return toast.warning("Las contraseñas no coinciden.");
-    /**
-     * The server's own rule, taken from the one place it lives on this side —
-     * `lib/password.ts` — and not a number typed in here.
-     *
-     * This check said `< 6` while the server demanded twelve, and the gap was
-     * declared harmless because "the server rejects correctly, so no weak
-     * password gets in". What that reasoning missed is the price of the
-     * rejection: the refusal costs one of the five password confirmations this
-     * account gets per quarter of an hour, the token is taken *before* the
-     * server looks at the new password, and the same ration also pays for
-     * renaming yourself. So somebody who reacts to "at least 12 characters" the
-     * way people do — nine, then ten, then eleven — is told to wait fifteen
-     * minutes for having corrected their own typing, and cannot change their
-     * username either.
-     */
-    const demasiadoCorta = passwordLengthError(cuenta.pass);
-    if (demasiadoCorta) return toast.warning(demasiadoCorta);
-    setConfirmPass(true);
-  };
-
-  /**
-   * The address is checked here and the identity is not, which is the split
-   * this screen settled on.
-   *
-   * A malformed address is worth catching before the round trip — the server
-   * answers 400 and nothing is learned by asking it. The password is the
-   * step-up gate's business: it is asked for on the way out, by the dialog, and
-   * asking here as well would be the same secret typed twice for one send.
-   */
-  const pedirEnviarEmail = () => {
-    const direccion = emailForm.email.trim();
-    if (!direccion) return toast.warning("Debe indicar una dirección de correo.");
-    if (!EMAIL_SHAPE.test(direccion)) return toast.warning("Debe indicar una dirección de correo válida.");
-    setConfirmEmail(true);
+    return false;
   };
 
   // ── Sesiones ───────────────────────────────────────────────────────────────
@@ -529,14 +352,30 @@ const PerfilPage = () => {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  const abrirCorreo = () => abrir("email");
+  const abrirCorreo = () => setDialogo("correo");
+
+  // Loading ended and there is still no record: the profile did not arrive.
+  if (!d.loading && !d.usuario) {
+    return (
+      <div className="p-page w-full space-y-page animate-in fade-in duration-500">
+        <Card className="shadow-sm border-muted/60">
+          <CardContent className="p-5 flex flex-wrap items-center gap-3">
+            <p className="text-sm m-0 flex-1 min-w-[16rem]">No se pudo cargar tu perfil.</p>
+            <Button variant="outline" size="sm" onClick={d.recargar}>
+              Reintentar
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-page w-full space-y-page animate-in fade-in duration-500">
 
       <PerfilHeader usuario={d.usuario} loading={d.loading} onCambiarFoto={cambiarFoto} />
 
-      {d.loading ? (
+      {d.loading || !d.usuario ? (
         <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem] gap-6 items-start">
           <div className="space-y-6">
             {[1, 2].map((i) => (
@@ -548,8 +387,8 @@ const PerfilPage = () => {
             ))}
           </div>
           <PerfilPanel
-            usuario={null} bitacora={[]} eventos={0} emailVerificado={false}
-            loading onConfigurarCorreo={abrirCorreo}
+            usuario={null} bitacora={[]} eventos={null} emailVerificado={false}
+            llaves={null} codigos={null} loading onGenerarCodigos={() => {}}
           />
         </div>
       ) : (
@@ -560,58 +399,39 @@ const PerfilPage = () => {
             fine print inside a card. It sits here, before the two-column split,
             so that on a phone — where the right-hand panel falls to the very
             bottom — the only actionable thing in it is still the first thing
-            read.
+            read. It says what the next step is, and its button opens the same
+            dialog as the row below.
           */}
           {!emailVerificado && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
               <MailWarningIcon className="h-4 w-4 text-amber-600 shrink-0" />
               <p className="text-sm m-0 flex-1 min-w-[16rem]">
                 {recovery.email
-                  ? "Todavía no confirmaste esta dirección: mientras tanto, no sirve para recuperar tu cuenta."
+                  ? `Te enviamos un enlace a ${recovery.email}. Ábrelo desde tu correo para confirmarla; hasta entonces no sirve para recuperar tu cuenta.`
                   : "No tienes un correo de recuperación. Si olvidas tu contraseña, no habrá forma de volver a entrar."}
               </p>
-              {editor !== "email" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="border-amber-500/30 bg-transparent hover:bg-amber-500/10 text-amber-700 dark:text-amber-500"
-                  onClick={abrirCorreo}
-                >
-                  {recovery.email ? "Verificar ahora" : "Configurar"}
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-amber-500/30 bg-transparent hover:bg-amber-500/10 text-amber-700 dark:text-amber-500"
+                onClick={abrirCorreo}
+              >
+                {recovery.email ? "Reenviar enlace" : "Añadir correo"}
+              </Button>
             </div>
           )}
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_17rem] gap-6 items-start">
             <div className="space-y-6 min-w-0">
-              <PerfilPersonal
-                datos={datos}
-                editando={editor === "personal"}
-                guardando={guardandoPersonal}
-                onCampo={(campo, valor) => setDatos((prev) => ({ ...prev, [campo]: valor }))}
-                onAbrir={() => abrir("personal")}
-                onCancelar={cancelar}
-                onGuardar={guardarPersonal}
-              />
+              <PerfilPersonal datos={datosPersonalesDe(d.usuario)} onEditar={() => setDialogo("personal")} />
 
               <PerfilAcceso
-                cuenta={cuenta}
-                emailForm={emailForm}
+                usuario={d.usuario.user || ""}
                 recovery={recovery}
-                abierto={editor === "personal" ? null : editor}
-                guardando={{
-                  usuario: guardandoUsuario,
-                  password: guardandoPassword,
-                  email: guardandoEmail,
-                }}
-                onCuenta={(campo, valor) => setCuenta((prev) => ({ ...prev, [campo]: valor }))}
-                onEmailForm={(campo, valor) => setEmailForm((prev) => ({ ...prev, [campo]: valor }))}
-                onAbrir={abrir}
-                onCancelar={cancelar}
-                onGuardarUsuario={pedirGuardarUsuario}
-                onGuardarPassword={pedirGuardarPassword}
-                onGuardarEmail={pedirEnviarEmail}
+                onAbrir={(cual) => setDialogo(cual)}
+                onLlaves={setLlaves}
+                onCodigos={setCodigos}
+                pedirCodigos={pedirCodigos}
               />
 
               <PerfilSesiones
@@ -628,93 +448,42 @@ const PerfilPage = () => {
             <PerfilPanel
               usuario={d.usuario}
               bitacora={d.bitacora}
-              eventos={d.eventos.length}
+              eventos={d.eventos?.length ?? null}
               emailVerificado={emailVerificado}
+              llaves={llaves}
+              codigos={codigos}
               loading={false}
-              onConfigurarCorreo={abrirCorreo}
+              onGenerarCodigos={() => setPedirCodigos((n) => n + 1)}
             />
           </div>
+
+          <PersonalDialog
+            open={dialogo === "personal"}
+            onClose={cerrarDialogo}
+            datos={datosPersonalesDe(d.usuario)}
+            onGuardar={guardarPersonal}
+          />
+          <UsuarioDialog
+            open={dialogo === "usuario"}
+            onClose={cerrarDialogo}
+            usuario={d.usuario.user || ""}
+            onGuardar={guardarUsuario}
+          />
+          <PasswordDialog
+            open={dialogo === "password"}
+            onClose={cerrarDialogo}
+            usuario={d.usuario.user || ""}
+            onGuardar={guardarPassword}
+          />
+          <CorreoDialog
+            open={dialogo === "correo"}
+            onClose={cerrarDialogo}
+            email={recovery.email}
+            verificado={emailVerificado}
+            onGuardar={enviarEmail}
+          />
         </>
       )}
-
-      {/* Confirm: descartar un editor a medias */}
-      <AlertDialog open={pendiente !== null} onOpenChange={(o) => !o && setPendiente(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Descartar los cambios?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tienes cambios sin guardar. Si abres otra sección, se perderán.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setPendiente(null)}>Seguir editando</AlertDialogCancel>
-            <AlertDialogAction onClick={descartarYSeguir}>Sí, descartar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirm: nombre de usuario */}
-      <AlertDialog open={confirmUsername} onOpenChange={(o) => !o && setConfirmUsername(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cambiar nombre de usuario?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Deberás ingresar al sistema con este nuevo nombre a partir de tu próxima sesión.
-              Tu contraseña no cambia.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmUsername(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setConfirmUsername(false); guardarUsuario(); }}>Sí, cambiar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirm: contraseña */}
-      <AlertDialog open={confirmPass} onOpenChange={(o) => !o && setConfirmPass(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cambiar contraseña?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tu sesión estará atada a esta nueva clave a partir del siguiente inicio de sesión.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmPass(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => { setConfirmPass(false); guardarPassword(); }}
-              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
-            >
-              Sí, cambiar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Confirm: correo de recuperación */}
-      <AlertDialog open={confirmEmail} onOpenChange={(o) => !o && setConfirmEmail(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Enviar verificación?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se enviará un enlace de verificación a esa dirección. Hasta que lo confirmes desde tu
-              correo, no podrás usarla para recuperar tu cuenta.
-              {emailVerificado && (
-                <>
-                  {" "}Tu dirección actual, ya verificada, quedará sin verificar y se avisará a esa
-                  misma casilla del cambio.
-                </>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmEmail(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={() => { setConfirmEmail(false); enviarEmail(); }}>
-              Sí, enviar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       {/* Confirm: cerrar todas las sesiones */}
       <AlertDialog open={confirmCerrarTodas} onOpenChange={(o) => !o && setConfirmCerrarTodas(false)}>

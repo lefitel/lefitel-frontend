@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +15,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { KeyIcon } from "lucide-react";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
+import { SeccionFactor } from "./SeccionFactor";
+import type { FilaDePerfil } from "./filaDePerfil";
 import {
   generateRecoveryCodes,
   getRecoveryCodesRemaining,
@@ -42,11 +43,38 @@ const UMBRAL_BAJO = 2;
  *
  * **Two shapes, one section**: a card on `/app/segundo-factor`, a row of
  * "Acceso y seguridad" in the profile when `fila` is passed. See
- * `SeccionFactor`.
+ * `SeccionFactor`. The row is the count and one button; it has no panel,
+ * because there is nothing to list.
+ *
+ * **Loading and failing are different states.** `getRecoveryCodesRemaining`
+ * answers `restantes: null` when the request did not come back, and a skeleton
+ * for that would sit there for ever. A failed read says so and offers to read
+ * again; it never shows a number.
  */
-const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
+const RecoveryCodesSection = ({
+  fila,
+  onRecuento,
+  pedirGenerar,
+}: {
+  fila?: FilaDePerfil;
+  /** How many codes are unspent, every time that changes; `null` while it is not known. */
+  onRecuento?: (restantes: number | null) => void;
+  /** A counter: each time it moves, the "generate ten new codes" confirmation opens.
+   *  How the profile's summary panel reaches the one dialog that does this. */
+  pedirGenerar?: number;
+}) => {
   const [restantes, setRestantes] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
+
+  // The callback is rebuilt on every render of whoever passes it; the report
+  // below must fire when the count changes, not on that.
+  const onRecuentoRef = useRef(onRecuento);
+  useEffect(() => {
+    onRecuentoRef.current = onRecuento;
+  });
+  useEffect(() => {
+    onRecuentoRef.current?.(cargando ? null : restantes);
+  }, [cargando, restantes]);
 
   const cargarRestantes = async () => {
     setCargando(true);
@@ -64,6 +92,16 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
   const [enviando, setEnviando] = useState(false);
   const [confirmAbierto, setConfirmAbierto] = useState(false);
   const [codigos, setCodigos] = useState<string[] | null>(null);
+
+  // Compared against the value this instance was born with, so that being
+  // remounted — the profile does it when a new sheet is minted elsewhere —
+  // does not reopen a confirmation somebody asked for earlier.
+  const pedidoVisto = useRef(pedirGenerar);
+  useEffect(() => {
+    if (pedirGenerar === pedidoVisto.current) return;
+    pedidoVisto.current = pedirGenerar;
+    setConfirmAbierto(true);
+  }, [pedirGenerar]);
 
   // No password asked here: the route takes the ten-minute window like every
   // other gated one since 2026-10-10, and the step-up dialog asks if it must.
@@ -92,7 +130,17 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
 
 
   const badge = () => {
-    if (cargando || restantes === null) return <Skeleton className="h-5 w-24 inline-block" />;
+    if (cargando) return <Skeleton className="h-5 w-24 inline-block" />;
+    if (restantes === null) {
+      return (
+        <span className="flex items-center gap-2">
+          <span className="text-destructive">No se pudo cargar</span>
+          <Button variant="link" size="sm" className="h-auto p-0" onClick={() => void cargarRestantes()}>
+            Reintentar
+          </Button>
+        </span>
+      );
+    }
     if (restantes === 0) {
       return (
         <Badge className="bg-destructive-fill/10 text-destructive border-destructive/20 shadow-none font-normal">
@@ -158,7 +206,17 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
       fila={fila}
       etiqueta="Códigos de recuperación"
       resumen={badge()}
-      abrirLabel="Gestionar códigos de recuperación"
+      accionesFila={
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label="Generar códigos de recuperación nuevos"
+          onClick={() => setConfirmAbierto(true)}
+          disabled={cargando || enviando}
+        >
+          Generar nuevos
+        </Button>
+      }
       dialogos={dialogos}
     >
       <div className="space-y-3">
