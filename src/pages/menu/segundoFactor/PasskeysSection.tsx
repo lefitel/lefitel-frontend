@@ -55,7 +55,7 @@ const fecha = (iso: string | null): string =>
  * pedir la lista, porque esa petición sería el 401 y pondría un segundo aviso
  * contradictorio encima del primero.
  *
- * **Cada llave se quita desde la lista, encima del formulario de alta**, por
+ * **Cada llave se quita desde la lista, que es lo primero que se ve**, por
  * el mismo motivo que `TotpSection` pone «Quitar» antes que «Añadir»: quien
  * perdió el aparato tiene una llave muerta pero registrada, y cada vuelta por
  * una puerta que la exige cuesta un código de recuperación.
@@ -279,7 +279,7 @@ const PasskeysSection = ({
         open={altaAbierta}
         onClose={cancelarAlta}
         size="sm"
-        title="Registrar una llave de acceso"
+        title="Añadir una llave de acceso"
         description="Confirma con tu contraseña que eres tú. Después, tu dispositivo te pedirá la huella, la cara o el PIN."
         dirty={nombreAlta !== nombreSugerido || passwordAlta !== ""}
         saving={enviandoAlta}
@@ -398,9 +398,20 @@ const PasskeysSection = ({
         </p>
 
         <section className="space-y-3" aria-labelledby="passkeys-lista-heading">
-          <h3 id="passkeys-lista-heading" className="text-sm font-medium">
-            Tus llaves
-          </h3>
+          {/* The one way to add a key sits beside the list it adds to. It
+              used to be a second section below, with a heading and a button
+              that said the same thing twice. */}
+          <div className="flex items-center justify-between gap-3">
+            <h3 id="passkeys-lista-heading" className="text-sm font-medium">
+              Tus llaves
+            </h3>
+            {soportado && (
+              <Button size="sm" variant="outline" onClick={abrirAlta}>
+                <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
+                Añadir llave
+              </Button>
+            )}
+          </div>
 
           {cargando && (
             <p className="text-sm text-muted-foreground flex items-center gap-2">
@@ -444,27 +455,12 @@ const PasskeysSection = ({
               ))}
             </ul>
           )}
-        </section>
-
-        <div className="border-t border-border/40" />
-
-        <section className="space-y-3" aria-labelledby="passkeys-alta-heading">
-          <h3 id="passkeys-alta-heading" className="text-sm font-medium flex items-center gap-2">
-            <PlusIcon className="h-4 w-4 text-muted-foreground" />
-            Registrar una llave
-          </h3>
 
           {!soportado && (
             <p className="text-sm text-muted-foreground">
               Este navegador no puede crear llaves de acceso. Puedes seguir quitando las que ya
-              tienes; para registrar una nueva, entra desde un navegador actual o desde tu móvil.
+              tienes; para añadir una nueva, entra desde un navegador actual o desde tu móvil.
             </p>
-          )}
-
-          {soportado && (
-            <Button size="sm" onClick={abrirAlta}>
-              Registrar una llave en este dispositivo
-            </Button>
           )}
         </section>
       </div>

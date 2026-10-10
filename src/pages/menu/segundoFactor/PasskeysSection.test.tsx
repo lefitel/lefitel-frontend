@@ -128,7 +128,7 @@ describe("la lista", () => {
 
 describe("registrar", () => {
   const rellenarYCrear = async (nombre = "mi móvil", password = "la-mia") => {
-    await userEvent.click(await screen.findByRole("button", { name: /registrar una llave/i }));
+    await userEvent.click(await screen.findByRole("button", { name: /añadir llave/i }));
     await userEvent.type(screen.getByLabelText(/nombre de la llave/i), nombre);
     await userEvent.type(screen.getByLabelText(/contraseña actual/i), password);
     await userEvent.click(screen.getByRole("button", { name: /crear la llave/i }));
@@ -197,7 +197,7 @@ describe("registrar", () => {
 
     expect(await screen.findByText("mi móvil")).toBeInTheDocument();
     expect(screen.getByText(/este navegador no puede crear llaves/i)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /registrar una llave/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /añadir llave/i })).not.toBeInTheDocument();
   });
 });
 

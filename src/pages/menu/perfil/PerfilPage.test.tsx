@@ -760,7 +760,7 @@ describe("the second-factor rows of the access card", () => {
     await abrir(user, "llave");
 
     expect(screen.queryByLabelText("Nueva contraseña")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /añadir llave/i })).toBeInTheDocument();
     // Nothing to type in the card itself: the form is a dialog.
     expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument();
   });
@@ -775,9 +775,9 @@ describe("the second-factor rows of the access card", () => {
     await esperarCarga();
     await abrir(user, "llave");
 
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    await user.click(screen.getByRole("button", { name: /añadir llave/i }));
 
-    const dialogo = await screen.findByRole("dialog", { name: /registrar una llave de acceso/i });
+    const dialogo = await screen.findByRole("dialog", { name: /añadir una llave de acceso/i });
     const nombre = within(dialogo).getByLabelText(/nombre de la llave/i);
     // Read from the browser, so the required field does not arrive blank.
     expect(nombre).toHaveValue("Chrome en Windows");
@@ -793,7 +793,7 @@ describe("the second-factor rows of the access card", () => {
     render(<Harness />);
     await esperarCarga();
     await abrir(user, "llave");
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    await user.click(screen.getByRole("button", { name: /añadir llave/i }));
     await user.type(await screen.findByLabelText(/contraseña actual/i), "la-mia");
 
     await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
@@ -804,7 +804,7 @@ describe("the second-factor rows of the access card", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     // Opened again, the password box is empty: the one typed was not kept.
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    await user.click(screen.getByRole("button", { name: /añadir llave/i }));
     expect(await screen.findByLabelText(/contraseña actual/i)).toHaveValue("");
   });
 
