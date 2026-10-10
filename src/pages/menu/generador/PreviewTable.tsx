@@ -28,8 +28,7 @@ interface Props {
    *
    * It used to be a button in the column list of the left panel, several
    * hundred pixels away from the column it ordered, while the table itself
-   * responded to nothing. Undefined leaves the headers as plain text — the
-   * export builders render this component too.
+   * responded to nothing. Undefined leaves the headers as plain text.
    */
   onToggleSort?: (path: string, agg?: AggFn) => void;
   loading?: boolean;
@@ -48,19 +47,30 @@ interface Props {
    *
    * Beside the pager it governs, which is where every table on earth puts it,
    * and not in the header — that row already carries Guardar, two exports, the
-   * row count, Auto and Generar. Undefined leaves the footer as it was: the
-   * export builders render this component too, and a file has no pages.
+   * row count, Auto and Generar. Undefined leaves the footer without it.
    */
   onPageSize?: (limit: number) => void;
+  /**
+   * Headers that have been renamed since this result was generated, by column
+   * position; undefined where the result's own name still stands.
+   *
+   * A rename changes no row, so the table is kept and nothing is asked again —
+   * which would leave the old name on screen over the box where the new one was
+   * just typed.
+   */
+  headers?: (string | undefined)[];
 }
 
 /** Thousands separated the way the rest of the screen separates them. */
 const es = (n: number) => n.toLocaleString("es-BO");
 
 const PreviewTable = ({
-  result, onPage, sort, onToggleSort, loading, hasFilters, onPageSize,
+  result, onPage, sort, onToggleSort, loading, hasFilters, onPageSize, headers,
 }: Props) => {
-  const { columns, rows, total, limit, offset } = result;
+  const { rows, total, limit, offset } = result;
+  const columns = headers
+    ? result.columns.map((c, i) => (headers[i] === undefined ? c : { ...c, label: headers[i] }))
+    : result.columns;
   const page = Math.floor(offset / Math.max(1, limit)) + 1;
   const pages = Math.max(1, Math.ceil(total / Math.max(1, limit)));
 

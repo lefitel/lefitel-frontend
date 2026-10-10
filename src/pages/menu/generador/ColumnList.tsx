@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import {
   DndContext, KeyboardSensor, PointerSensor, closestCenter,
   useSensor, useSensors, type DragEndEvent,
@@ -47,6 +47,42 @@ interface ChipProps {
   onSetAgg: (index: number, agg?: AggFn) => void;
   onToggleGroup: (index: number) => void;
   onToggleSort: (path: string, agg?: AggFn) => void;
+}
+
+
+/**
+ * The header box, holding what was typed rather than what was stored.
+ *
+ * The configuration keeps a header trimmed (`renameColumn`), which is right for
+ * what gets saved, compared and sent. Showing that trimmed value back in the
+ * box was not: the space at the end of «Mi » was gone before the next letter
+ * arrived, so «Mi columna» could be pasted and never typed — it came out
+ * «Micolumna». The box keeps its own text, and follows the stored one only when
+ * that changes from somewhere else: another report opened, the form cleared.
+ */
+function HeaderInput({ stored, placeholder, onRename }: {
+  stored: string;
+  placeholder: string;
+  onRename: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(stored);
+  useEffect(() => {
+    setDraft((typed) => (typed.trim() === stored ? typed : stored));
+  }, [stored]);
+
+  return (
+    <Input
+      value={draft}
+      placeholder={placeholder}
+      aria-label={`Nombre de la columna ${placeholder}`}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        onRename(e.target.value);
+      }}
+      maxLength={120}
+      className={cn(flatControl, "h-6 min-w-0 rounded-md px-2 focus-visible:ring-1")}
+    />
+  );
 }
 
 /**
@@ -142,13 +178,10 @@ const ColumnChip = memo(function ColumnChip({
         <span className="truncate px-2 text-[11px] leading-tight text-muted-foreground">
           {group}
         </span>
-        <Input
-          value={column.label ?? ""}
+        <HeaderInput
+          stored={column.label ?? ""}
           placeholder={label}
-          aria-label={`Nombre de la columna ${label}`}
-          onChange={(e) => onRename(index, e.target.value)}
-          maxLength={120}
-          className={cn(flatControl, "h-6 min-w-0 rounded-md px-2 focus-visible:ring-1")}
+          onRename={(value) => onRename(index, value)}
         />
       </div>
 

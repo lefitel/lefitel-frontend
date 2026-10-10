@@ -30,6 +30,7 @@ import {
   sameShape,
   setColumnAgg,
   pruneToCatalog,
+  withExtraFields,
   sortLimitReached,
   toggleGroupBy,
   toggleSort,
@@ -617,6 +618,122 @@ describe("pruneToCatalog", () => {
   });
 });
 
+describe("pruneToCatalog — what the server already judged", () => {
+  it("keeps an «existe» filter whose conditions belong to the related entity", () => {
+    // «Postes con algún evento pendiente». `state` is a field of an event; this
+    // root lists the fields of a poste, and looking it up here dropped the
+    // filter from a report that had saved and run with it.
+    const postes: CatalogRoot = {
+      key: "poste", label: "Poste", rowMeaning: "Una fila por poste",
+      fields: [{ path: "name", label: "Nº", kind: "string", group: "Poste", operators: ["like"], aggregates: ["count"] }],
+      aggregateOnly: [{ path: "eventos", label: "Eventos", group: "Poste" }],
+    };
+    const config: ReportConfig = {
+      ...emptyConfig("poste"),
+      columns: [{ path: "name" }],
+      filters: {
+        op: "and",
+        conditions: [{
+          exists: "eventos",
+          where: { op: "and", conditions: [{ path: "state", operator: "eq", value: false }] },
+        }],
+      },
+    };
+
+    expect(pruneToCatalog(config, postes).filters?.conditions).toHaveLength(1);
+    // The relation itself is still this catalog's to judge.
+    expect(pruneToCatalog(config, { ...postes, aggregateOnly: [] }).filters?.conditions).toHaveLength(0);
+  });
+
+  it("keeps an order by a field the report does not show", () => {
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }],
+      sort: [{ path: "date", dir: "desc" }],
+    };
+
+    expect(pruneToCatalog(config, evento).sort).toEqual(config.sort);
+    // And still drops one whose field is gone.
+    expect(pruneToCatalog({ ...config, sort: [{ path: "no.existe", dir: "asc" }] }, evento).sort)
+      .toEqual([]);
+  });
+
+  it("keeps a path the picker does not list once the report says what it is", () => {
+    const hidden = "ultimaRevision.evento.description";
+    const config: ReportConfig = {
+      ...emptyConfig("evento"),
+      columns: [{ path: "description" }, { path: hidden }],
+    };
+    const described = withExtraFields(evento, [{
+      path: hidden, label: "Descripción", kind: "string",
+      group: "Evento › Última revisión › Evento", operators: ["like"], aggregates: ["count"],
+    }]);
+
+    expect(pruneToCatalog(config, evento).columns).toHaveLength(1);
+    expect(pruneToCatalog(config, described).columns).toHaveLength(2);
+    // The catalog's own root is not touched, and a field it already lists is
+    // not added a second time.
+    expect(evento.fields.some((f) => f.path === hidden)).toBe(false);
+    expect(withExtraFields(evento, [evento.fields[0]])).toBe(evento);
+    expect(withExtraFields(evento, undefined)).toBe(evento);
+  });
+});
+
+describe("what makes the table on screen stale", () => {
+  const base: ReportConfig = {
+    ...emptyConfig("evento"),
+    columns: [{ path: "description" }],
+    limit: 100,
+  };
+
+  it("is not a renamed header", () => {
+    const renamed = { ...base, columns: [{ path: "description", label: "Detalle" }] };
+    expect(sameQuery(base, renamed)).toBe(true);
+  });
+
+  it("is not a different page size", () => {
+    expect(sameQuery(base, { ...base, limit: 250 })).toBe(true);
+  });
+
+  it("is a filter, an order, or a column", () => {
+    const filtered = addFilter(base, evento.fields[0]);
+    expect(sameQuery(base, filtered)).toBe(false);
+    expect(sameQuery(base, { ...base, sort: [{ path: "description", dir: "asc" }] })).toBe(false);
+    expect(sameQuery(base, addColumn(base, "state"))).toBe(false);
+  });
+});
+
+describe("the value of a filter when its operator changes", () => {
+  const withValue = (operator: FilterCondition["operator"], value: unknown): ReportConfig => ({
+    ...emptyConfig("evento"),
+    filters: { op: "and", conditions: [{ path: "date", operator, value }] },
+  });
+  const valueOf = (config: ReportConfig) => (config.filters!.conditions[0] as FilterCondition).value;
+
+  it("stays when both take one value in the same box", () => {
+    // «es mayor que 3» to «es mayor o igual que 3» used to mean typing the 3 again.
+    expect(valueOf(updateFilter(withValue("gt", 3), 0, { operator: "gte" }))).toBe(3);
+    expect(valueOf(updateFilter(withValue("eq", "2026-01-01"), 0, { operator: "lt" }))).toBe("2026-01-01");
+    expect(valueOf(updateFilter(withValue("like", "poste"), 0, { operator: "eq" }))).toBe("poste");
+  });
+
+  it("goes when the new operator takes a different shape", () => {
+    expect(valueOf(updateFilter(withValue("eq", 3), 0, { operator: "between" }))).toBeUndefined();
+    expect(valueOf(updateFilter(withValue("eq", 3), 0, { operator: "in" }))).toBeUndefined();
+    expect(valueOf(updateFilter(withValue("in", [1, 2]), 0, { operator: "eq" }))).toBeUndefined();
+    expect(valueOf(updateFilter(withValue("eq", 3), 0, { operator: "isnull" }))).toBeUndefined();
+  });
+
+  it("goes on a listed field when the box turns from text into a dropdown, or back", () => {
+    // A typed fragment is not one of the list's values: carried across, the
+    // dropdown would hold something it never offered.
+    expect(valueOf(updateFilter(withValue("like", "Tig"), 0, { operator: "eq" }, true))).toBeUndefined();
+    expect(valueOf(updateFilter(withValue("eq", "Tigo"), 0, { operator: "like" }, true))).toBeUndefined();
+    // Between two operators that both use the dropdown it stays.
+    expect(valueOf(updateFilter(withValue("eq", "Tigo"), 0, { operator: "neq" }, true))).toBe("Tigo");
+  });
+});
+
 describe("sameQuery — key order", () => {
   it("does not mind which order the keys were written in", () => {
     // `JSON.stringify` follows insertion order and the builders disagree on
@@ -894,11 +1011,14 @@ describe("whether the table on screen can still stand for the configuration", ()
     expect(sameShape(base, { ...base, columns: [base.columns[1], base.columns[0]] })).toBe(false);
   });
 
-  it("a renamed header is not", () => {
-    // The header is what the table shows; an old table under a new name is
-    // showing the wrong thing just as surely as one missing a column.
+  it("a renamed header is the same shape", () => {
+    // It was not, on the reasoning that an old table under a new name shows the
+    // wrong thing — and the price was the table itself, taken away for a letter
+    // typed in a header box and never brought back, because a rename is not a
+    // change the refresh answers to. The table draws the new name over the rows
+    // it already has.
     const renamed = [{ ...base.columns[0], label: "Detalle" }, base.columns[1]];
-    expect(sameShape(base, { ...base, columns: renamed })).toBe(false);
+    expect(sameShape(base, { ...base, columns: renamed })).toBe(true);
   });
 
   it("a different summary on the same field is not", () => {

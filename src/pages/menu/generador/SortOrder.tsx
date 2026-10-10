@@ -125,8 +125,14 @@ const SortOrder = ({ config, root, onReorder, onFlip, onRemove }: Props) => {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Nothing to say with one criterion: it wins by being alone.
-  if (sorts.length < 2) return null;
+  // Nothing to say with one criterion: it wins by being alone, and the arrow on
+  // its column already shows it. Unless it has no column — a saved report can
+  // be ordered by a field it does not show, and then this strip is the only
+  // place on the page that says so, and the only way to switch it off.
+  const unseen = sorts.some(
+    (s) => !config.columns.some((c) => c.path === s.path && (c.agg ?? undefined) === (s.agg ?? undefined)),
+  );
+  if (sorts.length < 2 && !unseen) return null;
 
   const ids = sorts.map(sortKey);
 

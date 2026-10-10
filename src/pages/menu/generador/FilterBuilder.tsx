@@ -45,7 +45,8 @@ interface Props {
    * thing on screen: the box the filter had before.
    */
   optionLists?: Record<string, string[]>;
-  onUpdate: (index: number, patch: Partial<FilterCondition>) => void;
+  /** `listed`: whether that row's value is chosen from a closed list. */
+  onUpdate: (index: number, patch: Partial<FilterCondition>, listed?: boolean) => void;
   onRemove: (index: number) => void;
   onSetJoin: (op: "and" | "or") => void;
 }
@@ -346,7 +347,7 @@ interface RowProps {
    * array each time would defeat that on every keystroke anywhere in the panel.
    */
   options?: string[];
-  onUpdate: (index: number, patch: Partial<FilterCondition>) => void;
+  onUpdate: (index: number, patch: Partial<FilterCondition>, listed?: boolean) => void;
   onRemove: (index: number) => void;
 }
 
@@ -394,7 +395,9 @@ const FilterRow = memo(function FilterRow({
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={condition.operator}
-          onValueChange={(v) => onUpdate(index, { operator: v as Operator })}
+          // Whether the value comes from a list decides if it survives the
+          // change of operator, and this row is the one that knows.
+          onValueChange={(v) => onUpdate(index, { operator: v as Operator }, options !== undefined)}
         >
           <SelectTrigger
             className="h-8 w-44 shrink-0 text-xs"

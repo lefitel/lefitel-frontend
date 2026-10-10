@@ -533,6 +533,36 @@ describe("FilterBuilder — the fields whose values are a closed list", () => {
     expect(screen.getByRole("textbox", { name: "Valor para Propietario" })).toHaveValue("ti");
   });
 
+  it("al cambiar de operador dice si el valor sale de una lista", async () => {
+    // Whether the typed value survives the change depends on it: a fragment
+    // typed under «contiene» is not one of the list's values. The rule itself
+    // is tested where it lives; this is the wire that feeds it, and with it cut
+    // every other test here still passed.
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    const { unmount } = wrap(
+      <FilterBuilder
+        config={filtro("like", "ti")} root={conLista} optionLists={listas}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Operador para Propietario" }));
+    await user.click(screen.getByRole("option", { name: "es igual a" }));
+    expect(onUpdate).toHaveBeenLastCalledWith(0, { operator: "eq" }, true);
+    unmount();
+
+    // And without a list for the field, it says so too.
+    wrap(
+      <FilterBuilder
+        config={filtro("like", "ti")} root={conLista}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Operador para Propietario" }));
+    await user.click(screen.getByRole("option", { name: "es igual a" }));
+    expect(onUpdate).toHaveBeenLastCalledWith(0, { operator: "eq" }, false);
+  });
+
   it("sin listas del servidor se queda la caja de texto de siempre", () => {
     // An older server sends no lists at all, and a list can also be missing
     // because it outgrew the cap. Both mean the field the generator had before.

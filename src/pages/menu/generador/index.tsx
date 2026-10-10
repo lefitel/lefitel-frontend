@@ -22,7 +22,7 @@ import {
   moveColumnByKey,
   moveSortByKey, flipSort, removeSort,
   pruneToCatalog, removeColumn, removeFilter, renameColumn, sameQuery, sameShape, setColumnAgg,
-  signatureOf,
+  signatureOf, fieldLabel, withExtraFields,
   setFilterJoin, sortLimitReached, toggleGroupBy, toggleSort, updateFilter, validateConfig,
   clearFilters,
   withPageSize,
@@ -100,6 +100,10 @@ const writeAutoPreference = (value: boolean): void => {
   }
 };
 
+/** `fieldLabel` answers with the path itself when it does not know the field. */
+const nameOrNothing = (name: string, path: string): string | undefined =>
+  name === path ? undefined : name;
+
 const GeneradorPage = () => {
   const { sesion } = useContext(SesionContext);
   const currentUserId = sesion.usuario.id ?? undefined;
@@ -129,7 +133,6 @@ const GeneradorPage = () => {
   const [estimate, setEstimate] = useState<number | null>(null);
   /** True while a refresh is armed but has not gone out: the banner defers to it. */
   const [autoPending, setAutoPending] = useState(false);
-  /** A level-of-detail change waiting to be confirmed, and what it would cost. */
   /** Confirmation for emptying a filter list long enough to be worth rebuilding. */
   const [clearingFilters, setClearingFilters] = useState(false);
   /** The "Nuevo" confirmation, open only when there is something to discard. */
@@ -209,9 +212,35 @@ const GeneradorPage = () => {
   const configRef = useRef(config);
   configRef.current = config;
 
-  const root = useMemo(
+  /**
+   * Fields the open report uses and the picker does not list.
+   *
+   * The server runs more than its menu offers — a path that reaches an entity
+   * the long way round, a parent's own totals — and a saved report can name
+   * one. It sends what each of those is along with the report; kept here so the
+   * report goes on being readable after it is saved, when the answer to the
+   * save carries nothing but the row.
+   */
+  const [extraFields, setExtraFields] = useState<CatalogField[]>([]);
+  /** The same for to-many relations: a count or an «existe» on one. */
+  const [extraRelations, setExtraRelations] = useState<CatalogRoot["aggregateOnly"]>([]);
+  /**
+   * Bumped whenever the screen starts being about a different report: one
+   * opened, a template loaded, Nuevo. A save or an archive that answers late
+   * compares it, so it cannot pin its own report's identity onto whatever was
+   * opened while it travelled.
+   */
+  const identitySeq = useRef(0);
+
+  /** The level of detail as the picker offers it. */
+  const menuRoot = useMemo(
     () => catalog?.roots.find((r) => r.key === config.root),
     [catalog, config.root],
+  );
+  /** And as everything else reads it: with the open report's extra fields. */
+  const root = useMemo(
+    () => (menuRoot ? withExtraFields(menuRoot, extraFields, extraRelations) : undefined),
+    [menuRoot, extraFields, extraRelations],
   );
   /**
    * The caps, taken from the catalog the server publishes.
@@ -252,7 +281,8 @@ const GeneradorPage = () => {
   /**
    * Disarms a refresh that has not gone out yet, and stops it re-arming.
    *
-   * Every control that runs something itself calls this first: an explicit
+   * Every control that runs something itself calls this first — Generar, a
+   * page, a page size, an order: an explicit
    * click beats a refresh that is still counting down. Without it, editing and
    * then paging within the same second gave you the page you asked for and
    * replaced it a moment later with page 1 of a different report. Marking the
@@ -294,6 +324,28 @@ const GeneradorPage = () => {
   /** The real table is shown while it still describes the configuration's shape. */
   const showsResult = result !== null && !shapeChanged;
   /**
+   * The headers of the table on screen, where they have been renamed since it
+   * was generated.
+   *
+   * A rename changes no row, so the table stays (`sameShape`) and nothing
+   * re-runs for it (`signatureOf`) — which leaves the result carrying the old
+   * name. Same shape means the same columns in the same order, so position is
+   * enough to pair them. Untouched headers stay undefined and keep the name the
+   * server gave them.
+   */
+  const liveHeaders = useMemo(() => {
+    if (!showsResult || !resultConfig) return undefined;
+    return config.columns.map((column, i) =>
+      (column.label ?? "") === (resultConfig.columns[i]?.label ?? "")
+        ? undefined
+        // The author's name, or — the name having been cleared — the one the
+        // server gives an unnamed column: the catalog's, with no summary after
+        // it. `columnHeader` adds «(conteo)» there and the server does not, so
+        // the header read one thing until the next Generar and another after.
+        // A path the catalog has no name for keeps the header it came with.
+        : column.label?.trim() || nameOrNothing(fieldLabel(root, column.path), column.path));
+  }, [showsResult, resultConfig, config.columns, root]);
+  /**
    * The shape drawn from the configuration alone, with sample values.
    *
    * Distinct from the skeleton: grey bars say "the real values are on their
@@ -302,6 +354,16 @@ const GeneradorPage = () => {
    * really are coming.
    */
   const previewing = config.columns.length > 0 && !showsResult && !running;
+  /**
+   * Whether there is a generated report to put in a file.
+   *
+   * A result is not enough. Once the columns have changed, what is on screen is
+   * a sample of a report nobody has generated, and the export — which sends the
+   * configuration that produced the last table — handed over a file without
+   * the column just added, under «Excel descargado». The banner that explains
+   * a stale table is not shown then either, because there is no table.
+   */
+  const canExport = result !== null && !shapeChanged;
 
   /**
    * Filters as the panel lists them, which is the top level only.
@@ -415,7 +477,7 @@ const GeneradorPage = () => {
     setRunning(true);
     try {
       const data = await runReporte(target, controller.signal);
-      if (seq !== runSeq.current) return;   // a newer request already went out
+      if (seq !== runSeq.current) return false;   // a newer request already went out
       setResult(data);
       setResultConfig(target);
       // Blaming the filters is only honest when there are some. A revision
@@ -428,12 +490,13 @@ const GeneradorPage = () => {
             : "El reporte no devolvió ningún registro.",
         );
       }
+      return true;
     } catch (error) {
-      if (seq !== runSeq.current) return;
+      if (seq !== runSeq.current) return false;
       // A cancellation is this screen's own doing — a newer run, or the reader
       // leaving the page — and the only one that reaches here is the leaving:
       // a superseded run has an older sequence and returned on the line above.
-      if (axios.isCancel(error)) return;
+      if (axios.isCancel(error)) return false;
       toast.error(mensajeDeError(error, "No se pudo generar el reporte"));
       // Clearing is right for Generar: rows from a previous configuration under
       // a header describing a different one is a lie on screen.
@@ -450,6 +513,7 @@ const GeneradorPage = () => {
         setResult(null);
         setResultConfig(null);
       }
+      return false;
     } finally {
       if (seq === runSeq.current) {
         setRunning(false);
@@ -467,6 +531,8 @@ const GeneradorPage = () => {
    */
   const applyRoot = (cleaned: ReportConfig) => {
     retireInFlight();
+    setExtraFields([]);
+    setExtraRelations([]);
     setConfig(cleaned);
     setResult(null);
     setResultConfig(null);
@@ -475,7 +541,14 @@ const GeneradorPage = () => {
 
   const handleGenerate = () => {
     if (problems.length > 0) return toast.warning(problems[0]);
+    // Before anything goes out. Moving to the first page does not change what
+    // the refresh is keyed on, so a refresh armed by the last edit stayed armed
+    // behind this click, fired, hung up on this very request and asked for the
+    // same report again: two of the thirty runs a minute, and the wait started
+    // over. Only a slow report showed it — a fast one landed first.
+    cancelAutoRefresh();
     const target = { ...config, offset: 0 };
+    autoDone.current = signatureOf(target);
     setConfig(target);
     void run(target);
   };
@@ -592,10 +665,18 @@ const GeneradorPage = () => {
    * one part of it nobody could choose.
    */
   const handlePageSize = (limit: number) => {
-    setConfig((c) => ({ ...c, limit }));
-    if (!resultConfig) return;
+    if (!resultConfig) {
+      setConfig((c) => ({ ...c, limit }));
+      return;
+    }
     cancelAutoRefresh();
-    void run({ ...resultConfig, limit, offset: 0 }, true);
+    // On the configuration once the page is here, not before. Written first, a
+    // page that failed left the table and its selector at the old size while
+    // the configuration held the new one — nothing on screen said so, and
+    // Guardar stored a size the reader had never seen applied.
+    void run({ ...resultConfig, limit, offset: 0 }, true).then((landed) => {
+      if (landed) setConfig((c) => ({ ...c, limit }));
+    });
   };
 
   // ── Column and filter editing ──────────────────────────────────────────────
@@ -610,7 +691,7 @@ const GeneradorPage = () => {
    *
    * The two ↑↓ buttons this replaces moved a column one place per press, which
    * is eleven presses to bring the twelfth column to the front. The keys come
-   * from `columnKey`, so two columns of the same field — the minimum and the
+   * from `columnKeys`, so two columns of the same field — the minimum and the
    * maximum of one date — are told apart, which position never could.
    */
   const handleReorder = useCallback((from: string, to: string) => {
@@ -736,8 +817,10 @@ const GeneradorPage = () => {
     runOrderNow(next);
   }, [runOrderNow]);
 
-  const handleUpdateFilter = useCallback((index: number, patch: Partial<FilterCondition>) => {
-    setConfig((c) => updateFilter(c, index, patch));
+  const handleUpdateFilter = useCallback((
+    index: number, patch: Partial<FilterCondition>, listed?: boolean,
+  ) => {
+    setConfig((c) => updateFilter(c, index, patch, listed));
   }, []);
 
   const handleRemoveFilter = useCallback((index: number) => {
@@ -751,6 +834,10 @@ const GeneradorPage = () => {
   // ── Saved reports ──────────────────────────────────────────────────────────
 
   const resetForm = () => {
+    // The screen stops being about that report, so an answer still travelling
+    // for it must not bring it back: a slow «Actualizar» that landed after the
+    // report had been archived pinned the archived report open again.
+    identitySeq.current += 1;
     setCurrent(null);
     setSaveName("");
     setSaveDescription("");
@@ -786,6 +873,9 @@ const GeneradorPage = () => {
 
   const applyNew = () => {
     retireInFlight();
+    identitySeq.current += 1;
+    setExtraFields([]);
+    setExtraRelations([]);
     setConfig(emptyConfig(root?.key ?? catalog?.roots[0]?.key ?? "evento"));
     setResult(null);
     setResultConfig(null);
@@ -820,6 +910,7 @@ const GeneradorPage = () => {
     if (saving) return;
 
     setSaving(true);
+    const openedAs = identitySeq.current;
     try {
       const payload = {
         name,
@@ -832,9 +923,15 @@ const GeneradorPage = () => {
       const report = current && isMine && mayEdit
         ? await actualizarReporte(current.id, payload)
         : await crearReporte(payload);
-      setCurrent(report);
-      setSaveName(report.name);
-      setSaveOpen(false);
+      // Only while the screen is still about the report that was saved. The
+      // popover is not modal, so another report can be opened while this
+      // travels — and pinning this one's identity onto that one's
+      // configuration made the next «Actualizar» write B over A.
+      if (openedAs === identitySeq.current) {
+        setCurrent(report);
+        setSaveName(report.name);
+        setSaveOpen(false);
+      }
       refreshSaved();
       toast.success(current && isMine && mayEdit ? "Reporte actualizado" : "Reporte guardado");
     } catch (error) {
@@ -861,7 +958,16 @@ const GeneradorPage = () => {
     // `withPageSize` because a stored configuration can predate the page-size
     // control, and "no limit" is not a neutral value: the server reads it as
     // 500 while everything this screen builds says 100.
-    const cleaned = withPageSize({ ...pruneToCatalog(report.config, target), offset: 0 });
+    //
+    // Against the root *with this report's extra fields*: the server sends what
+    // a valid path the picker does not list is, and pruning against the bare
+    // menu dropped exactly those — a column the server had just kept.
+    const extras = Array.isArray(report.extraFields) ? report.extraFields : [];
+    const relations = Array.isArray(report.extraRelations) ? report.extraRelations : [];
+    const cleaned = withPageSize({
+      ...pruneToCatalog(report.config, withExtraFields(target, extras, relations)),
+      offset: 0,
+    });
     // Two prunes, one number. The server drops what this account may not see
     // before the configuration ever arrives — it used to publish those paths,
     // filter values included — and this one drops what the catalog no longer
@@ -871,6 +977,9 @@ const GeneradorPage = () => {
       (report.omitted ?? 0) + elementCount(report.config) - elementCount(cleaned);
 
     retireInFlight();
+    identitySeq.current += 1;
+    setExtraFields(extras);
+    setExtraRelations(relations);
     setConfig(cleaned);
     setCurrent(report);
     setSaveName(report.name);
@@ -915,6 +1024,9 @@ const GeneradorPage = () => {
    */
   const handlePickTemplate = (template: ReportTemplate) => {
     retireInFlight();
+    identitySeq.current += 1;
+    setExtraFields([]);
+    setExtraRelations([]);
     setConfig(withPageSize({ ...template.config, offset: 0 }));
     setCurrent(null);
     setSaveName(template.name);
@@ -927,7 +1039,12 @@ const GeneradorPage = () => {
 
   const handleToggleFavorite = async (report: SavedReport) => {
     try {
-      await actualizarReporte(report.id, { favorite: !report.favorite });
+      const favorite = !report.favorite;
+      await actualizarReporte(report.id, { favorite });
+      // The star is drawn from the open report, not from the list. Refreshing
+      // only the list left it showing the old state, so the next press sent the
+      // same value again and a favourite could not be taken back.
+      setCurrent((open) => (open?.id === report.id ? { ...open, favorite } : open));
       refreshSaved();
     } catch (error) {
       toast.error(mensajeDeError(error, "No se pudo cambiar el favorito"));
@@ -945,9 +1062,17 @@ const GeneradorPage = () => {
   };
 
   const handleDelete = async (report: SavedReport) => {
+    // Decided now and checked again on the way back: `current` here is the one
+    // from when the click happened, so archiving A and opening B before the
+    // answer arrived closed B.
+    const wasOpen = current?.id === report.id;
+    const openedAs = identitySeq.current;
     try {
       await eliminarReporte(report.id);
-      if (current?.id === report.id) resetForm();
+      if (wasOpen && openedAs === identitySeq.current) resetForm();
+      // And by id, whatever happened in between: reopened from the list before
+      // this answered, it is still a report that no longer exists.
+      else setCurrent((open) => (open?.id === report.id ? null : open));
       refreshSaved();
       toast.success("Reporte archivado");
     } catch (error) {
@@ -979,10 +1104,10 @@ const GeneradorPage = () => {
    * captioning an event report with "una fila por poste" is a file that
    * describes itself wrongly, which is worse than one that says nothing.
    */
-  const resultRoot = useMemo(
-    () => catalog?.roots.find((r) => r.key === resultConfig?.root),
-    [catalog, resultConfig?.root],
-  );
+  const resultRoot = useMemo(() => {
+    const found = catalog?.roots.find((r) => r.key === resultConfig?.root);
+    return found ? withExtraFields(found, extraFields, extraRelations) : undefined;
+  }, [catalog, resultConfig?.root, extraFields, extraRelations]);
   const exportSubtitle = resultConfig ? describeConfig(resultConfig, resultRoot) : description;
 
   /**
@@ -993,14 +1118,36 @@ const GeneradorPage = () => {
    * the server has both already, and reads the photographs off its own disk.
    */
   const runExport = async (format: ExportFormat) => {
-    if (!resultConfig || exporting) return;
+    // `shapeChanged` as well as the buttons: what is on screen then is a sample
+    // of a report nobody has generated, and the file would be the one before it.
+    if (!resultConfig || shapeChanged || exporting) return;
     const controller = new AbortController();
     exportAbort.current = controller;
     setExporting(format);
     setExportBytes(0);
+    // The configuration that produced the table — with one thing taken from
+    // the one being edited: the headers. A rename changes no row, so nothing
+    // re-runs the report for it (`signatureOf` leaves labels out on purpose),
+    // and the file went out under the name the column had before.
+    //
+    // Whenever there is a table to export, not only when the rename is the one
+    // pending edit: the table draws the new names in both cases (`liveHeaders`),
+    // and with a filter also waiting the file said «Descripción» under a table
+    // that said something else. The guard above means the shape has not
+    // changed — the same columns in the same order — so the names pair by
+    // position. An edit to a filter or to the order still exports the rows that
+    // were generated, which is what the staleness banner says.
+    const exported = {
+      ...resultConfig,
+      columns: resultConfig.columns.map((column, i) => {
+        const { label: _was, ...rest } = column;
+        const label = config.columns[i]?.label;
+        return label ? { ...rest, label } : rest;
+      }),
+    };
     try {
       const { blob, filename } = await exportarReporte(
-        resultConfig,
+        exported,
         {
           format,
           title: exportTitle,
@@ -1458,7 +1605,7 @@ const GeneradorPage = () => {
                   </CardHelp>
                 </div>
                 <FieldPicker
-                  root={root}
+                  root={menuRoot}
                   chosen={chosen}
                   onPick={(field: CatalogField) => {
                     // Both refusals used to return the same object, and the
@@ -1573,7 +1720,7 @@ const GeneradorPage = () => {
                     </Button>
                   )}
                 <FieldPicker
-                  root={root}
+                  root={menuRoot}
                   chosen={new Set()}
                   label="Añadir filtro"
                   onPick={(field) => {
@@ -1658,9 +1805,15 @@ const GeneradorPage = () => {
                     </Select>
                   )}
 
+                  {result !== null && shapeChanged && problems.length === 0 && !running && (
+                    <span role="status" className="self-center text-xs text-muted-foreground">
+                      Pulse Generar para exportar este reporte
+                    </span>
+                  )}
+
                   <Button
                     variant="outline" size="sm"
-                    disabled={!result || exporting !== null}
+                    disabled={!canExport || exporting !== null}
                     onClick={() => runExport("excel")}
                   >
                     {exporting === "excel"
@@ -1670,7 +1823,7 @@ const GeneradorPage = () => {
                   </Button>
                   <Button
                     variant="outline" size="sm"
-                    disabled={!result || exporting !== null}
+                    disabled={!canExport || exporting !== null}
                     onClick={() => runExport("pdf")}
                   >
                     {exporting === "pdf"
@@ -1742,7 +1895,7 @@ const GeneradorPage = () => {
                       </div>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
-                      Rehace la tabla sola cuando cambia algo, medio segundo después de que pare de
+                      Rehace la tabla sola cuando cambia algo, un momento después de que pare de
                       tocar. Viene apagado porque cada refresco es una consulta entera: enciéndalo
                       para ir probando variantes y se queda encendido en este navegador.
                     </TooltipContent>
@@ -1822,6 +1975,7 @@ const GeneradorPage = () => {
               ) : showsResult && result ? (
                 <PreviewTable
                   result={result}
+                  headers={liveHeaders}
                   loading={running}
                   onPage={handlePage}
                   sort={config.sort}

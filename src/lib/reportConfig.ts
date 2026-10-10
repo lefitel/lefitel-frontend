@@ -364,8 +364,9 @@ export function toggleGroupBy(config: ReportConfig, index: number): ReportConfig
 
   // Two columns are the same thing when their path and their summary match;
   // a renamed header still makes them two, and collapsing those would delete a
-  // column the person put there on purpose. What the header must not do is
-  // collide as a React key — see the key ColumnList builds, which includes it.
+  // column the person put there on purpose. They do not collide as React keys
+  // either: `columnKeys` tells twins apart by which duplicate each one is, and
+  // leaves the header out so that typing in it does not remount the row.
   const seen = new Set<string>();
   const columns = stripped.filter((c) => {
     const key = `${c.path}|${c.agg ?? ""}|${c.label ?? ""}`;
@@ -505,17 +506,46 @@ export function addFilter(
   return { ...config, filters: { ...filters, conditions: [...filters.conditions, condition] } };
 }
 
+/** Operators whose value is one thing in one box. */
+const ONE_VALUE: readonly Operator[] = ["eq", "neq", "gt", "gte", "lt", "lte", "like"];
+
+/**
+ * Whether a value written under one operator still means something under another.
+ *
+ * It does when both take a single value in the same box. A range, a list and
+ * "está vacío" are each a different shape, so those still start clean. And on a
+ * field with a closed list of values, "contiene" is the one operator with a
+ * text box where the others have a dropdown: a typed fragment is not one of the
+ * list's values, and carrying it across would leave the dropdown holding
+ * something it never offered.
+ */
+const valueCarriesOver = (from: Operator, to: Operator, listed: boolean): boolean => {
+  if (!ONE_VALUE.includes(from) || !ONE_VALUE.includes(to)) return false;
+  return !(listed && (from === "like") !== (to === "like"));
+};
+
+/**
+ * @param listed whether this field's value is chosen from a closed list — only
+ *   the caller knows, because the lists arrive beside the catalog and not in it.
+ */
 export function updateFilter(
   config: ReportConfig,
   index: number,
   patch: Partial<FilterCondition>,
+  listed = false,
 ): ReportConfig {
   const filters = config.filters ?? { op: "and", conditions: [] };
   const conditions = filters.conditions.map((c, i) => {
     if (i !== index || isFilterGroup(c) || isExists(c)) return c;
+    const previous = (c as FilterCondition).operator;
     const next = { ...(c as FilterCondition), ...patch };
-    // Changing the operator invalidates a value shaped for the previous one.
-    if (patch.operator && patch.operator !== (c as FilterCondition).operator) {
+    // Changing the operator invalidates a value shaped for the previous one —
+    // and only then. It used to be thrown away on every change, so going from
+    // «es mayor que» to «es mayor o igual que» meant typing the number again.
+    if (
+      patch.operator && patch.operator !== previous &&
+      !valueCarriesOver(previous, patch.operator, listed)
+    ) {
       delete next.value;
     }
     return next;
@@ -574,11 +604,49 @@ function nodeSurvives(node: FilterNode, keeps: (path: string) => boolean): boole
   if (isExists(node)) {
     const exists = node as { exists: string; where?: unknown };
     if (!keeps(exists.exists)) return false;
-    if (exists.where === undefined) return true;
-    return isFilterGroup(exists.where) && nodeSurvives(exists.where as FilterNode, keeps);
+    // What is inside is not judged here, and cannot be. Those paths are written
+    // relative to the entity the relation leads to, and this catalog root lists
+    // the fields of the report's own. Looking them up here dropped «postes con
+    // algún evento pendiente» for having no `state` among a poste's fields. The
+    // server prunes the inside against the right entity before the report
+    // leaves it; this only checks that it is still a group at all.
+    return exists.where === undefined || isFilterGroup(exists.where);
   }
   const { path } = node as FilterCondition;
   return typeof path === "string" && keeps(path);
+}
+
+/**
+ * A catalog root with a report's extra fields added to it.
+ *
+ * The picker's list is narrower than what the server runs: it leaves out a path
+ * that reaches an entity the long way round, and a parent's root-only totals. A
+ * saved report can still name one, and the server sends what that path *is*
+ * along with the report. Everything on this screen reads names, types and
+ * operators off the root, so the simplest honest thing is a root that has them.
+ */
+export function withExtraFields(
+  root: CatalogRoot,
+  extra: CatalogField[] | undefined,
+  relations?: CatalogRoot["aggregateOnly"],
+): CatalogRoot {
+  const fresh = <T extends { path: string }>(have: T[], more: T[] | undefined): T[] => {
+    const listed = new Set(have.map((item) => item.path));
+    return (more ?? []).filter(
+      (item) => item && typeof item.path === "string" && !listed.has(item.path),
+    );
+  };
+  const fields = fresh(root.fields, extra);
+  // Relations too: a count of «las revisiones del evento de la última
+  // revisión», or an «existe» on them, is kept by the server and was deleted
+  // here for not being one of the menu's.
+  const aggregateOnly = fresh(root.aggregateOnly, relations);
+  if (fields.length === 0 && aggregateOnly.length === 0) return root;
+  return {
+    ...root,
+    fields: [...root.fields, ...fields],
+    aggregateOnly: [...root.aggregateOnly, ...aggregateOnly],
+  };
 }
 
 /**
@@ -606,10 +674,13 @@ export function pruneToCatalog(config: ReportConfig, root: CatalogRoot): ReportC
     ...config,
     columns,
     groupBy: (config.groupBy ?? []).filter(keeps),
-    // A sort belongs to a column, so it goes when its column does.
-    sort: (config.sort ?? []).filter(
-      (s) => keeps(s.path) && columns.some((c) => c.path === s.path && c.agg === s.agg),
-    ),
+    // By its own path, like everything else here. This also asked for a column
+    // with the same path and summary, on the reasoning that a sort goes when
+    // its column does — but a column and its sort share a path, so that half is
+    // already covered, and the extra condition only ever removed an order by a
+    // field the report does not show, which the server runs. `validateConfig`
+    // says so when an order cannot run as it stands.
+    sort: (config.sort ?? []).filter((s) => s && keeps(s.path)),
     filters: {
       ...filters,
       conditions: filters.conditions.filter((c) => nodeSurvives(c as FilterNode, keeps)),
@@ -643,10 +714,16 @@ export const elementCount = (config: ReportConfig): number =>
  * Whether two configurations would produce the same rows, ignoring which page
  * is being asked for. Used to tell when the table on screen no longer matches
  * the configuration above it.
+ *
+ * One rule with `signatureOf`, and it has to be one. This used to compare the
+ * headers and the page size as well, while the signature — what decides whether
+ * a refresh is owed — left both out. So a rename raised «cambió la
+ * configuración» over a table whose every row was still right, with a refresh
+ * that would never come to clear it; and changing the page size showed the same
+ * banner until the new page landed, or for good if it did not.
  */
 export function sameQuery(a: ReportConfig, b: ReportConfig): boolean {
-  const strip = ({ offset: _offset, ...rest }: ReportConfig) => rest;
-  return canonical(strip(a)) === canonical(strip(b));
+  return signatureOf(a) === signatureOf(b);
 }
 
 /**
@@ -699,10 +776,21 @@ export const signatureOf = (config: ReportConfig): string => {
  * it was — so the rows on screen are still a fair picture of the shape, and
  * throwing them away over a keystroke in a filter box would cost the reader the
  * row they were reading.
+ *
+ * A header is not either. It was, on the reasoning that an old table under a
+ * new name shows the wrong thing — and the cost of that was the whole table: one
+ * letter typed into a header box replaced the rows with sample values, and
+ * nothing brought them back, because a rename is not a change the refresh
+ * answers to (`signatureOf`). The table draws its headers from the
+ * configuration being edited instead, so the name is right and the rows stay.
  */
 export function sameShape(a: ReportConfig, b: ReportConfig): boolean {
-  return canonical({ root: a.root, columns: a.columns, groupBy: a.groupBy ?? [] })
-    === canonical({ root: b.root, columns: b.columns, groupBy: b.groupBy ?? [] });
+  const shape = (c: ReportConfig) => canonical({
+    root: c.root,
+    columns: c.columns.map(({ path, agg }) => ({ path, agg })),
+    groupBy: c.groupBy ?? [],
+  });
+  return shape(a) === shape(b);
 }
 
 function canonical(value: unknown): string {

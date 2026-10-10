@@ -186,6 +186,17 @@ export interface SavedReport {
    * catalog. This is the count it needs to say so out loud.
    */
   omitted?: number;
+  /**
+   * What the configuration's paths are, for the ones the catalog does not list.
+   *
+   * The picker offers less than the server runs, and a report can name a valid
+   * path that is not in `Catalog.roots`. Without this it would open as a column
+   * with no name and be pruned as unknown. Absent from an older server, and
+   * from the answer to a save.
+   */
+  extraFields?: CatalogField[];
+  /** The same, for to-many relations the report counts or filters on. */
+  extraRelations?: CatalogRoot["aggregateOnly"];
 }
 
 /** One page of saved reports, plus how many there are in all. */

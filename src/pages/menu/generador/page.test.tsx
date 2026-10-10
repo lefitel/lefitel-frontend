@@ -891,6 +891,39 @@ describe("the list of saved reports", () => {
   });
 });
 
+describe("the favourite star on the open report", () => {
+  it("shows what it just did, and undoes it on the next press", async () => {
+    // It saved the favourite and went on showing an empty star: the list was
+    // refreshed and the open report — which is what the star is drawn from —
+    // was not. So the second press sent `favorite: true` again, and there was
+    // no way to take it back without reopening the report.
+    const report = {
+      id: 9, name: "Pendientes", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    };
+    api.getReportesGuardados.mockResolvedValue(savedPage([report]));
+    api.actualizarReporte.mockImplementation((_id: number, patch: { favorite: boolean }) =>
+      Promise.resolve({ ...report, favorite: patch.favorite }));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.click(await screen.findByText("Pendientes"));
+
+    await user.click(await screen.findByRole("button", { name: "Marcar Pendientes como favorito" }));
+    const marked = await screen.findByRole("button", { name: "Quitar Pendientes de favoritos" });
+    expect(marked).toHaveAttribute("aria-pressed", "true");
+
+    await user.click(marked);
+    await screen.findByRole("button", { name: "Marcar Pendientes como favorito" });
+    expect(api.actualizarReporte.mock.calls.map(([, patch]) => patch)).toEqual([
+      { favorite: true }, { favorite: false },
+    ]);
+  });
+});
+
 describe("exporting", () => {
   /** Runs a report so the export buttons have something to act on. */
   const generate = async (user: ReturnType<typeof userEvent.setup>) => {
@@ -930,16 +963,62 @@ describe("exporting", () => {
   });
 
   it("exports the configuration that produced what is on screen", async () => {
-    // Editing after generating must not silently export something else.
+    // Editing after generating must not silently export something else. A
+    // filter keeps the table where it is, so the table is still what gets
+    // exported — and the banner over it says the configuration has moved on.
     const user = userEvent.setup();
     await generate(user);
-    await addColumn(user, /Resuelto/);
+    await addFilterOn(user, /Descripción/, "x");
 
     await user.click(screen.getByRole("button", { name: /excel/i }));
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
-    expect(config.columns).toHaveLength(1);
+    expect(config.filters?.conditions ?? []).toHaveLength(0);
+  });
+
+  it("does not export while the screen shows a report nobody has generated", async () => {
+    // Adding a column takes the table away and draws a sample of the new one.
+    // Both buttons stayed live, the file came out with the old columns, and the
+    // toast said «Excel descargado»: the one moment the screen and the file
+    // disagreed was the one moment nothing said so, because the stale-table
+    // banner needs a table to sit on.
+    const user = userEvent.setup();
+    await generate(user);
+    expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled();
+
+    await addColumn(user, /Resuelto/);
+    await screen.findByText(/Vista previa/);
+
+    expect(screen.getByRole("button", { name: /excel/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /pdf/i })).toBeDisabled();
+    expect(screen.getByText("Pulse Generar para exportar este reporte")).toBeInTheDocument();
+
+    // And generating it brings them back, for the report that is now on screen.
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled());
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
+    expect(config.columns).toHaveLength(2);
+  });
+
+  it("exports a header under the name it was just given", async () => {
+    // A rename changes no row, so nothing re-runs the report for it — and the
+    // export sent the configuration of the last run, with the old header in
+    // it. The file came out saying something the screen no longer said.
+    const user = userEvent.setup();
+    await generate(user);
+    const runsBefore = api.runReporte.mock.calls.length;
+
+    await user.type(screen.getByLabelText(/^Nombre de la columna /), "Qué pasó");
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
+    expect(config.columns).toEqual([expect.objectContaining({ label: "Qué pasó" })]);
+    // And it is still the report that was generated: no query was spent on it.
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore);
   });
 
   it("shows the server's own message when the export is refused", async () => {
@@ -2212,5 +2291,403 @@ describe("the controls that were missing", () => {
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const options = api.exportarReporte.mock.calls[0][1] as { scope?: string };
     expect(options.scope).toBe("all");
+  });
+});
+
+describe("renaming a column with a table on screen", () => {
+  const generate = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await screen.findByText("fila");
+  };
+
+  it("keeps the rows and puts the new name on the header", async () => {
+    // One letter in the header box replaced the whole table with sample values:
+    // a rename counted as a change of shape. And it is not a change the refresh
+    // answers to, so with Auto on nothing ever brought the rows back.
+    const user = userEvent.setup();
+    await generate(user);
+    await turnAutoOn(user);
+    const runsBefore = api.runReporte.mock.calls.length;
+
+    await user.type(screen.getByLabelText(/^Nombre de la columna /), "Qué pasó");
+
+    expect(screen.getByText("fila")).toBeInTheDocument();
+    expect(screen.queryByText(/Vista previa/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ordenar la tabla por Qué pasó" })).toBeInTheDocument();
+    // Not stale either: every row under that header is still the right row.
+    expect(screen.queryByText(/Cambió la configuración/)).not.toBeInTheDocument();
+    // Past the refresh's 700 ms, and still no query spent on a name.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore);
+    expect(screen.getByText("fila")).toBeInTheDocument();
+  });
+
+  it("goes back to the catalog's name when the header is cleared", async () => {
+    const user = userEvent.setup();
+    await generate(user);
+    const box = screen.getByLabelText(/^Nombre de la columna /);
+
+    await user.type(box, "Otro");
+    expect(screen.getByRole("button", { name: "Ordenar la tabla por Otro" })).toBeInTheDocument();
+    await user.clear(box);
+
+    expect(screen.getByRole("button", { name: "Ordenar la tabla por Descripción" })).toBeInTheDocument();
+  });
+});
+
+describe("Generar while a refresh is waiting to go out", () => {
+  it("asks for the report once, not twice", async () => {
+    // The edit arms a refresh for 700 ms later. Generar did not disarm it, and
+    // moving to the first page changes nothing the refresh is keyed on — so on
+    // a report slower than what was left of those 700 ms the timer fired behind
+    // the click, hung up on its request and asked for the same thing again.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await screen.findByText("fila");
+    await turnAutoOn(user);
+
+    let land: () => void = () => {};
+    api.runReporte.mockImplementationOnce(
+      (config: ReportConfig) =>
+        new Promise<ReportResult>((resolve) => { land = () => resolve(resultFor(config)); }),
+    );
+    const runsBefore = api.runReporte.mock.calls.length;
+
+    // The value is what makes the filter runnable, so it is what arms the timer.
+    await addFilterOn(user, /Descripción/, "x");
+    // If the refresh had already fired, Generar would be disabled, the click
+    // would do nothing, and every count below would hold without this test
+    // having touched what it is about. So that is ruled out, not assumed.
+    expect(screen.getByRole("button", { name: "Generar" })).not.toBeDisabled();
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore + 1);
+
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(api.runReporte.mock.calls.length).toBe(runsBefore + 1);
+    land();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Generar" })).not.toBeDisabled());
+  });
+});
+
+describe("an answer that arrives after the screen moved to another report", () => {
+  const mine = (id: number, name: string, path: string): SavedReport => ({
+    id, name, description: null, id_usuario: 7, visibility: "private", favorite: false,
+    config: { root: "evento", columns: [{ path }] },
+  });
+
+  it("does not pin a saved report's identity onto the one opened meanwhile", async () => {
+    // The save form is not modal. Updating A, opening B before the answer, and
+    // the answer set A as the open report over B's configuration — so the next
+    // «Actualizar» wrote B's columns into A.
+    const a = mine(21, "Reporte A", "description");
+    const b = mine(22, "Reporte B", "state");
+    api.getReportesGuardados.mockResolvedValue(savedPage([a, b]));
+    let answer: () => void = () => {};
+    api.actualizarReporte.mockImplementation(
+      () => new Promise((resolve) => { answer = () => resolve(a); }),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.click(await screen.findByText("Reporte A"));
+    await user.click(screen.getByRole("button", { name: /^actualizar$/i }));
+    await user.click(screen.getByRole("button", { name: "Actualizar reporte" }));
+    await waitFor(() => expect(api.actualizarReporte).toHaveBeenCalledTimes(1));
+
+    await openPicker(user);
+    await user.click(await screen.findByText("Reporte B"));
+    answer();
+
+    await waitFor(() => expect(toasts.some((t) => t.text === "Reporte actualizado")).toBe(true));
+    expect(screen.getByRole("button", { name: "Reporte abierto: Reporte B" })).toBeInTheDocument();
+  });
+
+  it("does not close the report opened while another was being archived", async () => {
+    const a = mine(23, "Reporte A", "description");
+    const b = mine(24, "Reporte B", "state");
+    api.getReportesGuardados.mockResolvedValue(savedPage([a, b]));
+    let answer: () => void = () => {};
+    api.eliminarReporte.mockImplementation(
+      () => new Promise((resolve) => { answer = () => resolve({ message: "ok" }); }),
+    );
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.click(await screen.findByText("Reporte A"));
+    await user.click(screen.getByRole("button", { name: "Archivar Reporte A" }));
+    // Whatever asks for confirmation, say yes to it.
+    const confirm = screen.queryByRole("button", { name: /^archivar$/i });
+    if (confirm) await user.click(confirm);
+    await waitFor(() => expect(api.eliminarReporte).toHaveBeenCalledTimes(1));
+
+    await openPicker(user);
+    await user.click(await screen.findByText("Reporte B"));
+    answer();
+
+    await waitFor(() => expect(toasts.some((t) => t.text === "Reporte archivado")).toBe(true));
+    expect(screen.getByRole("button", { name: "Reporte abierto: Reporte B" })).toBeInTheDocument();
+  });
+});
+
+describe("a saved report that names a field the picker does not list", () => {
+  // The server runs more than its menu offers, and sends what such a path is
+  // along with the report. Without that the column was pruned as unknown.
+  const hidden = "ultimaRevision.evento.description";
+  const report = (extraFields?: SavedReport["extraFields"]): SavedReport => ({
+    id: 31, name: "Con rodeo", description: null, id_usuario: 7,
+    visibility: "private", favorite: false,
+    config: { root: "evento", columns: [{ path: "description" }, { path: hidden }] },
+    extraFields,
+  });
+
+  it("opens whole, with the name the server gave it", async () => {
+    api.getReportesGuardados.mockResolvedValue(savedPage([report([{
+      path: hidden, label: "Descripción del evento revisado", kind: "string",
+      group: "Evento › Última revisión › Evento", operators: ["like"], aggregates: ["count"],
+    }])]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.click(await screen.findByText("Con rodeo"));
+
+    expect(toasts[toasts.length - 1]?.text).toMatch(/cargado/);
+    expect(columnCount()).toBe(2);
+    expect(screen.getByRole("columnheader", { name: "Descripción del evento revisado" }))
+      .toBeInTheDocument();
+
+    // And it runs as it was saved.
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    const sent = api.runReporte.mock.calls.at(-1)?.[0] as ReportConfig;
+    expect(sent.columns.map((c) => c.path)).toEqual(["description", hidden]);
+  });
+
+  it("still drops it when nothing says what it is", async () => {
+    // The control: an older server, or a path that really is gone.
+    api.getReportesGuardados.mockResolvedValue(savedPage([report()]));
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await openPicker(user);
+    await user.click(await screen.findByText("Con rodeo"));
+
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 1 elemento/);
+    expect(columnCount()).toBe(1);
+  });
+});
+
+describe("changing how many rows a page holds", () => {
+  it("does not call the table stale, even when the new page fails", async () => {
+    // The size landed on the configuration at once and on the result only when
+    // the page arrived, and the two were compared whole: «Cambió la
+    // configuración» over a table that was exactly the report configured, and
+    // a failed page left it there for good.
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      Promise.resolve(resultFor(config, { rows: [{ c0: "fila" }], total: 1376 })));
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
+
+    api.runReporte.mockRejectedValueOnce(new Error("se cayó la red"));
+    await user.click(screen.getByRole("combobox", { name: "Filas por página" }));
+    await user.click(screen.getByRole("option", { name: "250 filas" }));
+
+    await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
+    expect(screen.getByText("fila")).toBeInTheDocument();
+    expect(screen.queryByText(/Cambió la configuración/)).not.toBeInTheDocument();
+  });
+
+  it("does not save a size that never arrived", async () => {
+    // With the banner gone, the size written ahead of the page had no trace
+    // left on screen: the selector went back to 100 and Guardar stored 250.
+    api.runReporte.mockImplementation((config: ReportConfig) =>
+      Promise.resolve(resultFor(config, { rows: [{ c0: "fila" }], total: 1376 })));
+    api.crearReporte.mockResolvedValue({ id: 1, name: "X" });
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await waitFor(() => expect(screen.getByText(/Mostrando/)).toBeInTheDocument());
+
+    api.runReporte.mockRejectedValueOnce(new Error("se cayó la red"));
+    await user.click(screen.getByRole("combobox", { name: "Filas por página" }));
+    await user.click(screen.getByRole("option", { name: "250 filas" }));
+    await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
+
+    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.type(screen.getByLabelText("Nombre"), "Tras el fallo");
+    await user.click(screen.getByRole("button", { name: "Guardar reporte" }));
+    await waitFor(() => expect(api.crearReporte).toHaveBeenCalled());
+    const payload = api.crearReporte.mock.calls[0][0] as { config: ReportConfig };
+    expect(payload.config.limit).toBe(100);
+  });
+});
+
+describe("what the audit of these changes found", () => {
+  const generate = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderPage();
+    await ready();
+    await addColumn(user, /Descripción/);
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await screen.findByText("fila");
+  };
+  const mine = (id: number, name: string, config: ReportConfig, over: Partial<SavedReport> = {}): SavedReport => ({
+    id, name, description: null, id_usuario: 7, visibility: "private", favorite: false, config, ...over,
+  });
+  const open = async (user: ReturnType<typeof userEvent.setup>, name: string) => {
+    await openPicker(user);
+    await user.click(await screen.findByText(name));
+  };
+
+  it("exports the new header when a filter is waiting as well", async () => {
+    // The table drew the new name whenever its shape held; the export carried
+    // it only when the rename was the *only* pending edit. A filter typed as
+    // well, and the file said «Descripción» under a table saying otherwise.
+    const user = userEvent.setup();
+    await generate(user);
+
+    await user.type(screen.getByLabelText(/^Nombre de la columna /), "Qué pasó");
+    await addFilterOn(user, /Descripción/, "x");
+    expect(screen.getByRole("button", { name: "Ordenar la tabla por Qué pasó" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /excel/i }));
+
+    await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
+    const [config] = api.exportarReporte.mock.calls.at(-1) as [ReportConfig];
+    expect(config.columns).toEqual([{ path: "description", label: "Qué pasó" }]);
+    // Still the rows that were generated: the filter has not been run.
+    expect(config.filters?.conditions ?? []).toHaveLength(0);
+  });
+
+  it("gives a summarised column the server's name when its own is cleared", async () => {
+    // The server names an unnamed summary of a field by the field alone. The
+    // header here read «Descripción (conteo)» until the next Generar, and the
+    // file exported in between said «Descripción».
+    api.getReportesGuardados.mockResolvedValue(savedPage([mine(41, "Por estado", {
+      root: "evento",
+      columns: [{ path: "state" }, { path: "description", agg: "count", label: "Total" }],
+      groupBy: ["state"],
+    })]));
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await open(user, "Por estado");
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+    await screen.findByRole("button", { name: "Ordenar la tabla por Total" });
+
+    await user.clear(screen.getByDisplayValue("Total"));
+
+    expect(screen.getByRole("button", { name: "Ordenar la tabla por Descripción" })).toBeInTheDocument();
+    expect(screen.queryByText(/Descripción \(conteo\)/)).not.toBeInTheDocument();
+  });
+
+  it("shows an order by a field the report does not have, and lets it be removed", async () => {
+    // Kept on opening now, where it used to be dropped — and with one
+    // criterion the strip that lists the order drew nothing, so the table came
+    // out ordered by something nobody could see or switch off.
+    api.getReportesGuardados.mockResolvedValue(savedPage([mine(42, "Ordenado aparte", {
+      root: "evento",
+      columns: [{ path: "description" }],
+      sort: [{ path: "state", dir: "desc" }],
+    })]));
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await open(user, "Ordenado aparte");
+
+    await user.click(screen.getByRole("button", { name: "Dejar de ordenar por Resuelto" }));
+    await user.click(screen.getByRole("button", { name: "Generar" }));
+
+    await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
+    expect((api.runReporte.mock.calls.at(-1)?.[0] as ReportConfig).sort ?? []).toEqual([]);
+  });
+
+  it("does not reopen a report archived while its update was still travelling", async () => {
+    const a = mine(43, "Reporte A", { root: "evento", columns: [{ path: "description" }] });
+    api.getReportesGuardados.mockResolvedValue(savedPage([a]));
+    let answer: () => void = () => {};
+    api.actualizarReporte.mockImplementation(
+      () => new Promise((resolve) => { answer = () => resolve(a); }),
+    );
+    api.eliminarReporte.mockResolvedValue({ message: "ok" });
+
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+    await open(user, "Reporte A");
+    await user.click(screen.getByRole("button", { name: /^actualizar$/i }));
+    await user.click(screen.getByRole("button", { name: "Actualizar reporte" }));
+    await waitFor(() => expect(api.actualizarReporte).toHaveBeenCalledTimes(1));
+
+    await user.click(screen.getByRole("button", { name: "Archivar Reporte A" }));
+    const confirm = screen.queryByRole("button", { name: /^archivar$/i });
+    if (confirm) await user.click(confirm);
+    await waitFor(() => expect(toasts.some((t) => t.text === "Reporte archivado")).toBe(true));
+    expect(screen.queryByRole("button", { name: "Reporte abierto: Reporte A" })).not.toBeInTheDocument();
+
+    answer();
+    await waitFor(() => expect(toasts.some((t) => t.text === "Reporte actualizado")).toBe(true));
+    expect(screen.queryByRole("button", { name: "Reporte abierto: Reporte A" })).not.toBeInTheDocument();
+  });
+
+  it("does not tell the reader to press Generar when Generar cannot run", async () => {
+    const user = userEvent.setup();
+    await generate(user);
+    await addColumn(user, /Resuelto/);
+    expect(screen.getByText("Pulse Generar para exportar este reporte")).toBeInTheDocument();
+
+    // A filter with no value is a problem, and Generar answers with it.
+    await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+    await user.click(screen.getByRole("option", { name: /Descripción/ }));
+
+    expect(screen.queryByText("Pulse Generar para exportar este reporte")).not.toBeInTheDocument();
+  });
+
+  it("keeps a count of a relation the picker does not list", async () => {
+    // The fields had their descriptions sent along; the relations did not, so
+    // a count of one — or an «existe» on one — was kept by the server and
+    // deleted here.
+    const hidden = "ultimaRevision.evento.revisiones";
+    const config: ReportConfig = {
+      root: "evento",
+      columns: [{ path: "description" }, { path: hidden, agg: "count" }],
+      filters: { op: "and", conditions: [{ exists: hidden }] },
+    };
+    const relation = { path: hidden, label: "Revisiones", group: "Evento › Última revisión › Evento" };
+    api.getReportesGuardados.mockResolvedValue(savedPage([
+      mine(44, "Con relación oculta", config, { extraRelations: [relation] }),
+      mine(45, "Sin describirla", config),
+    ]));
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await open(user, "Con relación oculta");
+    expect(toasts[toasts.length - 1]?.text).toMatch(/cargado/);
+    expect(columnCount()).toBe(2);
+    expect(screen.getByText(/Filtro avanzado/)).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Nº de revisiones" })).toBeInTheDocument();
+
+    // The control: without the description it is still pruned, and says so.
+    await open(user, "Sin describirla");
+    expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 2 elementos/);
+    expect(columnCount()).toBe(1);
   });
 });
