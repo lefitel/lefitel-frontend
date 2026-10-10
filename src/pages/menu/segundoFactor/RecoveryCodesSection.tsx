@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -15,8 +14,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { KeyIcon } from "lucide-react";
-import FormDialog from "../../../components/dialogs/FormDialog";
-import { CampoDialogo } from "./CampoDialogo";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
 import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
 import {
@@ -64,46 +61,28 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
   }, []);
 
   // ── Generar / regenerar ─────────────────────────────────────────────────
-  const [formAbierto, setFormAbierto] = useState(false);
-  const [password, setPassword] = useState("");
   const [enviando, setEnviando] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [confirmAbierto, setConfirmAbierto] = useState(false);
   const [codigos, setCodigos] = useState<string[] | null>(null);
 
-  const abrirForm = () => {
-    setFormAbierto(true);
-    setError(null);
-  };
-
-  const cancelarForm = () => {
-    setFormAbierto(false);
-    setPassword("");
-    setError(null);
-  };
-
-  const pedirGenerar = () => {
-    if (!password) return toast.warning("Debes escribir tu contraseña actual.");
-    setConfirmAbierto(true);
-  };
-
+  // No password asked here: the route takes the ten-minute window like every
+  // other gated one since 2026-10-10, and the step-up dialog asks if it must.
+  // Failures go to a toast — there is no form left to hang them under.
   const generar = async () => {
     setConfirmAbierto(false);
     setEnviando(true);
-    setError(null);
     try {
-      const res = await generateRecoveryCodes(password);
+      const res = await generateRecoveryCodes();
       if (res.status === 200 && res.codigos) {
         setCodigos(res.codigos);
         setRestantes(res.codigos.length);
-        cancelarForm();
       } else if (res.code === CODIGO_STEP_UP) {
-        setError(describeStepUpError(res.motivo, res.message));
+        toast.error(describeStepUpError(res.motivo, res.message));
       } else {
-        setError(res.message || "Ocurrió un error en el servidor.");
+        toast.error(res.message || "Ocurrió un error en el servidor.");
       }
     } catch {
-      setError("No se pudo conectar con el servidor.");
+      toast.error("No se pudo conectar con el servidor.");
     }
     setEnviando(false);
   };
@@ -137,32 +116,6 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
 
   const dialogos = (
     <>
-      <FormDialog
-        open={formAbierto}
-        onClose={cancelarForm}
-        size="sm"
-        title="Generar códigos de recuperación"
-        description="Confirma con tu contraseña que eres tú."
-        dirty={password !== ""}
-        saving={enviando}
-        submitLabel="Generar códigos"
-        savingLabel="Generando…"
-        onSubmit={pedirGenerar}
-        bodyClassName="space-y-4"
-      >
-        <CampoDialogo id="recovery-codes-password" label="Contraseña actual" requerido>
-          <Input
-            id="recovery-codes-password"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="font-mono"
-            autoComplete="current-password"
-          />
-        </CampoDialogo>
-        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      </FormDialog>
-
       {/* Confirm: antes de generar, las dos cosas que hay que saber antes,
           no después. */}
       <AlertDialog open={confirmAbierto} onOpenChange={(o) => !o && setConfirmAbierto(false)}>
@@ -219,7 +172,7 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
             <span className="text-sm text-muted-foreground">Sin usar:</span>
             {badge()}
           </div>
-          <Button variant="outline" size="sm" onClick={abrirForm} disabled={cargando}>
+          <Button variant="outline" size="sm" onClick={() => setConfirmAbierto(true)} disabled={cargando || enviando}>
             Generar códigos nuevos
           </Button>
         </div>

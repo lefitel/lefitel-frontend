@@ -1,7 +1,8 @@
 // Llaves de acceso — plan 4C, Tarea 11. Lo que la sección hace con la lista,
-// con el alta (contraseña en las dos peticiones, ceremonia detrás de un mock) y
+// con el alta (un solo campo, el nombre; ceremonia detrás de un mock) y
 // con la baja — sobre todo con la baja de la última llave, que cierra la sesión
-// de este mismo navegador.
+// de este mismo navegador. Desde el 2026-10-10 ninguna de las dos pide la
+// contraseña: si hay que probar algo lo pide la ventana global del step-up.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -127,21 +128,47 @@ describe("la lista", () => {
 });
 
 describe("registrar", () => {
-  const rellenarYCrear = async (nombre = "mi móvil", password = "la-mia") => {
+  const rellenarYCrear = async (nombre = "mi móvil") => {
     await userEvent.click(await screen.findByRole("button", { name: /añadir llave/i }));
     await userEvent.type(screen.getByLabelText(/nombre de la llave/i), nombre);
-    await userEvent.type(screen.getByLabelText(/contraseña actual/i), password);
     await userEvent.click(screen.getByRole("button", { name: /crear la llave/i }));
   };
 
-  // 🔴 La contraseña viaja con el nombre en una sola llamada, que la mete en
-  // las dos peticiones: dejar que la ventana global la pidiera serían tres
-  // avisos para un gesto, y el reto caduca a los dos minutos.
-  it("manda el nombre y la contraseña a la ceremonia", async () => {
+  // 🔴 El nombre es lo único que viaja: ni contraseña ni nada parecido. Si
+  // la puerta pide probar la identidad, la ventana global se mete en medio de
+  // la ceremonia (ver `registrarPasskey`); el formulario no pregunta nada.
+  it("manda a la ceremonia solo el nombre, sin contraseña de ningún tipo", async () => {
     montar();
-    await rellenarYCrear();
+    await userEvent.click(await screen.findByRole("button", { name: /añadir llave/i }));
+    // Ni el diálogo del alta tiene un campo de contraseña: el único es el nombre.
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/nombre de la llave/i), "mi móvil");
+    await userEvent.click(screen.getByRole("button", { name: /crear la llave/i }));
 
-    expect(registrarPasskey).toHaveBeenCalledWith("mi móvil", "la-mia");
+    await waitFor(() => expect(registrarPasskey).toHaveBeenCalledTimes(1));
+    // Los argumentos exactos: un segundo argumento, aunque fuera `undefined`,
+    // haría fallar la comparación de la lista.
+    expect(registrarPasskey.mock.calls[0]).toEqual(["mi móvil"]);
+  });
+
+  it("abre el diálogo con el nombre ya puesto desde el navegador, y editable", async () => {
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    );
+    try {
+      montar();
+      await userEvent.click(await screen.findByRole("button", { name: /añadir llave/i }));
+
+      const nombre = screen.getByLabelText(/nombre de la llave/i);
+      expect(nombre).toHaveValue("Chrome en Windows");
+      await userEvent.clear(nombre);
+      await userEvent.type(nombre, "el del trabajo");
+      await userEvent.click(screen.getByRole("button", { name: /crear la llave/i }));
+
+      await waitFor(() => expect(registrarPasskey).toHaveBeenCalledWith("el del trabajo"));
+    } finally {
+      agente.mockRestore();
+    }
   });
 
   it("al terminar, vuelve a pedir la lista y vuelve a leer la sesión", async () => {
@@ -202,10 +229,8 @@ describe("registrar", () => {
 });
 
 describe("quitar", () => {
-  const quitarMovil = async (password = "la-mia") => {
+  const quitarMovil = async () => {
     await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
-    await userEvent.type(screen.getByLabelText(/contraseña actual/i), password);
-    await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
     await userEvent.click(await screen.findByRole("button", { name: /sí, quitar/i }));
   };
 
@@ -214,8 +239,6 @@ describe("quitar", () => {
   it("con correo verificado, avisa de que el correo sigue siendo el factor y de que las sesiones no se cierran", async () => {
     montar({ ...usuarioExample, email: "isaias@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" });
     await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
-    await userEvent.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
 
     expect(await screen.findByText(/tu correo verificado sigue siendo tu segundo factor/i)).toBeInTheDocument();
     expect(screen.queryByText(/entrarás sólo con tu contraseña/i)).not.toBeInTheDocument();
@@ -224,18 +247,26 @@ describe("quitar", () => {
   it("sin correo verificado, avisa de que volverá a la contraseña sola y de que las sesiones se cierran", async () => {
     montar();
     await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
-    await userEvent.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await userEvent.click(screen.getByRole("button", { name: /^quitar llave$/i }));
 
     expect(await screen.findByText(/entrarás sólo con tu contraseña/i)).toBeInTheDocument();
     expect(screen.getByText(/se cerrarán todas tus sesiones/i)).toBeInTheDocument();
   });
 
-  it("manda el id de esa llave y la contraseña", async () => {
+  it("«Quitar» abre la confirmación con el nombre de la llave, sin pedir contraseña antes", async () => {
+    montar();
+    await userEvent.click(await screen.findByRole("button", { name: /quitar la llave mi móvil/i }));
+
+    expect(await screen.findByText("¿Quitar la llave «mi móvil»?")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
+    expect(deleteCredential).not.toHaveBeenCalled();
+  });
+
+  it("manda solo el id de esa llave, sin contraseña", async () => {
     montar();
     await quitarMovil();
 
-    await waitFor(() => expect(deleteCredential).toHaveBeenCalledWith(7, "la-mia"));
+    await waitFor(() => expect(deleteCredential).toHaveBeenCalledTimes(1));
+    expect(deleteCredential.mock.calls[0]).toEqual([7]);
   });
 
   it("con otra llave restante, avisa y vuelve a pedir la lista", async () => {
@@ -312,7 +343,11 @@ describe("quitar", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("una contraseña equivocada deja el error junto al campo, con la frase de la puerta", async () => {
+  // La ventana global ya se ocupó de lo que se pudo: lo que llega aquí es una
+  // negativa que nadie resolvió (cerró la ventana, por ejemplo), y como ya no
+  // hay formulario debajo del que colgarla, va en un toast con la frase de la
+  // puerta.
+  it("una negativa del step-up al quitar sale en un toast con la frase de la puerta", async () => {
     deleteCredential.mockResolvedValue({
       status: 403,
       message: "x",
@@ -321,8 +356,19 @@ describe("quitar", () => {
       sesionCerrada: false,
     });
     montar();
-    await quitarMovil("no-es");
+    await quitarMovil();
 
-    expect(await screen.findByText(/esa contraseña no es correcta/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/esa contraseña no es correcta/i)),
+    );
+    expect(toast.success).not.toHaveBeenCalled();
+  });
+
+  it("un fallo cualquiera del servidor al quitar sale en un toast con su mensaje", async () => {
+    deleteCredential.mockResolvedValue({ status: 500, message: "Se rompió algo.", sesionCerrada: false });
+    montar();
+    await quitarMovil();
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Se rompió algo."));
   });
 });

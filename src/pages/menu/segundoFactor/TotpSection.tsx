@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CopyIcon, PlusIcon, ShieldOffIcon, SmartphoneIcon } from "lucide-react";
+import { CopyIcon, Loader2Icon, PlusIcon, ShieldOffIcon, SmartphoneIcon } from "lucide-react";
 import FormDialog from "../../../components/dialogs/FormDialog";
 import { CampoDialogo } from "./CampoDialogo";
 import {
@@ -28,29 +28,7 @@ import { renderTotpQr } from "./totpQr";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
 import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
 
-/**
- * The exact text of the two 409s `POST /auth/totp/setup` can answer with —
- * copied from `api/src/controllers/totp.controller.ts`'s
- * `MENSAJE_CORREO_NO_VERIFICADO` and `MENSAJE_FACTOR_YA_CONFIGURADO`, the
- * same way `Login.api.ts` copies `LOGOUT_URL`'s address rather than sharing
- * a constant the two repositories cannot both import.
- *
- * The server sends no `code` for either — there was never a need for one
- * until this screen existed to tell them apart — so this is matched by exact
- * text rather than a substring guess. If the server's wording ever changes,
- * this simply stops matching and the screen falls back to a plain banner
- * with whatever `message` says, rather than silently mis-filing a sentence
- * it no longer recognises under the wrong banner.
- */
-const MENSAJE_CORREO_NO_VERIFICADO =
-  "Debes verificar tu correo antes de configurar un segundo factor. " +
-  "Solicita el enlace de verificación desde tu perfil y confírmalo desde tu bandeja de entrada; " +
-  "después vuelve a intentar este registro.";
-const MENSAJE_FACTOR_YA_CONFIGURADO =
-  "Ya tienes un factor de autenticación configurado. Elimínalo antes de registrar uno nuevo.";
-
-type FaseAlta = "reposo" | "password" | "qr";
-type Banner409 = "correo" | "factor" | null;
+type FaseAlta = "reposo" | "qr";
 
 /**
  * TOTP setup, confirmation and removal — Task 19 of the 4B plan.
@@ -66,21 +44,19 @@ type Banner409 = "correo" | "factor" | null;
  * spent to log in, most often — which is a window that closes the moment
  * they wander off to do something else first, like verifying an email
  * `setup` is about to demand anyway. A screen that shows "Añadir" above
- * "Quitar" invites exactly that detour: press Añadir, get asked for a
- * password, and — since a factor is still on file — get refused before the
- * password is even looked at. Every trip around that loop costs one more
- * recovery code. Putting "Quitar" first is the fix a re-ordered sentence
- * cannot express on its own; `TotpSection.test.tsx` pins the DOM order
- * itself, not merely that both sections exist.
+ * "Quitar" invites exactly that detour: press Añadir, get the 409 that says
+ * a factor is already on file, and come back to "Quitar" with the window
+ * gone. Every trip around that loop costs one more recovery code. Putting
+ * "Quitar" first is the fix a re-ordered sentence cannot express on its own;
+ * `TotpSection.test.tsx` pins the DOM order itself, not merely that both
+ * buttons exist.
  *
- * **Every one of the three requests below carries the account's current
- * password, every time — setup, confirm and delete alike.** That is not
- * this component being cautious; `api/src/routes/totp.routes.ts` mounts all
- * three behind the step-up gate with `sinVentana: true`, so a call missing it
- * is simply refused. See `Mfa.api.ts`'s header comment for why the
- * password is asked once, at the start of a registration attempt, and
- * reused for the `confirm` that follows moments later rather than asked
- * twice for one continuous action.
+ * **None of the three requests below carries a password.** Until 2026-10-10
+ * all three demanded it on every request, so this component asked for it in a
+ * form of its own before showing anything. Since that day the routes take the
+ * ten-minute window like every other gated one (Isaias): when something has
+ * to be proved the step-up dialog asks, once, and the request repeats itself.
+ * "Configurar aplicación" therefore goes straight to the QR.
  *
  * **`SesionContext` is read here now, for exactly one write.** Hallazgo
  * E-3/F12: `confirmTotp`'s 200 promotes the session on the server —
@@ -122,60 +98,36 @@ const TotpSection = ({
 }) => {
   const { sesion, setSesion } = useContext(SesionContext);
   // ── Quitar ───────────────────────────────────────────────────────────────
-  const [bajaAbierta, setBajaAbierta] = useState(false);
-  const [passwordBaja, setPasswordBaja] = useState("");
   const [enviandoBaja, setEnviandoBaja] = useState(false);
-  const [errorBaja, setErrorBaja] = useState<string | null>(null);
   const [confirmBajaAbierto, setConfirmBajaAbierto] = useState(false);
 
-  const abrirBaja = () => {
-    setBajaAbierta(true);
-    setErrorBaja(null);
-  };
-
-  const cancelarBaja = () => {
-    setBajaAbierta(false);
-    setPasswordBaja("");
-    setErrorBaja(null);
-  };
-
-  const pedirQuitar = () => {
-    if (!passwordBaja) return toast.warning("Debes escribir tu contraseña actual.");
-    setConfirmBajaAbierto(true);
-  };
-
+  // Failures go to a toast: there is no form left to hang them under.
   const quitarFactor = async () => {
     setConfirmBajaAbierto(false);
     setEnviandoBaja(true);
-    setErrorBaja(null);
     try {
-      const res = await deleteTotp(passwordBaja);
+      const res = await deleteTotp();
       if (res.status === 200) {
         toast.success(res.message || "Se quitó tu factor de autenticación.");
-        cancelarBaja();
       } else if (res.status === 404) {
         // "Nothing to remove" is news, not a failure — see MENSAJE_SIN_FACTOR
         // in totp.controller.ts. A red toast here would tell somebody they
         // did something wrong when they did not.
         toast.info(res.message || "No tienes ningún factor de autenticación registrado.");
-        cancelarBaja();
       } else if (res.code === CODIGO_STEP_UP) {
-        setErrorBaja(describeStepUpError(res.motivo, res.message));
+        toast.error(describeStepUpError(res.motivo, res.message));
       } else {
-        setErrorBaja(res.message || "Ocurrió un error en el servidor.");
+        toast.error(res.message || "Ocurrió un error en el servidor.");
       }
     } catch {
-      setErrorBaja("No se pudo conectar con el servidor.");
+      toast.error("No se pudo conectar con el servidor.");
     }
     setEnviandoBaja(false);
   };
 
   // ── Añadir ───────────────────────────────────────────────────────────────
   const [fase, setFase] = useState<FaseAlta>("reposo");
-  const [passwordAlta, setPasswordAlta] = useState("");
   const [enviandoSetup, setEnviandoSetup] = useState(false);
-  const [errorAlta, setErrorAlta] = useState<string | null>(null);
-  const [banner409, setBanner409] = useState<Banner409>(null);
 
   const [otpauth, setOtpauth] = useState<string | null>(null);
   const [secreto, setSecreto] = useState<string | null>(null);
@@ -207,53 +159,40 @@ const TotpSection = ({
     };
   }, [otpauth]);
 
-  const abrirAlta = () => {
-    setFase("password");
-    setErrorAlta(null);
-    setBanner409(null);
-  };
-
   /** Abandon the whole attempt. Safe at any point: an unconfirmed row left
    *  behind on the server is replaced, not accumulated, the next time
    *  `setupTotp` is called — see that function's own comment. */
   const cancelarAlta = () => {
     setFase("reposo");
-    setPasswordAlta("");
-    setErrorAlta(null);
-    setBanner409(null);
     setOtpauth(null);
     setSecreto(null);
     setCodigo("");
     setErrorConfirm(null);
   };
 
+  /**
+   * "Configurar aplicación": ask the server for a secret and open the QR.
+   *
+   * Nothing opens until the answer is in. A refusal here is one of two 409s
+   * — the address is not verified yet, or a confirmed factor already exists —
+   * and the server's own sentence says which and what to do about it, so it
+   * goes in a toast that stays long enough to be read.
+   */
   const pedirSetup = async () => {
-    if (!passwordAlta) return toast.warning("Debes escribir tu contraseña actual.");
     setEnviandoSetup(true);
-    setErrorAlta(null);
-    setBanner409(null);
     try {
-      const res = await setupTotp(passwordAlta);
+      const res = await setupTotp();
       if (res.status === 200 && res.otpauth && res.secreto) {
         setOtpauth(res.otpauth);
         setSecreto(res.secreto);
         setFase("qr");
-      } else if (res.status === 409) {
-        setErrorAlta(res.message);
-        setBanner409(
-          res.message === MENSAJE_CORREO_NO_VERIFICADO
-            ? "correo"
-            : res.message === MENSAJE_FACTOR_YA_CONFIGURADO
-              ? "factor"
-              : null,
-        );
       } else if (res.code === CODIGO_STEP_UP) {
-        setErrorAlta(describeStepUpError(res.motivo, res.message));
+        toast.error(describeStepUpError(res.motivo, res.message));
       } else {
-        setErrorAlta(res.message || "Ocurrió un error en el servidor.");
+        toast.error(res.message || "Ocurrió un error en el servidor.", { duration: 10000 });
       }
     } catch {
-      setErrorAlta("No se pudo conectar con el servidor.");
+      toast.error("No se pudo conectar con el servidor.");
     }
     setEnviandoSetup(false);
   };
@@ -263,7 +202,7 @@ const TotpSection = ({
     setEnviandoConfirm(true);
     setErrorConfirm(null);
     try {
-      const res = await confirmTotp(codigo.trim(), passwordAlta);
+      const res = await confirmTotp(codigo.trim());
       if (res.status === 200) {
         toast.success("Tu segundo factor quedó configurado correctamente.");
         cancelarAlta();
@@ -287,14 +226,10 @@ const TotpSection = ({
           onCodigosEmitidos?.();
         }
       } else if (res.code === CODIGO_STEP_UP) {
-        // Rare: the password no longer holds — most likely it was changed in
-        // another tab mid-attempt. Sent back to the password step rather
-        // than shown a dead-end error under the code field: retyping the
-        // code will never fix a stale password.
-        setFase("password");
-        setOtpauth(null);
-        setSecreto(null);
-        setErrorAlta(describeStepUpError(res.motivo, res.message));
+        // The window `setupTotp` opened ran out while the QR was on screen
+        // and the person cancelled the dialog that asked again. The secret is
+        // still good: they can press Confirmar once more.
+        setErrorConfirm(describeStepUpError(res.motivo, res.message));
       } else {
         setErrorConfirm(res.message || "Ocurrió un error en el servidor.");
       }
@@ -323,144 +258,68 @@ const TotpSection = ({
 
   const dialogos = (
     <>
-      {/* One dialog for both steps of a registration, so the password typed
-          in the first is still there for the `confirm` the second sends. */}
       <FormDialog
-        open={fase !== "reposo"}
+        open={fase === "qr"}
         onClose={cancelarAlta}
         size="md"
         title="Configurar la aplicación de autenticación"
-        description={
-          fase === "qr"
-            ? "Escanea el código con tu aplicación y escribe los seis dígitos que te muestre."
-            : "Confirma con tu contraseña que eres tú."
-        }
-        // The QR step counts on its own: abandoning it throws away a secret
-        // the person may already have scanned.
-        dirty={fase === "qr" || passwordAlta !== ""}
-        saving={enviandoSetup || enviandoConfirm}
-        submitLabel={fase === "qr" ? "Confirmar" : "Continuar"}
+        description="Escanea el código con tu aplicación y escribe los seis dígitos que te muestre."
+        // Always: abandoning this step throws away a secret the person may
+        // already have scanned.
+        dirty
+        saving={enviandoConfirm}
+        submitLabel="Confirmar"
         savingLabel="Comprobando…"
-        onSubmit={() => void (fase === "qr" ? confirmarAlta() : pedirSetup())}
+        onSubmit={() => void confirmarAlta()}
         bodyClassName="space-y-4"
       >
-        {fase === "qr" ? (
-          <>
-            <div className="flex flex-col sm:flex-row gap-4 items-start">
-              {/* `bg-white` is deliberate and not a theme miss: a QR code
-                  has to stay dark-on-light to stay scannable in every
-                  phone camera, whatever theme this page is drawn in. */}
-              <div
-                className="inline-block rounded-lg border bg-white p-3 shrink-0"
-                role="img"
-                aria-label="Código QR para configurar el segundo factor"
-                dangerouslySetInnerHTML={{ __html: qrSvg ?? "" }}
-              />
-              <div className="space-y-2 min-w-0">
-                <p className="text-sm text-muted-foreground">
-                  Si no puedes escanearlo, escribe este código a mano en tu aplicación:
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="text-sm font-mono bg-background border rounded px-2 py-1 break-all">
-                    {secreto}
-                  </code>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={copiarSecreto} aria-label="Copiar código">
-                    <CopyIcon className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              </div>
+        <div className="flex flex-col sm:flex-row gap-4 items-start">
+          {/* `bg-white` is deliberate and not a theme miss: a QR code
+              has to stay dark-on-light to stay scannable in every
+              phone camera, whatever theme this page is drawn in. */}
+          <div
+            className="inline-block rounded-lg border bg-white p-3 shrink-0"
+            role="img"
+            aria-label="Código QR para configurar el segundo factor"
+            dangerouslySetInnerHTML={{ __html: qrSvg ?? "" }}
+          />
+          <div className="space-y-2 min-w-0">
+            <p className="text-sm text-muted-foreground">
+              Si no puedes escanearlo, escribe este código a mano en tu aplicación:
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="text-sm font-mono bg-background border rounded px-2 py-1 break-all">
+                {secreto}
+              </code>
+              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={copiarSecreto} aria-label="Copiar código">
+                <CopyIcon className="h-3.5 w-3.5" />
+              </Button>
             </div>
+          </div>
+        </div>
 
-            <CampoDialogo id="totp-confirmar-codigo" label="Código de 6 dígitos" requerido>
-              <Input
-                id="totp-confirmar-codigo"
-                autoFocus
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={codigo}
-                // Hallazgo E-12/F14: Google Authenticator and Authy both
-                // display the code as "123 456", with a space in the
-                // middle. Pasting that verbatim into a bare `maxLength={6}`
-                // field truncates to "123 45" — six characters, none of
-                // them the code — and the person reads "código incorrecto"
-                // while looking at a correct one. Same sanitizer
-                // `pages/login/SegundoFactorPage.tsx` already uses for the
-                // same paste.
-                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                className="font-mono tracking-widest w-32"
-                placeholder="000000"
-                maxLength={6}
-              />
-            </CampoDialogo>
-            {errorConfirm && <p role="alert" className="text-sm text-destructive">{errorConfirm}</p>}
-          </>
-        ) : (
-          <>
-            <CampoDialogo id="totp-alta-password" label="Contraseña actual" requerido>
-              <Input
-                id="totp-alta-password"
-                type="password"
-                value={passwordAlta}
-                onChange={(e) => setPasswordAlta(e.target.value)}
-                className="font-mono"
-                autoComplete="current-password"
-              />
-            </CampoDialogo>
-            {errorAlta && (
-              <div className="space-y-1">
-                <p role="alert" className="text-sm text-destructive">{errorAlta}</p>
-                {banner409 === "correo" && !fila && (
-                  // A plain `<a>`, not `<Link>` — no `<Router>` is
-                  // guaranteed around this component in every test that
-                  // mounts it, and a full navigation costs nothing extra
-                  // for a one-off trip to another settings screen.
-                  <a href="/app/perfil" className="text-sm underline text-primary">
-                    Ir a mi perfil a verificar mi correo
-                  </a>
-                )}
-                {banner409 === "correo" && fila && (
-                  // Already on the profile: a link to it would only reload
-                  // the page this dialog is on.
-                  <p className="text-sm text-muted-foreground">
-                    Cierra esta ventana y verifícalo en «Correo de recuperación», en esta misma tarjeta.
-                  </p>
-                )}
-                {banner409 === "factor" && (
-                  <p className="text-sm text-muted-foreground">
-                    Cierra esta ventana, usa «Quitar aplicación» y vuelve a intentarlo.
-                  </p>
-                )}
-              </div>
-            )}
-          </>
-        )}
-      </FormDialog>
-
-      <FormDialog
-        open={bajaAbierta}
-        onClose={cancelarBaja}
-        size="sm"
-        title="Quitar la aplicación de autenticación"
-        description="Confirma con tu contraseña que eres tú."
-        dirty={passwordBaja !== ""}
-        saving={enviandoBaja}
-        submitLabel="Quitar factor"
-        savingLabel="Quitando…"
-        destructive
-        onSubmit={pedirQuitar}
-        bodyClassName="space-y-4"
-      >
-        <CampoDialogo id="totp-quitar-password" label="Contraseña actual" requerido>
+        <CampoDialogo id="totp-confirmar-codigo" label="Código de 6 dígitos" requerido>
           <Input
-            id="totp-quitar-password"
-            type="password"
-            value={passwordBaja}
-            onChange={(e) => setPasswordBaja(e.target.value)}
-            className="font-mono"
-            autoComplete="current-password"
+            id="totp-confirmar-codigo"
+            autoFocus
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            value={codigo}
+            // Hallazgo E-12/F14: Google Authenticator and Authy both
+            // display the code as "123 456", with a space in the
+            // middle. Pasting that verbatim into a bare `maxLength={6}`
+            // field truncates to "123 45" — six characters, none of
+            // them the code — and the person reads "código incorrecto"
+            // while looking at a correct one. Same sanitizer
+            // `pages/login/SegundoFactorPage.tsx` already uses for the
+            // same paste.
+            onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            className="font-mono tracking-widest w-32"
+            placeholder="000000"
+            maxLength={6}
           />
         </CampoDialogo>
-        {errorBaja && <p role="alert" className="text-sm text-destructive">{errorBaja}</p>}
+        {errorConfirm && <p role="alert" className="text-sm text-destructive">{errorConfirm}</p>}
       </FormDialog>
 
       {/* Confirm: quitar el factor */}
@@ -523,12 +382,16 @@ const TotpSection = ({
           sit under a heading that repeated its own label.
         */}
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={abrirBaja}>
+          <Button variant="ghost" size="sm" onClick={() => setConfirmBajaAbierto(true)} disabled={enviandoBaja}>
             <ShieldOffIcon className="h-4 w-4 mr-1.5" aria-hidden />
             Quitar aplicación
           </Button>
-          <Button variant="outline" size="sm" onClick={abrirAlta}>
-            <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
+          <Button variant="outline" size="sm" onClick={() => void pedirSetup()} disabled={enviandoSetup}>
+            {enviandoSetup ? (
+              <Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" aria-hidden />
+            ) : (
+              <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
+            )}
             Configurar aplicación
           </Button>
         </div>

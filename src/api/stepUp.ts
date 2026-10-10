@@ -97,13 +97,17 @@ export const MENSAJE_FACTOR_INCOMPLETO =
 /**
  * Lo que el diálogo dice sobre para qué sirve la confirmación y cuánto dura.
  *
- * 🔴 **Son dos frases porque hay dos comportamientos, y prometer el de la
- * ventana en una ruta que no la tiene sería mentir.** Las rutas que dan de
- * alta o de baja un factor —o que registran un correo, que desde el plan 4E
- * es un factor— piden la contraseña en **cada** petición: son las que
- * contestan con `exigeContrasena: true`, que es el mismo campo con el que el
- * servidor dice «esta ruta va sin ventana». En las demás, una confirmación
- * cubre un rato de trabajo.
+ * 🔴 **Son dos frases porque hubo dos comportamientos, y el segundo sigue
+ * aquí sólo por el orden de despliegue.** Hasta el 2026-10-10 las rutas que
+ * dan de alta o de baja un factor —o que registran un correo, que desde el
+ * plan 4E es un factor— pedían la contraseña en **cada** petición y
+ * contestaban con `exigeContrasena: true`. Ese día Isaias metió todas las
+ * rutas con puerta en la ventana, y el servidor dejó de mandar el campo: con
+ * el servidor de hoy sólo se lee la segunda frase. La primera, y todo lo que
+ * en `useStepUpCeremony.ts` y `stepUpInterceptor.ts` cuelga de
+ * `exigeContrasena`, queda para el rato en que este cliente hable con un
+ * servidor anterior al corte — los dos repos se despliegan aparte. Retirarlo
+ * es deuda anotada, no un olvido.
  *
  * 🔴 **«Unos minutos» y no una cifra, a propósito.** El plazo real lo
  * decide `STEP_UP_WINDOW_MINUTES` (`api/src/config/security.ts`) y **no viaja

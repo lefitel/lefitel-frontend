@@ -794,18 +794,20 @@ describe("the second-factor rows of the access card", () => {
     await esperarCarga();
     await abrir(user, "llave");
     await user.click(screen.getByRole("button", { name: /añadir llave/i }));
-    await user.type(await screen.findByLabelText(/contraseña actual/i), "la-mia");
+    // jsdom's user agent names no browser, so the name arrives empty and
+    // anything typed is a change.
+    await user.type(await screen.findByLabelText(/nombre de la llave/i), "el del trabajo");
 
     await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
     const descartar = await screen.findByRole("button", { name: /^descartar$/i });
-    expect(screen.getByLabelText(/contraseña actual/i)).toHaveValue("la-mia");
+    expect(screen.getByLabelText(/nombre de la llave/i)).toHaveValue("el del trabajo");
     await user.click(descartar);
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
-    // Opened again, the password box is empty: the one typed was not kept.
+    // Opened again, the name box is empty: the one typed was not kept.
     await user.click(screen.getByRole("button", { name: /añadir llave/i }));
-    expect(await screen.findByLabelText(/contraseña actual/i)).toHaveValue("");
+    expect(await screen.findByLabelText(/nombre de la llave/i)).toHaveValue("");
   });
 
   it("folds a row away with 'Cerrar'", async () => {

@@ -32,8 +32,6 @@ const CODIGOS = Array.from({ length: 10 }, (_, i) => `CODE${i}ABCDEFGHJKMNPQRSTU
 
 async function generarHastaLaAdvertencia(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Generar códigos nuevos" }));
-  await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-  await user.click(screen.getByRole("button", { name: "Generar códigos" }));
 }
 
 beforeEach(() => {
@@ -82,7 +80,7 @@ describe("generar códigos nuevos", () => {
     expect(screen.getByText(/solo se muestran una vez/i)).toBeInTheDocument();
   });
 
-  it("sends the typed password and reveals the ten codes on confirmation", async () => {
+  it("sends the request with no password and reveals the ten codes on confirmation", async () => {
     generateRecoveryCodes.mockResolvedValue({ status: 200, message: null, codigos: CODIGOS });
     const user = userEvent.setup();
     render(<RecoveryCodesSection />);
@@ -91,7 +89,8 @@ describe("generar códigos nuevos", () => {
     await generarHastaLaAdvertencia(user);
     await user.click(screen.getByRole("button", { name: "Sí, generar" }));
 
-    await waitFor(() => expect(generateRecoveryCodes).toHaveBeenCalledWith("la-mia"));
+    await waitFor(() => expect(generateRecoveryCodes).toHaveBeenCalledTimes(1));
+    expect(generateRecoveryCodes.mock.calls[0]).toEqual([]);
     expect(await screen.findByText(/tus códigos de recuperación/i)).toBeInTheDocument();
     // All ten land on screen, formatted — not the raw 26-character string.
     for (const codigo of CODIGOS) {
@@ -100,7 +99,18 @@ describe("generar códigos nuevos", () => {
     expect(await screen.findByText(/10 de 10 sin usar/i)).toBeInTheDocument();
   });
 
-  it("shows a distinct sentence for a step-up refusal", async () => {
+  it("asks for no password anywhere on the way to the confirm dialog", async () => {
+    const user = userEvent.setup();
+    render(<RecoveryCodesSection />);
+    await screen.findByText(/5 de 10 sin usar/i);
+
+    await generarHastaLaAdvertencia(user);
+
+    expect(screen.getByText("¿Generar diez códigos nuevos?")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
+  });
+
+  it("toasts the gate's sentence for a step-up refusal, and reveals nothing", async () => {
     generateRecoveryCodes.mockResolvedValue({
       status: 403,
       message: "x",
@@ -114,7 +124,23 @@ describe("generar códigos nuevos", () => {
     await generarHastaLaAdvertencia(user);
     await user.click(screen.getByRole("button", { name: "Sí, generar" }));
 
-    expect(await screen.findByText(/esa contraseña no es correcta/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/esa contraseña no es correcta/i)),
+    );
+    expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument();
+  });
+
+  it("toasts the server's own sentence when generating fails for any other reason", async () => {
+    generateRecoveryCodes.mockResolvedValue({ status: 500, message: "Se rompió algo." });
+    const user = userEvent.setup();
+    render(<RecoveryCodesSection />);
+    await screen.findByText(/5 de 10 sin usar/i);
+
+    await generarHastaLaAdvertencia(user);
+    await user.click(screen.getByRole("button", { name: "Sí, generar" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Se rompió algo."));
+    expect(screen.queryByText(/tus códigos de recuperación/i)).not.toBeInTheDocument();
   });
 });
 

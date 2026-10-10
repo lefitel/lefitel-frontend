@@ -68,11 +68,11 @@ interface Props {
  * confirmation of identity and so it stays — there, the current password is
  * half of what is being changed.
  *
- * **The second-factor rows ask for the password too, and not by oversight.**
- * Passkeys, the authenticator app and the recovery codes each ask for it in
- * their own form: their routes sit behind the gate with `sinVentana`, so the
- * ten-minute window does not cover them. Those forms are modal dialogs, so
- * there is still never a second password box on screen.
+ * **The second-factor rows ask for no password either.** Passkeys, the
+ * authenticator app and the recovery codes did, each in a form of its own,
+ * while their routes demanded it on every request. Since 2026-10-10 every
+ * gated route takes the ten-minute window (Isaias), so they too leave the
+ * asking to the step-up dialog.
  *
  * **Those three used to live on a screen of their own, behind a link in this
  * card**, and Isaias asked for them here: a setting one click away on another

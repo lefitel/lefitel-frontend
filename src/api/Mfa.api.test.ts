@@ -17,17 +17,17 @@ afterEach(() => {
 });
 
 describe("setupTotp", () => {
-  it("posts to POST /api/auth/totp/setup with stepup_password, never pass or oldPass", async () => {
+  it("posts to POST /api/auth/totp/setup with no password of any name: the gate's dialog supplies what is missing", async () => {
     const post = vi.spyOn(axios, "post").mockResolvedValue({
       status: 200,
       data: { secreto: "JBSWY3DPEHPK3PXP", otpauth: "otpauth://totp/Osefi:ada?secret=JBSWY3DPEHPK3PXP" },
     });
 
-    await setupTotp("la-mia");
+    await setupTotp();
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0][0]).toMatch(/auth\/totp\/setup$/);
-    expect(post.mock.calls[0][1]).toEqual({ stepup_password: "la-mia" });
+    expect(post.mock.calls[0][1]).toEqual({});
   });
 
   it("returns the secret and the otpauth URI on 200", async () => {
@@ -36,7 +36,7 @@ describe("setupTotp", () => {
       data: { secreto: "JBSWY3DPEHPK3PXP", otpauth: "otpauth://totp/Osefi:ada?secret=JBSWY3DPEHPK3PXP" },
     });
 
-    const res = await setupTotp("la-mia");
+    const res = await setupTotp();
 
     expect(res).toEqual({
       status: 200,
@@ -53,7 +53,7 @@ describe("setupTotp", () => {
       }),
     );
 
-    const res = await setupTotp("la-mia");
+    const res = await setupTotp();
 
     expect(res).toEqual({
       status: 409,
@@ -79,7 +79,7 @@ describe("setupTotp", () => {
       }),
     );
 
-    const res = await setupTotp("");
+    const res = await setupTotp();
 
     expect(res.status).toBe(403);
     expect(res.code).toBe(CODIGO_STEP_UP);
@@ -89,7 +89,7 @@ describe("setupTotp", () => {
   it("reports 500 and something to show when nothing answered at all", async () => {
     vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
 
-    expect(await setupTotp("la-mia")).toEqual({
+    expect(await setupTotp()).toEqual({
       status: 500,
       message: "No se pudo conectar con el servidor.",
       code: undefined,
@@ -101,17 +101,17 @@ describe("setupTotp", () => {
 });
 
 describe("confirmTotp", () => {
-  it("posts the code and stepup_password to POST /api/auth/totp/confirm", async () => {
+  it("posts the code, and only the code, to POST /api/auth/totp/confirm", async () => {
     const post = vi.spyOn(axios, "post").mockResolvedValue({
       status: 200,
       data: { message: "Segundo factor configurado correctamente." },
     });
 
-    await confirmTotp("123456", "la-mia");
+    await confirmTotp("123456");
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0][0]).toMatch(/auth\/totp\/confirm$/);
-    expect(post.mock.calls[0][1]).toEqual({ codigo: "123456", stepup_password: "la-mia" });
+    expect(post.mock.calls[0][1]).toEqual({ codigo: "123456" });
   });
 
   it("keeps a wrong-code 400 distinguishable from a step-up refusal", async () => {
@@ -121,7 +121,7 @@ describe("confirmTotp", () => {
       }),
     );
 
-    const res = await confirmTotp("000000", "la-mia");
+    const res = await confirmTotp("000000");
 
     expect(res.status).toBe(400);
     expect(res.code).toBeUndefined();
@@ -139,7 +139,7 @@ describe("confirmTotp", () => {
       data: { message: "Segundo factor configurado correctamente.", codigos },
     });
 
-    const res = await confirmTotp("123456", "la-mia");
+    const res = await confirmTotp("123456");
 
     expect(res.status).toBe(200);
     expect(res.codigos).toEqual(codigos);
@@ -155,7 +155,7 @@ describe("confirmTotp", () => {
       data: { message: "Segundo factor configurado correctamente.", codigos: null },
     });
 
-    const res = await confirmTotp("123456", "la-mia");
+    const res = await confirmTotp("123456");
 
     expect(res.status).toBe(200);
     expect(res.codigos).toBeNull();
@@ -168,20 +168,20 @@ describe("confirmTotp", () => {
       }),
     );
 
-    const res = await confirmTotp("123456", "la-mia");
+    const res = await confirmTotp("123456");
 
     expect(res.codigos).toBeNull();
   });
 });
 
 describe("deleteTotp", () => {
-  it("sends stepup_password as the DELETE body, not a query string", async () => {
+  it("sends DELETE /api/auth/totp with no body and nothing in the query string", async () => {
     const del = vi.spyOn(axios, "delete").mockResolvedValue({
       status: 200,
       data: { message: "Factor de autenticación eliminado." },
     });
 
-    await deleteTotp("la-mia");
+    await deleteTotp();
 
     expect(del).toHaveBeenCalledTimes(1);
     expect(del.mock.calls[0][0]).toMatch(/auth\/totp$/);
@@ -189,7 +189,7 @@ describe("deleteTotp", () => {
     // to the URL — a secret or a password in the query string is exactly
     // what `httpLogger` would then write into a log line unredacted.
     expect(del.mock.calls[0][0]).not.toContain("stepup_password");
-    expect(del.mock.calls[0][1]).toEqual({ data: { stepup_password: "la-mia" } });
+    expect(del.mock.calls[0][1]).toBeUndefined();
   });
 
   it("reads a 404 (nothing to delete) as an ordinary answer, not folded away", async () => {
@@ -199,7 +199,7 @@ describe("deleteTotp", () => {
       }),
     );
 
-    const res = await deleteTotp("la-mia");
+    const res = await deleteTotp();
 
     expect(res).toEqual({
       status: 404,
@@ -211,18 +211,18 @@ describe("deleteTotp", () => {
 });
 
 describe("generateRecoveryCodes", () => {
-  it("posts stepup_password to POST /api/auth/recovery-codes and returns the ten codes", async () => {
+  it("posts to POST /api/auth/recovery-codes with no password and returns the ten codes", async () => {
     const codigos = Array.from({ length: 10 }, (_, i) => `CODIGO${i}`);
     const post = vi.spyOn(axios, "post").mockResolvedValue({
       status: 200,
       data: { message: "Códigos generados.", codigos },
     });
 
-    const res = await generateRecoveryCodes("la-mia");
+    const res = await generateRecoveryCodes();
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0][0]).toMatch(/auth\/recovery-codes$/);
-    expect(post.mock.calls[0][1]).toEqual({ stepup_password: "la-mia" });
+    expect(post.mock.calls[0][1]).toEqual({});
     expect(res.codigos).toEqual(codigos);
     expect(res.codigos).toHaveLength(10);
   });
@@ -234,7 +234,7 @@ describe("generateRecoveryCodes", () => {
       }),
     );
 
-    const res = await generateRecoveryCodes("la-mia");
+    const res = await generateRecoveryCodes();
 
     expect(res.codigos).toBeNull();
     expect(res.motivo).toBe("sin-factor-reciente");

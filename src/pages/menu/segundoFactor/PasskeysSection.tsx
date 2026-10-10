@@ -43,10 +43,11 @@ const fecha = (iso: string | null): string =>
  * teclear, y a prueba de phishing porque la llave sólo firma para el dominio
  * en que se creó.
  *
- * **La contraseña se pide aquí y viaja en las dos peticiones del registro**, en
- * vez de dejar que la ventana global la pida: son dos rutas con puerta y un
- * diálogo biométrico entre medias, y el reto del servidor caduca a los dos
- * minutos. Ver `Webauthn.api.ts`.
+ * **Aquí no se pide ninguna contraseña.** Hasta el 2026-10-10 esta sección la
+ * pedía en su propio formulario, porque las rutas de las llaves la exigían en
+ * cada petición; desde ese día aceptan la ventana de diez minutos como todas
+ * las demás (Isaias). Si hace falta probar algo, lo pide la ventana global
+ * del step-up y la petición se repite sola. Ver `Webauthn.api.ts`.
  *
  * **Borrar la última llave cierra todas las sesiones, la de este navegador
  * incluida.** El servidor lo dice en `sesion_cerrada`, y esta sección hace dos
@@ -110,11 +111,9 @@ const PasskeysSection = ({
   }, []);
 
   // ── Quitar ───────────────────────────────────────────────────────────────
+  // La llave por la que se pregunta en la confirmación; `null`, ninguna.
   const [bajaDe, setBajaDe] = useState<Credencial | null>(null);
-  const [passwordBaja, setPasswordBaja] = useState("");
-  const [confirmBajaAbierto, setConfirmBajaAbierto] = useState(false);
   const [enviandoBaja, setEnviandoBaja] = useState(false);
-  const [errorBaja, setErrorBaja] = useState<string | null>(null);
 
   // Kept after the dialog closes: its title is still on screen while it
   // animates out, and would otherwise blink to an empty name.
@@ -123,62 +122,48 @@ const PasskeysSection = ({
   const abrirBaja = (llave: Credencial) => {
     setBajaDe(llave);
     setNombreBaja(llave.nombre);
-    setPasswordBaja("");
-    setErrorBaja(null);
   };
+  const cancelarBaja = () => setBajaDe(null);
 
-  const cancelarBaja = () => {
-    setBajaDe(null);
-    setPasswordBaja("");
-    setErrorBaja(null);
-  };
-
-  const pedirQuitar = () => {
-    if (!passwordBaja) return toast.warning("Debes escribir tu contraseña actual.");
-    setConfirmBajaAbierto(true);
-  };
-
+  // Los fallos van en un toast: ya no hay formulario debajo del que colgarlos.
   const quitarLlave = async () => {
-    setConfirmBajaAbierto(false);
-    if (!bajaDe) return;
+    const llave = bajaDe;
+    if (!llave) return;
+    cancelarBaja();
     setEnviandoBaja(true);
-    setErrorBaja(null);
     try {
-      const res = await deleteCredential(bajaDe.id, passwordBaja);
+      const res = await deleteCredential(llave.id);
       if (res.status === 200) {
         // Diez segundos: si era la última llave, la siguiente petición saca a
         // la persona al login y este toast es lo único que sobrevive.
         toast.success(res.message || "Llave eliminada.", { duration: 10000 });
-        cancelarBaja();
         if (res.sesionCerrada) {
           // 🔴 El servidor acaba de cerrar la sesión de este navegador. Sin
           // esto la persona se queda en una pantalla entera —lista, botones,
           // las otras dos secciones— con una sesión muerta, y nada la saca:
           // no hay sondeo, y el temporizador de caducidad apunta a la fecha
-          // original. Se iría al login a mitad del siguiente formulario, con
-          // la contraseña tecleada perdida. `logout()` la lleva ahora; el
-          // toast vive fuera del router y sobrevive al viaje.
+          // original. Se iría al login a mitad de lo siguiente que hiciera.
+          // `logout()` la lleva ahora; el toast vive fuera del router y
+          // sobrevive al viaje.
           logout();
           return;
         }
         await cargar();
       } else if (res.status === 404) {
         toast.info(res.message || "Esa llave ya no existe.");
-        cancelarBaja();
         await cargar();
       } else if (res.code === CODIGO_REVOCACION_FALLIDA) {
         // La llave se borró y las sesiones no se cerraron: el remedio está en
         // la frase, y la lista ya no tiene esa llave.
         toast.error(res.message || "No se pudieron cerrar tus sesiones.", { duration: 15000 });
-        cancelarBaja();
         await cargar();
       } else if (res.code === CODIGO_STEP_UP) {
-        setErrorBaja(describeStepUpError(res.motivo, res.message));
+        toast.error(describeStepUpError(res.motivo, res.message));
       } else {
-        setErrorBaja(res.message || "Ocurrió un error en el servidor.");
+        toast.error(res.message || "Ocurrió un error en el servidor.");
       }
     } catch {
-      setErrorBaja("No se pudo conectar con el servidor.");
+      toast.error("No se pudo conectar con el servidor.");
     }
     setEnviandoBaja(false);
   };
@@ -186,7 +171,6 @@ const PasskeysSection = ({
   // ── Registrar ────────────────────────────────────────────────────────────
   const [altaAbierta, setAltaAbierta] = useState(false);
   const [nombreAlta, setNombreAlta] = useState("");
-  const [passwordAlta, setPasswordAlta] = useState("");
   const [enviandoAlta, setEnviandoAlta] = useState(false);
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
   const [codigosRecuperacion, setCodigosRecuperacion] = useState<string[] | null>(null);
@@ -205,7 +189,6 @@ const PasskeysSection = ({
   const cancelarAlta = () => {
     setAltaAbierta(false);
     setNombreAlta("");
-    setPasswordAlta("");
     setErrorAlta(null);
   };
 
@@ -213,13 +196,13 @@ const PasskeysSection = ({
     const nombre = nombreAlta.trim();
     if (!nombre) return toast.warning("Ponle un nombre a la llave: «mi móvil», «el portátil del trabajo»…");
     if (nombre.length > NOMBRE_MAX) return toast.warning(`El nombre no puede pasar de ${NOMBRE_MAX} caracteres.`);
-    if (!passwordAlta) return toast.warning("Debes escribir tu contraseña actual.");
     setEnviandoAlta(true);
     setErrorAlta(null);
     try {
-      // Desde el clic y sin nada en medio: el diálogo del sistema exige
-      // activación reciente en Safari.
-      const res = await registrarPasskey(nombre, passwordAlta);
+      // Desde el clic: el diálogo del sistema exige activación reciente en
+      // Safari. Si la puerta pide confirmar la identidad, esa ventana va en
+      // medio y su propio clic la renueva — ver `registrarPasskey`.
+      const res = await registrarPasskey(nombre);
       if (res.ok) {
         toast.success("Tu llave quedó registrada.");
         cancelarAlta();
@@ -243,7 +226,7 @@ const PasskeysSection = ({
         }
       } else if (res.cancelado) {
         // Cerró el diálogo del sistema. No es un error: el nuestro se queda
-        // abierto como estaba, con el nombre y la contraseña, para repetir.
+        // abierto como estaba, con el nombre, para repetir.
       } else if (res.code === CODIGO_STEP_UP) {
         setErrorAlta(describeStepUpError(res.motivo, res.message));
       } else {
@@ -280,8 +263,8 @@ const PasskeysSection = ({
         onClose={cancelarAlta}
         size="sm"
         title="Añadir una llave de acceso"
-        description="Confirma con tu contraseña que eres tú. Después, tu dispositivo te pedirá la huella, la cara o el PIN."
-        dirty={nombreAlta !== nombreSugerido || passwordAlta !== ""}
+        description="Al crearla, tu dispositivo te pedirá la huella, la cara o el PIN."
+        dirty={nombreAlta !== nombreSugerido}
         saving={enviandoAlta}
         submitLabel="Crear la llave"
         savingLabel="Esperando a tu dispositivo…"
@@ -294,11 +277,8 @@ const PasskeysSection = ({
           requerido
           ayuda="Para reconocerla en tu lista si algún día tienes que quitarla. Puedes cambiarlo."
         >
-          {/* `data-no-autofocus`: el nombre ya viene escrito, así que el
-              cursor empieza en la contraseña, que es lo que falta. */}
           <Input
             id="passkey-alta-nombre"
-            data-no-autofocus
             value={nombreAlta}
             onChange={(e) => setNombreAlta(e.target.value)}
             placeholder="mi móvil, el portátil del trabajo…"
@@ -306,51 +286,14 @@ const PasskeysSection = ({
             autoComplete="off"
           />
         </CampoDialogo>
-        <CampoDialogo id="passkey-alta-password" label="Contraseña actual" requerido>
-          <Input
-            id="passkey-alta-password"
-            type="password"
-            value={passwordAlta}
-            onChange={(e) => setPasswordAlta(e.target.value)}
-            className="font-mono"
-            autoComplete="current-password"
-          />
-        </CampoDialogo>
         {errorAlta && <p role="alert" className="text-sm text-destructive">{errorAlta}</p>}
       </FormDialog>
 
-      <FormDialog
-        open={bajaDe !== null}
-        onClose={cancelarBaja}
-        size="sm"
-        title={`Quitar la llave «${nombreBaja}»`}
-        description="Confirma con tu contraseña que eres tú."
-        dirty={passwordBaja !== ""}
-        saving={enviandoBaja}
-        submitLabel="Quitar llave"
-        savingLabel="Quitando…"
-        destructive
-        onSubmit={pedirQuitar}
-        bodyClassName="space-y-4"
-      >
-        <CampoDialogo id="passkey-quitar-password" label="Contraseña actual" requerido>
-          <Input
-            id="passkey-quitar-password"
-            type="password"
-            value={passwordBaja}
-            onChange={(e) => setPasswordBaja(e.target.value)}
-            className="font-mono"
-            autoComplete="current-password"
-          />
-        </CampoDialogo>
-        {errorBaja && <p role="alert" className="text-sm text-destructive">{errorBaja}</p>}
-      </FormDialog>
-
       {/* Confirm: quitar la llave */}
-      <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
+      <AlertDialog open={bajaDe !== null} onOpenChange={(o) => !o && cancelarBaja()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>¿Quitar esta llave?</AlertDialogTitle>
+            <AlertDialogTitle>¿Quitar la llave «{nombreBaja}»?</AlertDialogTitle>
             <AlertDialogDescription>
               {/* Plan 4E: con correo verificado la última llave no deja la cuenta
                   sin factor, y el servidor no cierra las sesiones en ese caso
@@ -361,7 +304,7 @@ const PasskeysSection = ({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmBajaAbierto(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogCancel onClick={cancelarBaja}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={quitarLlave}
               className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
@@ -445,7 +388,7 @@ const PasskeysSection = ({
                     size="sm"
                     className="shrink-0"
                     onClick={() => abrirBaja(llave)}
-                    disabled={bajaDe?.id === llave.id}
+                    disabled={enviandoBaja}
                     aria-label={`Quitar la llave ${llave.nombre}`}
                   >
                     <Trash2Icon className="h-4 w-4 mr-1.5" aria-hidden />

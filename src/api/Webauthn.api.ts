@@ -6,7 +6,7 @@ import type {
   RegistrationResponseJSON,
 } from "@simplewebauthn/browser";
 import { urlApi } from "./url";
-import { STEP_UP_PASSWORD_FIELD, TIMEOUT_CONFIRMACION_MS } from "./stepUp";
+import { TIMEOUT_CONFIRMACION_MS } from "./stepUp";
 import { respuestaDeError, type RespuestaMfa } from "./Mfa.api";
 import type { SesionInterface } from "../interfaces/interfaces";
 import type { Permisos } from "../lib/permissions";
@@ -15,19 +15,16 @@ import type { Permisos } from "../lib/permissions";
  * Las llaves de acceso (passkeys) — plan 4C, fase 1. Sólo HTTP: la ceremonia
  * con el navegador vive en `passkeyCeremony.ts`, que llama a esto.
  *
- * **Misma forma que `Mfa.api.ts`, y por el mismo motivo.** `POST
- * /auth/webauthn/register/options` y `/register/verify` están las dos detrás
- * de la puerta con `sinVentana: true` —la opción que hasta el 2026-09-08 se
- * llamaba `exigeContrasena`; el campo del cable sí conserva ese nombre—, así
- * que registrar una llave son **dos** peticiones que piden la contraseña. Dejar que las conteste el
- * interceptor global sería: 403 → ventana de contraseña → opciones → **el
- * diálogo biométrico del sistema** → 403 → ventana de contraseña otra vez.
- * Tres avisos para un solo gesto. Y peor: el reto que emiten las opciones
- * caduca a los dos minutos (`WEBAUTHN_CHALLENGE_TTL_MS`), así que una segunda
- * ventana con tiempo de tecleo humano dentro lo agota, y la persona lee «vuelve
- * a intentarlo desde el principio» sin saber por qué. Así que la sección pide
- * la contraseña una vez y la manda en las dos, como `TotpSection` hace con
- * `setup` y `confirm`.
+ * **Misma forma que `Mfa.api.ts`, y por el mismo motivo: ninguna de estas
+ * llamadas lleva contraseña.** `POST /auth/webauthn/register/options` y
+ * `/register/verify` están detrás de la puerta, y hasta el 2026-10-10 pedían
+ * la contraseña en el cuerpo en cada petición, así que la sección la pedía en
+ * su propio formulario y la mandaba en las dos. Desde ese día toda ruta con
+ * puerta acepta la ventana de diez minutos (Isaias): si hace falta probar
+ * algo, lo pide la ventana global al contestar la primera —las opciones—, y
+ * la segunda cae dentro de la ventana recién abierta. Así el orden sigue
+ * siendo el bueno: confirmación primero, diálogo biométrico después, y el
+ * reto de dos minutos (`WEBAUTHN_CHALLENGE_TTL_MS`) no se gasta tecleando.
  *
  * `loginOptions`/`loginVerify` no llevan puerta ni contraseña: las llama una
  * sesión a medias que aún no ha probado nada, y sirven igual para terminar un
@@ -39,11 +36,9 @@ export interface RegisterOptionsResult extends RespuestaMfa {
   opciones: PublicKeyCredentialCreationOptionsJSON | null;
 }
 
-export const registerOptions = (stepupPassword: string): Promise<RegisterOptionsResult> =>
+export const registerOptions = (): Promise<RegisterOptionsResult> =>
   axios
-    .post(`${urlApi}auth/webauthn/register/options`, {
-      [STEP_UP_PASSWORD_FIELD]: stepupPassword,
-    })
+    .post(`${urlApi}auth/webauthn/register/options`, {})
     .then((r) => ({
       status: r.status,
       message: null,
@@ -64,14 +59,9 @@ export interface RegisterVerifyResult extends RespuestaMfa {
 export const registerVerify = (
   nombre: string,
   respuesta: RegistrationResponseJSON,
-  stepupPassword: string,
 ): Promise<RegisterVerifyResult> =>
   axios
-    .post(`${urlApi}auth/webauthn/register/verify`, {
-      nombre,
-      respuesta,
-      [STEP_UP_PASSWORD_FIELD]: stepupPassword,
-    })
+    .post(`${urlApi}auth/webauthn/register/verify`, { nombre, respuesta })
     .then((r) => ({
       status: r.status,
       message: (r.data?.message as string | undefined) ?? null,
@@ -272,17 +262,15 @@ export interface DeleteCredentialResult extends RespuestaMfa {
 /**
  * `DELETE /auth/webauthn/credentials/:id` — quitar una llave propia.
  *
- * El cuerpo va en `config.data`, como `deleteTotp`. 404 es «esa llave no
+ * Sin cuerpo, como `deleteTotp`. 404 es «esa llave no
  * existe», la misma frase sea de quien sea — no es un error que enseñar en
  * rojo. Un 500 con `code: "REVOCACION_FALLIDA"` es el único caso que la
  * pantalla tiene que distinguir de un 500 cualquiera: la llave se borró y las
  * sesiones **no** se cerraron; el remedio está en la frase.
  */
-export const deleteCredential = (id: number, stepupPassword: string): Promise<DeleteCredentialResult> =>
+export const deleteCredential = (id: number): Promise<DeleteCredentialResult> =>
   axios
-    .delete(`${urlApi}auth/webauthn/credentials/${id}`, {
-      data: { [STEP_UP_PASSWORD_FIELD]: stepupPassword },
-    })
+    .delete(`${urlApi}auth/webauthn/credentials/${id}`)
     .then((r) => ({
       status: r.status,
       message: (r.data?.message as string | undefined) ?? null,

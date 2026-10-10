@@ -141,15 +141,15 @@ export type ResultadoRegistro =
     };
 
 /**
- * Registrar una llave nueva: opciones → diálogo del sistema → canje. La
- * contraseña viaja en las dos peticiones — ver `Webauthn.api.ts` para por qué
- * no se deja al interceptor.
+ * Registrar una llave nueva: opciones → diálogo del sistema → canje. Sin
+ * contraseña: si la puerta pide probar algo, lo hace la ventana global al
+ * contestar las opciones, **antes** del diálogo del sistema — ver
+ * `Webauthn.api.ts`. Esa ventana es un clic más entre el botón y
+ * `startRegistration`, y es el clic el que renueva la activación que Safari
+ * exige; si aun así caduca, sale como una cancelación y se repite.
  */
-export async function registrarPasskey(
-  nombre: string,
-  stepupPassword: string,
-): Promise<ResultadoRegistro> {
-  const opts = await registerOptions(stepupPassword);
+export async function registrarPasskey(nombre: string): Promise<ResultadoRegistro> {
+  const opts = await registerOptions();
   if (opts.status !== 200 || !opts.opciones) {
     return {
       ok: false,
@@ -177,7 +177,7 @@ export async function registrarPasskey(
     };
   }
 
-  const canje = await registerVerify(nombre, respuesta, stepupPassword);
+  const canje = await registerVerify(nombre, respuesta);
   if (canje.status !== 201) {
     return {
       ok: false,

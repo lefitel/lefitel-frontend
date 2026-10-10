@@ -1,7 +1,6 @@
 import axios from "axios";
 import { urlApi } from "./url";
 import {
-  STEP_UP_PASSWORD_FIELD,
   CODIGO_STEP_UP,
   cuerpoDeCanje,
   describeStepUpError,
@@ -14,30 +13,20 @@ export { CODIGO_STEP_UP, describeStepUpError };
 export type { MotivoStepUp };
 
 /**
- * The field every step-up-gated route reads the caller's current password
- * from — `STEP_UP_PASSWORD_FIELD` in `api/src/config/security.ts`, copied
- * rather than imported for the same reason `LOGOUT_URL` and `ROLE_HEADER` in
- * `SesionProvider.tsx` are: this is a wire format between two repositories
- * deployed separately, not a shared constant either can import.
+ * **None of the calls in this file carries a password.** `POST
+ * /auth/totp/setup`, `POST /auth/totp/confirm`, `DELETE /auth/totp` and `POST
+ * /auth/recovery-codes` sit behind the step-up gate, and until 2026-10-10 each
+ * of them demanded the password in the body on every request — so
+ * `TotpSection.tsx` and `RecoveryCodesSection.tsx` asked for it in a form of
+ * their own, and an account with a factor was then asked for it a second time
+ * by the step-up dialog. Isaias put every gated route inside the ten-minute
+ * window that day: one confirmation, one method, good for a few minutes.
  *
- * `POST /auth/totp/setup`, `POST /auth/totp/confirm`, `DELETE /auth/totp` and
- * `POST /auth/recovery-codes` all read this field and none other — a `pass`
- * or an `oldPass` alongside it, the names the rest of this codebase uses for
- * a password, is never read. Verified against
- * `api/src/routes/totp.routes.ts`: all three TOTP routes mount the step-up
- * gate with `sinVentana: true` — the option that was called `exigeContrasena`
- * until 2026-09-08, renamed there and **not** on the wire, where the refusal
- * still carries a field of the old name. It means **every one of them demands
- * the password, every time — including `confirm`, and including a session
- * that just typed the right six-digit code a moment ago.** That is
- * not an oversight this file works around; it is hallazgo C1's fix. Without
- * it, a stolen session cookie with no password could register its own
- * factor, and from that instant `tieneAlgunFactor` would deny the real
- * owner the password fallback too — a permanent lockout, not a narrower one.
- * `TotpSection.tsx` is built around that: it asks for the password once, at
- * the start of a registration attempt, and threads the same value through
- * both the `setup` and the immediate `confirm` that follows it, rather than
- * asking twice for one continuous action the person chose to start.
+ * So these functions send what the operation needs and nothing else. When the
+ * gate refuses, the global interceptor (`stepUpInterceptor.ts`) opens the
+ * dialog, proves whatever the server asked for, and sends the request again —
+ * the promise returned here resolves with the retried answer, and the screen
+ * never sees the 403 unless the person cancelled.
  */
 // El contrato del step-up vive ahora en `stepUp.ts`, una sola vez. Estaba
 // duplicado entre este fichero y `Login.api.ts`, y el interceptor del plan 4D
@@ -95,9 +84,9 @@ export interface SetupTotpResult extends RespuestaMfa {
  * shared discriminator for them — there was never a need for one until this
  * screen existed to read it.
  */
-export const setupTotp = (stepupPassword: string): Promise<SetupTotpResult> =>
+export const setupTotp = (): Promise<SetupTotpResult> =>
   axios
-    .post(`${urlApi}auth/totp/setup`, { [STEP_UP_PASSWORD_FIELD]: stepupPassword })
+    .post(`${urlApi}auth/totp/setup`, {})
     .then((r) => ({
       status: r.status,
       message: (r.data?.message as string | undefined) ?? null,
@@ -129,17 +118,16 @@ export interface ConfirmTotpResult extends RespuestaMfa {
 /**
  * `POST /auth/totp/confirm` — prove the secret `setupTotp` just handed out.
  *
- * Also behind the gate with `sinVentana: true` — see this file's header
- * comment on `STEP_UP_PASSWORD_FIELD` for why the same password used for
- * `setupTotp` is the one to send here too, rather than asking again.
+ * Behind the gate like `setupTotp`, and covered by the window that call
+ * just opened: confirming does not ask for anything again.
  *
  * **Confirming now also, sometimes, issues the account's first ten recovery
  * codes** (Isaias, 2026-09-02) — see `ConfirmTotpResult.codigos` above and
  * `totp.controller.ts`'s own comment on `confirmTotp` for the full decision.
  */
-export const confirmTotp = (codigo: string, stepupPassword: string): Promise<ConfirmTotpResult> =>
+export const confirmTotp = (codigo: string): Promise<ConfirmTotpResult> =>
   axios
-    .post(`${urlApi}auth/totp/confirm`, { codigo, [STEP_UP_PASSWORD_FIELD]: stepupPassword })
+    .post(`${urlApi}auth/totp/confirm`, { codigo })
     .then((r) => ({
       status: r.status,
       message: (r.data?.message as string | undefined) ?? null,
@@ -151,18 +139,14 @@ export const confirmTotp = (codigo: string, stepupPassword: string): Promise<Con
  * `DELETE /auth/totp` — remove the caller's own TOTP factor, confirmed or
  * still pending confirmation.
  *
- * The body rides on `config.data`, not a second positional argument — that
- * is how axios sends a body on a DELETE, and it is the only place in this
- * file that needs it: every other call here is a POST or a GET.
- *
  * Answers 404 (`MENSAJE_SIN_FACTOR`) when there is nothing to delete. That
  * is not an error `TotpSection.tsx` should raise an alarm over: it means
  * "there was nothing to remove", which is worth saying plainly rather than
  * as a red toast.
  */
-export const deleteTotp = (stepupPassword: string): Promise<RespuestaMfa> =>
+export const deleteTotp = (): Promise<RespuestaMfa> =>
   axios
-    .delete(`${urlApi}auth/totp`, { data: { [STEP_UP_PASSWORD_FIELD]: stepupPassword } })
+    .delete(`${urlApi}auth/totp`)
     .then((r) => ({ status: r.status, message: (r.data?.message as string | undefined) ?? null }))
     .catch(respuestaDeError);
 
@@ -180,13 +164,11 @@ export interface GenerarCodigosResult extends RespuestaMfa {
 /**
  * `POST /auth/recovery-codes` — issue a fresh set of ten codes, first time or
  * regeneration alike (the server does not distinguish the two calls). Behind
- * the gate with `sinVentana: true`, same as the three TOTP routes above:
- * hallazgo C14, so that a printed sheet alone can never regenerate itself into
- * a fresh ten.
+ * the gate, inside the window like everything else here.
  */
-export const generateRecoveryCodes = (stepupPassword: string): Promise<GenerarCodigosResult> =>
+export const generateRecoveryCodes = (): Promise<GenerarCodigosResult> =>
   axios
-    .post(`${urlApi}auth/recovery-codes`, { [STEP_UP_PASSWORD_FIELD]: stepupPassword })
+    .post(`${urlApi}auth/recovery-codes`, {})
     .then((r) => ({
       status: r.status,
       message: (r.data?.message as string | undefined) ?? null,

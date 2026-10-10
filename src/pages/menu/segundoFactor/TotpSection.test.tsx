@@ -2,7 +2,7 @@
 // plan itself is the DOM-order one below: hallazgo A5, reproduced with a
 // clock in `docs/plans/2026-09-01-factores-mfa.md`, is a loop somebody with a
 // dead TOTP factor falls into when "Añadir" reads before "Quitar" — pressing
-// Añadir gets them a password prompt and then a refusal, because a factor is
+// Añadir gets them a refusal (the 409 "ya tienes un factor"), because a factor is
 // still on file, and every trip round that loop costs a recovery code. A
 // test asserting both sections merely *exist* would stay green if that order
 // were reversed; only a test that reads the DOM's own order catches it.
@@ -105,15 +105,16 @@ describe("layout", () => {
 });
 
 describe("quitar el factor", () => {
-  it("asks for the password before letting the confirm dialog open", async () => {
+  it("opens the confirm dialog straight from the button, with no password asked first", async () => {
     const user = userEvent.setup();
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
-    expect(toast.warning).toHaveBeenCalledWith("Debes escribir tu contraseña actual.");
-    expect(screen.queryByText(/¿quitar tu segundo factor\?/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/¿quitar tu segundo factor\?/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
+    // Opening it is not deleting: nothing is sent until "Sí, quitar".
+    expect(deleteTotp).not.toHaveBeenCalled();
   });
 
   it("says, before deleting, that the account may fall back to password-only entry", async () => {
@@ -121,8 +122,6 @@ describe("quitar el factor", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
     expect(
       screen.getByText(/a partir de ahora volverás a entrar solo con tu contraseña/i),
@@ -137,28 +136,24 @@ describe("quitar el factor", () => {
     renderTotp({ ...usuarioExample, email: "isaias@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" });
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
     expect(screen.getByText(/tu correo verificado sigue siendo tu segundo factor/i)).toBeInTheDocument();
     expect(screen.queryByText(/volverás a entrar solo con tu contraseña/i)).not.toBeInTheDocument();
   });
 
-  it("deletes with the typed password once the dialog is confirmed", async () => {
+  it("deletes, with no password argument at all, once the dialog is confirmed", async () => {
     deleteTotp.mockResolvedValue({ status: 200, message: "Factor de autenticación eliminado." });
     const user = userEvent.setup();
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
 
-    await waitFor(() => expect(deleteTotp).toHaveBeenCalledWith("la-mia"));
+    await waitFor(() => expect(deleteTotp).toHaveBeenCalledTimes(1));
+    expect(deleteTotp.mock.calls[0]).toEqual([]);
     expect(toast.success).toHaveBeenCalledWith("Factor de autenticación eliminado.");
-    // The form collapses back to the plain button, not left open with a
-    // stale password sitting in state.
-    await waitFor(() => expect(screen.queryByLabelText(/contraseña actual/i)).not.toBeInTheDocument());
+    // The confirm dialog closes once the request is on its way.
+    await waitFor(() => expect(screen.queryByText(/¿quitar tu segundo factor\?/i)).not.toBeInTheDocument());
   });
 
   it("reads a 404 (nothing registered) as news, not as a red error", async () => {
@@ -167,8 +162,6 @@ describe("quitar el factor", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
 
     await waitFor(() =>
@@ -177,7 +170,7 @@ describe("quitar el factor", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
-  it("shows a distinct sentence for 'sin-factor-reciente', not the same one a wrong password gets", async () => {
+  it("toasts a distinct sentence for a 'sin-factor-reciente' refusal, not the same one a wrong password gets", async () => {
     deleteTotp.mockResolvedValue({
       status: 403,
       message: "Esta operación necesita que confirmes tu identidad. Vuelve a autenticarte y repite la acción.",
@@ -188,26 +181,38 @@ describe("quitar el factor", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
 
-    await waitFor(() => expect(screen.getByText(/prueba tu segundo factor actual/i)).toBeInTheDocument());
-    expect(screen.queryByText(/esa contraseña no es correcta/i)).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/prueba tu segundo factor actual/i)),
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(expect.stringMatching(/esa contraseña no es correcta/i));
+  });
+
+  it("toasts the server's own sentence when the delete fails for any other reason", async () => {
+    deleteTotp.mockResolvedValue({ status: 500, message: "Se rompió algo." });
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
+    await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Se rompió algo."));
+    expect(toast.success).not.toHaveBeenCalled();
   });
 });
 
 describe("añadir un factor nuevo", () => {
-  it("asks for the password, then shows the QR and the plain-text secret", async () => {
+  it("asks the server for a secret the moment the button is pressed, then shows the QR and the plain-text secret", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     const user = userEvent.setup();
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    await waitFor(() => expect(setupTotp).toHaveBeenCalledWith("la-mia"));
+    // One click, one request, no arguments: there is no password step in between.
+    await waitFor(() => expect(setupTotp).toHaveBeenCalledTimes(1));
+    expect(setupTotp.mock.calls[0]).toEqual([]);
     expect(await screen.findByText(SECRETO)).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /código qr/i })).toBeInTheDocument();
   });
@@ -223,8 +228,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
     await user.click(screen.getByRole("button", { name: /copiar código/i }));
@@ -243,8 +246,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
     await user.click(screen.getByRole("button", { name: /copiar código/i }));
@@ -254,24 +255,23 @@ describe("añadir un factor nuevo", () => {
     );
   });
 
-  it("confirms with the same password already typed for setup — never asks for it twice in one attempt", async () => {
+  it("confirms with the code alone — no password field anywhere, before or after the QR", async () => {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     confirmTotp.mockResolvedValue({ status: 200, message: "Segundo factor configurado correctamente." });
     const user = userEvent.setup();
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
-    // No second password field anywhere on screen at this point.
-    expect(screen.queryByLabelText(/contraseña actual/i)).not.toBeInTheDocument();
+    // No password field anywhere on screen at this point.
+    expect(screen.queryByLabelText(/contraseña/i)).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
-    await waitFor(() => expect(confirmTotp).toHaveBeenCalledWith("123456", "la-mia"));
+    await waitFor(() => expect(confirmTotp).toHaveBeenCalledTimes(1));
+    expect(confirmTotp.mock.calls[0]).toEqual(["123456"]);
   });
 
   it("refreshes SesionContext from /auth/me right after a successful confirm — hallazgo E-3/F12", async () => {
@@ -293,8 +293,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
     await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
@@ -314,8 +312,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
     // "123 456", the way both apps display it. A bare `maxLength={6}` with no
@@ -324,7 +320,7 @@ describe("añadir un factor nuevo", () => {
     await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123 456");
     await user.click(screen.getByRole("button", { name: "Confirmar" }));
 
-    await waitFor(() => expect(confirmTotp).toHaveBeenCalledWith("123456", "la-mia"));
+    await waitFor(() => expect(confirmTotp).toHaveBeenCalledWith("123456"));
   });
 
   it("keeps the QR on screen and shows an inline error on a wrong code, so the person can just retry", async () => {
@@ -337,8 +333,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
     await user.type(screen.getByLabelText(/código de 6 dígitos/i), "000000");
@@ -350,34 +344,45 @@ describe("añadir un factor nuevo", () => {
     expect(screen.getByText(SECRETO)).toBeInTheDocument();
   });
 
-  it("shows the verified-email 409 with a way there, not just a refusal", async () => {
-    setupTotp.mockResolvedValue({
-      status: 409,
-      message:
-        "Debes verificar tu correo antes de configurar un segundo factor. " +
-        "Solicita el enlace de verificación desde tu perfil y confírmalo desde tu bandeja de entrada; " +
-        "después vuelve a intentar este registro.",
-      otpauth: null,
-      secreto: null,
-    });
+  it("toasts the verified-email 409 with the server's own sentence, for long enough to read it", async () => {
+    const mensaje =
+      "Debes verificar tu correo antes de configurar un segundo factor. " +
+      "Solicita el enlace de verificación desde tu perfil y confírmalo desde tu bandeja de entrada; " +
+      "después vuelve a intentar este registro.";
+    setupTotp.mockResolvedValue({ status: 409, message: mensaje, otpauth: null, secreto: null });
     const user = userEvent.setup();
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText(/debes verificar tu correo/i)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /ir a mi perfil a verificar mi correo/i })).toHaveAttribute(
-      "href",
-      "/app/perfil",
-    );
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(mensaje, { duration: 10000 }));
+    // The refusal is a toast and nothing else: no QR dialog, no inline banner, no link.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
-  it("points back at the Quitar section on the 'already configured' 409, instead of leaving the trap A5 describes", async () => {
+  it("toasts the 'already configured' 409 with the server's sentence too, instead of leaving the trap A5 describes", async () => {
+    // The sentence itself says to remove the registered one first, and "Quitar
+    // aplicación" stays right there, first in the DOM (see the layout test).
+    const mensaje = "Ya tienes un factor de autenticación configurado. Elimínalo antes de registrar uno nuevo.";
+    setupTotp.mockResolvedValue({ status: 409, message: mensaje, otpauth: null, secreto: null });
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(mensaje, { duration: 10000 }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Quitar aplicación" })).toBeEnabled();
+  });
+
+  it("toasts the gate's sentence, not the server's raw one, when setup is refused by the step-up", async () => {
     setupTotp.mockResolvedValue({
-      status: 409,
-      message: "Ya tienes un factor de autenticación configurado. Elimínalo antes de registrar uno nuevo.",
+      status: 403,
+      message: "x",
+      code: "STEP_UP_REQUIRED",
+      motivo: "contraseña-incorrecta",
       otpauth: null,
       secreto: null,
     });
@@ -385,10 +390,35 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText(/cierra esta ventana, usa «quitar aplicación»/i)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringMatching(/esa contraseña no es correcta/i)),
+    );
+    expect(toast.error).not.toHaveBeenCalledWith("x", expect.anything());
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("keeps the QR step open and shows the gate's sentence inline when the confirm is refused by the step-up", async () => {
+    // The window setup opened ran out while the QR was on screen and the
+    // person cancelled the dialog that asked again: the secret is still good.
+    setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
+    confirmTotp.mockResolvedValue({
+      status: 403,
+      message: "x",
+      code: "STEP_UP_REQUIRED",
+      motivo: "sin-factor-reciente",
+    });
+    const user = userEvent.setup();
+    renderTotp();
+
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
+    await screen.findByText(SECRETO);
+    await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
+    await user.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/prueba tu segundo factor actual/i);
+    expect(screen.getByText(SECRETO)).toBeInTheDocument();
+    expect(toast.error).not.toHaveBeenCalled();
   });
 
   it("cancelling the QR step discards the attempt without calling the server again", async () => {
@@ -397,8 +427,6 @@ describe("añadir un factor nuevo", () => {
     renderTotp();
 
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
 
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
@@ -423,8 +451,6 @@ describe("códigos de recuperación al confirmar (Isaias, 2026-09-02)", () => {
   async function llegarAlPasoDeCodigo(user: ReturnType<typeof userEvent.setup>) {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
     await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-    await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
     await user.type(screen.getByLabelText(/código de 6 dígitos/i), "123456");
   }

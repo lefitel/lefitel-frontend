@@ -124,18 +124,18 @@ describe("registrarPasskey", () => {
   // 🔴 La contraseña va en las DOS peticiones: las dos rutas llevan puerta, y
   // dejar que la ventana global la pidiera serían tres avisos para un gesto.
   it("manda la contraseña en las opciones y en el canje, y el nombre en el canje", async () => {
-    const r = await registrarPasskey("mi móvil", "la-mia");
+    const r = await registrarPasskey("mi móvil");
 
     expect(r).toEqual({ ok: true, codigos: null });
-    expect(registerOptions).toHaveBeenCalledWith("la-mia");
+    expect(registerOptions).toHaveBeenCalledWith();
     expect(startRegistration).toHaveBeenCalledWith({ optionsJSON: OPCIONES });
-    expect(registerVerify).toHaveBeenCalledWith("mi móvil", ASERCION, "la-mia");
+    expect(registerVerify).toHaveBeenCalledWith("mi móvil", ASERCION);
   });
 
   it("devuelve los códigos de recuperación cuando el canje los trae", async () => {
     registerVerify.mockResolvedValue({ status: 201, message: "ok", codigos: ["ABCDEFGH"] });
 
-    expect(await registrarPasskey("x", "p")).toEqual({ ok: true, codigos: ["ABCDEFGH"] });
+    expect(await registrarPasskey("x")).toEqual({ ok: true, codigos: ["ABCDEFGH"] });
   });
 
   // Rechazo de la puerta en las opciones: `code` y `motivo` viajan enteros
@@ -149,7 +149,7 @@ describe("registrarPasskey", () => {
       opciones: null,
     });
 
-    const r = await registrarPasskey("x", "mal");
+    const r = await registrarPasskey("x");
 
     expect(r).toMatchObject({ ok: false, cancelado: false, status: 403, code: "STEP_UP_REQUIRED", motivo: "contraseña-incorrecta" });
     expect(startRegistration).not.toHaveBeenCalled();
@@ -160,7 +160,7 @@ describe("registrarPasskey", () => {
       new WebAuthnErrorFalso("InvalidStateError", "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED"),
     );
 
-    const r = await registrarPasskey("x", "p");
+    const r = await registrarPasskey("x");
 
     expect(r).toMatchObject({ ok: false, cancelado: false, yaRegistrada: true });
     expect((r as { message: string }).message).toContain("ya tiene una llave");
@@ -170,7 +170,7 @@ describe("registrarPasskey", () => {
   it("trata cancelar el diálogo del sistema como cancelado, sin frase", async () => {
     startRegistration.mockRejectedValue(new WebAuthnErrorFalso("NotAllowedError", "ERROR_PASSTHROUGH_SEE_CAUSE_PROPERTY"));
 
-    expect(await registrarPasskey("x", "p")).toEqual({ ok: false, cancelado: true });
+    expect(await registrarPasskey("x")).toEqual({ ok: false, cancelado: true });
   });
 });
 
