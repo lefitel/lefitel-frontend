@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +17,8 @@ import {
 import { KeyIcon } from "lucide-react";
 import { EditorBlock, EditorField } from "../perfil/perfilRows";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
+import { SeccionFactor } from "./SeccionFactor";
+import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
 import {
   generateRecoveryCodes,
   getRecoveryCodesRemaining,
@@ -41,8 +42,12 @@ const UMBRAL_BAJO = 2;
  * reveal dialog without saving them is not recoverable from here — the only
  * way back is generating a fresh ten, which is also what the dialog itself
  * says before it ever shows a code.
+ *
+ * **Two shapes, one section**: a card on `/app/segundo-factor`, a row of
+ * "Acceso y seguridad" in the profile when `fila` is passed. See
+ * `SeccionFactor`.
  */
-const RecoveryCodesSection = () => {
+const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
   const [restantes, setRestantes] = useState<number | null>(null);
   const [cargando, setCargando] = useState(true);
 
@@ -130,16 +135,56 @@ const RecoveryCodesSection = () => {
     );
   };
 
-  return (
-    <Card className="shadow-sm border-muted/60">
-      <CardHeader className="border-b border-border/40 pb-4">
-        <CardTitle className="text-base flex items-center gap-2">
-          <KeyIcon className="h-4 w-4 text-muted-foreground" />
-          Códigos de recuperación
-        </CardTitle>
-      </CardHeader>
+  useFilaDePerfil(fila, formAbierto && password !== "", cancelarForm);
 
-      <CardContent className="px-5 py-4 space-y-4">
+  const dialogos = (
+    <>
+      {/* Confirm: antes de generar, las dos cosas que hay que saber antes,
+          no después. */}
+      <AlertDialog open={confirmAbierto} onOpenChange={(o) => !o && setConfirmAbierto(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Generar diez códigos nuevos?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Si ya tenías códigos, los anteriores dejarán de servir de inmediato. Los nuevos solo se
+              muestran una vez, en esta misma pantalla: cópialos o imprímelos antes de cerrar, porque
+              no podrás volver a verlos — tu única salida después sería generar otro juego.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmAbierto(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={generar}>Sí, generar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* La hoja de códigos. Sin AlertDialogCancel y sin cierre por Escape:
+          la única salida es el botón, después de leer la advertencia de
+          arriba. */}
+      {/* La misma hoja que enseña `TotpSection` al confirmar el primer
+          factor. Una sola copia: cuando esto vivía aquí duplicado, cada
+          arreglo —el aviso del portapapeles de Windows, la ventana de
+          impresión que no se cerraba sola— había que hacerlo dos veces, y la
+          segunda es la que se olvida. */}
+      <RecoveryCodesRevealDialog
+        codigos={codigos}
+        onAcknowledge={cerrarRevelacion}
+        contexto="Cada código sirve una sola vez. Cuando se te acaben, genera un juego nuevo desde esta misma pantalla."
+      />
+    </>
+  );
+
+  return (
+    <SeccionFactor
+      titulo="Códigos de recuperación"
+      icon={KeyIcon}
+      fila={fila}
+      etiqueta="Códigos de recuperación"
+      resumen={badge()}
+      abrirLabel="Gestionar códigos de recuperación"
+      dialogos={dialogos}
+    >
+      <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
           Diez códigos de un solo uso para entrar si pierdes el acceso a tu aplicación de
           autenticación. Guárdalos impresos o en un lugar seguro — no son un factor por sí solos,
@@ -178,41 +223,8 @@ const RecoveryCodesSection = () => {
             Generar códigos nuevos
           </Button>
         )}
-      </CardContent>
-
-      {/* Confirm: antes de generar, las dos cosas que hay que saber antes,
-          no después. */}
-      <AlertDialog open={confirmAbierto} onOpenChange={(o) => !o && setConfirmAbierto(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Generar diez códigos nuevos?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Si ya tenías códigos, los anteriores dejarán de servir de inmediato. Los nuevos solo se
-              muestran una vez, en esta misma pantalla: cópialos o imprímelos antes de cerrar, porque
-              no podrás volver a verlos — tu única salida después sería generar otro juego.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmAbierto(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={generar}>Sí, generar</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* La hoja de códigos. Sin AlertDialogCancel y sin cierre por Escape:
-          la única salida es el botón, después de leer la advertencia de
-          arriba. */}
-      {/* La misma hoja que enseña `TotpSection` al confirmar el primer
-          factor. Una sola copia: cuando esto vivía aquí duplicado, cada
-          arreglo —el aviso del portapapeles de Windows, la ventana de
-          impresión que no se cerraba sola— había que hacerlo dos veces, y la
-          segunda es la que se olvida. */}
-      <RecoveryCodesRevealDialog
-        codigos={codigos}
-        onAcknowledge={cerrarRevelacion}
-        contexto="Cada código sirve una sola vez. Cuando se te acaben, genera un juego nuevo desde esta misma pantalla."
-      />
-    </Card>
+      </div>
+    </SeccionFactor>
   );
 };
 

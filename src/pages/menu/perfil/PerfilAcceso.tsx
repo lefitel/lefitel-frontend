@@ -1,14 +1,21 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  FingerprintIcon, KeyIcon, MailCheckIcon, MailIcon, MailWarningIcon, ShieldIcon, SmartphoneIcon,
+  FingerprintIcon, KeyIcon, MailCheckIcon, MailIcon, MailWarningIcon, ShieldIcon,
 } from "lucide-react";
 import { ReadRow, EditorBlock, EditorField } from "./perfilRows";
 import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
+import PasskeysSection from "../segundoFactor/PasskeysSection";
+import TotpSection from "../segundoFactor/TotpSection";
+import RecoveryCodesSection from "../segundoFactor/RecoveryCodesSection";
 
-export type EditorAcceso = "usuario" | "password" | "email";
+/** The three rows that are second-factor sections rather than editors of this card's own. */
+export type EditorFactor = "llave" | "totp" | "codigos";
+
+export type EditorAcceso = "usuario" | "password" | "email" | EditorFactor;
 
 export interface DatosCuenta {
   user: string;
@@ -31,7 +38,7 @@ interface Props {
   cuenta: DatosCuenta;
   emailForm: { email: string };
   recovery: { email: string | null; verifiedAt: string | null };
-  /** Which of the three is open, or null when all three are being read. */
+  /** Which row is open, or null when all of them are being read. */
   abierto: EditorAcceso | null;
   guardando: { usuario: boolean; password: boolean; email: boolean };
   onCuenta: (campo: keyof DatosCuenta, valor: string) => void;
@@ -41,24 +48,52 @@ interface Props {
   onGuardarUsuario: () => void;
   onGuardarPassword: () => void;
   onGuardarEmail: () => void;
+  /** A second-factor row saying whether it holds something that would be lost. */
+  onCambiosFactor: (cual: EditorFactor, hay: boolean) => void;
+  /** "Cerrar" on a second-factor row: unlike `onCancelar`, it asks before discarding. */
+  onCerrarFactor: () => void;
 }
 
 /**
- * The three credentials, each opening on its own.
+ * The three credentials, each opening on its own — and, since October 2026,
+ * the passkeys, the authenticator app and the recovery codes beside them.
  *
  * These used to be three separate cards, each with its own "confirm your
  * password" box — three password fields on one screen with no explanation of
  * why there were three. They are one card now, and only one of them is ever
  * open, so the question "which password box am I in" cannot be asked.
  *
- * 🔴 **And there is one password box left, not three.** The rename and the
- * recovery address stopped collecting one when the demand moved to the step-up
- * gate: it asks once, through a dialog that says what it is protecting, and
- * then stops asking for ten minutes. A box here as well meant typing the same
- * secret twice for one operation, which is the complaint this whole piece of
- * work answers. `Contraseña actual` on the password editor is not a
+ * 🔴 **And the three editors share one password box, not three.** The rename
+ * and the recovery address stopped collecting one when the demand moved to the
+ * step-up gate: it asks once, through a dialog that says what it is protecting,
+ * and then stops asking for ten minutes. A box here as well meant typing the
+ * same secret twice for one operation, which is the complaint this whole piece
+ * of work answers. `Contraseña actual` on the password editor is not a
  * confirmation of identity and so it stays — there, the current password is
  * half of what is being changed.
+ *
+ * **The second-factor rows are the exception, and not by oversight.** Passkeys,
+ * the authenticator app and the recovery codes each ask for the password in
+ * their own form: their routes sit behind the gate with `sinVentana`, so the
+ * ten-minute window does not cover them. One open row at a time still holds;
+ * one box at a time does not quite — inside the passkey row and the app row,
+ * "quitar" and "añadir" are two forms that can both be open, as they always
+ * could on the screen these sections come from.
+ *
+ * **Those three used to live on a screen of their own, behind a link in this
+ * card**, and Isaias asked for them here: a setting one click away on another
+ * page is a setting nobody finds. They are the same sections
+ * `/app/segundo-factor` draws as cards, handed a `fila` so they draw as rows
+ * that open in place. That screen stays for the one session that cannot load
+ * this one — `onboarding`, see its own header. Their drafts are their own,
+ * unlike the three editors': `onCambiosFactor` is how each one tells
+ * `PerfilPage` it is dirty.
+ *
+ * **The passkey sits under the password, not under the heading below it**,
+ * because that is what it is to the person holding it: a way to get in. The
+ * heading says the other half out loud — a registered key also makes a
+ * password login ask for a second step — so that nobody finds it out at the
+ * login screen.
  *
  * **Every label and button name here is load-bearing.** `PerfilPage.test.tsx`
  * reaches these fields with `getByLabelText` and these buttons with
@@ -85,7 +120,7 @@ interface Props {
 export default function PerfilAcceso({
   cuenta, emailForm, recovery, abierto, guardando,
   onCuenta, onEmailForm, onAbrir, onCancelar,
-  onGuardarUsuario, onGuardarPassword, onGuardarEmail,
+  onGuardarUsuario, onGuardarPassword, onGuardarEmail, onCambiosFactor, onCerrarFactor,
 }: Props) {
   const emailVerificado = recovery.verifiedAt !== null;
 
@@ -101,6 +136,20 @@ export default function PerfilAcceso({
     : !emailVerificado && emailSinCambios
       ? "Reenviar verificación"
       : "Guardar y verificar";
+
+  const fila = (cual: EditorFactor) => ({
+    abierto: abierto === cual,
+    onAbrir: () => onAbrir(cual),
+    onCerrar: onCerrarFactor,
+    onCambios: (hay: boolean) => onCambiosFactor(cual, hay),
+  });
+
+  // Registering a first key or a first app makes the server mint ten recovery
+  // codes, and the codes row only counts them when it mounts. Without this it
+  // would go on saying "Sin códigos disponibles" beside the sheet the person
+  // has just been shown.
+  const [tandaCodigos, setTandaCodigos] = useState(0);
+  const codigosEmitidos = () => setTandaCodigos((n) => n + 1);
 
   const botonAbrir = (cual: EditorAcceso, etiqueta: string) => (
     <Button variant="outline" size="sm" aria-label={etiqueta} onClick={() => onAbrir(cual)}>
@@ -203,6 +252,9 @@ export default function PerfilAcceso({
             </ReadRow>
           )}
 
+          {/* ── Llave de acceso ── */}
+          <PasskeysSection fila={fila("llave")} onCodigosEmitidos={codigosEmitidos} />
+
           {/* ── Correo de recuperación ── */}
           {abierto === "email" ? (
             <EditorBlock
@@ -261,39 +313,19 @@ export default function PerfilAcceso({
             </ReadRow>
           )}
 
-          {/*
-            Not a fourth editor — `/app/segundo-factor` is its own screen,
-            built to keep working for a session `PerfilPage` itself cannot
-            (see that screen's own comment on `usePerfilData` 403ing on an
-            `onboarding` session). This row is only ever a door to it, so it
-            carries no `abierto`/`onAbrir` state of its own.
+          {/* ── Verificación en dos pasos ── */}
+          <div className="pt-5 pb-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Verificación en dos pasos
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Lo que se te pide además de la contraseña. Una llave de acceso o un correo verificado
+              también la activan: al entrar con contraseña se te pedirá un segundo paso.
+            </p>
+          </div>
 
-            A plain `<a>`, not `<Link>`: `PerfilPage.test.tsx` renders this
-            tree with no `<Router>` around it, and `react-router-dom`'s
-            `Link` throws the moment it mounts outside one — measured, it
-            took 22 of that file's 24 tests down. Both routes live under the
-            same `BrowserRouter` in the real app regardless, so this only
-            costs a full navigation instead of a client-side one, for a
-            settings link nobody clicks often.
-          */}
-          <ReadRow
-            label="Segundo factor"
-            accion={
-              <Button variant="outline" size="sm" asChild>
-                {/* Not bare "Configurar" — `PerfilPage.tsx` and `PerfilPanel.tsx`
-                    both already use that exact word for the recovery email,
-                    and three buttons with the same accessible name on one
-                    page is a trap for anybody using a screen reader, not
-                    only for a future `getByRole` query. */}
-                <a href="/app/segundo-factor">Configurar segundo factor</a>
-              </Button>
-            }
-          >
-            <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-              <SmartphoneIcon className="h-3.5 w-3.5" />
-              Llaves de acceso, aplicación de autenticación y códigos de recuperación
-            </span>
-          </ReadRow>
+          <TotpSection fila={fila("totp")} onCodigosEmitidos={codigosEmitidos} />
+          <RecoveryCodesSection key={tandaCodigos} fila={fila("codigos")} />
 
         </div>
       </CardContent>

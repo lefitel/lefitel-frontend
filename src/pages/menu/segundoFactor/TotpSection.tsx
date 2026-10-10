@@ -1,6 +1,5 @@
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -26,6 +25,8 @@ import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { renderTotpQr } from "./totpQr";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
+import { SeccionFactor } from "./SeccionFactor";
+import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
 
 /**
  * The exact text of the two 409s `POST /auth/totp/setup` can answer with —
@@ -104,8 +105,21 @@ type Banner409 = "correo" | "factor" | null;
  * right here, with a mandatory acknowledgement, instead of the old toast
  * that only ever *suggested* a trip to `RecoveryCodesSection.tsx` — a trip
  * nothing forced anyone to actually take.
+ *
+ * **Two shapes, one section**: a card on `/app/segundo-factor`, a row of
+ * "Acceso y seguridad" in the profile when `fila` is passed. See
+ * `SeccionFactor`. The row carries no status, unlike its two neighbours:
+ * nothing the server answers to a full session says whether a TOTP is
+ * registered, and this component has never needed to know.
  */
-const TotpSection = () => {
+const TotpSection = ({
+  fila,
+  onCodigosEmitidos,
+}: {
+  fila?: FilaDePerfil;
+  /** Confirming just minted the ten codes: whoever shows their count should read it again. */
+  onCodigosEmitidos?: () => void;
+}) => {
   const { sesion, setSesion } = useContext(SesionContext);
   // ── Quitar ───────────────────────────────────────────────────────────────
   const [bajaAbierta, setBajaAbierta] = useState(false);
@@ -193,6 +207,12 @@ const TotpSection = () => {
     };
   }, [otpauth]);
 
+  // Which attempt is alive. A `setupTotp` answer that lands after its attempt
+  // was abandoned must not bring the QR back: as a profile row this section
+  // can be closed while the request is in flight, and the secret would then
+  // sit in a collapsed form — with the password it needs to confirm gone.
+  const intento = useRef(0);
+
   const abrirAlta = () => {
     setFase("password");
     setErrorAlta(null);
@@ -203,6 +223,7 @@ const TotpSection = () => {
    *  behind on the server is replaced, not accumulated, the next time
    *  `setupTotp` is called — see that function's own comment. */
   const cancelarAlta = () => {
+    intento.current++;
     setFase("reposo");
     setPasswordAlta("");
     setErrorAlta(null);
@@ -218,8 +239,13 @@ const TotpSection = () => {
     setEnviandoSetup(true);
     setErrorAlta(null);
     setBanner409(null);
+    const mio = intento.current;
     try {
       const res = await setupTotp(passwordAlta);
+      if (mio !== intento.current) {
+        setEnviandoSetup(false);
+        return;
+      }
       if (res.status === 200 && res.otpauth && res.secreto) {
         setOtpauth(res.otpauth);
         setSecreto(res.secreto);
@@ -270,6 +296,7 @@ const TotpSection = () => {
         // outstanding sheet already existed, so there is nothing to reveal.
         if (res.codigos) {
           setCodigosRecuperacion(res.codigos);
+          onCodigosEmitidos?.();
         }
       } else if (res.code === CODIGO_STEP_UP) {
         // Rare: the password no longer holds — most likely it was changed in
@@ -306,16 +333,67 @@ const TotpSection = () => {
     }
   };
 
-  return (
-    <Card className="shadow-sm border-muted/60">
-      <CardHeader className="border-b border-border/40 pb-4">
-        <CardTitle className="text-base flex items-center gap-2">
-          <SmartphoneIcon className="h-4 w-4 text-muted-foreground" />
-          Aplicación de autenticación
-        </CardTitle>
-      </CardHeader>
+  useFilaDePerfil(
+    fila,
+    // The QR step counts on its own: abandoning it throws away a secret the
+    // person may already have scanned.
+    fase === "qr" || (fase === "password" && passwordAlta !== "") || (bajaAbierta && passwordBaja !== ""),
+    () => {
+      cancelarAlta();
+      cancelarBaja();
+    },
+  );
 
-      <CardContent className="px-5 py-4 space-y-5">
+  const dialogos = (
+    <>
+      {/* Confirm: quitar el factor */}
+      <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Quitar tu segundo factor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* Plan 4E: a verified address is a full factor, so an account
+                  with one does not fall back to the password alone — and
+                  telling it so would be false. */}
+              {sesion?.usuario?.email_verified_at
+                ? "Se eliminará la aplicación de autenticación registrada en esta cuenta. Tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él. Los códigos de recuperación no cuentan como un factor."
+                : "Se eliminará la aplicación de autenticación registrada en esta cuenta. Si no tienes ningún otro factor, a partir de ahora volverás a entrar solo con tu contraseña — los códigos de recuperación no cuentan como un factor y no evitan esto."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmBajaAbierto(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={quitarFactor}
+              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
+            >
+              Sí, quitar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Isaias, 2026-09-02: the account's first ten recovery codes, shown
+          the instant confirming this factor is what minted them. See this
+          component's own docstring and `RecoveryCodesRevealDialog`'s. */}
+      <RecoveryCodesRevealDialog
+        codigos={codigosRecuperacion}
+        onAcknowledge={() => setCodigosRecuperacion(null)}
+        contexto="Tu segundo factor ya está activo. Estos diez códigos son tu única forma de entrar si alguna vez pierdes el acceso a tu aplicación de autenticación."
+      />
+    </>
+  );
+
+  return (
+    <SeccionFactor
+      titulo="Aplicación de autenticación"
+      icon={SmartphoneIcon}
+      fila={fila}
+      etiqueta="Aplicación"
+      resumen={<span className="text-muted-foreground">Códigos de seis dígitos desde tu teléfono</span>}
+      abrirLabel="Gestionar aplicación de autenticación"
+      dialogos={dialogos}
+    >
+      <div className="space-y-5">
         {/*
           "Quitar" first in the markup — see this component's own docstring
           for why the order, not merely the presence, is the fix for
@@ -407,7 +485,7 @@ const TotpSection = () => {
               {errorAlta && (
                 <div className="space-y-1">
                   <p className="text-sm text-destructive">{errorAlta}</p>
-                  {banner409 === "correo" && (
+                  {banner409 === "correo" && !fila && (
                     // A plain `<a>`, not `<Link>` — no `<Router>` is
                     // guaranteed around this component in every test that
                     // mounts it, and a full navigation costs nothing extra
@@ -415,6 +493,13 @@ const TotpSection = () => {
                     <a href="/app/perfil" className="text-sm underline text-primary">
                       Ir a mi perfil a verificar mi correo
                     </a>
+                  )}
+                  {banner409 === "correo" && fila && (
+                    // Already on the profile: a link to it would only reload
+                    // the page this form is on.
+                    <p className="text-sm text-muted-foreground">
+                      Verifícalo en «Correo de recuperación», en esta misma tarjeta.
+                    </p>
                   )}
                   {banner409 === "factor" && (
                     <p className="text-sm text-muted-foreground">
@@ -487,43 +572,8 @@ const TotpSection = () => {
             </div>
           )}
         </section>
-      </CardContent>
-
-      {/* Confirm: quitar el factor */}
-      <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Quitar tu segundo factor?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {/* Plan 4E: a verified address is a full factor, so an account
-                  with one does not fall back to the password alone — and
-                  telling it so would be false. */}
-              {sesion?.usuario?.email_verified_at
-                ? "Se eliminará la aplicación de autenticación registrada en esta cuenta. Tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él. Los códigos de recuperación no cuentan como un factor."
-                : "Se eliminará la aplicación de autenticación registrada en esta cuenta. Si no tienes ningún otro factor, a partir de ahora volverás a entrar solo con tu contraseña — los códigos de recuperación no cuentan como un factor y no evitan esto."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmBajaAbierto(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={quitarFactor}
-              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
-            >
-              Sí, quitar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Isaias, 2026-09-02: the account's first ten recovery codes, shown
-          the instant confirming this factor is what minted them. See this
-          component's own docstring and `RecoveryCodesRevealDialog`'s. */}
-      <RecoveryCodesRevealDialog
-        codigos={codigosRecuperacion}
-        onAcknowledge={() => setCodigosRecuperacion(null)}
-        contexto="Tu segundo factor ya está activo. Estos diez códigos son tu única forma de entrar si alguna vez pierdes el acceso a tu aplicación de autenticación."
-      />
-    </Card>
+      </div>
+    </SeccionFactor>
   );
 };
 

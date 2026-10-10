@@ -35,10 +35,13 @@ import RecoveryCodesSection from "./RecoveryCodesSection";
  * one visit. The total surface built is the same either way; this is a
  * layout decision, not a scope change.
  *
- * ~~Reached today only by typing `/app/segundo-factor`.~~ Not any more:
- * `App.tsx` redirects an `onboarding` session here on day 15, and
- * `PerfilAcceso.tsx` links to it. The sentence stood for a while after both
- * were wired; it is struck rather than deleted so nobody re-derives it.
+ * **Who reaches this screen.** `App.tsx` redirects an `onboarding` session
+ * here on day 15, and the "termina de configurar tu segundo factor" toast in
+ * `stepUpInterceptor.ts` carries a button to it. The profile used to link here
+ * too and no longer does: since October 2026 `PerfilAcceso.tsx` mounts these
+ * same three sections as rows of its own card, so for every session that can
+ * load the profile this screen is a second copy of something it already has.
+ * It stays because `onboarding` cannot load the profile.
  *
  * **Three sections since plan 4C, and the passkeys go first** because they
  * are the recommended method: one gesture, nothing to type, and a key only

@@ -1,8 +1,9 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -21,6 +22,8 @@ import { describeStepUpError, CODIGO_STEP_UP } from "../../../api/Mfa.api";
 import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
+import { SeccionFactor } from "./SeccionFactor";
+import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
 
 /** `code` del 500 que significa «la llave se borró, las sesiones no» — copiado
  *  de `api/src/controllers/webauthn.controller.ts`, formato de cable. */
@@ -59,8 +62,18 @@ const fecha = (iso: string | null): string =>
  * `comprobarToken` + `setSesion` tras un alta, como `TotpSection`: el servidor
  * acaba de promover la sesión y el resto de la pantalla tiene que enterarse
  * (hallazgo E-3/F12).
+ *
+ * **Dos formas, la misma sección**: tarjeta en `/app/segundo-factor`, fila de
+ * «Acceso y seguridad» en el perfil cuando llega `fila`. Ver `SeccionFactor`.
  */
-const PasskeysSection = () => {
+const PasskeysSection = ({
+  fila,
+  onCodigosEmitidos,
+}: {
+  fila?: FilaDePerfil;
+  /** El alta acaba de emitir los diez códigos: quien enseñe su recuento debe volver a leerlo. */
+  onCodigosEmitidos?: () => void;
+}) => {
   const { sesion, setSesion, logout } = useContext(SesionContext);
   // Una sola vez: es una propiedad del navegador, no cambia durante la vida
   // de la página.
@@ -212,7 +225,10 @@ const PasskeysSection = () => {
         }
         // Sólo cuando esta llave es el primer factor y no había hoja sin
         // gastar: los diez códigos, una sola vez, con acuse obligatorio.
-        if (res.codigos) setCodigosRecuperacion(res.codigos);
+        if (res.codigos) {
+          setCodigosRecuperacion(res.codigos);
+          onCodigosEmitidos?.();
+        }
       } else if (res.cancelado) {
         // Cerró el diálogo del sistema. No es un error: el formulario se queda
         // como estaba, con el nombre y la contraseña, para repetir.
@@ -227,16 +243,80 @@ const PasskeysSection = () => {
     setEnviandoAlta(false);
   };
 
-  return (
-    <Card className="shadow-sm border-muted/60">
-      <CardHeader className="border-b border-border/40 pb-4">
-        <CardTitle className="text-base flex items-center gap-2">
-          <KeyRoundIcon className="h-4 w-4 text-muted-foreground" />
-          Llaves de acceso
-        </CardTitle>
-      </CardHeader>
+  useFilaDePerfil(
+    fila,
+    (altaAbierta && (nombreAlta !== "" || passwordAlta !== "")) || (bajaDe !== null && passwordBaja !== ""),
+    () => {
+      cancelarAlta();
+      cancelarBaja();
+    },
+  );
 
-      <CardContent className="px-5 py-4 space-y-5">
+  const resumen = () => {
+    if (cargando) return <Skeleton className="h-5 w-24 inline-block" />;
+    if (llaves === null) return <span className="text-destructive">No se pudo cargar</span>;
+    if (llaves.length === 0) {
+      return (
+        <>
+          {/* Not "Sin configurar": the recovery address in the next row already
+              says that, and `PerfilPage.test.tsx` reads it by its text. */}
+          <Badge variant="outline" className="text-muted-foreground font-normal">
+            Ninguna registrada
+          </Badge>
+          <span className="text-muted-foreground">Huella, cara o PIN en lugar de la contraseña</span>
+        </>
+      );
+    }
+    return <span>{llaves.length === 1 ? "1 registrada" : `${llaves.length} registradas`}</span>;
+  };
+
+  const dialogos = (
+    <>
+      {/* Confirm: quitar la llave */}
+      <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Quitar esta llave?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {/* Plan 4E: con correo verificado la última llave no deja la cuenta
+                  sin factor, y el servidor no cierra las sesiones en ese caso
+                  (`deleteCredential` sólo revoca cuando no queda ningún factor). */}
+              {sesion?.usuario?.email_verified_at
+                ? "Dejará de servir para entrar. Si es tu última llave, tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él, y tus sesiones no se cierran. Los códigos de recuperación no cuentan como un factor."
+                : "Dejará de servir para entrar. Si es tu último factor, se cerrarán todas tus sesiones —esta incluida— y a partir de ahora entrarás sólo con tu contraseña; los códigos de recuperación no cuentan como un factor y no evitan esto."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmBajaAbierto(false)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={quitarLlave}
+              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
+            >
+              Sí, quitar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <RecoveryCodesRevealDialog
+        codigos={codigosRecuperacion}
+        onAcknowledge={() => setCodigosRecuperacion(null)}
+        contexto="Tu llave ya está activa. Estos diez códigos son tu única forma de entrar si alguna vez pierdes el dispositivo donde la registraste."
+      />
+    </>
+  );
+
+  return (
+    <SeccionFactor
+      titulo="Llaves de acceso"
+      icon={KeyRoundIcon}
+      fila={fila}
+      etiqueta="Llave de acceso"
+      resumen={resumen()}
+      abrirLabel="Gestionar llaves de acceso"
+      dialogos={dialogos}
+    >
+      <div className="space-y-5">
         <p className="text-sm text-muted-foreground">
           La huella, la cara o el PIN de tu móvil u ordenador, en lugar de un código. Es el método
           recomendado: un solo gesto, y una llave sólo funciona en esta dirección, así que una
@@ -375,40 +455,8 @@ const PasskeysSection = () => {
             </EditorBlock>
           )}
         </section>
-      </CardContent>
-
-      {/* Confirm: quitar la llave */}
-      <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Quitar esta llave?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {/* Plan 4E: con correo verificado la última llave no deja la cuenta
-                  sin factor, y el servidor no cierra las sesiones en ese caso
-                  (`deleteCredential` sólo revoca cuando no queda ningún factor). */}
-              {sesion?.usuario?.email_verified_at
-                ? "Dejará de servir para entrar. Si es tu última llave, tu correo verificado sigue siendo tu segundo factor: entrarás con un código enviado a él, y tus sesiones no se cierran. Los códigos de recuperación no cuentan como un factor."
-                : "Dejará de servir para entrar. Si es tu último factor, se cerrarán todas tus sesiones —esta incluida— y a partir de ahora entrarás sólo con tu contraseña; los códigos de recuperación no cuentan como un factor y no evitan esto."}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setConfirmBajaAbierto(false)}>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={quitarLlave}
-              className="bg-destructive-fill text-destructive-foreground hover:bg-destructive-fill/90"
-            >
-              Sí, quitar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      <RecoveryCodesRevealDialog
-        codigos={codigosRecuperacion}
-        onAcknowledge={() => setCodigosRecuperacion(null)}
-        contexto="Tu llave ya está activa. Estos diez códigos son tu única forma de entrar si alguna vez pierdes el dispositivo donde la registraste."
-      />
-    </Card>
+      </div>
+    </SeccionFactor>
   );
 };
 

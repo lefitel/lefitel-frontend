@@ -154,11 +154,10 @@ const ModuleRoute = ({ modulo }: { modulo: Modulo }) => {
  * why it is wrong: `PerfilPage` is built on `usePerfilData`, whose very first
  * request is `GET /api/usuario/:id`, which `onboarding` gets a 403 from
  * (`sessionState.ts` opens only `/api/auth/*` for that state). The screen
- * that actually works for `onboarding` talks to nothing but `/api/auth/totp/*`
- * and `/api/auth/recovery-codes`, lives at its own route with no `ModuleRoute`
- * in front of it, and `PerfilAcceso.tsx`'s own "Configurar segundo factor"
- * button already links to this same path — this redirect and that button
- * deliberately agree on where it lives.
+ * that actually works for `onboarding` talks to nothing outside `/api/auth/*`,
+ * and lives at its own route with no `ModuleRoute` in front of it. `PerfilAcceso.tsx` shows the same three
+ * sections inside the profile for every session that can load it; this route
+ * is the copy that works when the profile does not.
  */
 export const HomeRoute = () => {
   const { sesion } = useContext(SesionContext);
@@ -214,9 +213,7 @@ const App = () => {
                       period over — has to be able to reach it, and
                       `ModuleRoute` answers every question it asks from a
                       permission matrix that state is never sent (see
-                      `HomeRoute` below). `PerfilAcceso.tsx`'s own "Configurar
-                      segundo factor" button already links to this exact
-                      path. */}
+                      `HomeRoute` below). */}
                   <Route path="home"           element={<HomeRoute />} />
                   <Route path="perfil"         element={<PerfilPage />} />
                   <Route path="segundo-factor" element={<ConfigurarSegundoFactorPage />} />

@@ -65,6 +65,8 @@ const logoutAllSessions = vi.fn();
 const getBitacora = vi.fn();
 const getEvento_usuario = vi.fn();
 const uploadImage = vi.fn();
+const listCredentials = vi.fn();
+const getRecoveryCodesRemaining = vi.fn();
 
 vi.mock("../../../api/Usuario.api", () => ({
   editUserName: (...args: unknown[]) => editUserName(...args),
@@ -100,6 +102,26 @@ vi.mock("../../../api/Evento.api", () => ({
 }));
 vi.mock("../../../api/Upload.api", () => ({
   uploadImage: (...args: unknown[]) => uploadImage(...args),
+}));
+// The second-factor rows of "Acceso y seguridad" load their own status on
+// mount: how many passkeys, how many recovery codes are left. Only those two
+// reads are replaced — the rest of each module is the real one, and none of it
+// runs unless a test presses a button inside a row.
+vi.mock("../../../api/Webauthn.api", async (original) => ({
+  ...(await original<typeof import("../../../api/Webauthn.api")>()),
+  listCredentials: (...args: unknown[]) => listCredentials(...args),
+}));
+vi.mock("../../../api/Mfa.api", async (original) => ({
+  ...(await original<typeof import("../../../api/Mfa.api")>()),
+  getRecoveryCodesRemaining: (...args: unknown[]) => getRecoveryCodesRemaining(...args),
+}));
+// jsdom has no WebAuthn, and the register form only exists where it does.
+vi.mock("../../../api/passkeyCeremony", () => ({
+  soportaPasskeys: () => true,
+  cancelarCeremonia: () => {},
+  registrarPasskey: () => {
+    throw new Error("ningún test de esta pantalla registra una llave");
+  },
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
@@ -138,6 +160,9 @@ const ABRE = {
   usuario: /cambiar nombre de usuario/i,
   password: /^cambiar contraseña$/i,
   email: /cambiar correo de recuperación/i,
+  llave: /gestionar llaves de acceso/i,
+  totp: /gestionar aplicación de autenticación/i,
+  codigos: /gestionar códigos de recuperación/i,
 } as const;
 
 async function abrir(user: ReturnType<typeof userEvent.setup>, cual: keyof typeof ABRE) {
@@ -198,6 +223,8 @@ beforeEach(() => {
   editUserPass.mockResolvedValue({ status: 200 });
   sendVerificationEmail.mockResolvedValue({ status: 200, message: "Si la dirección es válida, se envió un enlace de verificación." });
   verifyEmailToken.mockResolvedValue({ status: 200, message: "Correo verificado." });
+  listCredentials.mockResolvedValue({ status: 200, credenciales: [] });
+  getRecoveryCodesRemaining.mockResolvedValue({ status: 200, restantes: 0 });
   // The hash-verification effect reads this on every mount. Left over from a
   // previous test, it would fire `verifyEmailToken` in tests that have
   // nothing to do with it — the true reset belongs here, not scattered across
@@ -690,5 +717,105 @@ describe("verifying via the link's fragment token", () => {
     await esperarCarga();
 
     expect(verifyEmailToken).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Passkeys, the authenticator app and the recovery codes, inside this card.
+ *
+ * They used to be a link to `/app/segundo-factor`, and the complaint that moved
+ * them was exact: the option was not on the profile, a button to another page
+ * was. So the first thing held here is that there is no such link any more, and
+ * the rest is that these rows obey the same one-editor rule as their
+ * neighbours — which they could easily not, since their drafts live inside
+ * them rather than in this page.
+ */
+describe("the second-factor rows of the access card", () => {
+  it("shows each one's state on the profile itself, with no link to another screen", async () => {
+    listCredentials.mockResolvedValue({
+      status: 200,
+      credenciales: [
+        { id: 1, nombre: "mi móvil", created_at: "2026-09-01T10:00:00.000Z", last_used_at: null },
+        { id: 2, nombre: "el portátil", created_at: "2026-09-02T10:00:00.000Z", last_used_at: null },
+      ],
+    });
+    getRecoveryCodesRemaining.mockResolvedValue({ status: 200, restantes: 8 });
+
+    render(<Harness />);
+    await esperarCarga();
+
+    expect(await screen.findByText("2 registradas")).toBeInTheDocument();
+    expect(await screen.findByText("8 de 10 sin usar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: ABRE.totp })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /segundo factor/i })).not.toBeInTheDocument();
+  });
+
+  it("opens the passkey form in place, and closes whichever editor was open", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "password");
+    expect(screen.getByLabelText("Nueva contraseña")).toBeInTheDocument();
+
+    await abrir(user, "llave");
+
+    expect(screen.queryByLabelText("Nueva contraseña")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    expect(screen.getByLabelText(/nombre de la llave/i)).toBeInTheDocument();
+  });
+
+  it("asks before discarding a half-typed passkey form, and leaves no password behind in it", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "llave");
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    await user.type(screen.getByLabelText(/nombre de la llave/i), "mi móvil");
+    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
+
+    await abrir(user, "usuario");
+
+    // Still the passkey form: the rename did not open over it.
+    expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /sí, descartar/i }));
+    expect(await screen.findByLabelText("Usuario")).toBeInTheDocument();
+
+    // Back to the row: the form it kept while collapsed must be empty, not
+    // waiting with a password in it.
+    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
+    await abrir(user, "llave");
+    expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    expect(screen.getByLabelText(/nombre de la llave/i)).toHaveValue("");
+    expect(screen.getByLabelText(/contraseña actual/i)).toHaveValue("");
+  });
+
+  it("asks before 'Cerrar' throws away a half-typed row, and keeps it if the answer is no", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "llave");
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    await user.type(screen.getByLabelText(/nombre de la llave/i), "mi móvil");
+
+    await user.click(screen.getByRole("button", { name: /^cerrar$/i }));
+
+    const descartar = await screen.findByRole("button", { name: /sí, descartar/i });
+    expect(screen.getByLabelText(/nombre de la llave/i)).toHaveValue("mi móvil");
+    await user.click(descartar);
+    await waitFor(() => expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: ABRE.llave })).toBeInTheDocument();
+  });
+
+  it("closes a row with nothing typed in it without asking", async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "codigos");
+
+    await user.click(screen.getByRole("button", { name: /^cerrar$/i }));
+
+    expect(screen.getByRole("button", { name: ABRE.codigos })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /sí, descartar/i })).not.toBeInTheDocument();
   });
 });
