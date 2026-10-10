@@ -43,8 +43,15 @@ export default function EnviosProgramadosPage() {
   const [loading, setLoading] = useState(true);
   const [abierto, setAbierto] = useState<{ programacion: Programacion | null; informe?: number | null } | null>(null);
   const [cambiando, setCambiando] = useState<number | null>(null);
+  // Raised on every mount, not only declared `true`: in development React
+  // mounts, unmounts and mounts each screen again, and a flag the cleanup
+  // lowers and nothing raises back leaves the page throwing its own answers
+  // away — the list arrived and the skeleton stayed for ever.
   const montado = useRef(true);
-  useEffect(() => () => { montado.current = false; }, []);
+  useEffect(() => {
+    montado.current = true;
+    return () => { montado.current = false; };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);

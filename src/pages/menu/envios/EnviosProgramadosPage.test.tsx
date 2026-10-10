@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { StrictMode } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
@@ -249,5 +250,26 @@ describe("arriving from the generator with a report in hand", () => {
     abrir("/app/envios?informe=12");
     await screen.findByText("Eventos de la semana");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("under React's strict mode, which is how the application runs in development", () => {
+  it("still shows the list: the screen is mounted, unmounted and mounted again before anything arrives", async () => {
+    // Strict mode runs every effect's cleanup once and then the effect again.
+    // A "still mounted" flag that the cleanup lowers and nothing raises back
+    // leaves the page believing it is gone, so the answer is thrown away and
+    // the skeleton stays for ever. Seen in a browser on 10 October 2026, with
+    // every test here green.
+    render(
+      <StrictMode>
+        <SesionContext.Provider value={{ sesion } as unknown as contextProps}>
+          <MemoryRouter initialEntries={["/app/envios"]}>
+            <EnviosProgramadosPage />
+          </MemoryRouter>
+        </SesionContext.Provider>
+      </StrictMode>,
+    );
+    expect(await screen.findByText("Eventos de la semana")).toBeInTheDocument();
+    expect(await screen.findByText("2 envíos · 1 activo")).toBeInTheDocument();
   });
 });

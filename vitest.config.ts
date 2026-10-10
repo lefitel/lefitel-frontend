@@ -46,6 +46,18 @@ export default defineConfig({
       // that gates deployment runs on a UTC runner: the guard would have
       // been green on the one machine that matters.
       TZ: "America/La_Paz",
+      // Given here, because the suite must not depend on the `.env` of whoever
+      // runs it — and where it matters most there is none.
+      //
+      // `src/api/url.ts` reads `VITE_DEV_API_URL` whenever the build is not a
+      // production one, which is every test run. On a developer's machine the
+      // local `.env` supplies it. Vercel holds only `VITE_PROD_API_URL`, so
+      // there the address was `undefined`, `url.ts` threw on import, and 41 of
+      // 106 test files failed before running a single test. The suite gates
+      // the build: the web would not have deployed. Measured on 10 October
+      // 2026 by running the committed tree in a clean checkout with Vercel's
+      // variables and nothing else.
+      VITE_DEV_API_URL: "http://localhost:3000/",
     },
     environment: "jsdom",
     globals: true,

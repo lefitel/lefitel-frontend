@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { StrictMode } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Programacion } from "../../../api/Programacion.api";
@@ -330,5 +331,24 @@ describe("the search box inside the form", () => {
     await user.click(await screen.findByRole("checkbox", { name: /Beto Mamani/ }));
     await user.type(screen.getByPlaceholderText("Buscar por nombre…"), "beto{Enter}");
     expect(api.crearProgramacion).not.toHaveBeenCalled();
+  });
+});
+
+describe("under React's strict mode, which is how the application runs in development", () => {
+  it("still fills its lists and its history", async () => {
+    api.listarEjecuciones.mockResolvedValue({
+      data: [{ id: 1, id_programacion: 5, programada_para: "2026-10-05T11:00:00.000Z", manual: false, estado: "enviado", iniciada_at: "", terminada_at: "", filas: 3, bytes: 2048, enviados: 1, no_enviados: 0, detalle: null }],
+      total: 1, page: 1, limit: 50,
+    });
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <EnvioDialog open programacion={guardado()} puedeEditar puedeEliminar onClose={onClose} onChanged={onChanged} />
+      </StrictMode>,
+    );
+    expect(await screen.findByText("Beto Mamani")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Beto Mamani/ })).toBeChecked();
+    await user.click(screen.getByRole("tab", { name: "Historial" }));
+    expect(await screen.findByText("Enviado")).toBeInTheDocument();
   });
 });

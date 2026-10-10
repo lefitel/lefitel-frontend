@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { StrictMode } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
@@ -154,5 +155,24 @@ describe("what it shows when the report is gone", () => {
     abrir(`#t=${TOKEN}`);
     expect(await screen.findByRole("button", { name: "Dejar de recibirlo" })).toBeInTheDocument();
     expect(screen.queryByText(/null/)).not.toBeInTheDocument();
+  });
+});
+
+describe("under React's strict mode, which is how the application runs in development", () => {
+  it("still reads the token: the second mount finds the address bar already cleaned", async () => {
+    window.history.replaceState(null, "", `/baja-informe#t=${TOKEN}`);
+    const user = userEvent.setup();
+    render(
+      <StrictMode>
+        <ThemeProvider>
+          <MemoryRouter>
+            <BajaInformePage />
+          </MemoryRouter>
+        </ThemeProvider>
+      </StrictMode>,
+    );
+    await user.click(await screen.findByRole("button", { name: "Dejar de recibirlo" }));
+    expect(confirmarBaja).toHaveBeenCalledWith(TOKEN);
+    expect(await screen.findByRole("heading", { name: "Ya no lo recibirás" })).toBeInTheDocument();
   });
 });
