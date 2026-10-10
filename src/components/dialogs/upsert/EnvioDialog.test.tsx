@@ -30,6 +30,7 @@ const guardado = (over: Partial<Programacion> = {}): Programacion => ({
   dia_semana: 1,
   dia_mes: null,
   hora: 7,
+  minuto: 0,
   formato: "excel",
   con_fotos: false,
   activa: true,
@@ -101,14 +102,15 @@ describe("a new schedule", () => {
     await screen.findByText("Beto Mamani");
     await elegir(user, "Informe", "Eventos de la semana");
     await elegir(user, "Día de la semana", "Viernes");
-    await elegir(user, "Hora", "09:00");
+    await user.click(screen.getByRole("button", { name: "Elegir una hora en punto" }));
+    await user.click(await screen.findByRole("option", { name: "09:00" }));
     await user.click(screen.getByRole("checkbox", { name: /Beto Mamani/ }));
     await user.type(screen.getByLabelText("Correos externos"), "Cliente@Fuera.com");
     await user.click(screen.getByRole("button", { name: "Programar envío" }));
 
     await waitFor(() => expect(api.crearProgramacion).toHaveBeenCalledTimes(1));
     expect(api.crearProgramacion).toHaveBeenCalledWith({
-      id_reporte: 3, frecuencia: "semanal", dia_semana: 5, dia_mes: null, hora: 9,
+      id_reporte: 3, frecuencia: "semanal", dia_semana: 5, dia_mes: null, hora: 9, minuto: 0,
       formato: "excel", con_fotos: false, activa: true,
       destinatarios: { usuarios: [20], correos: ["cliente@fuera.com"] },
     });
@@ -170,11 +172,26 @@ describe("the day field follows the frequency", () => {
 });
 
 describe("the recipients", () => {
-  it("warns that an account without a verified address will not receive it", async () => {
+  it("warns about an account that lost its address after it was added, and lets it be taken off — not put back", async () => {
     const user = userEvent.setup();
-    abrir();
-    await user.click(await screen.findByRole("checkbox", { name: /Carla Quispe/ }));
+    const base = guardado();
+    abrir({
+      programacion: guardado({
+        destinatarios: {
+          ...base.destinatarios,
+          usuarios: [...base.destinatarios.usuarios, { id_usuario: 21, name: "Carla", lastname: "Quispe", tieneCorreo: false }],
+        },
+      }),
+    });
+    const carla = await screen.findByRole("checkbox", { name: /Carla Quispe/ });
+    expect(carla).toBeChecked();
+    expect(carla).toBeEnabled();
     expect(screen.getByText(/Carla Quispe no tiene un correo verificado/)).toBeInTheDocument();
+
+    await user.click(carla);
+    expect(carla).not.toBeChecked();
+    expect(carla).toBeDisabled();
+    expect(screen.queryByText(/Carla Quispe no tiene un correo verificado/)).not.toBeInTheDocument();
   });
 
   it("counts accounts and addresses together against the ceiling", async () => {
@@ -203,12 +220,60 @@ describe("an existing schedule", () => {
     expect(screen.getByLabelText("Correos externos")).toHaveValue("cliente@fuera.com");
     expect(screen.getByRole("checkbox", { name: /Beto Mamani/ })).toBeChecked();
 
-    await elegir(user, "Hora", "10:00");
+    const hora = screen.getByLabelText("Hora");
+    expect(hora).toHaveValue("07:00");
+    await user.clear(hora);
+    await user.type(hora, "10:20");
     await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
 
     await waitFor(() => expect(api.actualizarProgramacion).toHaveBeenCalledTimes(1));
-    expect(api.actualizarProgramacion.mock.calls[0]).toEqual([5, expect.objectContaining({ hora: 10, id_reporte: 3 })]);
+    expect(api.actualizarProgramacion.mock.calls[0]).toEqual([5, expect.objectContaining({ hora: 10, minuto: 20, id_reporte: 3 })]);
     expect(toast.success).toHaveBeenCalledWith("Envío actualizado");
+  });
+
+  it("takes a typed time as soon as it reads as one, and puts the last good one back over nonsense", async () => {
+    const user = userEvent.setup();
+    abrir({ programacion: guardado() });
+    await screen.findByText("Beto Mamani");
+    const hora = screen.getByLabelText("Hora");
+
+    await user.clear(hora);
+    await user.type(hora, "730");
+    await user.tab();
+    expect(hora).toHaveValue("07:30");
+
+    await user.clear(hora);
+    await user.type(hora, "25:99");
+    expect(hora).toBeInvalid();
+    await user.tab();
+    expect(hora).toHaveValue("07:30");
+    expect(hora).toBeValid();
+
+    await user.click(screen.getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() => expect(api.actualizarProgramacion).toHaveBeenCalledTimes(1));
+    expect(api.actualizarProgramacion.mock.calls[0][1]).toEqual(expect.objectContaining({ hora: 7, minuto: 30 }));
+  });
+
+  it("goes back on the dot when an hour is picked from the list", async () => {
+    const user = userEvent.setup();
+    abrir({ programacion: guardado({ minuto: 45 }) });
+    await screen.findByText("Beto Mamani");
+    expect(screen.getByLabelText("Hora")).toHaveValue("07:45");
+
+    await user.click(screen.getByRole("button", { name: "Elegir una hora en punto" }));
+    await user.click(await screen.findByRole("option", { name: "18:00" }));
+    expect(screen.getByLabelText("Hora")).toHaveValue("18:00");
+  });
+
+  it("does not let an account with no verified address be added, and lets one already there be taken off", async () => {
+    const user = userEvent.setup();
+    abrir({ programacion: guardado() });
+    await screen.findByText("Beto Mamani");
+    const carla = screen.getByRole("checkbox", { name: /Carla Quispe/ });
+    expect(carla).toBeDisabled();
+    await user.click(carla);
+    expect(carla).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Beto Mamani/ })).toBeEnabled();
   });
 
   it("says who unsubscribed and who the mail no longer reaches, apart from the box", async () => {
@@ -259,7 +324,7 @@ describe("an existing schedule", () => {
     const user = userEvent.setup();
     abrir({ programacion: guardado() });
     await screen.findByText("Beto Mamani");
-    await elegir(user, "Hora", "10:00");
+    await user.type(screen.getByLabelText("Hora"), "{Control>}a{/Control}10:00");
     expect(screen.getByRole("button", { name: "Enviar ahora" })).toBeDisabled();
     expect(screen.getByText("Guarda los cambios antes de enviar.")).toBeInTheDocument();
   });

@@ -58,6 +58,8 @@ export interface Programacion {
   dia_mes: number | null;
   /** 0–23, in Bolivia's time. */
   hora: number;
+  /** 0–59. */
+  minuto: number;
   formato: FormatoProgramado;
   con_fotos: boolean;
   activa: boolean;
@@ -76,6 +78,8 @@ export interface ProgramacionPedida {
   dia_semana?: number | null;
   dia_mes?: number | null;
   hora: number;
+  /** 0–59. Left out means on the dot. */
+  minuto?: number;
   formato: FormatoProgramado;
   con_fotos?: boolean;
   activa?: boolean;

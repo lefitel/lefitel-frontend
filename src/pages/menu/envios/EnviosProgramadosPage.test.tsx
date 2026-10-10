@@ -45,6 +45,7 @@ const envio = (over: Partial<Programacion> = {}): Programacion => ({
   dia_semana: 1,
   dia_mes: null,
   hora: 7,
+  minuto: 0,
   formato: "excel",
   con_fotos: false,
   activa: true,
@@ -157,7 +158,7 @@ describe("pausing from the table", () => {
     const [id, pedida] = actualizarProgramacion.mock.calls[0];
     expect(id).toBe(5);
     expect(pedida).toMatchObject({
-      id_reporte: 3, frecuencia: "semanal", dia_semana: 1, hora: 7, activa: false,
+      id_reporte: 3, frecuencia: "semanal", dia_semana: 1, hora: 7, minuto: 0, activa: false,
       destinatarios: { usuarios: [20], correos: ["cliente@fuera.com"] },
     });
     await waitFor(() => expect(listarProgramaciones).toHaveBeenCalledTimes(2));

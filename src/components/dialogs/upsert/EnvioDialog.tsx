@@ -22,13 +22,11 @@ import {
   DIAS_DEL_MES,
   ESTADO_DE_EJECUCION,
   FRECUENCIAS,
-  HORAS,
   MAX_DESTINATARIOS,
   borradorDe,
   correosDe,
   cuandoSeEnvia,
   faltan,
-  horaComoTexto,
   pedidaDe,
   problemaDe,
   totalDeDestinatarios,
@@ -42,6 +40,7 @@ import { Checkbox } from "../../ui/checkbox";
 import { Label } from "../../ui/label";
 import { Switch } from "../../ui/switch";
 import { Textarea } from "../../ui/textarea";
+import { TimeField } from "../../ui/time-field";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../ui/tabs";
 
@@ -318,12 +317,13 @@ export default function EnvioDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="envio-hora">Hora</Label>
-              <Select value={String(borrador.hora)} disabled={soloLectura} onValueChange={(v) => cambia("hora", Number(v))}>
-                <SelectTrigger id="envio-hora" aria-label="Hora"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {HORAS.map((h) => <SelectItem key={h} value={String(h)}>{horaComoTexto(h)}</SelectItem>)}
-                </SelectContent>
-              </Select>
+              <TimeField
+                id="envio-hora"
+                hora={borrador.hora}
+                minuto={borrador.minuto}
+                disabled={soloLectura}
+                onChange={(hora, minuto) => setBorrador((b) => ({ ...b, hora, minuto }))}
+              />
             </div>
           </div>
           {borrador.frecuencia === "mensual" && (
@@ -382,21 +382,34 @@ export default function EnvioDialog({
                   {cuentas !== null && cuentasVisibles.length === 0 && (
                     <li className="px-2 py-2 text-sm text-muted-foreground">Sin resultados</li>
                   )}
-                  {cuentasVisibles.map((c) => (
-                    <li key={c.id}>
-                      <label className="flex cursor-pointer items-center gap-2 rounded-sm px-2 py-1.5 text-sm hover:bg-accent">
-                        <Checkbox
-                          checked={borrador.usuarios.includes(c.id)}
-                          onCheckedChange={(v) => cambia(
-                            "usuarios",
-                            v ? [...borrador.usuarios, c.id] : borrador.usuarios.filter((id) => id !== c.id),
+                  {cuentasVisibles.map((c) => {
+                    const marcada = borrador.usuarios.includes(c.id);
+                    // Nothing would reach an account with no verified address,
+                    // so it cannot be added. One already on the schedule — it
+                    // had an address when it was added — can still be taken off.
+                    const bloqueada = !c.tieneCorreo && !marcada;
+                    return (
+                      <li key={c.id}>
+                        <label
+                          className={cn(
+                            "flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm",
+                            bloqueada ? "cursor-not-allowed text-muted-foreground" : "cursor-pointer hover:bg-accent",
                           )}
-                        />
-                        <span className="truncate">{c.name} {c.lastname}</span>
-                        {!c.tieneCorreo && <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">sin correo verificado</span>}
-                      </label>
-                    </li>
-                  ))}
+                        >
+                          <Checkbox
+                            checked={marcada}
+                            disabled={bloqueada}
+                            onCheckedChange={(v) => cambia(
+                              "usuarios",
+                              v ? [...borrador.usuarios, c.id] : borrador.usuarios.filter((id) => id !== c.id),
+                            )}
+                          />
+                          <span className="truncate">{c.name} {c.lastname}</span>
+                          {!c.tieneCorreo && <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">sin correo verificado</span>}
+                        </label>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}

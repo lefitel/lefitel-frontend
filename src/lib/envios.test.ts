@@ -8,6 +8,8 @@ import {
   correosDe,
   cuandoSeEnvia,
   faltan,
+  horaComoTexto,
+  leerHora,
   motivoDePausa,
   pedidaConActiva,
   pedidaDe,
@@ -25,6 +27,7 @@ const programacion = (over: Partial<Programacion> = {}): Programacion => ({
   dia_semana: 1,
   dia_mes: null,
   hora: 7,
+  minuto: 0,
   formato: "excel",
   con_fotos: true,
   activa: true,
@@ -49,6 +52,7 @@ describe("cuandoSeEnvia", () => {
     expect(cuandoSeEnvia({ frecuencia: "semanal", dia_semana: 7, dia_mes: null, hora: 23 })).toBe("Domingo, 23:00");
     expect(cuandoSeEnvia({ frecuencia: "mensual", dia_semana: null, dia_mes: 1, hora: 8 })).toBe("Día 1, 08:00");
     expect(cuandoSeEnvia({ frecuencia: "diaria", dia_semana: null, dia_mes: null, hora: 0 })).toBe("Cada día, 00:00");
+    expect(cuandoSeEnvia({ frecuencia: "semanal", dia_semana: 6, dia_mes: null, hora: 7, minuto: 5 })).toBe("Sábado, 07:05");
   });
 });
 
@@ -136,6 +140,27 @@ describe("pedidaDe", () => {
   });
 });
 
+describe("a time as it is typed", () => {
+  it.each([
+    ["7", 7, 0], ["07", 7, 0], ["23", 23, 0], ["0", 0, 0],
+    ["7:30", 7, 30], ["07:30", 7, 30], ["7.30", 7, 30], ["730", 7, 30], ["0730", 7, 30],
+    [" 19:45 ", 19, 45], ["23:59", 23, 59], ["00:00", 0, 0],
+  ])("reads %j", (texto, hora, minuto) => {
+    expect(leerHora(texto)).toEqual({ hora, minuto });
+  });
+
+  it.each(["", "24", "24:00", "7:60", "7:5", "7:", ":30", "7:300", "siete", "7 30", "-1", "12:3o"])(
+    "does not take %j for a time",
+    (texto) => expect(leerHora(texto)).toBeNull(),
+  );
+
+  it("is written back with two digits each side, and reads what it wrote", () => {
+    expect(horaComoTexto(7, 5)).toBe("07:05");
+    expect(horaComoTexto(7)).toBe("07:00");
+    for (const [h, m] of [[0, 0], [9, 9], [23, 59]]) expect(leerHora(horaComoTexto(h, m))).toEqual({ hora: h, minuto: m });
+  });
+});
+
 describe("an existing schedule in the form", () => {
   it("comes back as it was saved", () => {
     expect(borradorDe(programacion())).toEqual({
@@ -144,6 +169,7 @@ describe("an existing schedule in the form", () => {
       dia_semana: 1,
       dia_mes: 1,
       hora: 7,
+      minuto: 0,
       formato: "excel",
       con_fotos: true,
       activa: true,
@@ -163,6 +189,7 @@ describe("an existing schedule in the form", () => {
       dia_semana: 1,
       dia_mes: null,
       hora: 7,
+      minuto: 0,
       formato: "excel",
       con_fotos: true,
       activa: true,

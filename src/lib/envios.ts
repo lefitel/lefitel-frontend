@@ -33,13 +33,30 @@ export const FRECUENCIAS: { value: Frecuencia; label: string }[] = [
 /** 1–28: a day every month has. */
 export const DIAS_DEL_MES = Array.from({ length: 28 }, (_, i) => i + 1);
 
-export const HORAS = Array.from({ length: 24 }, (_, i) => i);
+const dosCifras = (n: number): string => String(n).padStart(2, "0");
 
-export const horaComoTexto = (hora: number): string => `${String(hora).padStart(2, "0")}:00`;
+export const horaComoTexto = (hora: number, minuto = 0): string => `${dosCifras(hora)}:${dosCifras(minuto)}`;
 
-/** "Cada día, 06:00" · "Lunes, 07:00" · "Día 1, 08:00". */
-export function cuandoSeEnvia(p: Pick<Programacion, "frecuencia" | "dia_semana" | "dia_mes" | "hora">): string {
-  const hora = horaComoTexto(p.hora);
+/**
+ * A time as somebody types it: "7", "07", "7:30", "07.30", "730", "0730".
+ * `null` for anything that is not a time of day.
+ *
+ * The minutes take two digits or none. "7:5" is somebody half way to "7:50",
+ * and reading it as 07:05 would be guessing.
+ */
+export function leerHora(texto: string): { hora: number; minuto: number } | null {
+  const partes = /^(\d{1,2})(?:[:.]?(\d{2}))?$/.exec(texto.trim());
+  if (!partes) return null;
+  const hora = Number(partes[1]);
+  const minuto = partes[2] === undefined ? 0 : Number(partes[2]);
+  return hora <= 23 && minuto <= 59 ? { hora, minuto } : null;
+}
+
+/** "Cada día, 06:00" · "Lunes, 07:30" · "Día 1, 08:00". */
+export function cuandoSeEnvia(
+  p: Pick<Programacion, "frecuencia" | "dia_semana" | "dia_mes" | "hora"> & { minuto?: number },
+): string {
+  const hora = horaComoTexto(p.hora, p.minuto ?? 0);
   if (p.frecuencia === "semanal") {
     const dia = DIAS_DE_LA_SEMANA.find((d) => d.value === p.dia_semana)?.label ?? "Cada semana";
     return `${dia}, ${hora}`;
@@ -96,6 +113,7 @@ export interface Borrador {
   dia_semana: number;
   dia_mes: number;
   hora: number;
+  minuto: number;
   formato: FormatoProgramado;
   con_fotos: boolean;
   activa: boolean;
@@ -110,6 +128,7 @@ export const BORRADOR_VACIO: Borrador = {
   dia_semana: 1,
   dia_mes: 1,
   hora: 7,
+  minuto: 0,
   formato: "excel",
   con_fotos: false,
   activa: true,
@@ -131,6 +150,8 @@ export function borradorDe(p: Programacion): Borrador {
     dia_semana: p.dia_semana ?? BORRADOR_VACIO.dia_semana,
     dia_mes: p.dia_mes ?? BORRADOR_VACIO.dia_mes,
     hora: p.hora,
+    // A server from before schedules had minutes does not send one.
+    minuto: p.minuto ?? 0,
     formato: p.formato,
     con_fotos: p.con_fotos,
     activa: p.activa,
@@ -182,6 +203,7 @@ export function pedidaDe(b: Borrador): ProgramacionPedida {
     dia_semana: b.frecuencia === "semanal" ? b.dia_semana : null,
     dia_mes: b.frecuencia === "mensual" ? b.dia_mes : null,
     hora: b.hora,
+    minuto: b.minuto,
     formato: b.formato,
     con_fotos: b.formato === "excel" && b.con_fotos,
     activa: b.activa,
