@@ -2,7 +2,20 @@ import type { LucideIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ReadRow } from "../perfil/perfilRows";
-import type { FilaDePerfil } from "./useFilaDePerfil";
+
+/**
+ * What the profile hands a section so it can live as one row of "Acceso y
+ * seguridad" instead of as a card of its own.
+ *
+ * Nothing here about drafts, on purpose: every form a section has is a modal
+ * dialog, so nothing is ever half typed while the row could be closed or
+ * another one opened.
+ */
+export interface FilaDePerfil {
+  abierto: boolean;
+  onAbrir: () => void;
+  onCerrar: () => void;
+}
 
 interface Props {
   /** The card's title, and the open panel's. */
@@ -67,8 +80,6 @@ export function SeccionFactor({
 
   return (
     <>
-      {/* No fill, unlike `EditorBlock`: the forms inside are `EditorBlock`s
-          themselves, and a filled box inside a filled box reads as one. */}
       <section aria-label={titulo} className="rounded-lg border border-border/60 p-4 my-1.5">
         <div className="flex items-center gap-2 mb-4">
           <Icon className="h-4 w-4 text-muted-foreground" />

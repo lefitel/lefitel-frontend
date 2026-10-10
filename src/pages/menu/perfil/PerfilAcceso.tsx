@@ -48,10 +48,6 @@ interface Props {
   onGuardarUsuario: () => void;
   onGuardarPassword: () => void;
   onGuardarEmail: () => void;
-  /** A second-factor row saying whether it holds something that would be lost. */
-  onCambiosFactor: (cual: EditorFactor, hay: boolean) => void;
-  /** "Cerrar" on a second-factor row: unlike `onCancelar`, it asks before discarding. */
-  onCerrarFactor: () => void;
 }
 
 /**
@@ -72,22 +68,20 @@ interface Props {
  * confirmation of identity and so it stays — there, the current password is
  * half of what is being changed.
  *
- * **The second-factor rows are the exception, and not by oversight.** Passkeys,
- * the authenticator app and the recovery codes each ask for the password in
+ * **The second-factor rows ask for the password too, and not by oversight.**
+ * Passkeys, the authenticator app and the recovery codes each ask for it in
  * their own form: their routes sit behind the gate with `sinVentana`, so the
- * ten-minute window does not cover them. One open row at a time still holds;
- * one box at a time does not quite — inside the passkey row and the app row,
- * "quitar" and "añadir" are two forms that can both be open, as they always
- * could on the screen these sections come from.
+ * ten-minute window does not cover them. Those forms are modal dialogs, so
+ * there is still never a second password box on screen.
  *
  * **Those three used to live on a screen of their own, behind a link in this
  * card**, and Isaias asked for them here: a setting one click away on another
  * page is a setting nobody finds. They are the same sections
  * `/app/segundo-factor` draws as cards, handed a `fila` so they draw as rows
  * that open in place. That screen stays for the one session that cannot load
- * this one — `onboarding`, see its own header. Their drafts are their own,
- * unlike the three editors': `onCambiosFactor` is how each one tells
- * `PerfilPage` it is dirty.
+ * this one — `onboarding`, see its own header. A row opens to show what the
+ * account has; everything typed happens in a dialog, which is why these rows
+ * need nothing from `PerfilPage`'s dirty check.
  *
  * **The passkey sits under the password, not under the heading below it**,
  * because that is what it is to the person holding it: a way to get in. The
@@ -120,7 +114,7 @@ interface Props {
 export default function PerfilAcceso({
   cuenta, emailForm, recovery, abierto, guardando,
   onCuenta, onEmailForm, onAbrir, onCancelar,
-  onGuardarUsuario, onGuardarPassword, onGuardarEmail, onCambiosFactor, onCerrarFactor,
+  onGuardarUsuario, onGuardarPassword, onGuardarEmail,
 }: Props) {
   const emailVerificado = recovery.verifiedAt !== null;
 
@@ -140,8 +134,7 @@ export default function PerfilAcceso({
   const fila = (cual: EditorFactor) => ({
     abierto: abierto === cual,
     onAbrir: () => onAbrir(cual),
-    onCerrar: onCerrarFactor,
-    onCambios: (hay: boolean) => onCambiosFactor(cual, hay),
+    onCerrar: onCancelar,
   });
 
   // Registering a first key or a first app makes the server mint ten recovery

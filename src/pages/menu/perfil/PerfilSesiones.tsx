@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2Icon, MonitorIcon, SmartphoneIcon, TabletIcon } from "lucide-react";
 import type { SesionActivaInterface } from "../../../interfaces/interfaces";
+import { describirDispositivo, type FormaDispositivo } from "../../../lib/dispositivo";
 
 interface Props {
   sesiones: SesionActivaInterface[];
@@ -11,57 +12,6 @@ interface Props {
   cerrandoTodas: boolean;
   onCerrar: (s: SesionActivaInterface) => void;
   onCerrarTodas: () => void;
-}
-
-type Forma = "movil" | "tablet" | "escritorio";
-
-/**
- * A user agent, read the only way a user agent can honestly be read: by
- * guessing.
- *
- * Every browser lies in this header — Chrome claims to be Safari, Edge claims
- * to be Chrome, and all of them claim to be Mozilla — so the order of these
- * checks is the whole algorithm. Edge before Chrome, Chrome before Safari,
- * because each of those strings contains the ones after it.
- *
- * This is for recognition, not analytics. The person reading it needs to
- * answer one question — "is that me, or is that the laptop I left at the
- * office" — and "Chrome en Windows" answers it. Getting the browser subtly
- * wrong costs nothing; the IP and the date beside it are what settle a real
- * doubt.
- */
-function describir(ua: string | null): { nombre: string; forma: Forma } {
-  if (!ua) return { nombre: "Dispositivo desconocido", forma: "escritorio" };
-
-  const s = ua.toLowerCase();
-
-  const navegador =
-    s.includes("edg/") || s.includes("edga") ? "Edge"
-    : s.includes("opr/") || s.includes("opera") ? "Opera"
-    : s.includes("firefox") || s.includes("fxios") ? "Firefox"
-    : s.includes("chrome") || s.includes("crios") ? "Chrome"
-    : s.includes("safari") ? "Safari"
-    : null;
-
-  const sistema =
-    s.includes("android") ? "Android"
-    : s.includes("iphone") ? "iPhone"
-    : s.includes("ipad") ? "iPad"
-    : s.includes("windows") ? "Windows"
-    : s.includes("mac os") || s.includes("macintosh") ? "macOS"
-    : s.includes("linux") ? "Linux"
-    : null;
-
-  const forma: Forma =
-    s.includes("ipad") || s.includes("tablet") ? "tablet"
-    : s.includes("mobi") || s.includes("android") || s.includes("iphone") ? "movil"
-    : "escritorio";
-
-  const nombre =
-    navegador && sistema ? `${navegador} en ${sistema}`
-    : navegador ?? sistema ?? "Dispositivo desconocido";
-
-  return { nombre, forma };
 }
 
 /** "activa ahora", "hace 3 horas", "hace 11 días" — as coarse as it is honest. */
@@ -82,7 +32,7 @@ function desde(iso: string): string {
   return new Date(t).toLocaleDateString("es-ES");
 }
 
-function Icono({ forma }: { forma: Forma }) {
+function Icono({ forma }: { forma: FormaDispositivo }) {
   const cls = "h-4 w-4";
   if (forma === "movil") return <SmartphoneIcon className={cls} />;
   if (forma === "tablet") return <TabletIcon className={cls} />;
@@ -134,7 +84,8 @@ export default function PerfilSesiones({
       <CardContent className="px-5 py-1">
         <ul className="m-0 p-0 list-none">
           {ordenadas.map((s) => {
-            const { nombre, forma } = describir(s.user_agent);
+            const { nombre: leido, forma } = describirDispositivo(s.user_agent);
+            const nombre = leido ?? "Dispositivo desconocido";
             return (
               <li
                 key={s.id}

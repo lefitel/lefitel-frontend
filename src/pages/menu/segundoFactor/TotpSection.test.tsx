@@ -386,7 +386,7 @@ describe("añadir un factor nuevo", () => {
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText(/usa «quitar mi factor», arriba/i)).toBeInTheDocument();
+    expect(await screen.findByText(/cierra esta ventana, usa «quitar mi factor»/i)).toBeInTheDocument();
   });
 
   it("cancelling the QR step discards the attempt without calling the server again", async () => {
@@ -401,8 +401,14 @@ describe("añadir un factor nuevo", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancelar" }));
 
-    expect(screen.getByRole("button", { name: "Configurar un nuevo factor" })).toBeInTheDocument();
-    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+    // The step is a dialog now, and a secret that may already be in a phone
+    // is not thrown away on one click: it asks, and the QR is still there.
+    const descartar = await screen.findByRole("button", { name: "Descartar" });
+    expect(screen.getByText(SECRETO)).toBeInTheDocument();
+    await user.click(descartar);
+
+    await waitFor(() => expect(screen.queryByText(SECRETO)).not.toBeInTheDocument());
+    expect(await screen.findByRole("button", { name: "Configurar un nuevo factor" })).toBeInTheDocument();
     expect(confirmTotp).not.toHaveBeenCalled();
   });
 });

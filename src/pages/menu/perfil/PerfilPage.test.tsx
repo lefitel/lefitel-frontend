@@ -24,7 +24,7 @@
 // identical from the outside, and the server would simply ignore it.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import PerfilPage from "./PerfilPage";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
@@ -115,7 +115,7 @@ vi.mock("../../../api/Mfa.api", async (original) => ({
   ...(await original<typeof import("../../../api/Mfa.api")>()),
   getRecoveryCodesRemaining: (...args: unknown[]) => getRecoveryCodesRemaining(...args),
 }));
-// jsdom has no WebAuthn, and the register form only exists where it does.
+// jsdom has no WebAuthn, and the register button only exists where it does.
 vi.mock("../../../api/passkeyCeremony", () => ({
   soportaPasskeys: () => true,
   cancelarCeremonia: () => {},
@@ -727,8 +727,8 @@ describe("verifying via the link's fragment token", () => {
  * them was exact: the option was not on the profile, a button to another page
  * was. So the first thing held here is that there is no such link any more, and
  * the rest is that these rows obey the same one-editor rule as their
- * neighbours — which they could easily not, since their drafts live inside
- * them rather than in this page.
+ * neighbours, and that what is typed in them is typed in a dialog — the form
+ * sitting inside the card was the second complaint.
  */
 describe("the second-factor rows of the access card", () => {
   it("shows each one's state on the profile itself, with no link to another screen", async () => {
@@ -750,7 +750,7 @@ describe("the second-factor rows of the access card", () => {
     expect(screen.queryByRole("link", { name: /segundo factor/i })).not.toBeInTheDocument();
   });
 
-  it("opens the passkey form in place, and closes whichever editor was open", async () => {
+  it("opens the passkey row in place, and closes whichever editor was open", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
@@ -760,54 +760,55 @@ describe("the second-factor rows of the access card", () => {
     await abrir(user, "llave");
 
     expect(screen.queryByLabelText("Nueva contraseña")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
-    expect(screen.getByLabelText(/nombre de la llave/i)).toBeInTheDocument();
-  });
-
-  it("asks before discarding a half-typed passkey form, and leaves no password behind in it", async () => {
-    const user = userEvent.setup();
-    render(<Harness />);
-    await esperarCarga();
-    await abrir(user, "llave");
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
-    await user.type(screen.getByLabelText(/nombre de la llave/i), "mi móvil");
-    await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
-
-    await abrir(user, "usuario");
-
-    // Still the passkey form: the rename did not open over it.
-    expect(screen.queryByLabelText("Usuario")).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /sí, descartar/i }));
-    expect(await screen.findByLabelText("Usuario")).toBeInTheDocument();
-
-    // Back to the row: the form it kept while collapsed must be empty, not
-    // waiting with a password in it.
-    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
-    await abrir(user, "llave");
+    expect(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i })).toBeInTheDocument();
+    // Nothing to type in the card itself: the form is a dialog.
     expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
-    expect(screen.getByLabelText(/nombre de la llave/i)).toHaveValue("");
-    expect(screen.getByLabelText(/contraseña actual/i)).toHaveValue("");
   });
 
-  it("asks before 'Cerrar' throws away a half-typed row, and keeps it if the answer is no", async () => {
+  it("registers a key from a dialog, with a name already in it", async () => {
+    // jsdom's own user agent names no browser this application recognises.
+    const agente = vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    );
+    const user = userEvent.setup();
+    render(<Harness />);
+    await esperarCarga();
+    await abrir(user, "llave");
+
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+
+    const dialogo = await screen.findByRole("dialog", { name: /registrar una llave de acceso/i });
+    const nombre = within(dialogo).getByLabelText(/nombre de la llave/i);
+    // Read from the browser, so the required field does not arrive blank.
+    expect(nombre).toHaveValue("Chrome en Windows");
+    // And editable — a suggestion, not a label.
+    await user.clear(nombre);
+    await user.type(nombre, "el del trabajo");
+    expect(nombre).toHaveValue("el del trabajo");
+    agente.mockRestore();
+  });
+
+  it("asks before the dialog throws away what was typed, and leaves nothing behind when it does", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
     await abrir(user, "llave");
     await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
-    await user.type(screen.getByLabelText(/nombre de la llave/i), "mi móvil");
+    await user.type(await screen.findByLabelText(/contraseña actual/i), "la-mia");
 
-    await user.click(screen.getByRole("button", { name: /^cerrar$/i }));
+    await user.click(screen.getByRole("button", { name: /^cancelar$/i }));
 
-    const descartar = await screen.findByRole("button", { name: /sí, descartar/i });
-    expect(screen.getByLabelText(/nombre de la llave/i)).toHaveValue("mi móvil");
+    const descartar = await screen.findByRole("button", { name: /^descartar$/i });
+    expect(screen.getByLabelText(/contraseña actual/i)).toHaveValue("la-mia");
     await user.click(descartar);
-    await waitFor(() => expect(screen.queryByLabelText(/nombre de la llave/i)).not.toBeInTheDocument());
-    expect(screen.getByRole("button", { name: ABRE.llave })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    // Opened again, the password box is empty: the one typed was not kept.
+    await user.click(screen.getByRole("button", { name: /registrar una llave en este dispositivo/i }));
+    expect(await screen.findByLabelText(/contraseña actual/i)).toHaveValue("");
   });
 
-  it("closes a row with nothing typed in it without asking", async () => {
+  it("folds a row away with 'Cerrar'", async () => {
     const user = userEvent.setup();
     render(<Harness />);
     await esperarCarga();
@@ -816,6 +817,5 @@ describe("the second-factor rows of the access card", () => {
     await user.click(screen.getByRole("button", { name: /^cerrar$/i }));
 
     expect(screen.getByRole("button", { name: ABRE.codigos })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /sí, descartar/i })).not.toBeInTheDocument();
   });
 });

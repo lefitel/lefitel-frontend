@@ -18,7 +18,7 @@ import type { SesionActivaInterface, UsuarioInterface } from "../../../interface
 import { usePerfilData } from "./usePerfilData";
 import PerfilHeader from "./PerfilHeader";
 import PerfilPersonal, { type DatosPersonales } from "./PerfilPersonal";
-import PerfilAcceso, { type DatosCuenta, type EditorAcceso, type EditorFactor } from "./PerfilAcceso";
+import PerfilAcceso, { type DatosCuenta, type EditorAcceso } from "./PerfilAcceso";
 import PerfilSesiones from "./PerfilSesiones";
 import PerfilActividad from "./PerfilActividad";
 import PerfilPanel from "./PerfilPanel";
@@ -88,9 +88,9 @@ const CUENTA_VACIA: DatosCuenta = { user: "", oldPass: "", pass: "", confirmPass
  *
  * The state below is deliberately still held here rather than inside each
  * section: the dirty check that guards editor switching has to see every form's
- * value. The three second-factor rows are the exception — they are sections of
- * another screen and keep their own drafts — and they report whether they are
- * dirty instead; see `factorSucio`.
+ * value. The three second-factor rows hold none of it: they open to show what
+ * the account has, and their forms are modal dialogs that ask for themselves
+ * before discarding anything.
  */
 const PerfilPage = () => {
   const { sesion, setSesion, logout } = useContext(SesionContext);
@@ -99,7 +99,7 @@ const PerfilPage = () => {
 
   const [editor, setEditor] = useState<Editor | null>(null);
   /** Where to go once the person agrees to discard what is open. */
-  const [pendiente, setPendiente] = useState<Editor | "cerrar" | null>(null);
+  const [pendiente, setPendiente] = useState<Editor | null>(null);
 
   const [datos, setDatos] = useState<DatosPersonales>({ name: "", lastname: "", phone: "", birthday: "" });
   /** What the server has, to compare a draft against. Never edited. */
@@ -130,21 +130,6 @@ const PerfilPage = () => {
     verifiedAt: null,
   });
   const [emailForm, setEmailForm] = useState({ email: "" });
-
-  /**
-   * Whether each second-factor row holds a draft. The one piece of form state
-   * this page does not own: those rows are the sections of
-   * `/app/segundo-factor`, which keep their own drafts because that screen has
-   * no page above it to hold them. They report here so the dirty check below
-   * still covers every editor.
-   */
-  const [factorSucio, setFactorSucio] = useState<Record<EditorFactor, boolean>>({
-    llave: false,
-    totp: false,
-    codigos: false,
-  });
-  const anotarFactorSucio = (cual: EditorFactor, hay: boolean) =>
-    setFactorSucio((prev) => (prev[cual] === hay ? prev : { ...prev, [cual]: hay }));
 
   const [guardandoPersonal, setGuardandoPersonal] = useState(false);
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
@@ -261,7 +246,6 @@ const PerfilPage = () => {
     if (cual === "usuario") return cuenta.user !== (d.usuario?.user ?? "");
     if (cual === "password") return cuenta.oldPass !== "" || cuenta.pass !== "" || cuenta.confirmPass !== "";
     if (cual === "email") return emailForm.email.trim() !== (recovery.email ?? "");
-    if (cual === "llave" || cual === "totp" || cual === "codigos") return factorSucio[cual];
     return false;
   };
 
@@ -274,8 +258,8 @@ const PerfilPage = () => {
    * the rest of the session. Only the password editor has any now — the other
    * two are put back to what the server holds.
    *
-   * The second-factor rows are not here because they clear themselves: each
-   * one drops its draft when it stops being the open editor.
+   * The second-factor rows are not here because they have nothing to put
+   * back: what is typed in them lives in a dialog that is gone by then.
    */
   const limpiar = (cual: Editor) => {
     if (cual === "personal") setDatos(datosGuardados);
@@ -296,18 +280,6 @@ const PerfilPage = () => {
     setEditor(null);
   };
 
-  /**
-   * "Cerrar" on a second-factor row, which asks first where `cancelar` does not.
-   *
-   * The three editors say "Cancelar", and nobody presses that expecting to keep
-   * what they typed. A row says "Cerrar", which reads as folding it away — and
-   * what would be lost can be a secret already scanned into a phone.
-   */
-  const cerrar = () => {
-    if (editor && hayCambios(editor)) return setPendiente("cerrar");
-    cancelar();
-  };
-
   /** Close the editor after a save that worked, without wiping what was saved. */
   const cerrarTrasGuardar = (cual: Editor) => {
     if (editor === cual) setEditor(null);
@@ -315,7 +287,7 @@ const PerfilPage = () => {
 
   const descartarYSeguir = () => {
     if (editor) limpiar(editor);
-    setEditor(pendiente === "cerrar" ? null : pendiente);
+    setEditor(pendiente);
     setPendiente(null);
   };
 
@@ -640,8 +612,6 @@ const PerfilPage = () => {
                 onGuardarUsuario={pedirGuardarUsuario}
                 onGuardarPassword={pedirGuardarPassword}
                 onGuardarEmail={pedirEnviarEmail}
-                onCambiosFactor={anotarFactorSucio}
-                onCerrarFactor={cerrar}
               />
 
               <PerfilSesiones

@@ -23,6 +23,10 @@ interface Props {
   saving?: boolean;
   /** What the main button does, as a verb: "Crear poste", "Guardar cambios". */
   submitLabel?: string;
+  /** What the main button reads while `saving`, when "Guardando…" would be the wrong verb. */
+  savingLabel?: string;
+  /** The main button removes something: it is painted as the destructive action. */
+  destructive?: boolean;
   /** Omitted for a form opened read-only: the footer is then a single "Cerrar". */
   onSubmit?: () => void;
   submitDisabled?: boolean;
@@ -65,7 +69,8 @@ const NO_ENVIAN = new Set(["checkbox", "radio", "file", "button", "submit", "res
  */
 export default function FormDialog({
   open, onClose, title, description, size, dirty = false, missing = [], saving = false,
-  submitLabel = "Guardar cambios", onSubmit, submitDisabled = false, bodyClassName, children,
+  submitLabel = "Guardar cambios", savingLabel = "Guardando…", destructive = false,
+  onSubmit, submitDisabled = false, bodyClassName, children,
 }: Props) {
   const cuerpo = useRef<HTMLDivElement>(null);
   const [intentado, setIntentado] = useState(false);
@@ -131,8 +136,12 @@ export default function FormDialog({
               {onSubmit ? "Cancelar" : "Cerrar"}
             </Button>
             {onSubmit && (
-              <Button onClick={enviar} disabled={saving || submitDisabled}>
-                {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : submitLabel}
+              <Button
+                variant={destructive ? "destructive" : "default"}
+                onClick={enviar}
+                disabled={saving || submitDisabled}
+              >
+                {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />{savingLabel}</> : submitLabel}
               </Button>
             )}
           </DialogFooter>

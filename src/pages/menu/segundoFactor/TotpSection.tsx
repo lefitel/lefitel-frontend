@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { CopyIcon, KeyRoundIcon, ShieldOffIcon, SmartphoneIcon } from "lucide-react";
-import { EditorBlock, EditorField } from "../perfil/perfilRows";
+import FormDialog from "../../../components/dialogs/FormDialog";
+import { CampoDialogo } from "./CampoDialogo";
 import {
   setupTotp,
   confirmTotp,
@@ -25,8 +26,7 @@ import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
 import { renderTotpQr } from "./totpQr";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor } from "./SeccionFactor";
-import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
+import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
 
 /**
  * The exact text of the two 409s `POST /auth/totp/setup` can answer with —
@@ -207,12 +207,6 @@ const TotpSection = ({
     };
   }, [otpauth]);
 
-  // Which attempt is alive. A `setupTotp` answer that lands after its attempt
-  // was abandoned must not bring the QR back: as a profile row this section
-  // can be closed while the request is in flight, and the secret would then
-  // sit in a collapsed form — with the password it needs to confirm gone.
-  const intento = useRef(0);
-
   const abrirAlta = () => {
     setFase("password");
     setErrorAlta(null);
@@ -223,7 +217,6 @@ const TotpSection = ({
    *  behind on the server is replaced, not accumulated, the next time
    *  `setupTotp` is called — see that function's own comment. */
   const cancelarAlta = () => {
-    intento.current++;
     setFase("reposo");
     setPasswordAlta("");
     setErrorAlta(null);
@@ -239,13 +232,8 @@ const TotpSection = ({
     setEnviandoSetup(true);
     setErrorAlta(null);
     setBanner409(null);
-    const mio = intento.current;
     try {
       const res = await setupTotp(passwordAlta);
-      if (mio !== intento.current) {
-        setEnviandoSetup(false);
-        return;
-      }
       if (res.status === 200 && res.otpauth && res.secreto) {
         setOtpauth(res.otpauth);
         setSecreto(res.secreto);
@@ -333,19 +321,148 @@ const TotpSection = ({
     }
   };
 
-  useFilaDePerfil(
-    fila,
-    // The QR step counts on its own: abandoning it throws away a secret the
-    // person may already have scanned.
-    fase === "qr" || (fase === "password" && passwordAlta !== "") || (bajaAbierta && passwordBaja !== ""),
-    () => {
-      cancelarAlta();
-      cancelarBaja();
-    },
-  );
-
   const dialogos = (
     <>
+      {/* One dialog for both steps of a registration, so the password typed
+          in the first is still there for the `confirm` the second sends. */}
+      <FormDialog
+        open={fase !== "reposo"}
+        onClose={cancelarAlta}
+        size="md"
+        title="Configurar la aplicación de autenticación"
+        description={
+          fase === "qr"
+            ? "Escanea el código con tu aplicación y escribe los seis dígitos que te muestre."
+            : "Confirma con tu contraseña que eres tú."
+        }
+        // The QR step counts on its own: abandoning it throws away a secret
+        // the person may already have scanned.
+        dirty={fase === "qr" || passwordAlta !== ""}
+        saving={enviandoSetup || enviandoConfirm}
+        submitLabel={fase === "qr" ? "Confirmar" : "Continuar"}
+        savingLabel="Comprobando…"
+        onSubmit={() => void (fase === "qr" ? confirmarAlta() : pedirSetup())}
+        bodyClassName="space-y-4"
+      >
+        {fase === "qr" ? (
+          <>
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              {/* `bg-white` is deliberate and not a theme miss: a QR code
+                  has to stay dark-on-light to stay scannable in every
+                  phone camera, whatever theme this page is drawn in. */}
+              <div
+                className="inline-block rounded-lg border bg-white p-3 shrink-0"
+                role="img"
+                aria-label="Código QR para configurar el segundo factor"
+                dangerouslySetInnerHTML={{ __html: qrSvg ?? "" }}
+              />
+              <div className="space-y-2 min-w-0">
+                <p className="text-sm text-muted-foreground">
+                  Si no puedes escanearlo, escribe este código a mano en tu aplicación:
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="text-sm font-mono bg-background border rounded px-2 py-1 break-all">
+                    {secreto}
+                  </code>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={copiarSecreto} aria-label="Copiar código">
+                    <CopyIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <CampoDialogo id="totp-confirmar-codigo" label="Código de 6 dígitos" requerido>
+              <Input
+                id="totp-confirmar-codigo"
+                autoFocus
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                value={codigo}
+                // Hallazgo E-12/F14: Google Authenticator and Authy both
+                // display the code as "123 456", with a space in the
+                // middle. Pasting that verbatim into a bare `maxLength={6}`
+                // field truncates to "123 45" — six characters, none of
+                // them the code — and the person reads "código incorrecto"
+                // while looking at a correct one. Same sanitizer
+                // `pages/login/SegundoFactorPage.tsx` already uses for the
+                // same paste.
+                onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="font-mono tracking-widest w-32"
+                placeholder="000000"
+                maxLength={6}
+              />
+            </CampoDialogo>
+            {errorConfirm && <p role="alert" className="text-sm text-destructive">{errorConfirm}</p>}
+          </>
+        ) : (
+          <>
+            <CampoDialogo id="totp-alta-password" label="Contraseña actual" requerido>
+              <Input
+                id="totp-alta-password"
+                type="password"
+                value={passwordAlta}
+                onChange={(e) => setPasswordAlta(e.target.value)}
+                className="font-mono"
+                autoComplete="current-password"
+              />
+            </CampoDialogo>
+            {errorAlta && (
+              <div className="space-y-1">
+                <p role="alert" className="text-sm text-destructive">{errorAlta}</p>
+                {banner409 === "correo" && !fila && (
+                  // A plain `<a>`, not `<Link>` — no `<Router>` is
+                  // guaranteed around this component in every test that
+                  // mounts it, and a full navigation costs nothing extra
+                  // for a one-off trip to another settings screen.
+                  <a href="/app/perfil" className="text-sm underline text-primary">
+                    Ir a mi perfil a verificar mi correo
+                  </a>
+                )}
+                {banner409 === "correo" && fila && (
+                  // Already on the profile: a link to it would only reload
+                  // the page this dialog is on.
+                  <p className="text-sm text-muted-foreground">
+                    Cierra esta ventana y verifícalo en «Correo de recuperación», en esta misma tarjeta.
+                  </p>
+                )}
+                {banner409 === "factor" && (
+                  <p className="text-sm text-muted-foreground">
+                    Cierra esta ventana, usa «Quitar mi factor» y vuelve a intentarlo.
+                  </p>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </FormDialog>
+
+      <FormDialog
+        open={bajaAbierta}
+        onClose={cancelarBaja}
+        size="sm"
+        title="Quitar la aplicación de autenticación"
+        description="Confirma con tu contraseña que eres tú."
+        dirty={passwordBaja !== ""}
+        saving={enviandoBaja}
+        submitLabel="Quitar factor"
+        savingLabel="Quitando…"
+        destructive
+        onSubmit={pedirQuitar}
+        bodyClassName="space-y-4"
+      >
+        <CampoDialogo id="totp-quitar-password" label="Contraseña actual" requerido>
+          <Input
+            id="totp-quitar-password"
+            type="password"
+            value={passwordBaja}
+            onChange={(e) => setPasswordBaja(e.target.value)}
+            className="font-mono"
+            autoComplete="current-password"
+          />
+        </CampoDialogo>
+        {errorBaja && <p role="alert" className="text-sm text-destructive">{errorBaja}</p>}
+      </FormDialog>
+
       {/* Confirm: quitar el factor */}
       <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
         <AlertDialogContent>
@@ -412,34 +529,9 @@ const TotpSection = ({
             </p>
           </div>
 
-          {bajaAbierta ? (
-            <EditorBlock
-              titulo="Confirma tu contraseña para quitar el factor"
-              icon={<ShieldOffIcon className="h-4 w-4 text-muted-foreground" />}
-              guardando={enviandoBaja}
-              guardarLabel="Quitar factor"
-              destructivo
-              onGuardar={pedirQuitar}
-              onCancelar={cancelarBaja}
-            >
-              <EditorField id="totp-quitar-password" label="Contraseña actual" requerido>
-                <Input
-                  id="totp-quitar-password"
-                  type="password"
-                  value={passwordBaja}
-                  onChange={(e) => setPasswordBaja(e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-              </EditorField>
-              {errorBaja && <p className="text-sm text-destructive">{errorBaja}</p>}
-            </EditorBlock>
-          ) : (
-            <Button variant="outline" size="sm" onClick={abrirBaja}>
-              Quitar mi factor
-            </Button>
-          )}
+          <Button variant="outline" size="sm" onClick={abrirBaja}>
+            Quitar mi factor
+          </Button>
         </section>
 
         <div className="border-t border-border/40" />
@@ -456,121 +548,9 @@ const TotpSection = ({
             </p>
           </div>
 
-          {fase === "reposo" && (
-            <Button size="sm" onClick={abrirAlta}>
-              Configurar un nuevo factor
-            </Button>
-          )}
-
-          {fase === "password" && (
-            <EditorBlock
-              titulo="Confirma tu contraseña para empezar"
-              icon={<KeyRoundIcon className="h-4 w-4 text-muted-foreground" />}
-              guardando={enviandoSetup}
-              guardarLabel="Continuar"
-              onGuardar={pedirSetup}
-              onCancelar={cancelarAlta}
-            >
-              <EditorField id="totp-alta-password" label="Contraseña actual" requerido>
-                <Input
-                  id="totp-alta-password"
-                  type="password"
-                  value={passwordAlta}
-                  onChange={(e) => setPasswordAlta(e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-              </EditorField>
-              {errorAlta && (
-                <div className="space-y-1">
-                  <p className="text-sm text-destructive">{errorAlta}</p>
-                  {banner409 === "correo" && !fila && (
-                    // A plain `<a>`, not `<Link>` — no `<Router>` is
-                    // guaranteed around this component in every test that
-                    // mounts it, and a full navigation costs nothing extra
-                    // for a one-off trip to another settings screen.
-                    <a href="/app/perfil" className="text-sm underline text-primary">
-                      Ir a mi perfil a verificar mi correo
-                    </a>
-                  )}
-                  {banner409 === "correo" && fila && (
-                    // Already on the profile: a link to it would only reload
-                    // the page this form is on.
-                    <p className="text-sm text-muted-foreground">
-                      Verifícalo en «Correo de recuperación», en esta misma tarjeta.
-                    </p>
-                  )}
-                  {banner409 === "factor" && (
-                    <p className="text-sm text-muted-foreground">
-                      Usa «Quitar mi factor», arriba, y vuelve a intentarlo.
-                    </p>
-                  )}
-                </div>
-              )}
-            </EditorBlock>
-          )}
-
-          {fase === "qr" && (
-            <div className="rounded-lg bg-muted/50 border border-border/60 p-4 space-y-4">
-              <div className="flex flex-col sm:flex-row gap-4 items-start">
-                {/* `bg-white` is deliberate and not a theme miss: a QR code
-                    has to stay dark-on-light to stay scannable in every
-                    phone camera, whatever theme this page is drawn in. */}
-                <div
-                  className="inline-block rounded-lg border bg-white p-3 shrink-0"
-                  role="img"
-                  aria-label="Código QR para configurar el segundo factor"
-                  dangerouslySetInnerHTML={{ __html: qrSvg ?? "" }}
-                />
-                <div className="space-y-2 min-w-0">
-                  <p className="text-sm text-muted-foreground">
-                    Escanea el código con tu aplicación de autenticación. Si no puedes escanearlo,
-                    escribe este código a mano:
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-sm font-mono bg-background border rounded px-2 py-1 break-all">
-                      {secreto}
-                    </code>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={copiarSecreto} aria-label="Copiar código">
-                      <CopyIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <EditorField id="totp-confirmar-codigo" label="Código de 6 dígitos" requerido>
-                <Input
-                  id="totp-confirmar-codigo"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  value={codigo}
-                  // Hallazgo E-12/F14: Google Authenticator and Authy both
-                  // display the code as "123 456", with a space in the
-                  // middle. Pasting that verbatim into a bare `maxLength={6}`
-                  // field truncates to "123 45" — six characters, none of
-                  // them the code — and the person reads "código incorrecto"
-                  // while looking at a correct one. Same sanitizer
-                  // `pages/login/SegundoFactorPage.tsx` already uses for the
-                  // same paste.
-                  onChange={(e) => setCodigo(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                  className="font-mono tracking-widest w-32"
-                  placeholder="000000"
-                  maxLength={6}
-                />
-              </EditorField>
-              {errorConfirm && <p className="text-sm text-destructive">{errorConfirm}</p>}
-
-              <div className="flex justify-end gap-2">
-                <Button variant="ghost" onClick={cancelarAlta} disabled={enviandoConfirm}>
-                  Cancelar
-                </Button>
-                <Button onClick={confirmarAlta} disabled={enviandoConfirm}>
-                  Confirmar
-                </Button>
-              </div>
-            </div>
-          )}
+          <Button size="sm" onClick={abrirAlta}>
+            Configurar un nuevo factor
+          </Button>
         </section>
       </div>
     </SeccionFactor>

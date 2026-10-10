@@ -15,10 +15,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { KeyIcon } from "lucide-react";
-import { EditorBlock, EditorField } from "../perfil/perfilRows";
+import FormDialog from "../../../components/dialogs/FormDialog";
+import { CampoDialogo } from "./CampoDialogo";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor } from "./SeccionFactor";
-import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
+import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
 import {
   generateRecoveryCodes,
   getRecoveryCodesRemaining,
@@ -135,10 +135,34 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
     );
   };
 
-  useFilaDePerfil(fila, formAbierto && password !== "", cancelarForm);
-
   const dialogos = (
     <>
+      <FormDialog
+        open={formAbierto}
+        onClose={cancelarForm}
+        size="sm"
+        title="Generar códigos de recuperación"
+        description="Confirma con tu contraseña que eres tú."
+        dirty={password !== ""}
+        saving={enviando}
+        submitLabel="Generar códigos"
+        savingLabel="Generando…"
+        onSubmit={pedirGenerar}
+        bodyClassName="space-y-4"
+      >
+        <CampoDialogo id="recovery-codes-password" label="Contraseña actual" requerido>
+          <Input
+            id="recovery-codes-password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="font-mono"
+            autoComplete="current-password"
+          />
+        </CampoDialogo>
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      </FormDialog>
+
       {/* Confirm: antes de generar, las dos cosas que hay que saber antes,
           no después. */}
       <AlertDialog open={confirmAbierto} onOpenChange={(o) => !o && setConfirmAbierto(false)}>
@@ -196,33 +220,9 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
           {badge()}
         </div>
 
-        {formAbierto ? (
-          <EditorBlock
-            titulo="Confirma tu contraseña para generar los códigos"
-            icon={<KeyIcon className="h-4 w-4 text-muted-foreground" />}
-            guardando={enviando}
-            guardarLabel="Generar códigos"
-            onGuardar={pedirGenerar}
-            onCancelar={cancelarForm}
-          >
-            <EditorField id="recovery-codes-password" label="Contraseña actual" requerido>
-              <Input
-                id="recovery-codes-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="font-mono"
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-            </EditorField>
-            {error && <p className="text-sm text-destructive">{error}</p>}
-          </EditorBlock>
-        ) : (
-          <Button variant="outline" size="sm" onClick={abrirForm} disabled={cargando}>
-            Generar códigos nuevos
-          </Button>
-        )}
+        <Button variant="outline" size="sm" onClick={abrirForm} disabled={cargando}>
+          Generar códigos nuevos
+        </Button>
       </div>
     </SeccionFactor>
   );

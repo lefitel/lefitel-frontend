@@ -15,15 +15,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { KeyRoundIcon, Loader2Icon, PlusIcon, Trash2Icon } from "lucide-react";
-import { EditorBlock, EditorField } from "../perfil/perfilRows";
+import FormDialog from "../../../components/dialogs/FormDialog";
+import { CampoDialogo } from "./CampoDialogo";
 import { deleteCredential, listCredentials, type Credencial } from "../../../api/Webauthn.api";
 import { cancelarCeremonia, registrarPasskey, soportaPasskeys } from "../../../api/passkeyCeremony";
 import { describeStepUpError, CODIGO_STEP_UP } from "../../../api/Mfa.api";
 import { comprobarToken } from "../../../api/Login.api";
 import { SesionContext } from "../../../context/SesionContext";
+import { describirDispositivo } from "../../../lib/dispositivo";
 import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
-import { SeccionFactor } from "./SeccionFactor";
-import { useFilaDePerfil, type FilaDePerfil } from "./useFilaDePerfil";
+import { SeccionFactor, type FilaDePerfil } from "./SeccionFactor";
 
 /** `code` del 500 que significa «la llave se borró, las sesiones no» — copiado
  *  de `api/src/controllers/webauthn.controller.ts`, formato de cable. */
@@ -115,8 +116,13 @@ const PasskeysSection = ({
   const [enviandoBaja, setEnviandoBaja] = useState(false);
   const [errorBaja, setErrorBaja] = useState<string | null>(null);
 
+  // Kept after the dialog closes: its title is still on screen while it
+  // animates out, and would otherwise blink to an empty name.
+  const [nombreBaja, setNombreBaja] = useState("");
+
   const abrirBaja = (llave: Credencial) => {
     setBajaDe(llave);
+    setNombreBaja(llave.nombre);
     setPasswordBaja("");
     setErrorBaja(null);
   };
@@ -185,8 +191,14 @@ const PasskeysSection = ({
   const [errorAlta, setErrorAlta] = useState<string | null>(null);
   const [codigosRecuperacion, setCodigosRecuperacion] = useState<string[] | null>(null);
 
+  // «Chrome en Windows», leído del navegador: un punto de partida que la
+  // persona puede retocar, para que el campo obligatorio no la reciba vacío.
+  // Vacío si no se pudo leer nada — un nombre inventado sería peor que pedirlo.
+  const [nombreSugerido] = useState(() => describirDispositivo(navigator.userAgent).nombre ?? "");
+
   const abrirAlta = () => {
     setAltaAbierta(true);
+    setNombreAlta(nombreSugerido);
     setErrorAlta(null);
   };
 
@@ -230,8 +242,8 @@ const PasskeysSection = ({
           onCodigosEmitidos?.();
         }
       } else if (res.cancelado) {
-        // Cerró el diálogo del sistema. No es un error: el formulario se queda
-        // como estaba, con el nombre y la contraseña, para repetir.
+        // Cerró el diálogo del sistema. No es un error: el nuestro se queda
+        // abierto como estaba, con el nombre y la contraseña, para repetir.
       } else if (res.code === CODIGO_STEP_UP) {
         setErrorAlta(describeStepUpError(res.motivo, res.message));
       } else {
@@ -242,15 +254,6 @@ const PasskeysSection = ({
     }
     setEnviandoAlta(false);
   };
-
-  useFilaDePerfil(
-    fila,
-    (altaAbierta && (nombreAlta !== "" || passwordAlta !== "")) || (bajaDe !== null && passwordBaja !== ""),
-    () => {
-      cancelarAlta();
-      cancelarBaja();
-    },
-  );
 
   const resumen = () => {
     if (cargando) return <Skeleton className="h-5 w-24 inline-block" />;
@@ -272,6 +275,77 @@ const PasskeysSection = ({
 
   const dialogos = (
     <>
+      <FormDialog
+        open={altaAbierta}
+        onClose={cancelarAlta}
+        size="sm"
+        title="Registrar una llave de acceso"
+        description="Confirma con tu contraseña que eres tú. Después, tu dispositivo te pedirá la huella, la cara o el PIN."
+        dirty={nombreAlta !== nombreSugerido || passwordAlta !== ""}
+        saving={enviandoAlta}
+        submitLabel="Crear la llave"
+        savingLabel="Esperando a tu dispositivo…"
+        onSubmit={() => void registrar()}
+        bodyClassName="space-y-4"
+      >
+        <CampoDialogo
+          id="passkey-alta-nombre"
+          label="Nombre de la llave"
+          requerido
+          ayuda="Para reconocerla en tu lista si algún día tienes que quitarla. Puedes cambiarlo."
+        >
+          {/* `data-no-autofocus`: el nombre ya viene escrito, así que el
+              cursor empieza en la contraseña, que es lo que falta. */}
+          <Input
+            id="passkey-alta-nombre"
+            data-no-autofocus
+            value={nombreAlta}
+            onChange={(e) => setNombreAlta(e.target.value)}
+            placeholder="mi móvil, el portátil del trabajo…"
+            maxLength={NOMBRE_MAX}
+            autoComplete="off"
+          />
+        </CampoDialogo>
+        <CampoDialogo id="passkey-alta-password" label="Contraseña actual" requerido>
+          <Input
+            id="passkey-alta-password"
+            type="password"
+            value={passwordAlta}
+            onChange={(e) => setPasswordAlta(e.target.value)}
+            className="font-mono"
+            autoComplete="current-password"
+          />
+        </CampoDialogo>
+        {errorAlta && <p role="alert" className="text-sm text-destructive">{errorAlta}</p>}
+      </FormDialog>
+
+      <FormDialog
+        open={bajaDe !== null}
+        onClose={cancelarBaja}
+        size="sm"
+        title={`Quitar la llave «${nombreBaja}»`}
+        description="Confirma con tu contraseña que eres tú."
+        dirty={passwordBaja !== ""}
+        saving={enviandoBaja}
+        submitLabel="Quitar llave"
+        savingLabel="Quitando…"
+        destructive
+        onSubmit={pedirQuitar}
+        bodyClassName="space-y-4"
+      >
+        <CampoDialogo id="passkey-quitar-password" label="Contraseña actual" requerido>
+          <Input
+            id="passkey-quitar-password"
+            type="password"
+            value={passwordBaja}
+            onChange={(e) => setPasswordBaja(e.target.value)}
+            className="font-mono"
+            autoComplete="current-password"
+          />
+        </CampoDialogo>
+        {errorBaja && <p role="alert" className="text-sm text-destructive">{errorBaja}</p>}
+      </FormDialog>
+
       {/* Confirm: quitar la llave */}
       <AlertDialog open={confirmBajaAbierto} onOpenChange={(o) => !o && setConfirmBajaAbierto(false)}>
         <AlertDialogContent>
@@ -370,31 +444,6 @@ const PasskeysSection = ({
               ))}
             </ul>
           )}
-
-          {bajaDe && (
-            <EditorBlock
-              titulo={`Confirma tu contraseña para quitar «${bajaDe.nombre}»`}
-              icon={<Trash2Icon className="h-4 w-4 text-muted-foreground" />}
-              guardando={enviandoBaja}
-              guardarLabel="Quitar llave"
-              destructivo
-              onGuardar={pedirQuitar}
-              onCancelar={cancelarBaja}
-            >
-              <EditorField id="passkey-quitar-password" label="Contraseña actual" requerido>
-                <Input
-                  id="passkey-quitar-password"
-                  type="password"
-                  value={passwordBaja}
-                  onChange={(e) => setPasswordBaja(e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-              </EditorField>
-              {errorBaja && <p className="text-sm text-destructive">{errorBaja}</p>}
-            </EditorBlock>
-          )}
         </section>
 
         <div className="border-t border-border/40" />
@@ -412,47 +461,10 @@ const PasskeysSection = ({
             </p>
           )}
 
-          {soportado && !altaAbierta && (
+          {soportado && (
             <Button size="sm" onClick={abrirAlta}>
               Registrar una llave en este dispositivo
             </Button>
-          )}
-
-          {soportado && altaAbierta && (
-            <EditorBlock
-              titulo="Ponle nombre y confirma tu contraseña"
-              icon={<KeyRoundIcon className="h-4 w-4 text-muted-foreground" />}
-              guardando={enviandoAlta}
-              guardarLabel="Crear la llave"
-              onGuardar={registrar}
-              onCancelar={cancelarAlta}
-            >
-              <EditorField id="passkey-alta-nombre" label="Nombre de la llave" requerido>
-                <Input
-                  id="passkey-alta-nombre"
-                  value={nombreAlta}
-                  onChange={(e) => setNombreAlta(e.target.value)}
-                  placeholder="mi móvil, el portátil del trabajo…"
-                  maxLength={NOMBRE_MAX}
-                  autoComplete="off"
-                />
-              </EditorField>
-              <EditorField id="passkey-alta-password" label="Contraseña actual" requerido>
-                <Input
-                  id="passkey-alta-password"
-                  type="password"
-                  value={passwordAlta}
-                  onChange={(e) => setPasswordAlta(e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                />
-              </EditorField>
-              <p className="text-xs text-muted-foreground">
-                Al pulsar «Crear la llave», tu dispositivo te pedirá la huella, la cara o el PIN.
-              </p>
-              {errorAlta && <p className="text-sm text-destructive">{errorAlta}</p>}
-            </EditorBlock>
           )}
         </section>
       </div>
