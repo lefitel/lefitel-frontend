@@ -6,8 +6,8 @@ import BaseMap from "../../../components/map/BaseMap";
 import MapPoint from "../../../components/map/MapPoint";
 import { SonarMarker } from "../../../components/map/SonarMarker";
 import { FitView } from "../../../components/map/useFitCoords";
-import { fromLatLngTuple, type LatLng } from "../../../components/map/mapGeo";
-import { MAP_RADIUS, MAP_WEIGHT } from "../../../components/map/mapConstants";
+import { fromLatLngTuple, type LatLng, hasCoords } from "../../../components/map/mapGeo";
+import { MAP_RADIUS, MAP_WEIGHT, MAP_DOT } from "../../../components/map/mapConstants";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { Button } from "../../../components/ui/button";
@@ -15,11 +15,10 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Badge } from "../../../components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { CiudadInterface, PosteInterface } from "../../../interfaces/interfaces";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { useCiudadDetalleData } from "./useCiudadDetalleData";
 import { latExample, lngExample } from "../../../data/example";
 import BitacoraPanel from "../../../components/BitacoraPanel";
@@ -28,14 +27,16 @@ import PermissionGuard from "../../../components/PermissionGuard";
 import { ImageViewer } from "../../../components/ui/image-viewer";
 import {
   ActivityIcon, CalendarIcon, ChevronRightIcon, ImageIcon,
-  LocateFixedIcon, MapPinIcon, MoreHorizontalIcon, MoreVerticalIcon,
+  LocateFixedIcon, MapPinIcon, MoreVerticalIcon,
   PencilIcon, RefreshCwIcon, RouteIcon, ZapIcon,
 } from "lucide-react";
 
+// A city has no state to colour, so its dot is the neutral blue the forms use —
+// theme tokens, where this was one blue picked against the light map.
 const CITY_COLOR = {
-  fill:   "#596BAB",
-  stroke: "#4557a0",
-  rgb:    "89, 107, 171",
+  fill:   MAP_DOT.subject,
+  stroke: "#ffffff",
+  rgb:    MAP_DOT.subjectRgb,
 };
 
 export default function CiudadDetallePage() {
@@ -43,25 +44,29 @@ export default function CiudadDetallePage() {
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
-  const d = useCiudadDetalleData(Number(id));
+  // Poles are a second permission. Without it the sheet still opens: it does
+  // not ask for them and does not draw the blocks made of them.
+  const verPostes = can(rol, "postes", "ver");
+  const verBitacora = can(rol, "bitacora", "ver");
+  const d = useCiudadDetalleData(Number(id), { verPostes });
   const [openEditCiudad, setOpenEditCiudad] = useState(false);
   const [fitPostes, setFitPostes] = useState(false);
 
-  const hasCoords = (d.ciudad?.lat ?? 0) !== 0 && (d.ciudad?.lng ?? 0) !== 0;
-  const center: LatLng = hasCoords
+  const located = hasCoords(d.ciudad);
+  const center: LatLng = located
     ? { lat: d.ciudad!.lat, lng: d.ciudad!.lng }
     : { lat: latExample, lng: lngExample };
 
   const boundsCoords: [number, number][] = [
-    ...(hasCoords ? [[center.lat, center.lng] as [number, number]] : []),
-    ...d.postes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
+    ...(located ? [[center.lat, center.lng] as [number, number]] : []),
+    ...d.postes.filter(hasCoords).map((p): [number, number] => [p.lat, p.lng]),
   ];
 
   return (
-    <div className="@container/card px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card px-page pb-page w-full space-y-page animate-in fade-in duration-500">
 
       {/* ── Header sticky ── */}
-      <div className="sticky top-0 z-20 -mx-6 md:-mx-8 px-6 md:px-8 py-4 bg-background/85 supports-backdrop-filter:backdrop-blur-md border-b border-border/40">
+      <div className="sticky top-0 z-20 -mx-page px-page py-4 bg-background/85 supports-backdrop-filter:backdrop-blur-md border-b border-border/40">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             {d.loading ? (
@@ -74,46 +79,58 @@ export default function CiudadDetallePage() {
                 <h1 className="text-2xl font-bold tracking-tight truncate">
                   {d.ciudad?.name ?? "Ciudad"}
                 </h1>
-                <p className="text-sm text-muted-foreground">
-                  {d.tramos.length} {d.tramos.length === 1 ? "tramo" : "tramos"} · {d.postes.length} postes
-                </p>
+                {verPostes && (
+                  <p className="text-sm text-muted-foreground">
+                    {d.tramos.length} {d.tramos.length === 1 ? "tramo" : "tramos"} · {d.postes.length} postes
+                  </p>
+                )}
               </>
             )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="h-9 w-9" disabled={d.loading}>
-                  <MoreHorizontalIcon className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                {can(rol, "ciudades", "editar") && (
-                  <DropdownMenuItem onClick={() => setOpenEditCiudad(true)} disabled={!d.ciudad}>
-                    <PencilIcon className="h-4 w-4" />
-                    Editar ciudad
-                  </DropdownMenuItem>
-                )}
-                {can(rol, "ciudades", "editar") && <DropdownMenuSeparator />}
-                <DropdownMenuItem onClick={d.load} disabled={d.loading}>
-                  <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
-                  Refrescar
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/*
+              On the header, not behind a «⋯»: that menu held these two and
+              nothing else, so each cost a click to find and a click to press.
+              The same two, the same way, as on a pole's header.
+            */}
+            {can(rol, "ciudades", "editar") && (
+              <Button
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setOpenEditCiudad(true)}
+                disabled={d.loading || !d.ciudad}
+              >
+                <PencilIcon className="h-4 w-4" />
+                Editar
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9"
+              onClick={d.load}
+              disabled={d.loading}
+              aria-label="Refrescar"
+              title="Refrescar"
+            >
+              <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
         </div>
       </div>
 
       {/* ── Strip de métricas ── */}
-      <CiudadStrip
-        loading={d.loading}
-        ciudad={d.ciudad}
-        postes={d.postes}
-        tramos={d.tramos}
-        ciudadId={Number(id)}
-      />
+      {/* Three of its four figures are counts of poles. */}
+      {verPostes && (
+        <CiudadStrip
+          loading={d.loading}
+          ciudad={d.ciudad}
+          postes={d.postes}
+          tramos={d.tramos}
+          ciudadId={Number(id)}
+        />
+      )}
 
       {/* ── Info + Mapa ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -125,7 +142,7 @@ export default function CiudadDetallePage() {
             {d.loading ? (
               <Skeleton className="absolute inset-0 rounded-none" />
             ) : d.ciudad?.image ? (
-              <ImageViewer src={`${url}${d.ciudad.image}`} alt={d.ciudad.name} hero />
+              <ImageViewer src={imageUrl(d.ciudad.image) ?? ""} alt={d.ciudad.name} hero />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/40">
                 <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
@@ -150,7 +167,7 @@ export default function CiudadDetallePage() {
                 <Row label="Nombre" value={d.ciudad?.name} />
                 <Row
                   label="Coordenadas"
-                  value={hasCoords
+                  value={located
                     ? `${d.ciudad!.lat.toFixed(6)}, ${d.ciudad!.lng.toFixed(6)}`
                     : "Sin coordenadas"}
                 />
@@ -176,7 +193,7 @@ export default function CiudadDetallePage() {
               <div className="isolate h-full relative">
 
                 {/* Toggle button */}
-                {hasCoords && boundsCoords.length >= 2 && (
+                {located && boundsCoords.length >= 2 && (
                   <div className="absolute top-3 right-3 z-1000">
                     <Button
                       size="sm"
@@ -195,27 +212,27 @@ export default function CiudadDetallePage() {
 
                 <BaseMap
                   center={center}
-                  zoom={hasCoords ? 13 : 5}
+                  zoom={located ? 13 : 5}
                   style={{ height: "100%", minHeight: "420px" }}
                 >
                   <FitView
                     coords={boundsCoords.map(fromLatLngTuple)}
                     fit={fitPostes}
-                    center={hasCoords ? center : { lat: 0, lng: 0 }}
+                    center={located ? center : { lat: 0, lng: 0 }}
                     zoom={13}
                   />
 
                   {/* Postes secundarios */}
                   {d.postes
-                    .filter((p) => p.lat && p.lng)
+                    .filter(hasCoords)
                     .map((p) => (
                       <MapPoint
                         key={p.id as number}
                         center={{ lat: p.lat, lng: p.lng }}
                         radius={MAP_RADIUS.secondary}
-                        strokeColor="#9ca3af"
-                        fillColor="#9ca3af"
-                        fillOpacity={0.75}
+                        strokeColor={MAP_DOT.pole}
+                        fillColor={MAP_DOT.poleFill}
+                        fillOpacity={1}
                         strokeWidth={MAP_WEIGHT.secondary}
                         popupMinWidth={220}
                       >
@@ -224,7 +241,7 @@ export default function CiudadDetallePage() {
                     ))}
 
                   {/* Ciudad principal — SonarMarker */}
-                  {hasCoords && (
+                  {located && (
                     <SonarMarker
                       center={[center.lat, center.lng]}
                       fillColor={CITY_COLOR.fill}
@@ -248,28 +265,39 @@ export default function CiudadDetallePage() {
         </Card>
       </div>
 
-      {/* ── Tramos y Bitácora ── */}
+      {/* ── Tramos y Bitácora ──
+          Each tab behind its own permission, and no card at all for a role that
+          holds neither: a card with no tabs in it says nothing. */}
+      {(verPostes || verBitacora) && (
       <Card className="shadow-sm border-muted/60 py-0">
         <CardContent className="p-0">
-          <Tabs defaultValue="tramos" className="gap-0">
+          <Tabs defaultValue={verPostes ? "tramos" : "bitacora"} className="gap-0">
             <div className="px-4 pt-4 pb-3 border-b border-border/40">
-              <TabsList variant="line">
-                <TabsTrigger value="tramos" className="gap-1.5">
-                  <RouteIcon className="h-3.5 w-3.5" />
-                  Postes por tramo
-                  {d.postes.length > 0 && (
-                    <span className="ml-1 text-[10px] text-muted-foreground">
-                      ({d.postes.length})
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="bitacora" className="gap-1.5">
-                  <ActivityIcon className="h-3.5 w-3.5" />
-                  Bitácora
-                </TabsTrigger>
+              <TabsList>
+                {verPostes && (
+                  <TabsTrigger value="tramos" className="gap-1.5">
+                    <RouteIcon className="h-3.5 w-3.5" />
+                    Postes por tramo
+                    {d.postes.length > 0 && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        ({d.postes.length})
+                      </span>
+                    )}
+                  </TabsTrigger>
+                )}
+                {/* Only for a role that may read the log: its endpoint asks for
+                    `bitacora.ver`, and without it this tab held nothing but
+                    "No tiene permiso para ver la bitácora". */}
+                {verBitacora && (
+                  <TabsTrigger value="bitacora" className="gap-1.5">
+                    <ActivityIcon className="h-3.5 w-3.5" />
+                    Bitácora
+                  </TabsTrigger>
+                )}
               </TabsList>
             </div>
 
+            {verPostes && (
             <TabsContent value="tramos" className="mt-0">
               {d.loading ? (
                 <div className="p-6 space-y-3">
@@ -332,13 +360,17 @@ export default function CiudadDetallePage() {
                 ))
               )}
             </TabsContent>
+            )}
 
-            <TabsContent value="bitacora" className="p-5">
-              <BitacoraPanel entity="Ciudad" entityId={Number(id)} />
-            </TabsContent>
+            {verBitacora && (
+              <TabsContent value="bitacora" className="p-5">
+                <BitacoraPanel entity="Ciudad" entityId={Number(id)} />
+              </TabsContent>
+            )}
           </Tabs>
         </CardContent>
       </Card>
+      )}
 
       <PermissionGuard
         module="ciudades"

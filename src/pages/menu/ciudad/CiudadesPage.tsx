@@ -4,11 +4,12 @@ import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { deleteCiudad, desarchivarCiudad, getCiudad } from "../../../api/Ciudad.api";
+import { deleteCiudad, desarchivarCiudad, getCiudad, type CiudadConCifras } from "../../../api/Ciudad.api";
 import { CiudadInterface } from "../../../interfaces/interfaces";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
+import { Badge } from "../../../components/ui/badge";
 import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { ImageLightbox } from "../../../components/ui/image-viewer";
@@ -37,6 +38,27 @@ import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 type Tab = "activos" | "archivados";
 
+/** "hoy", "hace 5 días", "hace 3 semanas", "hace 4 meses" — coarser as it gets older. */
+function haceCuanto(fecha: string): string {
+  const dias = Math.max(0, Math.floor((Date.now() - new Date(fecha).getTime()) / 86_400_000));
+  if (dias === 0) return "hoy";
+  if (dias === 1) return "hace 1 día";
+  if (dias < 14) return `hace ${dias} días`;
+  if (dias < 60) return `hace ${Math.floor(dias / 7)} semanas`;
+  const meses = Math.floor(dias / 30);
+  if (meses < 24) return `hace ${meses} meses`;
+  return `hace ${Math.floor(dias / 365)} años`;
+}
+
+/** "conecta con A, B y 3 más": two names, then a count, so the line stays one line. */
+function conectaCon(nombres: string[]): string {
+  if (nombres.length === 0) return "sin tramos";
+  const [a, b, ...resto] = nombres;
+  if (!b) return `conecta con ${a}`;
+  if (resto.length === 0) return `conecta con ${a} y ${b}`;
+  return `conecta con ${a}, ${b} y ${resto.length} más`;
+}
+
 function CiudadAvatar({ name, image, faded, onImageClick }: {
   name: string;
   image: string | null | undefined;
@@ -44,7 +66,7 @@ function CiudadAvatar({ name, image, faded, onImageClick }: {
   onImageClick: (src: string) => void;
 }) {
   const [loaded, setLoaded] = useState(false);
-  const imgSrc = image ? `${url}${image}` : null;
+  const imgSrc = imageUrl(image);
   return (
     <Avatar
       className={`${faded ? "opacity-60" : ""}${loaded ? " cursor-zoom-in" : ""}`}
@@ -66,7 +88,7 @@ function CiudadAvatar({ name, image, faded, onImageClick }: {
 export default function CiudadesPage() {
   const { sesion } = useContext(SesionContext);
   const navigate = useNavigate();
-  const [ciudades, setCiudades] = useState<CiudadInterface[] | null>(null);
+  const [ciudades, setCiudades] = useState<CiudadConCifras[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [archivedCiudades, setArchivedCiudades] = useState<CiudadInterface[] | null>(null);
   const [loadingArchived, setLoadingArchived] = useState(false);
@@ -132,28 +154,102 @@ export default function CiudadesPage() {
     if (tab === "archivados" && archivedCiudades === null) loadArchived();
   }, [tab, archivedCiudades, loadArchived]);
 
-  const columns = useMemo<Col<CiudadInterface>[]>(() => [
+  // The server sends each block of figures only to a role that could read it on
+  // its own screen, so the columns are drawn on the same two answers.
+  const verPostes = can(sesion.usuario.id_rol, "postes", "ver");
+  const verEventos = can(sesion.usuario.id_rol, "eventos", "ver");
+
+  const nombres = useMemo(
+    () => new Map((ciudades ?? []).map((c) => [c.id as number, c.name])),
+    [ciudades],
+  );
+
+  const columns = useMemo<Col<CiudadConCifras>[]>(() => [
     rowNumberColumn(),
     {
-      accessorKey: "image",
-      header: "Foto",
-      enableSorting: false,
-      cell: ({ row }) => (
-        <CiudadAvatar name={row.original.name} image={row.original.image} onImageClick={setLightboxSrc} />
-      ),
-    },
-    {
       accessorKey: "name",
-      header: "Nombre",
-      cell: ({ row }) => (
-        <button
-          className="font-medium text-sm text-primary hover:underline text-left"
-          onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${row.original.id}`); }}
-        >
-          {row.original.name}
-        </button>
-      ),
+      header: "Ciudad",
+      cell: ({ row }) => {
+        const vecinas = row.original.vecinas;
+        return (
+          <div className="flex items-center gap-3 min-w-0">
+            <CiudadAvatar name={row.original.name} image={row.original.image} onImageClick={setLightboxSrc} />
+            <div className="min-w-0">
+              <button
+                className="font-medium text-sm text-primary hover:underline text-left"
+                onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${row.original.id}`); }}
+              >
+                {row.original.name}
+              </button>
+              {vecinas && (
+                <p className="text-xs text-muted-foreground truncate max-w-72">
+                  {conectaCon(vecinas.flatMap((id) => nombres.get(id) ?? []))}
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      },
     },
+    ...(verPostes ? [
+      {
+        id: "tramos",
+        accessorFn: (c) => c.vecinas?.length ?? 0,
+        header: "Tramos",
+        enableColumnFilter: false,
+        cell: ({ row }) => {
+          const n = row.original.vecinas?.length ?? 0;
+          return <span className={`text-sm tabular-nums ${n ? "" : "text-muted-foreground"}`}>{n}</span>;
+        },
+      },
+      {
+        id: "postes",
+        accessorFn: (c) => c.postes ?? 0,
+        header: "Postes",
+        enableColumnFilter: false,
+        cell: ({ row }) => {
+          const n = row.original.postes ?? 0;
+          return <span className={`text-sm tabular-nums ${n ? "" : "text-muted-foreground"}`}>{n}</span>;
+        },
+      },
+    ] satisfies Col<CiudadConCifras>[] : []),
+    ...(verEventos ? [
+      {
+        id: "pendientes",
+        accessorFn: (c) => c.pendientes ?? 0,
+        header: "Eventos pendientes",
+        enableColumnFilter: false,
+        cell: ({ row }) => {
+          const { pendientes = 0, prioritarios = 0, ultimoEvento } = row.original;
+          if (pendientes === 0) {
+            return <span className="text-xs text-muted-foreground">{ultimoEvento ? "Sin pendientes" : "—"}</span>;
+          }
+          return prioritarios > 0
+            ? (
+              <Badge className="bg-destructive/10 text-destructive border-transparent shadow-none text-xs tabular-nums">
+                {pendientes} · {prioritarios} {prioritarios === 1 ? "prioritario" : "prioritarios"}
+              </Badge>
+            )
+            : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs tabular-nums">{pendientes}</Badge>;
+        },
+      },
+      {
+        id: "ultimoEvento",
+        accessorFn: (c) => (c.ultimoEvento ? new Date(c.ultimoEvento).getTime() : 0),
+        header: "Última actividad",
+        enableColumnFilter: false,
+        cell: ({ row }) => {
+          const fecha = row.original.ultimoEvento;
+          return fecha
+            ? (
+              <span className="text-xs whitespace-nowrap" title={new Date(fecha).toLocaleDateString("es-ES")}>
+                {haceCuanto(fecha)}
+              </span>
+            )
+            : <span className="text-xs text-muted-foreground">—</span>;
+        },
+      },
+    ] satisfies Col<CiudadConCifras>[] : []),
     {
       accessorKey: "createdAt",
       header: "Registrada",
@@ -211,9 +307,9 @@ export default function CiudadesPage() {
         </div>
       ),
     },
-  ], [navigate, sesion.usuario.id_rol]);
+  ], [navigate, sesion.usuario.id_rol, verPostes, verEventos, nombres]);
 
-  const archivedColumns = useMemo<Col<CiudadInterface>[]>(() => [
+  const archivedColumns = useMemo<Col<CiudadConCifras>[]>(() => [
     rowNumberColumn(),
     {
       accessorKey: "image",
@@ -264,7 +360,7 @@ export default function CiudadesPage() {
 
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}
-      className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500"
+      className="@container/card p-page w-full space-y-page animate-in fade-in duration-500"
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -287,6 +383,8 @@ export default function CiudadesPage() {
           loading={loading}
           columns={columns}
           onRetry={load}
+          initialColumnVisibility={{ createdAt: false, updatedAt: false }}
+          initialSorting={verEventos ? [{ id: "pendientes", desc: true }] : []}
           actions={<>
             <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
               <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />

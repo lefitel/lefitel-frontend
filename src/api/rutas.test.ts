@@ -38,8 +38,8 @@
 
 import { describe, it, expect, vi, afterEach } from "vitest";
 import axios from "axios";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
+import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getAdssPoste } from "./AdssPoste.api";
@@ -255,5 +255,115 @@ describe("ninguna dirección lleva un verbo en español", () => {
       }
     }
     expect(malas, `direcciones en español en src/api:\n  ${malas.join("\n  ")}`).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Que la dirección exista al otro lado.
+ *
+ * 🔴 **Ésta es la comprobación que no existía en ninguno de los dos
+ * repositorios**, y la única que caza la clase de fallo entera. Todo lo de
+ * arriba mide la *forma* de lo que pide el cliente; nada medía que el servidor
+ * conteste ahí. Una auditoría lo demostró apuntando dos funciones a
+ * `/api/files/orphan` y `/api/usuario/usuario/:user` —direcciones que el
+ * servidor no monta— y corriendo las suites de los dos repos: **verdes las
+ * dos**, 1.071 pruebas aquí y 2.655 allí. Una de ellas, además, cae justo donde
+ * el fallo se lee como éxito: la comprobación de si un nombre de usuario está
+ * libre trata cualquier rechazo como «libre».
+ *
+ * **Cómo se lee el otro lado.** Se parsea `api/src/app.ts` para saber qué
+ * router se monta en qué prefijo, y luego cada fichero de router para sus
+ * rutas. Es mecánico y aguanta: las dos formas son de una línea y una sola
+ * manera. Lo que no se hace es fiarse — si el análisis devuelve menos rutas de
+ * las que debería, falla, porque un parser que se queda corto certifica
+ * cualquier cosa.
+ *
+ * **Y si el repositorio `api` no está al lado, esto se salta y lo dice.** Un
+ * fichero que existe y no declara lo que debería es un fallo; un fichero que no
+ * está es otra máquina. Mismo criterio que `lib/password.test.ts`.
+ */
+const RAIZ_API = resolve(dirname(fileURLToPath(import.meta.url)), "../../../api");
+
+/** Cada ruta montada por el servidor, como `MÉTODO /api/...`. */
+const rutasDelServidor = (): string[] => {
+  const app = readFileSync(join(RAIZ_API, "src/app.ts"), "utf8");
+
+  // `import filesRoutes from "./routes/files.routes.js";`
+  const fichero = new Map<string, string>();
+  for (const m of app.matchAll(/import\s+(\w+)\s+from\s+"\.\/routes\/([\w.-]+)\.js"/g)) {
+    fichero.set(m[1], m[2] + ".ts");
+  }
+
+  const rutas: string[] = [];
+  // `app.use("/api/files", authenticate, filesRoutes);`
+  for (const m of app.matchAll(/app\.use\("(\/api[^"]*)"([^)]*)\)/g)) {
+    const prefijo = m[1];
+    for (const ident of m[2].matchAll(/(\w+Routes)\b/g)) {
+      const nombre = fichero.get(ident[1]);
+      if (!nombre) continue;
+      const fuente = readFileSync(join(RAIZ_API, "src/routes", nombre), "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/\/\/.*$/gm, "");
+      for (const r of fuente.matchAll(/router\.(get|post|put|patch|delete)\(\s*"([^"]*)"/g)) {
+        const sufijo = r[2] === "/" ? "/" : r[2];
+        rutas.push(`${r[1].toUpperCase()} ${prefijo}${sufijo}`);
+      }
+    }
+  }
+  return [...new Set(rutas)];
+};
+
+/**
+ * La barra final no distingue, y por eso se normaliza a los dos lados.
+ *
+ * Express arranca con `strict routing` **apagado** —`app.ts` no lo activa, y
+ * ése es el valor por defecto—, así que `/api/permiso` y `/api/permiso/` son
+ * la misma dirección para el enrutador. El cliente escribe una y el servidor
+ * monta la otra en varios sitios, y eso no es un defecto.
+ *
+ * 🔴 Si alguien enciende `strict routing` alguna vez, esta normalización
+ * pasa a esconder roturas reales y hay que quitarla. Queda dicho porque es la
+ * única línea de este fichero que da algo por equivalente.
+ */
+const sinBarraFinal = (camino: string) => camino.replace(/\/+$/, "") || "/";
+
+/** `/api/poste/:id/adss` → una expresión que casa `/api/poste/7/adss`. */
+const comoPatron = (ruta: string) =>
+  new RegExp(
+    "^" + sinBarraFinal(ruta).replace(/[.*+?^${}()|[\]]/g, "\\$&")
+      .replace(/:[A-Za-z_]+/g, "[^/]+") + "$",
+  );
+
+describe("la dirección existe al otro lado", () => {
+  const hayApi = existsSync(join(RAIZ_API, "src/app.ts"));
+
+  it.skipIf(!hayApi)("se ley\u00f3 la tabla del servidor, y no una lista corta", () => {
+    const rutas = rutasDelServidor();
+    // Anti-vacuidad, y con margen estrecho a prop\u00f3sito: hoy son 135. Un parser
+    // que dejara de entender `app.use` devolver\u00eda cero y todo lo de abajo
+    // pasar\u00eda sin mirar nada.
+    expect(rutas.length, "el an\u00e1lisis del servidor devolvi\u00f3 casi nada").toBeGreaterThan(110);
+    expect(rutas.filter((r) => r.startsWith("GET /api/")).length).toBeGreaterThan(40);
+  });
+
+  it.skipIf(!hayApi)("cada direcci\u00f3n que pide el cliente la sirve el servidor", async () => {
+    const patrones = rutasDelServidor().map((r) => ({ ruta: r, patron: comoPatron(r.split(" ")[1]) }));
+    const huerfanas: string[] = [];
+
+    for (const caso of CASOS) {
+      const direccion = await direccionDe(caso);
+      const camino = sinBarraFinal(new URL(direccion).pathname);
+      const verbo = caso.verbo.toUpperCase();
+      const casa = patrones.some((p) => p.ruta.startsWith(verbo + " ") && p.patron.test(camino));
+      if (!casa) huerfanas.push(`${caso.nombre}: ${verbo} ${camino}`);
+      vi.restoreAllMocks();
+    }
+
+    expect(
+      huerfanas,
+      `el cliente pide direcciones que el servidor no monta: ${huerfanas.join(" | ")}`,
+    ).toEqual([]);
   });
 });

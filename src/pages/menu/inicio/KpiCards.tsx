@@ -203,7 +203,11 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
             <DateRangePicker
               value={pickerValue}
               onChange={handleRangeChange}
-              className={`text-xs h-8 transition-opacity duration-200 ${period !== "custom" ? "opacity-40 hover:opacity-70" : ""}`}
+              // `w-auto`: as wide as the dates it shows. The picker took the
+              // shared trigger style, which is full-width because a form field
+              // is — and here it shares its row with the period buttons, so it
+              // ate the row and squeezed them until «Todo» was cut off.
+              className={`w-auto shrink-0 text-xs h-8 transition-opacity duration-200 ${period !== "custom" ? "opacity-40 hover:opacity-70" : ""}`}
             />
             <SegmentedControl
               options={(Object.keys(PERIOD_LABELS) as Period[]).map((p) => ({ value: p, label: PERIOD_LABELS[p] }))}

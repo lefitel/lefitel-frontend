@@ -13,28 +13,38 @@ import { uploadImage } from "../../../api/Upload.api";
 import { createPoste, editPoste } from "../../../api/Poste.api";
 import { mensajeDeError } from "../../../api/descarga";
 import { posteExample, latExample, lngExample } from "../../../data/example";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { DatePicker } from "../../ui/date-picker";
-import { Button } from "../../ui/button";
 import { Label } from "../../ui/label";
 import { Input } from "../../ui/input";
 import { Combobox } from "../../ui/combobox";
-import { Checkbox } from "../../ui/checkbox";
 import { Skeleton } from "../../ui/skeleton";
-import {
-  Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../../ui/sheet";
+import FormDialog from "../FormDialog";
+import CoordInputs from "../../map/CoordInputs";
 import BaseMap from "../../map/BaseMap";
 import MapPoint from "../../map/MapPoint";
 import MapLine from "../../map/MapLine";
 import { FitView } from "../../map/useFitCoords";
-import { fromLatLngTuple, type LatLng } from "../../map/mapGeo";
+import { fromLatLngTuple, type LatLng, hasCoords } from "../../map/mapGeo";
 import MapSearch from "../../map/MapSearch";
-import { Loader2Icon } from "lucide-react";
+import { ArrowRightIcon, CheckIcon } from "lucide-react";
 import { SonarMarker } from "../../map/SonarMarker";
+import { MAP_RADIUS, MAP_DOT } from "../../map/mapConstants";
 import { ImageDropzone } from "../../ui/image-dropzone";
-import { flatControl } from "../../ui/control-surface";
 import { cn } from "../../../lib/utils";
+
+/** One titled block of the form: what it is about, then its fields. */
+function Grupo({ titulo, extra, children }: { titulo: string; extra?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {titulo}
+        {extra && <span className="font-medium normal-case tracking-normal text-primary">{extra}</span>}
+      </h3>
+      {children}
+    </section>
+  );
+}
 
 interface Props {
   poste?: PosteInterface | null;
@@ -51,6 +61,8 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   const [data, setData] = useState<PosteInterface>({ ...posteExample });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [adssSelected, setAdssSelected] = useState<number[]>([]);
+  /** The ADSS the pole arrived with. What `adssSelected` is compared against to know if anything changed. */
+  const [adssInicial, setAdssInicial] = useState<number[]>([]);
 
   const [listAdss, setListAdss] = useState<OpcionSimple[]>([]);
   const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
@@ -124,6 +136,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       setData({ ...posteExample });
       setAdssSelected([]);
     }
+    setAdssInicial([]);
 
     // Silent when the catalogues were already refused: since C5 both this and
     // `/api/poste/options` ask for `postes.ver`, so one refusal produces both
@@ -133,10 +146,17 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     // the screen has already answered better.
     const propios = isEditing && poste?.id
       ? getAdssPoste(poste.id as number)
-        .then((adssP) => setAdssSelected(adssP.map((a) => a.id_adss as number)))
+        .then((adssP) => {
+          const ids = adssP.map((a) => a.id_adss as number);
+          setAdssSelected(ids);
+          setAdssInicial(ids);
+        })
         .catch((error) => {
           setAdssSelected([]);
-          if (estadoTrasFallo(error) === "listas") {
+          // `"fallo"`, the one outcome that is not a refusal. This read
+          // `"listas"`, which `estadoTrasFallo` never answers, so the toast
+          // below was dead and the unticked boxes went unexplained.
+          if (estadoTrasFallo(error) === "fallo") {
             toast.error("No se pudo cargar el ADSS de este poste");
           }
         })
@@ -160,7 +180,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
         const sorted = postes
-          .filter((p) => p.lat && p.lng)
+          .filter(hasCoords)
           .sort((p1, p2) =>
             (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
             ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
@@ -203,6 +223,15 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     if (adssSelected.length === 0) newErrors.adss = "Selecciona al menos un ADSS";
     if (!isEditing && !imageFile) newErrors.image = "La imagen del poste es requerida";
     if (!data.lat || !data.lng) newErrors.location = "Selecciona una ubicación en el mapa";
+    // A value is not a place. The two boxes take whatever is typed, and a
+    // decimal point left out went straight to the table: a latitude of minus
+    // twenty-two thousand million, on a pole that then cost its whole stretch
+    // the road route. The server refuses it too; said here, it is said beside
+    // the box that has it.
+    else if (!hasCoords(data)) {
+      newErrors.location =
+        "Esa ubicación no existe: la latitud va de -90 a 90 y la longitud de -180 a 180. Revise el punto decimal.";
+    }
     if (Object.keys(newErrors).length) { setErrors(newErrors); return; }
 
     setSaving(true);
@@ -242,302 +271,340 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   const allCoords: LatLng[] = isEditing ? [
     ...(ciudadA?.lat && ciudadA?.lng ? [{ lat: ciudadA.lat, lng: ciudadA.lng }] : []),
     ...(ciudadB?.lat && ciudadB?.lng ? [{ lat: ciudadB.lat, lng: ciudadB.lng }] : []),
-    ...(data.lat && data.lng ? [{ lat: data.lat, lng: data.lng }] : []),
-    ...tramoPostes.filter((p) => p.lat && p.lng).map((p) => ({ lat: p.lat, lng: p.lng })),
+    ...(hasCoords(data) ? [{ lat: data.lat, lng: data.lng }] : []),
+    ...tramoPostes.filter(hasCoords).map((p) => ({ lat: p.lat, lng: p.lng })),
   ] : [];
 
+  const soloLectura = isEditing && !canEdit;
+
+  /** Whether closing now would lose something typed. The frame asks before it does. */
+  const base = isEditing ? poste! : posteExample;
+  const cambiado =
+    data.name !== base.name
+    || new Date(data.date).getTime() !== new Date(base.date).getTime()
+    || data.id_propietario !== base.id_propietario
+    || data.id_material !== base.id_material
+    || data.id_ciudadA !== base.id_ciudadA
+    || data.id_ciudadB !== base.id_ciudadB
+    || data.lat !== base.lat
+    || data.lng !== base.lng
+    || !!imageFile
+    || [...adssSelected].sort().join() !== [...adssInicial].sort().join();
+
+  const faltan = [
+    !data.name.trim() && "Número",
+    !data.id_propietario && "Propietario",
+    !data.id_material && "Material",
+    (!data.id_ciudadA || !data.id_ciudadB) && "Tramo",
+    adssSelected.length === 0 && "Ferretería",
+    (!data.lat || !data.lng) && "Ubicación",
+    !isEditing && !imageFile && "Foto",
+  ].filter((c): c is string => !!c);
+
+  const nombreA = listCiudad.find((c) => c.id === data.id_ciudadA)?.name;
+  const nombreB = listCiudad.find((c) => c.id === data.id_ciudadB)?.name;
+
   return (
-    <Sheet open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <SheetContent side="right" className="flex flex-col gap-0 p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40 shrink-0">
-          <SheetTitle>{isEditing ? "Editar poste" : "Nuevo poste"}</SheetTitle>
-          <SheetDescription>
-            {isEditing
-              ? (data.name ? `Poste ${data.name}` : "Modifica los datos del poste")
-              : "Completa los datos para registrar un nuevo poste en la red."}
-          </SheetDescription>
-        </SheetHeader>
+    <FormDialog
+      open={open}
+      onClose={handleClose}
+      size="wide"
+      title={isEditing ? `Editar poste ${data.name}`.trim() : "Nuevo poste"}
+      description={
+        soloLectura
+          ? "Solo lectura: tu rol puede ver los postes, no editarlos."
+          : nombreA && nombreB
+            ? `Tramo ${nombreA} — ${nombreB}`
+            : "Completa los datos para registrar un poste en la red."
+      }
+      dirty={!soloLectura && cambiado}
+      missing={faltan}
+      saving={saving}
+      submitLabel={isEditing ? "Guardar cambios" : "Crear poste"}
+      onSubmit={soloLectura ? undefined : () => void handleGuardar()}
+      submitDisabled={loadingData || estadoOpciones !== "listas"}
+      bodyClassName="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start"
+    >
+      {/* ── Left: what the pole is ── */}
+      <div className="space-y-6 min-w-0">
+        {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+            <p className="text-sm text-destructive">
+              {estadoOpciones === "denegado"
+                ? "No tiene permiso para consultar los catálogos de postes, así que este formulario no se puede completar."
+                : "No se pudieron cargar los catálogos. Cierre y vuelva a abrir para reintentarlo."}
+            </p>
+          </div>
+        )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-3 items-start content-start">
-
-          {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
-            <div className="sm:col-span-2 rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
-              <p className="text-sm text-destructive">
-                {estadoOpciones === "denegado"
-                  ? "No tiene permiso para consultar los catálogos de postes, así que este formulario no se puede completar."
-                  : "No se pudieron cargar los catálogos. Cierre y vuelva a abrir para reintentarlo."}
-              </p>
-            </div>
-          )}
-
+        <Grupo titulo="Identificación">
           {isEditing && (
-            <div className="sm:col-span-2 grid grid-cols-3 gap-x-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">ID</Label>
-                <Input value={data.id ?? "—"} disabled />
-              </div>
-              <div className="col-span-2 space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Registrado por</Label>
-                <Input value={data.usuario ? `${data.usuario.name} ${data.usuario.lastname ?? ""}`.trim() : "—"} disabled />
-              </div>
-            </div>
+            <p className="text-xs text-muted-foreground">
+              ID {data.id ?? "—"} · Registrado por{" "}
+              {data.usuario ? `${data.usuario.name} ${data.usuario.lastname ?? ""}`.trim() : "—"}
+            </p>
           )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="poste-name">Número <span className="text-destructive">*</span></Label>
+              {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                <Input
+                  id="poste-name"
+                  placeholder="Ej: P-001"
+                  value={data.name}
+                  onChange={(e) => { setData((d) => ({ ...d, name: e.target.value })); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
+                  disabled={soloLectura}
+                  aria-invalid={!!errors.name}
+                />
+              )}
+              {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
+            </div>
 
-          <div className="space-y-1.5">
-            <Label>Número de poste <span className="text-destructive">*</span></Label>
-            {loadingData ? <Skeleton className="h-10 w-full" /> : (
-              <Input
-                placeholder="Ej: P-001"
-                value={data.name}
-                onChange={(e) => { setData((d) => ({ ...d, name: e.target.value })); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
-                disabled={isEditing && !canEdit}
-                aria-invalid={!!errors.name}
-              />
-            )}
-            {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Fecha</Label>
-            {loadingData ? <Skeleton className="h-10 w-full" /> : (
-              <DatePicker
-                value={data.date ? new Date(data.date) : undefined}
-                onSelect={(date) => setData((d) => ({ ...d, date: date ?? new Date() }))}
-              />
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Propietario <span className="text-destructive">*</span></Label>
-            {loadingData ? <Skeleton className="h-10 w-full" /> : (
-              <Combobox
-                placeholder="Seleccionar..."
-                options={listPropietario.map((p) => ({ value: String(p.id), label: p.name ?? "" }))}
-                value={data.id_propietario ? String(data.id_propietario) : ""}
-                onValueChange={(v) => {
-                  // The nested object is cleared rather than replaced, here and
-                  // in the three below. Nothing in this sheet reads it, and
-                  // `updatePoste` ignores it — `TempPoste.set()` only writes
-                  // real attributes — so it was already write-only. What the
-                  // catalogue now hands back is a projection (`id`, `name`), not
-                  // a `PropietarioInterface`, and leaving the object the pole
-                  // arrived with would ship a stale name beside a new id.
-                  setData((d) => ({ ...d, id_propietario: Number(v), propietario: null }));
-                  if (errors.propietario) setErrors(p => ({ ...p, propietario: "" }));
-                }}
-              />
-            )}
-            {errors.propietario && <p className="text-xs text-destructive mt-1">{errors.propietario}</p>}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Material <span className="text-destructive">*</span></Label>
-            {loadingData ? <Skeleton className="h-10 w-full" /> : (
-              <Combobox
-                placeholder="Seleccionar..."
-                options={listMaterial.map((m) => ({ value: String(m.id), label: m.name ?? "" }))}
-                value={data.id_material ? String(data.id_material) : ""}
-                onValueChange={(v) => {
-                  setData((d) => ({ ...d, id_material: Number(v), material: null }));
-                  if (errors.material) setErrors(p => ({ ...p, material: "" }));
-                }}
-              />
-            )}
-            {errors.material && <p className="text-xs text-destructive mt-1">{errors.material}</p>}
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Tramo <span className="text-destructive">*</span></Label>
-            <div className="grid grid-cols-2 gap-3">
-              {loadingData ? (
-                <><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></>
-              ) : (
-                <>
-                  <Combobox
-                    placeholder="Inicio"
-                    options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
-                    value={data.id_ciudadA ? String(data.id_ciudadA) : ""}
-                    onValueChange={(v) => {
-                      setData((d) => ({ ...d, id_ciudadA: Number(v), ciudadA: null }));
-                      if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
-                    }}
-                  />
-                  <Combobox
-                    placeholder="Fin"
-                    options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
-                    value={data.id_ciudadB ? String(data.id_ciudadB) : ""}
-                    onValueChange={(v) => {
-                      setData((d) => ({ ...d, id_ciudadB: Number(v), ciudadB: null }));
-                      if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
-                    }}
-                  />
-                </>
+            <div className="space-y-1.5">
+              <Label>Fecha en campo</Label>
+              {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                <DatePicker
+                  value={data.date ? new Date(data.date) : undefined}
+                  onSelect={(date) => setData((d) => ({ ...d, date: date ?? new Date() }))}
+                />
               )}
             </div>
-            {errors.tramo && <p className="text-xs text-destructive mt-1">{errors.tramo}</p>}
-          </div>
 
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>ADSS / Ferretería de sujeción <span className="text-destructive">*</span></Label>
-            {loadingData ? (
-              <div className="grid grid-cols-2 gap-2">
-                {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-7 w-full" />)}
-              </div>
-            ) : listAdss.length === 0 ? (
-              // "Sin ADSS registradas" is a claim about the database, and until
-              // now it was printed whenever the request failed as well — the
-              // screen stating as fact something it had no answer for.
-              <p className="text-sm text-muted-foreground">
-                {estadoOpciones === "listas" ? "Sin ADSS registradas" : "Lista no disponible"}
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-y-1">
-                {listAdss.map((adss) => (
-                  <label key={adss.id} className="flex items-center gap-2 cursor-pointer select-none py-0.5">
-                    <Checkbox
-                      checked={adss.id ? adssSelected.includes(adss.id) : false}
-                      onCheckedChange={() => { if (adss.id) toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
-                      disabled={isEditing && !canEdit}
-                    />
-                    <span className="text-sm">{adss.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-            {errors.adss && <p className="text-xs text-destructive mt-1">{errors.adss}</p>}
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>Ubicación <span className="text-destructive">*</span></Label>
-            <div className="relative h-72 rounded-lg overflow-hidden border border-border isolate">
-              <BaseMap
-                center={{ lat: data.lat || latExample, lng: data.lng || lngExample }}
-                zoom={13}
-                style={{ height: "100%" }}
-                onMapClick={(!isEditing || canEdit) ? (p) => {
-                  setData((d) => ({ ...d, lat: p.lat, lng: p.lng }));
-                  if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
-                } : undefined}
-              >
-                <MapSearch />
-                {isEditing && (
-                  <FitView
-                    coords={allCoords}
-                    fit={allCoords.length >= 2}
-                    center={{ lat: poste?.lat ?? 0, lng: poste?.lng ?? 0 }}
-                    zoom={13}
-                  />
-                )}
-
-                {isEditing && routePath.length >= 2 && (
-                  <MapLine id="poste-route" positions={routePath.map(fromLatLngTuple)} color="#596BAB" width={3} opacity={0.7} />
-                )}
-                {isEditing && ciudadA?.lat && ciudadA?.lng && (
-                  <MapPoint
-                    center={{ lat: ciudadA.lat, lng: ciudadA.lng }}
-                    radius={7}
-                    strokeColor="#374151"
-                    fillColor="#374151"
-                    fillOpacity={1}
-                    strokeWidth={0}
-                  />
-                )}
-                {isEditing && ciudadB?.lat && ciudadB?.lng && (
-                  <MapPoint
-                    center={{ lat: ciudadB.lat, lng: ciudadB.lng }}
-                    radius={7}
-                    strokeColor="#374151"
-                    fillColor="#374151"
-                    fillOpacity={1}
-                    strokeWidth={0}
-                  />
-                )}
-                {isEditing && tramoPostes
-                  .filter((p) => p.id !== poste?.id && p.lat && p.lng)
-                  .map((p) => (
-                    <MapPoint
-                      key={p.id as number}
-                      center={{ lat: p.lat, lng: p.lng }}
-                      radius={5}
-                      strokeColor="#9ca3af"
-                      fillColor="#9ca3af"
-                      fillOpacity={0.7}
-                      strokeWidth={1.5}
-                    />
-                  ))}
-                {data.lat && data.lng && (
-                  <SonarMarker
-                    center={[data.lat, data.lng]}
-                    fillColor="#596BAB"
-                    strokeColor="#ffffff"
-                    rgb="89, 107, 171"
-                    dotRadius={isEditing ? 10 : 8}
-                    weight={1.5}
-                    popupMinWidth={160}
-                  >
-                    {isEditing && <>Poste {data.name}</>}
-                  </SonarMarker>
-                )}
-              </BaseMap>
-
-              <div className="absolute bottom-3 left-3 right-3 z-1000 flex gap-2">
-                <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
-                  <span className="text-xs text-muted-foreground shrink-0">Lat</span>
-                  <Input
-                    type="number"
-                    step="any"
-                    placeholder={String(latExample)}
-                    value={data.lat || ""}
-                    onChange={(e) => { setData((d) => ({ ...d, lat: parseFloat(e.target.value) || 0 })); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    disabled={isEditing && !canEdit}
-                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
-                  />
-                </div>
-                <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
-                  <span className="text-xs text-muted-foreground shrink-0">Lng</span>
-                  <Input
-                    type="number"
-                    step="any"
-                    placeholder={String(lngExample)}
-                    value={data.lng || ""}
-                    onChange={(e) => { setData((d) => ({ ...d, lng: parseFloat(e.target.value) || 0 })); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    disabled={isEditing && !canEdit}
-                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
-                  />
-                </div>
-              </div>
+            <div className="space-y-1.5">
+              <Label>Propietario <span className="text-destructive">*</span></Label>
+              {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                <Combobox
+                  placeholder="Seleccionar..."
+                  options={listPropietario.map((p) => ({ value: String(p.id), label: p.name ?? "" }))}
+                  value={data.id_propietario ? String(data.id_propietario) : ""}
+                  onValueChange={(v) => {
+                    // The nested object is cleared rather than replaced, here and
+                    // in the three below. Nothing in this form reads it, and
+                    // `updatePoste` ignores it — `TempPoste.set()` only writes
+                    // real attributes — so it was already write-only. What the
+                    // catalogue now hands back is a projection (`id`, `name`), not
+                    // a `PropietarioInterface`, and leaving the object the pole
+                    // arrived with would ship a stale name beside a new id.
+                    setData((d) => ({ ...d, id_propietario: Number(v), propietario: null }));
+                    if (errors.propietario) setErrors(p => ({ ...p, propietario: "" }));
+                  }}
+                />
+              )}
+              {errors.propietario && <p className="text-xs text-destructive mt-1">{errors.propietario}</p>}
             </div>
-            {errors.location && <p className="text-xs text-destructive mt-1">{errors.location}</p>}
+
+            <div className="space-y-1.5">
+              <Label>Material <span className="text-destructive">*</span></Label>
+              {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                <Combobox
+                  placeholder="Seleccionar..."
+                  options={listMaterial.map((m) => ({ value: String(m.id), label: m.name ?? "" }))}
+                  value={data.id_material ? String(data.id_material) : ""}
+                  onValueChange={(v) => {
+                    setData((d) => ({ ...d, id_material: Number(v), material: null }));
+                    if (errors.material) setErrors(p => ({ ...p, material: "" }));
+                  }}
+                />
+              )}
+              {errors.material && <p className="text-xs text-destructive mt-1">{errors.material}</p>}
+            </div>
           </div>
+        </Grupo>
 
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>
-              Imagen del poste{!isEditing && <span className="text-destructive ml-0.5">*</span>}
-            </Label>
-            <ImageDropzone
-              file={imageFile}
-              onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
-              existingUrl={data.image ? `${url}${data.image}` : undefined}
-              error={errors.image}
-              readOnly={isEditing && !canEdit}
-            />
-          </div>
-
-        </div>
-
-        <SheetFooter className="px-6 py-4 border-t border-border/40 shrink-0">
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleClose} disabled={saving}>
-              Cancelar
-            </Button>
-            {(!isEditing || canEdit) && (
-              <Button onClick={handleGuardar} disabled={saving || loadingData || estadoOpciones !== "listas"}>
-                {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar"}
-              </Button>
+        <Grupo titulo="Tramo">
+          {/* Read as a stretch — from, arrow, to — where it was two dropdowns
+              side by side that happened to say "Inicio" and "Fin". */}
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
+            {loadingData ? (
+              <><Skeleton className="h-9 w-full" /><span /><Skeleton className="h-9 w-full" /></>
+            ) : (
+              <>
+                <Combobox
+                  placeholder="Inicio"
+                  options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
+                  value={data.id_ciudadA ? String(data.id_ciudadA) : ""}
+                  onValueChange={(v) => {
+                    setData((d) => ({ ...d, id_ciudadA: Number(v), ciudadA: null }));
+                    if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
+                  }}
+                />
+                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" aria-hidden />
+                <Combobox
+                  placeholder="Fin"
+                  options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
+                  value={data.id_ciudadB ? String(data.id_ciudadB) : ""}
+                  onValueChange={(v) => {
+                    setData((d) => ({ ...d, id_ciudadB: Number(v), ciudadB: null }));
+                    if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
+                  }}
+                />
+              </>
             )}
           </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+          {errors.tramo && <p className="text-xs text-destructive">{errors.tramo}</p>}
+        </Grupo>
+
+        <Grupo
+          titulo="Ferretería de sujeción"
+          extra={adssSelected.length > 0
+            ? `${adssSelected.length} ${adssSelected.length === 1 ? "elegida" : "elegidas"}`
+            : undefined}
+        >
+          {loadingData ? (
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}
+            </div>
+          ) : listAdss.length === 0 ? (
+            // "Sin ADSS registradas" is a claim about the database, and until
+            // now it was printed whenever the request failed as well — the
+            // screen stating as fact something it had no answer for.
+            <p className="text-sm text-muted-foreground">
+              {estadoOpciones === "listas" ? "Sin ADSS registradas" : "Lista no disponible"}
+            </p>
+          ) : (
+            // Toggles, still announced as checkboxes: what is on is filled and
+            // ticked, so the answer reads at a glance where a column of boxes
+            // had to be scanned one by one.
+            <div className="flex flex-wrap gap-2">
+              {listAdss.map((adss) => {
+                const marcada = adss.id ? adssSelected.includes(adss.id) : false;
+                return (
+                  <button
+                    key={adss.id}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={marcada}
+                    disabled={soloLectura}
+                    onClick={() => { if (adss.id) toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
+                    className={cn(
+                      "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
+                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60",
+                      marcada
+                        ? "border-transparent bg-primary/15 font-medium text-foreground"
+                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                    )}
+                  >
+                    {marcada && <CheckIcon className="h-3.5 w-3.5 text-primary" />}
+                    {adss.name}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {errors.adss && <p className="text-xs text-destructive">{errors.adss}</p>}
+        </Grupo>
+
+        <Grupo titulo="Foto" extra={isEditing ? undefined : "obligatoria"}>
+          <ImageDropzone
+            file={imageFile}
+            onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
+            existingUrl={imageUrl(data.image) ?? undefined}
+            error={errors.image}
+            readOnly={soloLectura}
+          />
+        </Grupo>
+      </div>
+
+      {/* ── Right: where it is. Beside the fields from `lg`, so the map is in
+             view the whole time; under them on anything narrower. ── */}
+      <div className="min-w-0 lg:sticky lg:top-0">
+        <Grupo titulo="Ubicación">
+          {/* Enter in the place search looks a place up; it does not save the form. */}
+          <div data-no-submit className="relative h-72 lg:h-[26rem] rounded-lg overflow-hidden border border-border isolate">
+            <BaseMap
+              // A stored pair that is not a place opens on the example, like a
+              // pole with none: this form is where such a pole gets corrected,
+              // so it has to open.
+              center={hasCoords(data) ? { lat: data.lat, lng: data.lng } : { lat: latExample, lng: lngExample }}
+              zoom={13}
+              style={{ height: "100%" }}
+              onMapClick={!soloLectura ? (p) => {
+                setData((d) => ({ ...d, lat: p.lat, lng: p.lng }));
+                if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+              } : undefined}
+            >
+              <MapSearch />
+              {isEditing && (
+                <FitView
+                  coords={allCoords}
+                  fit={allCoords.length >= 2}
+                  center={{ lat: poste?.lat ?? 0, lng: poste?.lng ?? 0 }}
+                  zoom={13}
+                />
+              )}
+
+              {isEditing && routePath.length >= 2 && (
+                <MapLine id="poste-route" positions={routePath.map(fromLatLngTuple)} />
+              )}
+              {isEditing && ciudadA?.lat && ciudadA?.lng && (
+                <MapPoint
+                  center={{ lat: ciudadA.lat, lng: ciudadA.lng }}
+                  radius={MAP_RADIUS.endpoint}
+                  strokeColor={MAP_DOT.endpoint}
+                  fillColor={MAP_DOT.endpoint}
+                  fillOpacity={1}
+                  strokeWidth={0}
+                />
+              )}
+              {isEditing && ciudadB?.lat && ciudadB?.lng && (
+                <MapPoint
+                  center={{ lat: ciudadB.lat, lng: ciudadB.lng }}
+                  radius={MAP_RADIUS.endpoint}
+                  strokeColor={MAP_DOT.endpoint}
+                  fillColor={MAP_DOT.endpoint}
+                  fillOpacity={1}
+                  strokeWidth={0}
+                />
+              )}
+              {isEditing && tramoPostes
+                .filter((p) => p.id !== poste?.id && hasCoords(p))
+                .map((p) => (
+                  <MapPoint
+                    key={p.id as number}
+                    center={{ lat: p.lat, lng: p.lng }}
+                    radius={MAP_RADIUS.secondary}
+                    strokeColor={MAP_DOT.pole}
+                    fillColor={MAP_DOT.poleFill}
+                    fillOpacity={1}
+                    strokeWidth={1.5}
+                  />
+                ))}
+              {hasCoords(data) && (
+                <SonarMarker
+                  center={[data.lat, data.lng]}
+                  fillColor={MAP_DOT.subject}
+                  strokeColor="#ffffff"
+                  rgb={MAP_DOT.subjectRgb}
+                  dotRadius={MAP_RADIUS.main}
+                  weight={1.5}
+                  popupMinWidth={160}
+                >
+                  {isEditing && <>Poste {data.name}</>}
+                </SonarMarker>
+              )}
+            </BaseMap>
+          </div>
+
+          <CoordInputs
+            id="poste"
+            lat={data.lat}
+            lng={data.lng}
+            disabled={soloLectura}
+            invalid={!!errors.location}
+            onChange={(lat, lng) => {
+              setData((d) => ({ ...d, lat, lng }));
+              if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+            }}
+          />
+          {errors.location
+            ? <p className="text-xs text-destructive">{errors.location}</p>
+            : !soloLectura && (
+              <p className="text-xs text-muted-foreground">
+                Pulsa en el mapa para mover el poste, o escribe las coordenadas.
+              </p>
+            )}
+        </Grupo>
+      </div>
+    </FormDialog>
   );
 }

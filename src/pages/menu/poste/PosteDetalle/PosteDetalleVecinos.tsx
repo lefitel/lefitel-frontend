@@ -12,7 +12,7 @@ interface Props {
 export default function PosteDetalleVecinos({ loading, postes, posteActualId, onVerPoste }: Props) {
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+      <div className="grid grid-cols-1 gap-2">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} className="h-16 rounded-lg" />
         ))}
@@ -30,18 +30,11 @@ export default function PosteDetalleVecinos({ loading, postes, posteActualId, on
     );
   }
 
-  const idx = postes.findIndex((p) => p.id === posteActualId);
-
+  // No sentence above the list: how many there are is on the section's title,
+  // and which one this is, on the pole's own card.
   return (
-    <div className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        {otros.length} poste{otros.length === 1 ? "" : "s"} en el mismo tramo.
-        {idx >= 0 && (
-          <> Este es el #{idx + 1} de {postes.length}.</>
-        )}
-      </p>
-
-      <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+    <div>
+      <ul className="grid grid-cols-1 gap-2">
         {postes.map((p, i) => {
           const isActual = p.id === posteActualId;
           return (
@@ -50,14 +43,14 @@ export default function PosteDetalleVecinos({ loading, postes, posteActualId, on
                 type="button"
                 disabled={isActual}
                 onClick={() => onVerPoste(p.id as number)}
-                className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                className={`w-full text-left rounded-lg border px-2.5 py-2 transition-colors ${
                   isActual
                     ? "border-primary/40 bg-primary/5 cursor-default"
                     : "border-border/50 hover:border-border hover:bg-muted/40"
                 }`}
               >
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className={`shrink-0 h-8 w-8 rounded-full flex items-center justify-center text-xs font-semibold ${
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span className={`shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-semibold ${
                     isActual ? "bg-primary-fill text-primary-foreground" : "bg-muted text-muted-foreground"
                   }`}>
                     {i + 1}

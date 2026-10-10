@@ -1,5 +1,5 @@
 import { ShareIcon, PlusSquareIcon, CheckIcon, MoreVerticalIcon, MonitorDownIcon } from "lucide-react";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "./ui/sheet";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
 import type { InstallPlatform } from "../hooks/useInstallPrompt";
 
 interface Step {
@@ -59,14 +59,15 @@ export function InstallSheet({ platform, open, onOpenChange }: Props) {
   const guide = STEPS[platform];
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" size="md" className="flex flex-col gap-0 p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-          <SheetTitle>{guide.title}</SheetTitle>
-          <SheetDescription>{guide.blurb}</SheetDescription>
-        </SheetHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent size="sm">
+        <DialogHeader>
+          <DialogTitle>{guide.title}</DialogTitle>
+          <DialogDescription>{guide.blurb}</DialogDescription>
+        </DialogHeader>
 
-        <ol className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-5">
+        <DialogBody>
+          <ol className="space-y-5">
           {guide.steps.map((step, i) => (
             <li key={i} className="flex gap-3">
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
@@ -78,14 +79,15 @@ export function InstallSheet({ platform, open, onOpenChange }: Props) {
               </span>
             </li>
           ))}
-        </ol>
+          </ol>
+        </DialogBody>
 
         {guide.note && (
           <p className="border-t border-border/40 px-6 py-4 text-xs text-muted-foreground">
             {guide.note}
           </p>
         )}
-      </SheetContent>
-    </Sheet>
+      </DialogContent>
+    </Dialog>
   );
 }

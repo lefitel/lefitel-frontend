@@ -12,8 +12,16 @@ export type EditorAcceso = "usuario" | "password" | "email";
 
 export interface DatosCuenta {
   user: string;
-  /** The current password the *rename* carries. Never shared with `oldPass`. */
-  userPass: string;
+  /**
+   * The current password, for the password editor alone.
+   *
+   * There used to be a second one beside it, `userPass`, carried by the rename
+   * — and keeping the two apart was a rule this file spent a paragraph on.
+   * Both the field and the rule are gone: renaming proves identity at the
+   * step-up gate now, so it collects nothing. This one stays because on a
+   * password change the current password is not a confirmation at all, it is
+   * half of what is being changed.
+   */
   oldPass: string;
   pass: string;
   confirmPass: string;
@@ -21,13 +29,13 @@ export interface DatosCuenta {
 
 interface Props {
   cuenta: DatosCuenta;
-  emailForm: { email: string; pass: string };
+  emailForm: { email: string };
   recovery: { email: string | null; verifiedAt: string | null };
   /** Which of the three is open, or null when all three are being read. */
   abierto: EditorAcceso | null;
   guardando: { usuario: boolean; password: boolean; email: boolean };
   onCuenta: (campo: keyof DatosCuenta, valor: string) => void;
-  onEmailForm: (campo: "email" | "pass", valor: string) => void;
+  onEmailForm: (campo: "email", valor: string) => void;
   onAbrir: (cual: EditorAcceso) => void;
   onCancelar: () => void;
   onGuardarUsuario: () => void;
@@ -43,16 +51,31 @@ interface Props {
  * why there were three. They are one card now, and only one of them is ever
  * open, so the question "which password box am I in" cannot be asked.
  *
+ * 🔴 **And there is one password box left, not three.** The rename and the
+ * recovery address stopped collecting one when the demand moved to the step-up
+ * gate: it asks once, through a dialog that says what it is protecting, and
+ * then stops asking for ten minutes. A box here as well meant typing the same
+ * secret twice for one operation, which is the complaint this whole piece of
+ * work answers. `Contraseña actual` on the password editor is not a
+ * confirmation of identity and so it stays — there, the current password is
+ * half of what is being changed.
+ *
  * **Every label and button name here is load-bearing.** `PerfilPage.test.tsx`
  * reaches these fields with `getByLabelText` and these buttons with
  * `getByRole("button", { name })`, both of which throw on an ambiguous match
  * rather than picking one. The rules that keeps:
  *
- * - The three "confirm your password" fields answer to three different
- *   phrases: `Confirma tu contraseña` (rename), `Contraseña actual` (password
- *   change) and `Confirma con tu contraseña` (recovery address). A fourth
- *   field matching any of them would break tests that are about something
- *   else entirely.
+ * - 🔴 **No `<input>` inside the username editor or the recovery-address
+ *   editor may be labelled with the word "contraseña".** That is the rule, and
+ *   it is narrower than "this card has one password label": the password
+ *   editor alone holds three of them (`Contraseña actual`, `Nueva
+ *   contraseña`, `Confirmar nueva contraseña`), and the collapsed row and its
+ *   `aria-label` carry the word too. Two of that screen's tests assert the
+ *   **absence** with a query as loose as `/contraseña/i` scoped to
+ *   `{ selector: "input" }` — scoped precisely because those other five
+ *   matches exist and an unscoped query trips over the row's own button. So a
+ *   new *field* worded anything like it, in either of those two editors, turns
+ *   them red instead of passing under a different name.
  * - No button label may contain "actualizar" except the rename's own, and none
  *   may contain "clave" except the password change's.
  * - The buttons that *open* an editor are named by `aria-label`, not by their
@@ -110,29 +133,13 @@ export default function PerfilAcceso({
               <EditorField
                 id="user"
                 label="Usuario"
-                ayuda="Usado en los registros de auditoría y para hacer login."
+                ayuda="Usado en los registros de auditoría y para hacer login. Al guardar te pediremos confirmar que eres tú."
               >
                 <Input
                   id="user"
                   value={cuenta.user}
                   onChange={(e) => onCuenta("user", e.target.value)}
                   className="font-mono"
-                />
-              </EditorField>
-
-              <EditorField
-                id="userPass"
-                label="Confirma tu contraseña"
-                requerido
-                ayuda="Cambiar tu usuario cambia con qué nombre entras, así que hay que confirmar que eres tú."
-              >
-                <Input
-                  id="userPass"
-                  type="password"
-                  value={cuenta.userPass}
-                  onChange={(e) => onCuenta("userPass", e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
                 />
               </EditorField>
             </EditorBlock>
@@ -217,22 +224,6 @@ export default function PerfilAcceso({
                   value={emailForm.email}
                   onChange={(e) => onEmailForm("email", e.target.value)}
                   placeholder="tu.correo@ejemplo.com"
-                />
-              </EditorField>
-
-              <EditorField
-                id="emailPass"
-                label="Confirma con tu contraseña"
-                requerido
-                ayuda="Registrar o cambiar tu correo de recuperación exige confirmar que eres tú."
-              >
-                <Input
-                  id="emailPass"
-                  type="password"
-                  value={emailForm.pass}
-                  onChange={(e) => onEmailForm("pass", e.target.value)}
-                  className="font-mono"
-                  placeholder="••••••••"
                 />
               </EditorField>
             </EditorBlock>

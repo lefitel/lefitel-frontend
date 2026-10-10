@@ -124,6 +124,15 @@ export default defineConfig(({ mode }) => ({
     },
   },
   /**
+   * Workers are built as ES modules, because the only one there is — MapLibre's,
+   * imported in `src/components/map/BaseMap.tsx` — is started by the library
+   * with `new Worker(url, { type: "module" })`. Vite's default for workers is a
+   * classic script.
+   */
+  worker: {
+    format: "es",
+  },
+  /**
    * Strip the logging out of production builds.
    *
    * This used to be `esbuild: { drop: [...] }`, which Vite 8 silently stopped

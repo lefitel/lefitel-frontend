@@ -24,10 +24,12 @@ export type { MotivoStepUp };
  * `POST /auth/recovery-codes` all read this field and none other — a `pass`
  * or an `oldPass` alongside it, the names the rest of this codebase uses for
  * a password, is never read. Verified against
- * `api/src/routes/totp.routes.ts`: all three TOTP routes mount
- * `requireStepUp({ exigeContrasena: true })`, which means **every one of
- * them demands the password, every time — including `confirm`, and including
- * a session that just typed the right six-digit code a moment ago.** That is
+ * `api/src/routes/totp.routes.ts`: all three TOTP routes mount the step-up
+ * gate with `sinVentana: true` — the option that was called `exigeContrasena`
+ * until 2026-09-08, renamed there and **not** on the wire, where the refusal
+ * still carries a field of the old name. It means **every one of them demands
+ * the password, every time — including `confirm`, and including a session
+ * that just typed the right six-digit code a moment ago.** That is
  * not an oversight this file works around; it is hallazgo C1's fix. Without
  * it, a stolen session cookie with no password could register its own
  * factor, and from that instant `tieneAlgunFactor` would deny the real
@@ -127,9 +129,9 @@ export interface ConfirmTotpResult extends RespuestaMfa {
 /**
  * `POST /auth/totp/confirm` — prove the secret `setupTotp` just handed out.
  *
- * Also behind `requireStepUp({ exigeContrasena: true })` — see this file's
- * header comment on `STEP_UP_PASSWORD_FIELD` for why the same password used
- * for `setupTotp` is the one to send here too, rather than asking again.
+ * Also behind the gate with `sinVentana: true` — see this file's header
+ * comment on `STEP_UP_PASSWORD_FIELD` for why the same password used for
+ * `setupTotp` is the one to send here too, rather than asking again.
  *
  * **Confirming now also, sometimes, issues the account's first ten recovery
  * codes** (Isaias, 2026-09-02) — see `ConfirmTotpResult.codigos` above and
@@ -178,9 +180,9 @@ export interface GenerarCodigosResult extends RespuestaMfa {
 /**
  * `POST /auth/recovery-codes` — issue a fresh set of ten codes, first time or
  * regeneration alike (the server does not distinguish the two calls). Behind
- * `requireStepUp({ exigeContrasena: true })`, same as the three TOTP routes
- * above: hallazgo C14, so that a printed sheet alone can never regenerate
- * itself into a fresh ten.
+ * the gate with `sinVentana: true`, same as the three TOTP routes above:
+ * hallazgo C14, so that a printed sheet alone can never regenerate itself into
+ * a fresh ten.
  */
 export const generateRecoveryCodes = (stepupPassword: string): Promise<GenerarCodigosResult> =>
   axios
@@ -219,15 +221,15 @@ export const getRecoveryCodesRemaining = (): Promise<{ status: number; restantes
  * completa: el servidor filtra por ese estado, así que llamarla desde una
  * sesión a medias no falla con un mensaje útil — **carga un intento fallido
  * contra el bloqueo de la cuenta**, con el código correcto tecleado. Quién
- * llama a cuál lo decide `StepUpDialog` mirando el estado de la sesión.
+ * llama a cuál lo decide `useStepUpCeremony.ts` mirando el estado de la sesión.
  *
  * Acepta `codigo` y, desde el plan 4E, un `metodo` opcional. Sin él, seis
  * dígitos se leen como TOTP y cualquier otra cosa como código de recuperación
  * — la distinción la hace el servidor, como siempre. **El código del correo
  * son también seis dígitos**, así que ése tiene que ir con `metodo: "correo"`
  * o el servidor lo probará contra la aplicación, lo dará por erróneo y cargará
- * un intento contra el bloqueo con el código correcto tecleado. Quién elige la
- * clase es la ventana (`StepUpDialog`), con su selector.
+ * un intento contra el bloqueo con el código correcto tecleado. Qué clase
+ * viaja lo decide `useStepUpCeremony.ts`, a partir del selector de la ventana.
  *
  * `intentosRestantes` es lo que evita que alguien se quede fuera del ERP sin
  * haber leído un aviso: el mensaje de error es el mismo para un código mal

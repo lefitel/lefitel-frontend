@@ -7,8 +7,8 @@
 // promesa.
 
 import { describe, it, expect, vi, afterEach, beforeEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import userEvent, { PointerEventsCheckLevel } from "@testing-library/user-event";
 import { StepUpDialog } from "./StepUpDialog";
 import { SesionContext, type contextProps } from "@/context/SesionContext";
 import { usuarioExample } from "@/data/example";
@@ -16,6 +16,7 @@ import { sinPermisos } from "@/lib/permissions";
 import type { EstadoSesion } from "@/interfaces/interfaces";
 import * as interceptor from "@/api/stepUpInterceptor";
 import type { PeticionStepUp, ResultadoStepUp } from "@/api/stepUpInterceptor";
+import { TIMEOUT_CONFIRMACION_MS } from "@/api/stepUp";
 
 const probarStepUp = vi.fn();
 const pedirCodigoPorCorreo = vi.fn();
@@ -114,14 +115,14 @@ afterEach(() => {
 describe("qué pide", () => {
   it("no pinta nada mientras nadie pida nada", () => {
     montar();
-    expect(screen.queryByText("Confirma que eres tú")).not.toBeInTheDocument();
+    expect(screen.queryByText("Protegemos esta operación")).not.toBeInTheDocument();
   });
 
   it("sólo la contraseña cuando eso es lo que falta", async () => {
     montar();
     void pedir(PIDE_PASSWORD);
 
-    await screen.findByText("Confirma que eres tú");
+    await screen.findByText("Protegemos esta operación");
     expect(screen.getByLabelText("Tu contraseña")).toBeInTheDocument();
     expect(screen.queryByLabelText("Código de tu aplicación")).not.toBeInTheDocument();
   });
@@ -145,6 +146,59 @@ describe("qué pide", () => {
     // ceremonia serían dos ventanas encadenadas justo en las operaciones más
     // delicadas: restablecer el factor de otra persona, desbloquear su cuenta.
     expect(screen.getByLabelText("Tu contraseña")).toBeInTheDocument();
+  });
+});
+
+/**
+ * Lo que el diálogo dice de sí mismo, que es una petición literal de Isaias
+ * (2026-09-08): «esa petición de contraseña debería ser un diálogo solo, que
+ * diga que es para proteger, y que se guarde unos minutos».
+ *
+ * Dos cosas, y las dos se miden aquí porque ninguna otra parte de la
+ * aplicación las enseña: para qué sirve la confirmación, y cuánto dura.
+ *
+ * 🔴 **Lo segundo no es una frase fija, y ahí está el valor del bloque.** Las
+ * rutas con `sinVentana` piden la contraseña en cada petición — dar de alta o
+ * de baja un factor, registrar el correo — y el servidor las distingue con
+ * `exigeContrasena`. Prometerle diez minutos a quien va a tener que teclearla
+ * otra vez en la siguiente petición es una promesa falsa, y una promesa falsa
+ * sobre seguridad es peor que no decir nada.
+ */
+describe("dice para qué es y que dura un rato", () => {
+  it("el título habla de proteger, no de tramitar", async () => {
+    montar();
+    void pedir(PIDE_PASSWORD);
+
+    // El título anterior era «Confirma que eres tú»: nombra el trámite y deja
+    // sin decir por qué se pide. Se comprueba que el viejo ya no está, porque
+    // añadir el nuevo en otro sitio y dejar aquel puesto enseñaría los dos.
+    expect(await screen.findByText("Protegemos esta operación")).toBeInTheDocument();
+    expect(screen.queryByText("Confirma que eres tú")).not.toBeInTheDocument();
+  });
+
+  it("con ventana, dice que no se volverá a pedir durante un rato", async () => {
+    montar();
+    void pedir(PIDE_PASSWORD);
+
+    await screen.findByText("Protegemos esta operación");
+    // 🔴 **Y sin cifra, que es una decisión y no una vaguedad.** El plazo real
+    // vive en `STEP_UP_WINDOW_MINUTES`, en el otro repositorio, y no viaja en
+    // ningún campo del 403. Un número aquí sería una copia que el día que
+    // aquella cambiara dejaría esta pantalla mintiendo en verde. Ver
+    // `describeProteccion`.
+    expect(screen.getByText(/proteger tu cuenta.*unos minutos/i)).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ minutos/)).not.toBeInTheDocument();
+  });
+
+  it("sin ventana, dice que se pide cada vez en lugar de prometer minutos", async () => {
+    // `exigeContrasena` es el campo con el que el servidor dice «esta ruta va
+    // sin ventana». Aquí la promesa de los diez minutos sería mentira.
+    montar();
+    void pedir({ ...PIDE_FACTOR, exigeContrasena: true });
+
+    await screen.findByText("Protegemos esta operación");
+    expect(screen.getByText(/la confirmamos cada vez/i)).toBeInTheDocument();
+    expect(screen.queryByText(/unos minutos/i)).not.toBeInTheDocument();
   });
 });
 
@@ -192,7 +246,7 @@ describe("cómo termina", () => {
     montar();
     const promesa = pedir(PIDE_PASSWORD);
 
-    await screen.findByText("Confirma que eres tú");
+    await screen.findByText("Protegemos esta operación");
     await userEvent.click(screen.getByRole("button", { name: /cancelar/i }));
 
     await expect(promesa).resolves.toBeNull();
@@ -440,7 +494,7 @@ describe("cómo se prueba la llave", () => {
 
     expect(await screen.findByRole("button", { name: /usar mi llave de acceso/i })).toBeEnabled();
     expect(screen.queryByText(/no se pudo/i)).not.toBeInTheDocument();
-    expect(screen.getByText("Confirma que eres tú")).toBeInTheDocument();
+    expect(screen.getByText("Protegemos esta operación")).toBeInTheDocument();
   });
 
   // El cupo de ceremonias contesta 429 con su frase y sin `code`. Cuando la
@@ -519,6 +573,118 @@ describe("la sesión se vuelve a leer después de probar un factor", () => {
     await userEvent.click(screen.getByRole("button", { name: /confirmar/i }));
 
     expect(comprobarToken).not.toHaveBeenCalled();
+  });
+});
+
+describe("el refresco de sesión no deja la ventana muerta", () => {
+  // Tarea 10. `comprobarToken` es la única petición de la ceremonia que
+  // llegaba sin `timeout`: mientras está en vuelo, «Cancelar» y «Confirmar»
+  // están deshabilitados y Escape se traga, así que un servidor que acepta el
+  // código y nunca contesta a `/auth/me` deja la ventana con los dos botones
+  // muertos para siempre — la única salida sería recargar, perdiendo el
+  // formulario del que venía la operación.
+  beforeEach(() => {
+    // `shouldAdvanceTime` deja correr el tiempo real por debajo, que es lo
+    // que `findByRole` necesita para su sondeo, mientras el temporizador de
+    // la ventana sigue siendo nuestro para moverlo a mano.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("no deja la ventana muerta si el refresco de sesión no vuelve", async () => {
+    // `pointerEventsCheck: Never` — con temporizadores falsos, el bloqueo de
+    // `pointer-events` que Radix pone en el `<body>` mientras el diálogo entra
+    // no se suelta a tiempo (depende de un timer/rAF que aquí no corre solo);
+    // las demás pruebas de este fichero, con temporizadores reales, tecléan
+    // en el mismo campo sin este ajuste. No es lo que esta prueba mide.
+    const usuario = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    comprobarToken.mockImplementation(() => new Promise(() => {})); // nunca resuelve
+    montar("completa");
+    // Envuelto en `act`, a diferencia del resto de este fichero: bajo
+    // temporizadores reales, `findByLabelText` de abajo le da tiempo a React de
+    // absorber lo que `pedir` escribe antes de que importe; bajo los falsos de
+    // esta prueba, no, y sin esto React avisa de una actualización suelta.
+    act(() => {
+      void pedir(PIDE_FACTOR);
+    });
+
+    await usuario.type(await screen.findByLabelText("Código de tu aplicación"), "123456");
+    await usuario.click(screen.getByRole("button", { name: /confirmar/i }));
+
+    // Antes de adelantar el reloj: sin esto, `comprobarToken` podría no
+    // haberse llamado todavía —y su temporizador no estar aún en la cola—
+    // cuando se adelanta el tiempo, y la prueba pasaría por casualidad.
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalled());
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIRMACION_MS + 1);
+      // Un segundo tirón: el temporizador de la carrera resuelve `refrescarSesion`,
+      // pero lo que hace con eso `confirmar` —`setError`, y `setEnviando` en su
+      // `finally`— cuelga de esa resolución por otra vuelta de microtareas.
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(await screen.findByRole("button", { name: /cancelar/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /confirmar/i })).toBeEnabled();
+  });
+
+  // El mismo cuelgue, por el otro camino: probar la llave también llama a
+  // `refrescarSesion` (`usarLlave`, en `useStepUpCeremony.ts`), y es
+  // exactamente el escenario que motiva la tarea — el técnico en campo que
+  // prueba su llave justo cuando el móvil pierde cobertura.
+  //
+  // 🔴 Ronda 1 de revisión: la primera versión de esta prueba sólo comprobaba
+  // el síntoma —que «Confirmar» se desatasca— y eso pasaba incluso con
+  // `usarLlave` descartando el booleano de `refrescarSesion` sin avisar de
+  // nada. Un botón que se habilita no es lo mismo que un botón que, al
+  // pulsarlo, hace lo correcto: aquí se comprueban las dos cosas, y la
+  // segunda —que no cierra la ventana a ciegas— es la que la versión anterior
+  // dejaba pasar.
+  it("con la llave, si el refresco de sesión no vuelve, avisa y pulsar «Confirmar» no cierra a ciegas", async () => {
+    const usuario = userEvent.setup({
+      advanceTimers: vi.advanceTimersByTime,
+      pointerEventsCheck: PointerEventsCheckLevel.Never,
+    });
+    comprobarToken.mockImplementation(() => new Promise(() => {})); // nunca resuelve
+    montar();
+    let promesa!: Promise<ResultadoStepUp | null>;
+    act(() => {
+      promesa = pedir(CON_LLAVE);
+    });
+    let resuelta = false;
+    void promesa.then(() => {
+      resuelta = true;
+    });
+
+    await usuario.click(await screen.findByRole("button", { name: /usar mi llave de acceso/i }));
+    await screen.findByText(/llave comprobada/i);
+
+    await waitFor(() => expect(comprobarToken).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TIMEOUT_CONFIRMACION_MS + 1);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // El síntoma: el botón se desatasca.
+    expect(await screen.findByRole("button", { name: /confirmar/i })).toBeEnabled();
+    // Lo que la versión anterior de esta prueba no comprobaba: hay un aviso
+    // visible de que la sesión no se pudo confirmar — no sólo un botón vivo y
+    // silencio.
+    expect(screen.getByText(/no se pudo confirmar a tiempo/i)).toBeInTheDocument();
+
+    // La propiedad, no el síntoma: al pulsar «Confirmar» con el refresco sin
+    // confirmar, la ventana no cierra a ciegas — vuelve a intentarlo, y esa
+    // segunda llamada tampoco ha vuelto todavía.
+    await usuario.click(screen.getByRole("button", { name: /confirmar/i }));
+    expect(resuelta).toBe(false);
+    expect(comprobarToken).toHaveBeenCalledTimes(2);
   });
 });
 

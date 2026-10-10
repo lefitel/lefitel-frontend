@@ -583,6 +583,7 @@ export const SesionProvider = ({ children }: props) => {
                   usuario: res.usuario as UsuarioInterface,
                   permisos: res.permisos,
                   estado: res.estado,
+                  metodos: res.metodos,
                   /**
                    * Hallazgo E-4/F11's fourth entry — not `prev.autenticado`.
                    * This comment used to claim `estado` "can only move to
@@ -735,6 +736,9 @@ export const SesionProvider = ({ children }: props) => {
             usuario: res.usuario,
             permisos: res.permisos,
             estado: res.estado,
+            // What the second-step screen draws itself from. This is the path
+            // a reload takes while a factor is still owed.
+            metodos: res.metodos,
             /**
              * `res.estado !== "parcial"`, not `true`. Hallazgo A10/D4: this
              * call is one of the MFA loop's two entries — a `parcial`

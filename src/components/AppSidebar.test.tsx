@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { SesionContext, type contextProps } from "../context/SesionContext";
@@ -8,6 +8,7 @@ import { TooltipProvider } from "./ui/tooltip";
 import { usuarioExample } from "../data/example";
 import { AppSidebar } from "./AppSidebar";
 import { markReleaseSeen, resetSeenRelease } from "../hooks/useSeenRelease";
+import { olvidarPermisos, setPermisos, sinPermisos, type Modulo } from "../lib/permissions";
 
 const sesion: contextProps = {
   sesion: {
@@ -46,6 +47,17 @@ describe("user menu", () => {
     await user.click(screen.getByRole("button", { name: /Ada Lovelace/i }));
 
     expect(await screen.findByText(__APP_VERSION__)).toBeInTheDocument();
+  });
+
+  it("is the sidebar's own button, so it folds to an icon with the rest", () => {
+    // Drawn by hand it kept its padding when the menu folded: 16px left for a
+    // 32px avatar, which spilled out along with the chevron. Nothing here lays
+    // a page out, so what can be held is that it is the button that folds.
+    mount();
+
+    const trigger = screen.getByRole("button", { name: /Ada Lovelace/i });
+    expect(trigger).toHaveAttribute("data-sidebar", "menu-button");
+    expect(trigger).toHaveAttribute("data-size", "lg");
   });
 
   it("points at the release notes as a page, not a panel", async () => {
@@ -170,5 +182,114 @@ describe("unread release notes", () => {
     });
 
     expect(screen.queryByText("(sin leer)")).toBeNull();
+  });
+});
+
+/**
+ * Ten screens in one flat list read as ten unrelated things. They are three
+ * kinds of thing, and the menu says which.
+ */
+describe("the screens, block by block", () => {
+  const ROL = 1;
+
+  const allow = (...modulos: Modulo[]) => {
+    const permisos = sinPermisos();
+    for (const modulo of modulos) permisos[modulo].ver = true;
+    setPermisos(ROL, permisos);
+  };
+
+  const screensUnder = (title: string) =>
+    within(screen.getByRole("list", { name: title }))
+      .getAllByRole("link")
+      .map((link) => [link.textContent, link.getAttribute("href")]);
+
+  afterEach(() => {
+    olvidarPermisos();
+  });
+
+  it("puts each screen under the title it belongs to, in order", () => {
+    allow(
+      "postes", "eventos", "ciudades", "parametros", "reportes",
+      "generador", "seguridad", "roles", "archivos", "bitacora",
+    );
+    mount();
+
+    expect(screensUnder("Operación")).toEqual([
+      ["Postes", "/app/postes"],
+      ["Eventos", "/app/eventos"],
+      ["Ciudades", "/app/ciudades"],
+    ]);
+    // Both make reports, so they share a block — and the ready-made ones are
+    // not called «Reportes» again under a title that already says it.
+    expect(screensUnder("Reportes")).toEqual([
+      ["Informes", "/app/reportes"],
+      ["Generador", "/app/generador"],
+    ]);
+    // Named for what is on the screen.
+    expect(screensUnder("Administración")).toEqual([
+      ["Usuarios", "/app/usuarios"],
+      ["Roles y permisos", "/app/roles"],
+      ["Bitácora", "/app/bitacora"],
+      ["Parámetros", "/app/parametros"],
+      ["Archivos", "/app/archivos"],
+    ]);
+  });
+
+  it("offers scheduled reports only to somebody who may schedule, right after the generator", () => {
+    // Reading the generator is not what makes scheduled reports yours to set
+    // up: that is a permission of its own, and the menu asks for it.
+    const permisos = sinPermisos();
+    permisos.generador.ver = true;
+    setPermisos(ROL, permisos);
+    const { unmount } = mount();
+    expect(screensUnder("Reportes")).toEqual([["Generador", "/app/generador"]]);
+    unmount();
+
+    permisos.generador.programar = true;
+    setPermisos(ROL, permisos);
+    mount();
+    expect(screensUnder("Reportes")).toEqual([
+      ["Generador", "/app/generador"],
+      ["Envíos programados", "/app/envios"],
+    ]);
+  });
+
+  it("keeps the home page above every block, under no title", () => {
+    allow("postes");
+    mount();
+
+    const home = screen.getByRole("link", { name: "Inicio" });
+    for (const title of ["Operación", "Reportes", "Administración"]) {
+      const block = screen.queryByRole("list", { name: title });
+      if (block) expect(block.contains(home)).toBe(false);
+    }
+    expect(
+      home.compareDocumentPosition(screen.getByRole("link", { name: "Postes" })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("lets clicks through its titles once the menu is folded to icons", () => {
+    // Folded, a title is pulled up over the block before it and made
+    // transparent — still a box, still on top. It swallowed the clicks and the
+    // tooltip of a strip of the icon above it. Nothing here lays a page out,
+    // so what can be held is that the title steps aside when folded.
+    allow("postes", "generador", "bitacora");
+    mount();
+
+    for (const title of ["Operación", "Reportes", "Administración"]) {
+      expect(screen.getByText(title).className.split(/\s+/))
+        .toContain("group-data-[collapsible=icon]:pointer-events-none");
+    }
+  });
+
+  it("draws no title over a block this role can open nothing in", () => {
+    allow("postes", "generador");
+    mount();
+
+    expect(screen.getByText("Operación")).toBeInTheDocument();
+    expect(screensUnder("Reportes")).toEqual([["Generador", "/app/generador"]]);
+    expect(screen.queryByText("Administración")).toBeNull();
+    expect(screen.queryByRole("list", { name: "Administración" })).toBeNull();
   });
 });

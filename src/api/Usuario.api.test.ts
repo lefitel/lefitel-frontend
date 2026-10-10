@@ -32,8 +32,8 @@
 // what makes that tidy-up fail instead of ship.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import axios from "axios";
-import { editUserName, editUserPass, resetMfaUsuario, desbloquearUsuario, deleteUsuario } from "./Usuario.api";
+import axios, { AxiosError } from "axios";
+import { asignarRol, editUserName, editUserPass, resetMfaUsuario, desbloquearUsuario, deleteUsuario } from "./Usuario.api";
 import type { UsuarioInterface } from "../interfaces/interfaces";
 
 afterEach(() => {
@@ -69,32 +69,88 @@ const cuenta = (id: number): UsuarioInterface => ({
 const cuerpoEnviado = (put: ReturnType<typeof vi.spyOn>) =>
   put.mock.calls[0][1] as Record<string, unknown>;
 
+/**
+ * Un rechazo con la forma exacta que produce axios de verdad.
+ *
+ * 🔴 **`AxiosError` y no un `Error` con un `response` pegado encima**, que es
+ * lo que ponía aquí antes. La diferencia dejó de ser cosmética cuando estos
+ * envoltorios pasaron a sacar su frase por `mensajeDeError`: esa función
+ * pregunta `axios.isAxiosError(error)` antes de mirar el cuerpo, así que un
+ * impostor de pato se lleva el respaldo genérico y el test dice que el
+ * servidor no habló cuando en producción sí habla. Un fixture que no puede
+ * salir del código que imita no está midiendo ese código.
+ *
+ * El recorrido completo —con el normalizador y el interceptor de la ventana
+ * montados de verdad— lo cubre `statusPropagation.test.ts`; esto es la mitad
+ * unitaria.
+ */
+const rechazoDelServidor = (status: number, message: string) =>
+  new AxiosError(
+    String(status),
+    String(status),
+    undefined,
+    {},
+    { status, data: { message }, statusText: "", headers: {}, config: {} } as never,
+  );
+
 describe("editUserName", () => {
-  it("puts the current password on the rename, as a value and not as an empty key", async () => {
+  it("sends the new name and no password of any kind, on the wire the server actually reads", async () => {
+    /**
+     * 🔴 The mirror of what this test used to hold, and the point of the arc.
+     *
+     * A rename carried `oldPass` until the server's own check moved up to the
+     * step-up gate. The gate reads a different field, `stepup_password`, and
+     * `stepUpInterceptor.ts` puts it there on the retry — so a password
+     * collected by the rename form would be a second prompt for one secret in
+     * one request, ignored by the server and typed by the person anyway.
+     *
+     * **Asserted on the serialised body**, which is what the server receives,
+     * and on `Object.keys` of the object, which is what catches the shape this
+     * change could regress into: a parameter left on the signature and never
+     * passed puts `oldPass: undefined` on the object, and *that* satisfies both
+     * `not.toHaveProperty` after `JSON.stringify` and a `toEqual` without the
+     * key. See this file's header — the same class of mistake cost a
+     * production defect once already.
+     */
     const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
 
-    await editUserName({ ...cuenta(YO), user: "isalas", oldPass: "la-mia" });
+    await editUserName({ ...cuenta(YO), user: "isalas" });
 
     expect(put).toHaveBeenCalledTimes(1);
     const cuerpo = cuerpoEnviado(put);
-    // The assertion the whole file exists for. Reading the value and not
-    // `toHaveProperty`: a key holding `undefined` satisfies the latter and then
-    // disappears in serialisation, which is the exact failure being guarded
-    // against.
-    expect(cuerpo.oldPass).toBe("la-mia");
-    // And it survives the trip to JSON, which is what the server reads.
-    expect(JSON.parse(JSON.stringify(cuerpo)).oldPass).toBe("la-mia");
-    // The password sent is the one supplied, never the record's own `pass`
-    // field — a hash, which the server would compare and refuse.
-    expect(cuerpo.oldPass).not.toBe(cuenta(YO).pass);
-    // And the new name went with it.
+    expect(Object.keys(cuerpo)).not.toContain("oldPass");
+    expect(JSON.parse(JSON.stringify(cuerpo))).not.toHaveProperty("oldPass");
+    // And the new name went with it, so this is not green because nothing was
+    // sent at all.
     expect(cuerpo.user).toBe("isalas");
+  });
+
+  it("does not accept a password parameter at all — checked by the compiler, not at runtime", async () => {
+    /**
+     * 🔴 **The only witness that can go red for this change, and it is a type
+     * one.** `editUserName` forwards whatever object it is given, so no runtime
+     * assertion in this file can tell "the wrapper stopped adding a password"
+     * from "the wrapper never added one" — it never did; the callers did. What
+     * actually stops a caller now is the signature.
+     *
+     * `@ts-expect-error` is how that gets held: `npm run typecheck` covers this
+     * file (`tsconfig.test.json`), and an unused `@ts-expect-error` is itself an
+     * error. So if `oldPass` is ever put back on the parameter type, this line
+     * stops being an error, the directive goes unused, and the typecheck fails.
+     * The test body below is incidental — the assertion is the directive.
+     */
+    const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
+
+    // @ts-expect-error `oldPass` is not part of a rename any more — the gate asks.
+    await editUserName({ ...cuenta(YO), user: "isalas", oldPass: "la-mia" });
+
+    expect(put).toHaveBeenCalledTimes(1);
   });
 
   it("addresses the rename endpoint for the account being renamed", async () => {
     const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
 
-    await editUserName({ ...cuenta(YO), user: "isalas", oldPass: "la-mia" });
+    await editUserName({ ...cuenta(YO), user: "isalas" });
 
     // Anchored: `usuario/7` (the generic update, whose whitelist refuses `user`
     // outright) and `usuario/userpass/7` are both wrong here, and both would
@@ -102,18 +158,16 @@ describe("editUserName", () => {
     expect(put.mock.calls[0][0]).toMatch(/\/usuario\/username\/7$/);
   });
 
-  it("sends no password when an administrator renames somebody else", async () => {
-    // The other half of the server's rule, and it has to keep working: there is
-    // no password the caller could be expected to know, so `requiresOwnPassword`
-    // is false and none is demanded. A key sent as `undefined` is the correct
-    // shape — but only because it does not survive serialisation, which is why
-    // that is what gets asserted.
+  it("renames somebody else through the same endpoint, with nothing extra on it", async () => {
+    // An administrator renaming another account was the case that needed the
+    // `oldPass` exemption; with no password on the request at all there is no
+    // exemption left to get wrong, and the two calls are now literally the same
+    // shape. Kept because the *address* still has to change with the target.
     const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
 
-    await editUserName({ ...cuenta(OTRA_PERSONA), user: "otro-nombre", oldPass: undefined });
+    await editUserName({ ...cuenta(OTRA_PERSONA), user: "otro-nombre" });
 
-    const enviadoDeVerdad = JSON.parse(JSON.stringify(cuerpoEnviado(put)));
-    expect(enviadoDeVerdad).not.toHaveProperty("oldPass");
+    expect(Object.keys(cuerpoEnviado(put))).not.toContain("oldPass");
     expect(put.mock.calls[0][0]).toMatch(/\/usuario\/username\/99$/);
   });
 
@@ -129,12 +183,10 @@ describe("editUserName", () => {
     ]) {
       vi.restoreAllMocks();
       vi.spyOn(axios, "put").mockRejectedValue(
-        Object.assign(new Error(String(respuesta.status)), {
-          response: { status: respuesta.status, data: { message: respuesta.message } },
-        })
+        rechazoDelServidor(respuesta.status, respuesta.message)
       );
 
-      expect(await editUserName({ ...cuenta(YO), oldPass: "la-mia" }), String(respuesta.status)).toEqual(respuesta);
+      expect(await editUserName({ ...cuenta(YO) }), String(respuesta.status)).toEqual(respuesta);
     }
   });
 
@@ -143,7 +195,7 @@ describe("editUserName", () => {
     // toast is how "it just did nothing" happens.
     vi.spyOn(axios, "put").mockRejectedValue(new Error("network down"));
 
-    expect(await editUserName({ ...cuenta(YO), oldPass: "la-mia" })).toEqual({
+    expect(await editUserName({ ...cuenta(YO) })).toEqual({
       status: 500,
       message: "Error desconocido",
     });
@@ -155,7 +207,7 @@ describe("editUserName", () => {
     // sentence for a rename that worked.
     vi.spyOn(axios, "put").mockResolvedValue({ status: 200, data: {} });
 
-    expect(await editUserName({ ...cuenta(YO), oldPass: "la-mia" })).toEqual({ status: 200 });
+    expect(await editUserName({ ...cuenta(YO) })).toEqual({ status: 200 });
   });
 });
 
@@ -204,14 +256,14 @@ describe("editUserPass", () => {
     for (const respuesta of [
       { status: 400, message: "Debe proporcionar su contraseña actual." },
       { status: 400, message: "La contraseña debe tener al menos 12 caracteres." },
-      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      // 400 since the server stopped answering this one with a 401: every 401
+      // ends the session in `SesionProvider`, and a typo is not a dead session.
+      { status: 400, message: "La contraseña actual suministrada no es correcta." },
       { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
     ]) {
       vi.restoreAllMocks();
       vi.spyOn(axios, "put").mockRejectedValue(
-        Object.assign(new Error(String(respuesta.status)), {
-          response: { status: respuesta.status, data: { message: respuesta.message } },
-        })
+        rechazoDelServidor(respuesta.status, respuesta.message)
       );
 
       expect(await editUserPass({ ...cuenta(YO), oldPass: "la-mia" }), respuesta.message).toEqual(respuesta);
@@ -242,6 +294,81 @@ describe("editUserPass", () => {
  * that mocks this module wholesale would never notice a wrong method, a wrong
  * path, or a swallowed status.
  */
+/**
+ * `asignarRol` — the function this module did not have.
+ *
+ * `id_rol` came off `PUT /api/usuario/:id`'s allowlist and became a
+ * sub-resource of its own on the server, and nothing here was taught the new
+ * address: `editUsuario` went on sending the role inside the profile save, the
+ * server discarded it and answered 200, and the screen said "Usuario
+ * actualizado" over a role that had not moved.
+ *
+ * These are the wire assertions, and they run wherever the suite runs. The
+ * other half — that no gated route is left with nobody calling it, which is the
+ * shape the defect actually had — is `rutasProtegidas.test.ts`, and it needs
+ * the `api` repository beside this one.
+ */
+describe("asignarRol", () => {
+  it("puts the role on its own sub-resource, and sends the role and nothing else", async () => {
+    const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 204, data: "" });
+
+    await asignarRol(YO, 5);
+
+    expect(put).toHaveBeenCalledTimes(1);
+    // The address, not merely "a PUT happened": sending this to
+    // `/api/usuario/7` is exactly the defect, and it answers 200.
+    expect(put.mock.calls[0][0]).toMatch(/\/usuario\/7\/rol$/);
+    // And the body is the role alone. The record this comes from carries a
+    // password hash and a recovery address; a route that writes one number has
+    // no business receiving them, and `id_rol` arriving beside forty other
+    // fields is how it ended up on the wrong route in the first place.
+    expect(cuerpoEnviado(put)).toEqual({ id_rol: 5 });
+  });
+
+  it("addresses the right account and not a neighbouring one", async () => {
+    const put = vi.spyOn(axios, "put").mockResolvedValue({ status: 204, data: "" });
+
+    await asignarRol(OTRA_PERSONA, 5);
+
+    expect(put.mock.calls[0][0]).toMatch(/\/usuario\/99\/rol$/);
+    expect(put.mock.calls[0][0]).not.toMatch(/\/usuario\/7\//);
+  });
+
+  it("reports the server's own refusal instead of a success", async () => {
+    // The three this route answers with a sentence worth reading. The first is
+    // the one a client must never provoke — the refusal on the caller's own row
+    // is unconditional — and it is here because reaching it is a bug in the
+    // screen, not in the person, and swallowing it would hide that.
+    for (const respuesta of [
+      { status: 403, message: "No puede cambiar su propio rol. Pídaselo a otro administrador." },
+      { status: 409, message: "No se puede asignar un rol archivado." },
+      { status: 404, message: "Rol no encontrado" },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "put").mockRejectedValue(
+        rechazoDelServidor(respuesta.status, respuesta.message)
+      );
+
+      expect(await asignarRol(YO, 5), String(respuesta.status)).toEqual(respuesta);
+    }
+  });
+
+  it("reports 500 and something to show when nothing answered at all", async () => {
+    vi.spyOn(axios, "put").mockRejectedValue(new Error("network down"));
+
+    expect(await asignarRol(YO, 5)).toEqual({ status: 500, message: "Error desconocido" });
+  });
+
+  it("reports the 204 the server really sends, with no message at all", async () => {
+    // 204 and not 200: this route writes one number and has nothing to send
+    // back. A caller comparing against 200 would read every success as a
+    // failure, which is why the number is asserted rather than "not an error".
+    vi.spyOn(axios, "put").mockResolvedValue({ status: 204, data: "" });
+
+    expect(await asignarRol(YO, 5)).toEqual({ status: 204 });
+  });
+});
+
 describe("resetMfaUsuario", () => {
   it("posts to the mfa/reset route for the account named", async () => {
     const post = vi.spyOn(axios, "post").mockResolvedValue({ status: 200, data: {} });
@@ -268,9 +395,7 @@ describe("resetMfaUsuario", () => {
     ]) {
       vi.restoreAllMocks();
       vi.spyOn(axios, "post").mockRejectedValue(
-        Object.assign(new Error(String(respuesta.status)), {
-          response: { status: respuesta.status, data: { message: respuesta.message } },
-        })
+        rechazoDelServidor(respuesta.status, respuesta.message)
       );
 
       expect(await resetMfaUsuario(7), String(respuesta.status)).toEqual(respuesta);
@@ -316,9 +441,7 @@ describe("desbloquearUsuario", () => {
     ]) {
       vi.restoreAllMocks();
       vi.spyOn(axios, "patch").mockRejectedValue(
-        Object.assign(new Error(String(respuesta.status)), {
-          response: { status: respuesta.status, data: { message: respuesta.message } },
-        })
+        rechazoDelServidor(respuesta.status, respuesta.message)
       );
 
       expect(await desbloquearUsuario(7), String(respuesta.status)).toEqual(respuesta);

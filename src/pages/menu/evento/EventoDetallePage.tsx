@@ -6,8 +6,8 @@ import MapPoint from "../../../components/map/MapPoint";
 import MapLine from "../../../components/map/MapLine";
 import { SonarMarker } from "../../../components/map/SonarMarker";
 import { FitView } from "../../../components/map/useFitCoords";
-import { fromLatLngTuple, type LatLng } from "../../../components/map/mapGeo";
-import { MAP_RADIUS, MAP_WEIGHT } from "../../../components/map/mapConstants";
+import { fromLatLngTuple, type LatLng, hasCoords } from "../../../components/map/mapGeo";
+import { MAP_RADIUS, MAP_WEIGHT, MAP_DOT } from "../../../components/map/mapConstants";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { getPosteByTramo } from "../../../api/Poste.api";
@@ -16,20 +16,17 @@ import { useEventoDetalleData } from "./useEventoDetalleData";
 import {
   EventoInterface, PosteInterface, RevisionInterface, SolucionInterface,
 } from "../../../interfaces/interfaces";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import BitacoraPanel from "../../../components/BitacoraPanel";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Skeleton } from "../../../components/ui/skeleton";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
 import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import {
   PencilIcon, PlusIcon, WrenchIcon, RefreshCwIcon, CalendarIcon,
-  ClockIcon, MoreHorizontalIcon, LocateFixedIcon, RouteIcon,
+  ClockIcon, RotateCcwIcon, LocateFixedIcon, RouteIcon,
   ActivityIcon, UserIcon, ChevronRightIcon, ImageIcon,
 } from "lucide-react";
 import { latExample, lngExample } from "../../../data/example";
@@ -76,8 +73,8 @@ export default function EventoDetallePage() {
   const criticality = getEventCriticality({ eventoObs: d.eventoObs });
 
   const poste = d.evento?.poste;
-  const hasCoords = (poste?.lat ?? 0) !== 0 && (poste?.lng ?? 0) !== 0;
-  const center: LatLng = hasCoords
+  const located = hasCoords(poste);
+  const center: LatLng = located
     ? { lat: poste!.lat, lng: poste!.lng }
     : { lat: latExample, lng: lngExample };
 
@@ -92,7 +89,7 @@ export default function EventoDetallePage() {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
         const sorted = postes
-          .filter((p) => p.lat && p.lng)
+          .filter(hasCoords)
           .sort(
             (p1, p2) =>
               (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
@@ -120,15 +117,15 @@ export default function EventoDetallePage() {
   const boundsCoords: [number, number][] = [
     ...(poste?.ciudadA?.lat && poste.ciudadA.lng ? [[poste.ciudadA.lat, poste.ciudadA.lng] as [number, number]] : []),
     ...(poste?.ciudadB?.lat && poste.ciudadB.lng ? [[poste.ciudadB.lat, poste.ciudadB.lng] as [number, number]] : []),
-    ...(hasCoords ? [[center.lat, center.lng] as [number, number]] : []),
-    ...tramoPostes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
+    ...(located ? [[center.lat, center.lng] as [number, number]] : []),
+    ...tramoPostes.filter(hasCoords).map((p): [number, number] => [p.lat, p.lng]),
   ];
 
   return (
-    <div className="@container/card px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card px-page pb-page w-full space-y-page animate-in fade-in duration-500">
 
       {/* ── Header sticky ── */}
-      <div className="sticky top-0 z-20 -mx-6 md:-mx-8 px-6 md:px-8 py-4 bg-background/85 supports-backdrop-filter:backdrop-blur-md border-b border-border/40">
+      <div className="sticky top-0 z-20 -mx-page px-page py-4 bg-background/85 supports-backdrop-filter:backdrop-blur-md border-b border-border/40">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
           <div className="min-w-0">
             {d.loading ? (
@@ -177,8 +174,17 @@ export default function EventoDetallePage() {
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
+            {/*
+              A button, not a «⋯». The menu that stood here never held more than
+              one thing — Editar while the event is open, Reabrir once it is
+              resolved — so it was a click spent on opening a list of one.
+            */}
             {!d.loading && d.evento && canAct && isPending && (
               <>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenEdit(true)}>
+                  <PencilIcon className="h-3.5 w-3.5" />
+                  Editar
+                </Button>
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setOpenRevision(true)}>
                   <PlusIcon className="h-3.5 w-3.5" />
                   Revisión
@@ -189,33 +195,24 @@ export default function EventoDetallePage() {
                 </Button>
               </>
             )}
-            {!d.loading && d.evento && canAct && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="icon" className="h-8 w-8">
-                    <MoreHorizontalIcon className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {isPending && (
-                    <DropdownMenuItem onClick={() => setOpenEdit(true)}>
-                      <PencilIcon className="h-3.5 w-3.5 mr-2" />
-                      Editar
-                    </DropdownMenuItem>
-                  )}
-                  {!isPending && (
-                    <DropdownMenuItem
-                      onClick={() => setConfirmReabrir(true)}
-                      className="text-amber-600 focus:text-amber-600"
-                    >
-                      <RefreshCwIcon className="h-3.5 w-3.5 mr-2" />
-                      Reabrir
-                    </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            {!d.loading && d.evento && canAct && !isPending && (
+              // Amber as it was in the menu, and still asked before it happens:
+              // the press opens the same confirmation.
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 text-amber-600 hover:text-amber-600"
+                onClick={() => setConfirmReabrir(true)}
+              >
+                <RotateCcwIcon className="h-3.5 w-3.5" />
+                Reabrir
+              </Button>
             )}
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={d.load} disabled={d.loading}>
+            <Button
+              variant="outline" size="icon" className="h-8 w-8"
+              onClick={d.load} disabled={d.loading}
+              aria-label="Refrescar" title="Refrescar"
+            >
               <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
             </Button>
           </div>
@@ -240,7 +237,7 @@ export default function EventoDetallePage() {
             {d.loading ? (
               <Skeleton className="absolute inset-0 rounded-none" />
             ) : d.evento?.image ? (
-              <ImageViewer src={`${url}${d.evento.image}`} alt="evento" hero />
+              <ImageViewer src={imageUrl(d.evento.image) ?? ""} alt="evento" hero />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-muted-foreground/40">
                 <ImageIcon className="h-10 w-10" strokeWidth={1.5} />
@@ -338,7 +335,7 @@ export default function EventoDetallePage() {
               <Skeleton className="h-full min-h-90 w-full rounded-none" />
             ) : (
               <div className="isolate h-full relative">
-                {hasCoords && boundsCoords.length >= 2 && (
+                {located && boundsCoords.length >= 2 && (
                   <div className="absolute top-3 right-3 z-1000">
                     <Button
                       size="sm"
@@ -356,22 +353,22 @@ export default function EventoDetallePage() {
                 )}
                 <BaseMap
                   center={center}
-                  zoom={hasCoords ? 15 : 5}
+                  zoom={located ? 15 : 5}
                   style={{ height: "100%", minHeight: "420px" }}
                 >
                   <FitView
                     coords={boundsCoords.map(fromLatLngTuple)}
                     fit={fitTramo}
-                    center={hasCoords ? center : { lat: 0, lng: 0 }}
+                    center={located ? center : { lat: 0, lng: 0 }}
                     zoom={15}
                   />
 
                   {poste?.ciudadA?.lat && poste.ciudadA.lng && (
                     <MapPoint
                       center={{ lat: poste.ciudadA.lat, lng: poste.ciudadA.lng }}
-                      radius={7}
-                      strokeColor="#374151"
-                      fillColor="#374151"
+                      radius={MAP_RADIUS.endpoint}
+                      strokeColor={MAP_DOT.endpoint}
+                      fillColor={MAP_DOT.endpoint}
                       fillOpacity={1}
                       strokeWidth={MAP_WEIGHT.secondary}
                       popupMinWidth={200}
@@ -389,9 +386,9 @@ export default function EventoDetallePage() {
                   {poste?.ciudadB?.lat && poste.ciudadB.lng && (
                     <MapPoint
                       center={{ lat: poste.ciudadB.lat, lng: poste.ciudadB.lng }}
-                      radius={7}
-                      strokeColor="#374151"
-                      fillColor="#374151"
+                      radius={MAP_RADIUS.endpoint}
+                      strokeColor={MAP_DOT.endpoint}
+                      fillColor={MAP_DOT.endpoint}
                       fillOpacity={1}
                       strokeWidth={MAP_WEIGHT.secondary}
                       popupMinWidth={200}
@@ -407,15 +404,15 @@ export default function EventoDetallePage() {
                   )}
 
                   {tramoPostes
-                    .filter((p) => p.id !== poste?.id && p.lat && p.lng)
+                    .filter((p) => p.id !== poste?.id && hasCoords(p))
                     .map((p) => (
                       <MapPoint
                         key={p.id as number}
                         center={{ lat: p.lat, lng: p.lng }}
                         radius={MAP_RADIUS.secondary}
-                        strokeColor="#9ca3af"
-                        fillColor="#9ca3af"
-                        fillOpacity={0.65}
+                        strokeColor={MAP_DOT.pole}
+                        fillColor={MAP_DOT.poleFill}
+                        fillOpacity={1}
                         strokeWidth={MAP_WEIGHT.secondary}
                         popupMinWidth={200}
                       >
@@ -432,13 +429,10 @@ export default function EventoDetallePage() {
                     <MapLine
                       id="evento-route"
                       positions={routePath.map(fromLatLngTuple)}
-                      color="#596BAB"
-                      width={3}
-                      opacity={0.7}
                     />
                   )}
 
-                  {hasCoords && (
+                  {located && (
                     <SonarMarker
                       center={[center.lat, center.lng]}
                       fillColor={eventoCfg.fill}
@@ -473,6 +467,7 @@ export default function EventoDetallePage() {
         reviciones={d.revisions}
         solucion={d.solucion}
         canAct={canAct}
+        canVerBitacora={can(rol, "bitacora", "ver")}
         isPending={isPending}
         onAddRevision={() => setOpenRevision(true)}
       />
@@ -743,13 +738,15 @@ type TimelineItem =
   | { type: "solucion"; date: Date; description: string; image: string };
 
 function EventoTimeline({
-  loading, eventoId, reviciones, solucion, canAct, isPending, onAddRevision,
+  loading, eventoId, reviciones, solucion, canAct, canVerBitacora, isPending, onAddRevision,
 }: {
   loading: boolean;
   eventoId: number | null;
   reviciones: RevisionInterface[];
   solucion: SolucionInterface | null;
   canAct: boolean;
+  /** `bitacora.ver` — the Bitácora tab is not drawn without it. */
+  canVerBitacora: boolean;
   isPending: boolean;
   onAddRevision: () => void;
 }) {
@@ -775,7 +772,7 @@ function EventoTimeline({
       <CardContent className="p-0">
         <Tabs defaultValue="actividad" className="gap-0">
           <div className="px-4 pt-4 pb-3 border-b border-border/40 flex items-center justify-between gap-3 flex-wrap">
-            <TabsList variant="line">
+            <TabsList>
               <TabsTrigger value="actividad" className="gap-1.5">
                 <ClockIcon className="h-3.5 w-3.5" />
                 Actividad
@@ -783,10 +780,15 @@ function EventoTimeline({
                   <span className="ml-1 text-[10px] text-muted-foreground">({items.length})</span>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="bitacora" className="gap-1.5">
-                <ActivityIcon className="h-3.5 w-3.5" />
-                Bitácora
-              </TabsTrigger>
+              {/* Only for a role that may read the log: its endpoint asks for
+                  `bitacora.ver`, and without it this tab held nothing but
+                  "No tiene permiso para ver la bitácora". */}
+              {canVerBitacora && (
+                <TabsTrigger value="bitacora" className="gap-1.5">
+                  <ActivityIcon className="h-3.5 w-3.5" />
+                  Bitácora
+                </TabsTrigger>
+              )}
             </TabsList>
             {canAct && isPending && !loading && (
               <Button variant="outline" size="sm" className="gap-1.5" onClick={onAddRevision}>
@@ -857,7 +859,7 @@ function EventoTimeline({
                           {isSolucion && (item as TimelineItem & { type: "solucion" }).image && (
                             <div className="pt-1">
                               <ImageViewer
-                                src={`${url}${(item as TimelineItem & { type: "solucion" }).image}`}
+                                src={imageUrl((item as TimelineItem & { type: "solucion" }).image) ?? ""}
                                 alt="solución"
                               />
                             </div>
@@ -871,9 +873,11 @@ function EventoTimeline({
             )}
           </TabsContent>
 
-          <TabsContent value="bitacora" className="p-5">
-            <BitacoraPanel entity="Evento" entityId={eventoId} />
-          </TabsContent>
+          {canVerBitacora && (
+            <TabsContent value="bitacora" className="p-5">
+              <BitacoraPanel entity="Evento" entityId={eventoId} />
+            </TabsContent>
+          )}
         </Tabs>
       </CardContent>
     </Card>

@@ -1,3 +1,4 @@
+import { MAP_DOT } from "../../../components/map/mapConstants";
 import { useContext, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -5,7 +6,7 @@ import BaseMap from "../../../components/map/BaseMap";
 import MapPoint from "../../../components/map/MapPoint";
 import MapLine from "../../../components/map/MapLine";
 import { FitView } from "../../../components/map/useFitCoords";
-import { fromLatLngTuple } from "../../../components/map/mapGeo";
+import { fromLatLngTuple, hasCoords } from "../../../components/map/mapGeo";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
 
@@ -228,7 +229,7 @@ const ReportRecorridoSec = () => {
                 const dx = b.lat - a.lat;
                 const dy = b.lng - a.lng;
                 const sorted = postesTramo
-                    .filter((p) => p.lat && p.lng)
+                    .filter(hasCoords)
                     .sort((p1, p2) =>
                         ((p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy) -
                         ((p2.lat - a.lat) * dx + (p2.lng - a.lng) * dy)
@@ -454,12 +455,12 @@ const ReportRecorridoSec = () => {
                                 )}
 
                                 {routePath.length >= 2 && (
-                                    <MapLine id="recorrido-route" positions={routePath.map(fromLatLngTuple)} width={3} opacity={0.75} />
+                                    <MapLine id="recorrido-route" positions={routePath.map(fromLatLngTuple)} />
                                 )}
 
                                 {/* Ciudad A */}
                                 {ciudadA.lat && ciudadA.lng && (
-                                    <MapPoint center={{ lat: ciudadA.lat, lng: ciudadA.lng }} radius={7} strokeColor="#1e293b" fillColor="#1e293b" fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
+                                    <MapPoint center={{ lat: ciudadA.lat, lng: ciudadA.lng }} radius={7} strokeColor={MAP_DOT.endpoint} fillColor={MAP_DOT.endpoint} fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
                                         <div style={{ padding: "4px 2px 2px" }}>
                                             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadA.name}</p>
                                             <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Inicio del tramo</p>
@@ -469,7 +470,7 @@ const ReportRecorridoSec = () => {
                                 )}
                                 {/* Ciudad B */}
                                 {ciudadB.lat && ciudadB.lng && (
-                                    <MapPoint center={{ lat: ciudadB.lat, lng: ciudadB.lng }} radius={7} strokeColor="#1e293b" fillColor="#1e293b" fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
+                                    <MapPoint center={{ lat: ciudadB.lat, lng: ciudadB.lng }} radius={7} strokeColor={MAP_DOT.endpoint} fillColor={MAP_DOT.endpoint} fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
                                         <div style={{ padding: "4px 2px 2px" }}>
                                             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadB.name}</p>
                                             <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Fin del tramo</p>
@@ -555,7 +556,7 @@ const ReportRecorridoSec = () => {
                                 {/* Poste markers */}
                                 {mapTab === "postes" && posteMapMarkers.map((p, i) => (
                                     <MapPoint key={i} center={{ lat: p.lat, lng: p.lng }} radius={8}
-                                        strokeColor="#fff" fillColor="#596BAB" fillOpacity={0.95} strokeWidth={2.5} popupMinWidth={220}
+                                        strokeColor="#fff" fillColor={MAP_DOT.subject} fillOpacity={0.95} strokeWidth={2.5} popupMinWidth={220}
                                     >
                                             <div style={{ padding: "4px 2px 2px", minWidth: 205 }}>
                                                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>

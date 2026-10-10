@@ -14,7 +14,7 @@ import { Button } from "../../components/ui/button";
  * "no hay conexión con el servidor": a network problem, for a permissions
  * problem, sending whoever reads it to check a network that is fine.
  *
- * A role created from Seguridad starts with all thirty-two cells denied, so this is
+ * A role created from the roles screen starts with all thirty-two cells denied, so this is
  * not an edge case — it is the first thing every new role sees before anybody
  * grants it anything, and the sentence it reads decides whether the next call is
  * to an administrator or to whoever maintains the servers.

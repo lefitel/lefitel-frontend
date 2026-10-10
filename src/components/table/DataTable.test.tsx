@@ -1,7 +1,7 @@
 // What every table in this application has to keep doing.
 //
-// `DataTable` draws Postes, Ciudades, Eventos, Seguridad, Archivos, Bitácora,
-// Reportes and the five paramétricos — and until this file it had no test at
+// `DataTable` draws Postes, Ciudades, Eventos, Usuarios, Roles, Archivos,
+// Bitácora, Informes and the five paramétricos — and until this file it had no test at
 // all, nor did any page that renders it. That was survivable while the library
 // underneath stayed put. It stops being survivable the moment TanStack Table
 // moves a major, because the v9 type system covers the mechanical half of that

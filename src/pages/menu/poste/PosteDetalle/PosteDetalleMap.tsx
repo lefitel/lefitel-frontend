@@ -8,9 +8,9 @@ import MapPoint from "../../../../components/map/MapPoint";
 import MapLine from "../../../../components/map/MapLine";
 import { SonarMarker } from "../../../../components/map/SonarMarker";
 import { FitView } from "../../../../components/map/useFitCoords";
-import { fromLatLngTuple, type LatLng } from "../../../../components/map/mapGeo";
+import { fromLatLngTuple, type LatLng, hasCoords } from "../../../../components/map/mapGeo";
 import { latExample, lngExample } from "../../../../data/example";
-import { MAP_RADIUS, MAP_WEIGHT } from "../../../../components/map/mapConstants";
+import { MAP_RADIUS, MAP_WEIGHT, MAP_DOT } from "../../../../components/map/mapConstants";
 import { LocateFixedIcon, RouteIcon } from "lucide-react";
 
 interface Props {
@@ -49,8 +49,8 @@ export default function PosteDetalleMap({
   onVerCiudad, onEditarCiudad, onVerPoste, onEditarOtroPoste, onEditarEstePoste,
   canEditPostes, canEditCiudades,
 }: Props) {
-  const hasCoords = (poste?.lat ?? 0) !== 0 && (poste?.lng ?? 0) !== 0;
-  const center: LatLng = hasCoords
+  const located = hasCoords(poste);
+  const center: LatLng = located
     ? { lat: poste!.lat, lng: poste!.lng }
     : { lat: latExample, lng: lngExample };
   const [fitTramo, setFitTramo] = useState(false);
@@ -67,10 +67,10 @@ export default function PosteDetalleMap({
     <Card className="shadow-sm border-muted/60 overflow-hidden h-full py-0">
       <CardContent className="p-0 h-full">
         {loading ? (
-          <Skeleton className="h-full min-h-90 w-full rounded-none" />
+          <Skeleton className="h-full min-h-64 w-full rounded-none" />
         ) : (
           <div className="isolate h-full relative">
-            {hasCoords && boundsCoords.length >= 2 && (
+            {located && boundsCoords.length >= 2 && (
               <div className="absolute top-3 right-3 z-1000">
                 <Button
                   size="sm"
@@ -93,13 +93,13 @@ export default function PosteDetalleMap({
             </div>
             <BaseMap
               center={center}
-              zoom={hasCoords ? 13 : 5}
-              style={{ height: "100%", minHeight: "420px" }}
+              zoom={located ? 13 : 5}
+              style={{ height: "100%", minHeight: "16rem" }}
             >
               <FitView
                 coords={boundsCoords.map(fromLatLngTuple)}
                 fit={fitTramo}
-                center={hasCoords ? center : { lat: 0, lng: 0 }}
+                center={located ? center : { lat: 0, lng: 0 }}
                 zoom={15}
               />
 
@@ -107,9 +107,9 @@ export default function PosteDetalleMap({
               {poste?.ciudadA?.lat && poste.ciudadA.lng && (
                 <MapPoint
                   center={{ lat: poste.ciudadA.lat, lng: poste.ciudadA.lng }}
-                  radius={7}
-                  strokeColor="#374151"
-                  fillColor="#374151"
+                  radius={MAP_RADIUS.endpoint}
+                  strokeColor={MAP_DOT.endpoint}
+                  fillColor={MAP_DOT.endpoint}
                   fillOpacity={1}
                   strokeWidth={MAP_WEIGHT.secondary}
                   popupMinWidth={220}
@@ -128,9 +128,9 @@ export default function PosteDetalleMap({
               {poste?.ciudadB?.lat && poste.ciudadB.lng && (
                 <MapPoint
                   center={{ lat: poste.ciudadB.lat, lng: poste.ciudadB.lng }}
-                  radius={7}
-                  strokeColor="#374151"
-                  fillColor="#374151"
+                  radius={MAP_RADIUS.endpoint}
+                  strokeColor={MAP_DOT.endpoint}
+                  fillColor={MAP_DOT.endpoint}
                   fillOpacity={1}
                   strokeWidth={MAP_WEIGHT.secondary}
                   popupMinWidth={220}
@@ -147,15 +147,15 @@ export default function PosteDetalleMap({
 
               {/* Otros postes del tramo */}
               {tramoPosotes
-                .filter((p) => p.id !== poste?.id && p.lat && p.lng)
+                .filter((p) => p.id !== poste?.id && hasCoords(p))
                 .map((p) => (
                   <MapPoint
                     key={p.id as number}
                     center={{ lat: p.lat, lng: p.lng }}
                     radius={MAP_RADIUS.secondary}
-                    strokeColor="#9ca3af"
-                    fillColor="#9ca3af"
-                    fillOpacity={0.65}
+                    strokeColor={MAP_DOT.pole}
+                    fillColor={MAP_DOT.poleFill}
+                    fillOpacity={1}
                     strokeWidth={MAP_WEIGHT.secondary}
                     popupMinWidth={240}
                   >
@@ -172,14 +172,11 @@ export default function PosteDetalleMap({
                 <MapLine
                   id="poste-detalle-route"
                   positions={routePath.map(fromLatLngTuple)}
-                  color="#596BAB"
-                  width={3}
-                  opacity={0.7}
                 />
               )}
 
               {/* Poste actual con health-based color */}
-              {hasCoords && (
+              {located && (
                 <SonarMarker
                   center={[center.lat, center.lng]}
                   fillColor={healthCfg.fill}

@@ -26,7 +26,8 @@ export const getBitacora = (
 
 export interface BitacoraFilters {
   id_usuario?: number;
-  action?: string;
+  /** A family of actions, by the value `getVocabularioBitacora` offers. */
+  family?: string;
   entity?: string;
   entity_id?: number;
   from?: string;
@@ -81,6 +82,21 @@ export const getAutoresBitacora = (): Promise<AutorBitacora[]> =>
  * truncated one. `BitacoraPanel`, which sends no limit at all, had been showing
  * the first fifty entries of a sheet's history as though they were all of it.
  */
+export interface OpcionDeFiltro {
+  value: string;
+  label: string;
+}
+
+/**
+ * What the "Acción" and "Entidad" filters offer.
+ *
+ * Asked of the server rather than written out here. Both lists were written out
+ * here once, and five entities and a third of the actions the server writes
+ * were on neither — a row could be on screen and impossible to filter for.
+ */
+export const getVocabularioBitacora = (): Promise<{ families: OpcionDeFiltro[]; entities: OpcionDeFiltro[] }> =>
+  axios.get(urlApi + urlBitacora + "vocabulary").then((r) => r.data);
+
 export const getAllBitacora = (
   filters: BitacoraFilters
 ): Promise<Paginado<BitacoraInterface>> =>

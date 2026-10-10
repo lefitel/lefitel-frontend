@@ -65,7 +65,7 @@ const TYPE_ROUTES: Partial<Record<string, (id: number) => string>> = {
   "Evento": (id) => `/app/eventos/${id}`,
   "Solución": (id) => `/app/eventos/${id}`,
   "Ciudad": (id) => `/app/ciudades/${id}`,
-  "Usuario": (id) => `/app/seguridad/${id}`,
+  "Usuario": (id) => `/app/usuarios/${id}`,
 };
 
 const formatSize = (bytes: number): string => {
@@ -328,7 +328,7 @@ const FilesPage = () => {
   const totalBroken = brokenRefs.length;
 
   return (
-    <Tabs defaultValue="archivos" className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    <Tabs defaultValue="archivos" className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

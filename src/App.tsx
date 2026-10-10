@@ -8,6 +8,7 @@ import { SesionContext } from "./context/SesionContext";
 import { SesionProvider } from "./context/SesionProvider";
 import { useContext, useEffect } from "react";
 import InicioPage from "./pages/menu/inicio";
+import RolesPage from "./pages/menu/RolesPage";
 import PostePage from "./pages/menu/poste";
 import PosteDetallePage from "./pages/menu/poste/PosteDetalle";
 import CiudadesPage from "./pages/menu/ciudad/CiudadesPage";
@@ -17,6 +18,7 @@ import EventoDetallePage from "./pages/menu/evento/EventoDetallePage";
 import ParametrosPage from "./pages/menu/parametros";
 import ReportePage from "./pages/menu/reportes";
 import GeneradorPage from "./pages/menu/generador";
+import EnviosProgramadosPage from "./pages/menu/envios/EnviosProgramadosPage";
 import SeguridadPage from "./pages/menu/SeguridadPage";
 import UsuarioDetallePage from "./pages/menu/usuario/UsuarioDetallePage";
 import FilesPage from "./pages/menu/FilesPage";
@@ -37,6 +39,7 @@ import LoginPage from "./pages/LoginPage";
 import SegundoFactorPage from "./pages/login/SegundoFactorPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
+import BajaInformePage from "./pages/BajaInformePage";
 import { Toaster } from "@/components/ui/sonner";
 import { StepUpDialog } from "./components/dialogs/StepUpDialog";
 import { UpdatePrompt } from "./components/UpdatePrompt";
@@ -93,7 +96,7 @@ export const SegundoFactorRoute = () => {
  * `generador.ver` for a role and the menu entry vanished while the URL still
  * worked — the page mounted, the catalogue came back 403, and the screen
  * offered a "Reintentar" button for a refusal that was permanent. Create a
- * fourth role from Seguridad and grant it anything, and every route redirected
+ * fourth role from the roles screen and grant it anything, and every route redirected
  * it to a route that redirected it back: sidebar drawn, content area blank,
  * no error, nothing to click.
  */
@@ -255,6 +258,11 @@ const App = () => {
 
                   <Route element={<ModuleRoute modulo="generador" />}>
                     <Route path="generador"     element={<GeneradorPage />} />
+                    {/* The generator's own reports, sent by mail on a schedule.
+                        Under the same guard: whoever may read the generator may
+                        read their own schedules. What they may *write* there is
+                        `generador.programar`, which the page and the menu ask. */}
+                    <Route path="envios"        element={<EnviosProgramadosPage />} />
                   </Route>
 
                   <Route element={<ModuleRoute modulo="parametros" />}>
@@ -262,8 +270,20 @@ const App = () => {
                   </Route>
 
                   <Route element={<ModuleRoute modulo="seguridad" />}>
-                    <Route path="seguridad"     element={<SeguridadPage />} />
-                    <Route path="seguridad/:id" element={<UsuarioDetallePageKeyed />} />
+                    <Route path="usuarios"      element={<SeguridadPage />} />
+                    <Route path="usuarios/:id"  element={<UsuarioDetallePageKeyed />} />
+                    {/* Where these two lived until the screen was named for
+                        what is on it. Kept so a bookmark or a link pasted into
+                        a chat still arrives. */}
+                    <Route path="seguridad"     element={<UsuarioOldAddress />} />
+                    <Route path="seguridad/:id" element={<UsuarioOldAddress />} />
+                  </Route>
+
+                  {/* Its own door, on its own permission. As a tab of the users
+                      screen it stood behind `seguridad` as well, so a role that
+                      could manage roles but not accounts had no way in. */}
+                  <Route element={<ModuleRoute modulo="roles" />}>
+                    <Route path="roles"         element={<RolesPage />} />
                   </Route>
 
                   <Route element={<ModuleRoute modulo="archivos" />}>
@@ -307,6 +327,13 @@ const App = () => {
                   their own profile, so sending them there costs nothing. */}
               <Route path="/nueva-contrasena" element={<ResetPasswordPage />} />
 
+              {/* Outside `PublicRoutes` for the same reason as the one above:
+                  whoever opens the "stop these" link of a scheduled report
+                  arrives with a token in the fragment, and a session open in
+                  that browser must not swallow it. Most people who land here
+                  have no account at all. */}
+              <Route path="/baja-informe" element={<BajaInformePage />} />
+
               <Route path="*" element={<Navigate to="/app/home" replace />} />
             </Routes>
             {/* Dentro del router y fuera de <Routes>: lee la navegación para
@@ -331,6 +358,19 @@ export default App;
 function CiudadDetallePageKeyed() {
   const { id } = useParams<{ id: string }>();
   return <CiudadDetallePage key={id} />;
+}
+
+/**
+ * `/app/seguridad` and `/app/seguridad/:id`, sent on to where they live now.
+ *
+ * With what came after the address. `<Navigate to="…">` given a string builds a
+ * whole new location and drops the query and the fragment, so a link that
+ * carried either arrived without it.
+ */
+export function UsuarioOldAddress() {
+  const { id } = useParams<{ id: string }>();
+  const { search, hash } = useLocation();
+  return <Navigate to={{ pathname: id ? `/app/usuarios/${id}` : "/app/usuarios", search, hash }} replace />;
 }
 
 function UsuarioDetallePageKeyed() {

@@ -19,7 +19,7 @@
 //     solution — for an incident the role is entitled to read.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import EventoSheet from "./EventoSheet";
@@ -33,6 +33,7 @@ const getSolucion_evento = vi.fn();
 const getEventoObs = vi.fn();
 const getObs = vi.fn();
 const getTipoObs = vi.fn();
+const todosLosPostes = vi.fn();
 
 vi.mock("../../../api/opciones.api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../../api/opciones.api")>()),
@@ -43,6 +44,7 @@ vi.mock("../../../api/Evento.api", () => ({
   createEvento: vi.fn(),
   editEvento: vi.fn(),
 }));
+vi.mock("../../../api/Poste.api", () => ({ todosLosPostes: (...a: unknown[]) => todosLosPostes(...a) }));
 vi.mock("../../../api/Revision.api", () => ({ getRevision: (...a: unknown[]) => getRevision(...a) }));
 vi.mock("../../../api/Solucion.api", () => ({ getSolucion_evento: (...a: unknown[]) => getSolucion_evento(...a) }));
 vi.mock("../../../api/EventoObs.api", () => ({ getEventoObs: (...a: unknown[]) => getEventoObs(...a) }));
@@ -67,6 +69,12 @@ const OPCIONES = {
   ],
 };
 
+const POSTES = [{
+  id: 40, name: "P-001", image: "", date: new Date("2026-01-05"),
+  lat: -18.0, lng: -70.2, id_adss: 3, id_material: 7, id_propietario: 2,
+  id_ciudadA: 11, id_ciudadB: 12, id_usuario: 1,
+}];
+
 const EVENTO = {
   id: 77, description: "Poste caído tras la tormenta", priority: true,
   state: false, date: new Date("2026-02-01"), image: "", id_poste: 40, id_usuario: 1,
@@ -79,16 +87,17 @@ beforeEach(() => {
   getRevision.mockResolvedValue([]);
   getSolucion_evento.mockResolvedValue(null);
   getEventoObs.mockResolvedValue([]);
+  todosLosPostes.mockResolvedValue(POSTES);
 });
 
 const sesion = { usuario: usuarioExample, autenticado: true };
-const pintar = (eventoId: number | null) =>
+const pintar = (eventoId: number | null, posteId: number | null = 40) =>
   render(
     <MemoryRouter>
       <SesionContext.Provider
         value={{ sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() } as never}
       >
-        <EventoSheet eventoId={eventoId} posteId={40} open setOpen={vi.fn()} onSuccess={vi.fn()} />
+        <EventoSheet eventoId={eventoId} posteId={posteId ?? undefined} open setOpen={vi.fn()} onSuccess={vi.fn()} />
       </SesionContext.Provider>
     </MemoryRouter>,
   );
@@ -105,14 +114,15 @@ describe("where the observations come from", () => {
   it("groups each observation under its own type", async () => {
     pintar(null);
 
-    const estructura = await screen.findByRole("button", { name: /Estructura/i });
-    // Closed, the observation is not rendered at all: finding it after the
-    // click is what proves the group was built. Without `id_tipoObs` the filter
-    // yields nothing and this button opens onto an empty section.
-    await userEvent.click(estructura);
+    // Every type is open now, so being on screen proves nothing: each
+    // observation has to be inside its own type and outside the other. Without
+    // `id_tipoObs` the filter yields nothing and both groups vanish.
+    const estructura = await screen.findByRole("group", { name: "Estructura" });
+    const tendido = screen.getByRole("group", { name: "Tendido" });
 
-    expect(await screen.findByText("Poste inclinado")).toBeTruthy();
-    expect(screen.queryByText("Cable suelto")).toBeNull();
+    expect(within(estructura).getByText("Poste inclinado")).toBeTruthy();
+    expect(within(estructura).queryByText("Cable suelto")).toBeNull();
+    expect(within(tendido).getByText("Cable suelto")).toBeTruthy();
   });
 });
 
@@ -146,5 +156,96 @@ describe("when the observations are refused", () => {
 
     expect(await screen.findByText(/no puede cambiarlas/i)).toBeTruthy();
     expect(screen.queryByText(/no puede registrar la incidencia/i)).toBeNull();
+  });
+});
+
+describe("choosing the observations", () => {
+  it("repeats what is chosen at the top, and takes it back off from there", async () => {
+    // The accordion hid a ticked observation as soon as another type was
+    // opened; all that was left was a count.
+    pintar(null);
+
+    await userEvent.click(await screen.findByRole("checkbox", { name: "Poste inclinado" }));
+    const elegidas = screen.getByRole("list", { name: "Observaciones elegidas" });
+    expect(within(elegidas).getByText("Poste inclinado")).toBeTruthy();
+    expect(screen.getByText("1 elegida")).toBeTruthy();
+
+    await userEvent.click(screen.getByRole("button", { name: "Quitar Poste inclinado" }));
+    expect(screen.queryByRole("list", { name: "Observaciones elegidas" })).toBeNull();
+    expect(screen.getByRole("checkbox", { name: "Poste inclinado" }).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("narrows the list by what is typed, without minding accents", async () => {
+    pintar(null);
+    await userEvent.type(await screen.findByRole("searchbox", { name: "Buscar observación" }), "CÁBLE");
+
+    expect(screen.getByText("Cable suelto")).toBeTruthy();
+    expect(screen.queryByText("Poste inclinado")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Estructura" })).toBeNull();
+  });
+
+  it("says so when nothing matches", async () => {
+    pintar(null);
+    await userEvent.type(await screen.findByRole("searchbox", { name: "Buscar observación" }), "zzz");
+    expect(screen.getByText(/Ninguna observación coincide/)).toBeTruthy();
+  });
+});
+
+describe("opened without a pole", () => {
+  // This was a second form, `AddEventoPageSheet`. The home screen and the
+  // incident list open this one that way now, and these are its tests.
+  it("asks for the pole register, separately from the observations", async () => {
+    pintar(null, null);
+
+    await waitFor(() => expect(todosLosPostes).toHaveBeenCalledTimes(1));
+    expect(await screen.findByText("Buscar poste...")).toBeTruthy();
+  });
+
+  it("does not ask for it when it was opened from a pole", async () => {
+    pintar(null);
+
+    await screen.findByRole("group", { name: "Estructura" });
+    expect(todosLosPostes).not.toHaveBeenCalled();
+    expect(screen.queryByText("Buscar poste...")).toBeNull();
+  });
+
+  it("keeps the observations when it is the pole register that failed", async () => {
+    // The separation, asserted from the side that used to lose everything.
+    todosLosPostes.mockRejectedValue(new Error("Network Error"));
+    pintar(null, null);
+
+    const estructura = await screen.findByRole("group", { name: "Estructura" });
+    expect(within(estructura).getByText("Poste inclinado")).toBeTruthy();
+  });
+
+  it("counts the pole among what is missing", async () => {
+    pintar(null, null);
+    const crear = await screen.findByRole("button", { name: "Crear evento" });
+    await waitFor(() => expect(crear).not.toBeDisabled());
+    await userEvent.click(crear);
+
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Faltan 5 campos: Poste, Descripción, Foto, Observaciones y Primera revisión",
+    );
+  });
+});
+
+describe("an incident that is already resolved", () => {
+  beforeEach(() => {
+    searchEvento.mockResolvedValue({ ...EVENTO, state: true });
+    getSolucion_evento.mockResolvedValue({ id: 1, description: "Se cambió el herraje", date: new Date("2026-03-01"), image: "" });
+    getEventoObs.mockResolvedValue([{ id_obs: 5 }]);
+  });
+
+  it("opens to be read: the solution, what was observed, and no way to save", async () => {
+    // It used to open the form to say "no puede editarse".
+    pintar(77);
+
+    expect(await screen.findByText("Se cambió el herraje")).toBeTruthy();
+    expect(screen.getByText("Poste caído tras la tormenta")).toBeTruthy();
+    expect(screen.getByText("Poste inclinado")).toBeTruthy();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Guardar/i })).toBeNull();
   });
 });

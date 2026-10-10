@@ -3,7 +3,8 @@ import { format, isValid, parseISO } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { ChevronDownIcon, SearchIcon, XIcon } from "lucide-react";
 import type {
-  CatalogField, CatalogRoot, FilterCondition, Operator, ReportConfig,
+  CatalogField, CatalogPeriod, CatalogRoot, ExistsCondition, FilterCondition, FilterGroup,
+  Operator, ReportConfig,
 } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
 import { Checkbox } from "../../../components/ui/checkbox";
@@ -29,6 +30,7 @@ const OPERATOR_LABEL: Record<Operator, string> = {
   lt: "es menor que",
   lte: "es menor o igual que",
   between: "está entre",
+  period: "está en el periodo",
   in: "está en la lista",
   like: "contiene",
   isnull: "está vacío",
@@ -45,11 +47,30 @@ interface Props {
    * thing on screen: the box the filter had before.
    */
   optionLists?: Record<string, string[]>;
+  /**
+   * The named periods a date filter can take, as the server published them.
+   * Absent against an older server — which then does not offer the operator.
+   */
+  periods?: CatalogPeriod[];
   /** `listed`: whether that row's value is chosen from a closed list. */
   onUpdate: (index: number, patch: Partial<FilterCondition>, listed?: boolean) => void;
   onRemove: (index: number) => void;
   onSetJoin: (op: "and" | "or") => void;
 }
+
+/**
+ * The periods to list, plus the stored one if the server did not send it.
+ *
+ * Same rule as `withCurrent` above and for the same reason: a saved report
+ * filtered by a period is set and running, so its row must not read as empty
+ * just because this server's list does not carry that name.
+ */
+const withStoredPeriod = (periods: CatalogPeriod[], current: unknown): { key: string; label: string }[] => {
+  if (typeof current !== "string" || current === "" || periods.some((p) => p.key === current)) {
+    return periods;
+  }
+  return [{ key: current, label: current }, ...periods];
+};
 
 /**
  * The offered values, plus whatever the configuration already holds if it is
@@ -347,13 +368,15 @@ interface RowProps {
    * array each time would defeat that on every keystroke anywhere in the panel.
    */
   options?: string[];
+  /** Same reference on every render, for the same reason as `options`. */
+  periods: CatalogPeriod[];
   onUpdate: (index: number, patch: Partial<FilterCondition>, listed?: boolean) => void;
   onRemove: (index: number) => void;
 }
 
 /** Memoised: the parent re-renders on every keystroke anywhere in the builder. */
 const FilterRow = memo(function FilterRow({
-  condition, index, field, options, onUpdate, onRemove,
+  condition, index, field, options, periods, onUpdate, onRemove,
 }: RowProps) {
   const label = field?.label ?? condition.path;
   const operators = field?.operators ?? ["eq"];
@@ -429,6 +452,25 @@ const FilterRow = memo(function FilterRow({
                   onChange={(v) => onUpdate(index, { value: v })}
                 />
               )
+            ) : condition.operator === "period" ? (
+              /*
+                A period is chosen by name, not on a calendar: "la semana
+                pasada" is not two days, it is whichever two days that means
+                on the morning the report runs.
+              */
+              <Select
+                value={typeof condition.value === "string" ? condition.value : ""}
+                onValueChange={(v) => onUpdate(index, { value: v })}
+              >
+                <SelectTrigger className="h-8 flex-1 text-xs" aria-label={`Periodo para ${label}`}>
+                  <SelectValue placeholder="Elija el periodo" />
+                </SelectTrigger>
+                <SelectContent>
+                  {withStoredPeriod(periods, condition.value).map((p) => (
+                    <SelectItem key={p.key} value={p.key}>{p.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             ) : range && field?.kind === "date" ? (
               /*
                 One control for both ends, not two calendars side by side.
@@ -481,7 +523,80 @@ const FilterRow = memo(function FilterRow({
   );
 });
 
-const FilterBuilder = ({ config, root, optionLists, onUpdate, onRemove, onSetJoin }: Props) => {
+/** A value the way a sentence would write it. */
+const sayValue = (value: unknown, field: CatalogField | undefined): string => {
+  if (value === true) return "Sí";
+  if (value === false) return "No";
+  if (value === undefined || value === null || value === "") return "…";
+  if (field?.kind === "date") {
+    const day = asDay(value);
+    // The notation the range picker reads back, not the one on the wire.
+    if (day) return format(day, "dd/MM/yyyy");
+  }
+  return field?.kind === "string" ? `«${String(value)}»` : String(value);
+};
+
+const sayCondition = (
+  condition: FilterCondition, root: CatalogRoot | undefined, periods: CatalogPeriod[],
+): string => {
+  const field = findField(root, condition.path);
+  const name = field?.label ?? condition.path;
+  const verb = OPERATOR_LABEL[condition.operator] ?? condition.operator;
+
+  if (!operatorNeedsValue(condition.operator)) return `${name} ${verb}`;
+  if (condition.operator === "period") {
+    const period = periods.find((p) => p.key === condition.value)?.label;
+    return `${name} ${verb} «${period ?? String(condition.value ?? "…")}»`;
+  }
+  if (operatorNeedsTwoValues(condition.operator)) {
+    const pair = Array.isArray(condition.value) ? condition.value : [];
+    return `${name} ${verb} ${sayValue(pair[0], field)} y ${sayValue(pair[1], field)}`;
+  }
+  if (condition.operator === "in") {
+    const list = Array.isArray(condition.value) ? condition.value : [];
+    return `${name} ${verb}: ${list.length > 0 ? list.map((v) => sayValue(v, field)).join(", ") : "…"}`;
+  }
+  return `${name} ${verb} ${sayValue(condition.value, field)}`;
+};
+
+/**
+ * A filter this panel has no controls for, read back as a sentence.
+ *
+ * The conditions under an existence filter are counted, not spelt out: their
+ * paths are written from the related entity — a revision's fields, in a report
+ * about events — and this panel only holds the catalog of the report's own
+ * root, so the names would come out as raw paths.
+ */
+const sayNode = (
+  node: FilterGroup["conditions"][number],
+  root: CatalogRoot | undefined,
+  periods: CatalogPeriod[],
+  nested = false,
+): string => {
+  if (isFilterGroup(node)) {
+    const parts = node.conditions.map((inner) => sayNode(inner, root, periods, true));
+    if (parts.length === 0) return "grupo sin condiciones";
+    const joined = parts.join(node.op === "or" ? " o " : " y ");
+    // Brackets only where they change the reading: a group inside another.
+    return nested && parts.length > 1 ? `(${joined})` : joined;
+  }
+  if (isExists(node)) {
+    const exists = node as ExistsCondition;
+    const relation = root?.aggregateOnly.find((a) => a.path === exists.exists)?.label.toLowerCase()
+      ?? exists.exists;
+    const inner = exists.where?.conditions.length ?? 0;
+    return `${exists.negate ? "No tiene" : "Tiene"} ${relation}`
+      + (inner > 0 ? ` que cumplen ${inner} ${inner === 1 ? "condición" : "condiciones"}` : "");
+  }
+  return sayCondition(node as FilterCondition, root, periods);
+};
+
+/** One reference for "no periods", so the memoised rows do not see a new array each render. */
+const NO_PERIODS: CatalogPeriod[] = [];
+
+const FilterBuilder = ({
+  config, root, optionLists, periods = NO_PERIODS, onUpdate, onRemove, onSetJoin,
+}: Props) => {
   const conditions = config.filters?.conditions ?? [];
 
   if (conditions.length === 0) {
@@ -511,12 +626,23 @@ const FilterBuilder = ({ config, root, optionLists, onUpdate, onRemove, onSetJoi
         {conditions.map((node, index) => {
           // Nested groups and existence filters come from saved configurations;
           // there is no interface to edit them, so say so rather than pretend.
+          //
+          // And say what they are. The row read "Filtro avanzado" and stopped:
+          // a condition that shapes the whole report, with a button to remove
+          // it and nothing to tell what removing it would change.
           if (isFilterGroup(node) || isExists(node)) {
             return (
-              <li key={`adv-${index}`} className="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                <span className="text-muted-foreground">Filtro avanzado</span>
+              <li key={`adv-${index}`} className="flex items-start justify-between gap-2 px-2 py-2">
+                <div className="min-w-0 space-y-0.5">
+                  <p className="text-sm font-medium">Filtro avanzado</p>
+                  <p className="text-sm text-muted-foreground">{sayNode(node, root, periods)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    No se edita desde aquí: solo se puede quitar.
+                  </p>
+                </div>
                 <Button
-                  variant="ghost" size="icon" className="h-7 w-7"
+                  variant="ghost" size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
                   aria-label={`Quitar filtro avanzado ${index + 1}`}
                   onClick={() => onRemove(index)}
                 >
@@ -535,6 +661,7 @@ const FilterBuilder = ({ config, root, optionLists, onUpdate, onRemove, onSetJoi
               index={index}
               field={field}
               options={field?.optionList ? optionLists?.[field.optionList] : undefined}
+              periods={periods}
               onUpdate={onUpdate}
               onRemove={onRemove}
             />

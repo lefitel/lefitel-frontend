@@ -12,8 +12,28 @@ import { CiudadInterface } from "../interfaces/interfaces";
  * hundred — with the total printed on a card two centimetres above the table,
  * disagreeing.
  */
-export const getCiudad = (archived = false): Promise<CiudadInterface[]> =>
-  todasLasFilas<CiudadInterface>(urlApi + urlCiudad, archived ? { archived: true } : {});
+export const getCiudad = (archived = false): Promise<CiudadConCifras[]> =>
+  todasLasFilas<CiudadConCifras>(urlApi + urlCiudad, archived ? { archived: true } : {});
+
+/**
+ * A city as the list serves it: the row, plus what hangs from it.
+ *
+ * Every figure is optional because the server sends each block only to a role
+ * that could read it on its own screen — the first two need `postes.ver`, the
+ * last three `eventos.ver`. Absent means "not yours to see", never zero.
+ */
+export interface CiudadConCifras extends CiudadInterface {
+  /** Live poles on any tramo that ends here. */
+  postes?: number;
+  /** Ids of the live cities it shares a tramo with. */
+  vecinas?: number[];
+  /** Unresolved incidents on those poles. */
+  pendientes?: number;
+  /** How many of the unresolved ones are flagged as priority. */
+  prioritarios?: number;
+  /** Date of the most recent incident, resolved or not. */
+  ultimoEvento?: string | null;
+}
 
 export const searchCiudad = (id: number): Promise<CiudadInterface> =>
   axios
@@ -29,9 +49,18 @@ export const createCiudad = (data: CiudadInterface): Promise<CiudadInterface> =>
     .then((response) => response.data);
 };
 
+/**
+ * Sends the four columns a city has, and not the object it was handed.
+ *
+ * The form passes back the row it was opened with, and since the list started
+ * carrying figures that row holds `postes`, `pendientes` and the rest. The
+ * server builds the bitácora entry from the body it receives, so sending them
+ * recorded every edit as a change to counts nobody touched.
+ */
 export const editCiudad = (data: CiudadInterface): Promise<CiudadInterface> => {
+  const { name, image, lat, lng } = data;
   return axios
-    .put<CiudadInterface>(urlApi + urlCiudad + data.id, data)
+    .put<CiudadInterface>(urlApi + urlCiudad + data.id, { name, image, lat, lng })
     .then((response) => response.data);
 };
 

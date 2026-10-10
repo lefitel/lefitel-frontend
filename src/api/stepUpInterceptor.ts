@@ -36,10 +36,14 @@ import { toast } from "sonner";
 import {
   STEP_UP_PASSWORD_FIELD,
   CODIGO_STEP_UP,
+  MENSAJE_CANCELADO,
+  MENSAJE_FACTOR_INCOMPLETO,
+  MENSAJE_SIN_INTENTOS,
   MOTIVO_ESTADO_INCOMPLETO,
   MOTIVO_CONTRASENA_INCORRECTA,
 } from "./stepUp";
 import type { RechazoStepUp } from "./stepUp";
+import { marcarExplicacion } from "./fallo";
 
 /**
  * Lo que la ventana devuelve cuando ha terminado.
@@ -111,6 +115,35 @@ const metodosDe = (valor: unknown): string[] | undefined =>
  */
 export type ResolvedorStepUp = (peticion: PeticionStepUp) => Promise<ResultadoStepUp | null>;
 
+/**
+ * Qué le queda por hacer a una petición que pidió ceremonia: con qué acabó la
+ * suya y, sobre todo, **quién** la acabó.
+ *
+ * 🔴 **Los dos finales sin resultado no son la misma cosa, y con un `null` para
+ * los dos no se podían distinguir.** Cancelar es una decisión de quien está
+ * delante, y merece que se le diga que por eso no pasó nada. Lo demás —que la
+ * aplicación aún no haya montado la ventana, que la sesión se corte por debajo,
+ * que la ventana reviente— no lo ha decidido nadie: decirle a esa persona que
+ * canceló sería mentirle, y en el caso de la sesión cortada, mentirle encima de
+ * una pantalla que ya se está yendo al login.
+ *
+ * Va en el valor de la promesa y no en una variable del módulo a propósito:
+ * cada petición que espera lee el desenlace de **su** ceremonia, y no el de la
+ * siguiente, que puede haber empezado ya.
+ */
+type DesenlaceStepUp =
+  | { fin: "resuelto"; resultado: ResultadoStepUp }
+  | { fin: "cancelado" }
+  | { fin: "sin-resolver" }
+  /**
+   * No hubo ventana para esta petición y aun así se reenvía: la ceremonia de
+   * **otra** petición acaba de cambiar el estado de la sesión, así que lo que
+   * decía su rechazo puede haber dejado de ser verdad. Se manda tal cual y se
+   * deja que el servidor nombre la carencia que quede —el porqué está en
+   * `resolver`.
+   */
+  | { fin: "reenviar" };
+
 let resolvedor: ResolvedorStepUp | null = null;
 
 /**
@@ -137,10 +170,12 @@ export function registrarResolvedorStepUp(fn: ResolvedorStepUp | null): void {
  * código correcto tecleado todas las veces, y sin nada en pantalla que lo
  * explique.
  *
- * Con esto, la primera petición abre la ventana y las demás esperan **esa
- * misma promesa**: se reintentan con su resultado sin volver a preguntar nada.
+ * Con esto, la primera petición abre la ventana y las que necesiten lo mismo
+ * esperan **esa misma promesa**: se reintentan con su resultado sin volver a
+ * preguntar nada. Las que necesiten otra cosa esperan a que acabe y abren la
+ * suya — `parCeremonia`, aquí debajo, es lo que separa un caso del otro.
  */
-let ceremonia: Promise<ResultadoStepUp | null> | null = null;
+let ceremonia: Promise<DesenlaceStepUp> | null = null;
 
 /**
  * Con qué se corta la ceremonia viva desde fuera, y el aviso para que la
@@ -150,8 +185,43 @@ let ceremonia: Promise<ResultadoStepUp | null> | null = null;
  * peticiones que la esperaban se quedan **ni resueltas ni rechazadas** — sus
  * `await` no vuelven nunca. Hay que llamar a su `resolve`.
  */
-let cerrarCeremonia: ((r: ResultadoStepUp | null) => void) | null = null;
+let cerrarCeremonia: ((d: DesenlaceStepUp) => void) | null = null;
 let abortoCeremonia: AbortController | null = null;
+
+/**
+ * Qué carencia está cubriendo la ceremonia viva, que es lo que decide quién
+ * puede aprovecharla.
+ *
+ * 🔴 **`motivo` a secas no distingue lo que hay que pedir.** Dos operaciones
+ * de la misma pantalla rechazan las dos con `sin-factor-reciente` y se
+ * diferencian sólo en `exigeContrasena`: cerrar la sesión de otro dispositivo
+ * se cubre probando el factor, y cambiar el nombre de la cuenta necesita
+ * además la contraseña. Enganchar la segunda a la ventana de la primera le
+ * entrega un resultado **sin contraseña** —la ventana ni siquiera dibujó el
+ * campo—, así que su reenvío vuelve a fallar, gasta un reintento y acaba
+ * abriendo una segunda ventana igualmente.
+ *
+ * 🔴 **Y por qué `contraseña-incorrecta` no lleva `exigeContrasena` sin que eso
+ * sea un agujero**, que es la asimetría que alguien va a querer «arreglar». El
+ * servidor manda el campo al pedir el factor y al pedir la contraseña, pero no
+ * al rechazar una contraseña equivocada: allí llega siempre ausente, o sea
+ * `false`, y todas las peticiones que estén ahí comparten par. Compartir es lo
+ * correcto, porque ese motivo significa que la contraseña **ya se comparó** —y
+ * para llegar a compararla la puerta del factor ya estaba pasada—, así que dos
+ * peticiones con ese motivo están en el mismo estado y necesitan exactamente lo
+ * mismo: teclear otra vez la contraseña. Añadir el campo allí no cambiaría
+ * ninguna decisión de aquí.
+ */
+interface ParStepUp {
+  motivo: string;
+  exigeContrasena: boolean;
+}
+let parCeremonia: ParStepUp | null = null;
+
+/** Si dos peticiones necesitan exactamente lo mismo y por tanto les vale una
+ *  sola ventana. Sin ceremonia viva no hay par que igualar. */
+const mismoPar = (viva: ParStepUp | null, otra: ParStepUp): boolean =>
+  viva !== null && viva.motivo === otra.motivo && viva.exigeContrasena === otra.exigeContrasena;
 
 /**
  * Las puertas que el interceptor no debe tocar nunca.
@@ -209,19 +279,112 @@ export const RUTAS_EXCLUIDAS = [
 const CUERPOS_QUE_CADUCAN = ["/auth/totp/confirm"];
 
 /**
- * Cuántas veces se reintenta una misma petición antes de rendirse.
+ * Cuántas veces se reintenta con el **mismo** `motivo` cuando el servidor no
+ * dice cuántos intentos quedan.
  *
- * Dos, y hace falta que sean dos: en las rutas que quieren el factor **y** la
- * contraseña el servidor nombra una carencia por respuesta, así que la
- * ceremonia honrada son dos viajes. El tope existe porque sin él un cuerpo mal
- * serializado —o un motivo que el servidor repite— gira para siempre, dejando
- * una línea de bitácora por vuelta.
+ * 🔴 **El que manda mientras venga es `intentosRestantes`**, que el servidor
+ * cuenta y escribe en el cuerpo del 403 — `RechazoStepUp`, en `stepUp.ts`, dice
+ * qué significa su `0`. El presupuesto es suyo, así que el número que él manda
+ * es el que se obedece. Este tope sólo cubre a los motivos que no lo traen y a
+ * un servidor anterior que no lo mande nunca.
+ *
+ * Puesto a la altura del presupuesto de contraseña del servidor
+ * (`PASSWORD_CONFIRM_LIMIT`, en `api/src/config/security.ts`) para no quedarse
+ * corto por debajo de él. Si allí sube, aquí no falla nada: manda el número que
+ * llegue por el cable.
  */
-const MAX_REINTENTOS = 2;
+const MAX_REINTENTOS_POR_MOTIVO = 5;
+
+/**
+ * El techo de la petición entera, sumando todos los motivos.
+ *
+ * 🔴 **Contra qué protege, que no es contra equivocarse.** Es lo único que
+ * impide girar para siempre, y hace falta **además** del tope por motivo: como
+ * cada motivo lleva su propia cuenta, un servidor que alterne dos motivos no
+ * llega a agotar ninguna de las dos nunca. Sin este techo eso son vueltas
+ * infinitas, con una línea de bitácora por vuelta y sin nada en pantalla que
+ * lo explique.
+ *
+ * 🔴 **Y por qué sobra tanto, que es lo que alguien va a querer recortar.** El
+ * número tiene holgura a propósito: nadie que teclee bien puede acercarse. La
+ * ceremonia honrada son dos viajes —el servidor nombra una carencia por
+ * respuesta— y el presupuesto de contraseña del servidor
+ * (`PASSWORD_CONFIRM_LIMIT`, en `api/src/config/security.ts`) cabe entero por
+ * debajo de lo que queda. Bajarlo hasta que «ajuste» vuelve a poner los pasos
+ * de la ceremonia a competir con las equivocaciones por el mismo presupuesto,
+ * que es exactamente el defecto que la cuenta por motivo vino a quitar: si
+ * mañana la ceremonia gana un paso, esto tiene que seguir sobrando.
+ */
+const MAX_REINTENTOS = 10;
 
 interface ConfigConIntentos extends InternalAxiosRequestConfig {
-  __stepUpIntentos?: number;
+  /**
+   * Cuántos reenvíos lleva hechos esta petición, **por `motivo`** del rechazo
+   * que los pidió.
+   *
+   * Las claves llevan el prefijo de `claveDe`, y ahí está escrito por qué:
+   * sin él, tres nombres de motivo se pierden en el clonado que hace axios al
+   * reenviar y los dos frenos dejan de existir.
+   *
+   * 🔴 **Por motivo, y ahí está el arreglo.** Con una sola cuenta, los viajes
+   * de la ceremonia honrada —el servidor nombra una carencia por respuesta, así
+   * que pedir el factor y pedir después la contraseña son dos rechazos que
+   * nadie ha hecho mal— salían del mismo presupuesto que las equivocaciones. El
+   * resultado era que la primera contraseña mal tecleada mataba la operación,
+   * teniendo el servidor intentos de sobra que ofrecer. Un motivo distinto es
+   * un paso distinto de la ceremonia, no otra equivocación con lo mismo.
+   */
+  __stepUpIntentos?: Record<string, number>;
 }
+
+/** Lo que lleva contado esta petición, o el mapa vacío si es la primera vez. */
+const intentosDe = (config: ConfigConIntentos): Record<string, number> =>
+  config.__stepUpIntentos ?? {};
+
+/** Cuántos reenvíos lleva la petición en total, sumando todos los motivos. */
+const totalDe = (intentos: Record<string, number>): number =>
+  Object.values(intentos).reduce((suma, n) => suma + n, 0);
+
+/**
+ * Con qué clave se cuenta un `motivo`.
+ *
+ * 🔴 **El prefijo no es cosmético: sin él el techo de reintentos no existe.**
+ * El reenvío es `axios(config)`, y axios **no manda este mismo objeto**: lo
+ * clona por el camino (`mergeConfig` → `utils.merge`), así que la
+ * configuración que vuelve dentro del error de la vuelta siguiente es una
+ * copia. Y ese clonado **descarta a propósito** las claves `__proto__`,
+ * `constructor` y `prototype` — está en el `assignValue` de
+ * `node_modules/axios/lib/utils.js`, contra la contaminación de prototipos.
+ *
+ * Un `motivo` llamado como una de las tres se perdía **entero** en el viaje: el
+ * mapa llegaba vacío, `cuentaDe` y `totalDe` valían cero para siempre, y **no
+ * se activaba ninguno de los dos frenos** — ni el del motivo ni el de la
+ * petición entera. Medido contra el axios instalado: doscientas peticiones y
+ * subiendo. Con el prefijo la clave viaja; sin él, no.
+ *
+ * 🔴 **Y por eso el recuento sigue viviendo en el `config` y no en un
+ * `WeakMap`.** También medido, y es lo contrario de lo que parece: el clonado
+ * **no conserva la identidad** del objeto de configuración, así que un
+ * `WeakMap` con el `config` de clave perdería la cuenta en **todas** las
+ * vueltas y no sólo en las tres claves malas. Lo que sobrevive al viaje es el
+ * valor copiado, no el objeto.
+ *
+ * Se aplica aquí dentro, y no en cada sitio que toca el mapa, para que no haya
+ * dónde olvidarlo.
+ */
+const claveDe = (motivo: string): string => `m:${motivo}`;
+
+/**
+ * Cuántos reenvíos lleva un motivo concreto.
+ *
+ * El `typeof` es porque `motivo` viaja en el cuerpo del 403 sin validar: la
+ * clave es del servidor aunque el prefijo la haga inofensiva, y lo que no sea
+ * un número no puede compararse con un tope.
+ */
+const cuentaDe = (intentos: Record<string, number>, motivo: string): number => {
+  const n = intentos[claveDe(motivo)];
+  return typeof n === "number" ? n : 0;
+};
 
 const rutaDe = (config: { url?: string } | undefined): string => config?.url ?? "";
 
@@ -297,14 +460,16 @@ function cuerpoDe(config: ConfigConIntentos): Record<string, unknown> {
  * inyectó en un reintento.
  */
 const traiaContrasena = (config: ConfigConIntentos): boolean =>
-  (config.__stepUpIntentos ?? 0) === 0 && STEP_UP_PASSWORD_FIELD in cuerpoDe(config);
+  totalDe(intentosDe(config)) === 0 && STEP_UP_PASSWORD_FIELD in cuerpoDe(config);
 
 /**
  * Quita la contraseña del cuerpo de una configuración, dejando el resto.
  *
- * Se llama sobre el error que sale de aquí hacia la pantalla que llamó. El
- * cuerpo puede venir ya serializado a cadena (es lo normal para cuando axios
- * ha despachado) o seguir siendo un objeto, así que se contemplan los dos.
+ * Se llama sobre el `config` que sale de aquí hacia la pantalla que llamó,
+ * tanto si el reintento acaba en respuesta (`respuesta.config`) como si acaba
+ * en error (`error.config`). El cuerpo puede venir ya serializado a cadena
+ * (es lo normal para cuando axios ha despachado) o seguir siendo un objeto,
+ * así que se contemplan los dos.
  */
 function limpiarPassword(config: ConfigConIntentos | undefined): void {
   if (!config) return;
@@ -320,14 +485,42 @@ function limpiarPassword(config: ConfigConIntentos | undefined): void {
     }
   } catch {
     // Un cuerpo que no se puede leer tampoco se puede limpiar campo a campo.
-    // Se tira entero, que es la dirección segura: perder el cuerpo de un error
-    // ya fallido cuesta menos que dejar una contraseña dentro.
+    // Se tira entero, que es la dirección segura: perder el cuerpo de un
+    // error ya fallido cuesta menos que dejar una contraseña dentro, y en una
+    // respuesta que salió bien es un caso que hoy no se alcanza —
+    // `inyectarPassword` siempre deja JSON válido— pero el mismo criterio
+    // aplica si algún día deja de ser cierto.
     config.data = undefined;
   }
 }
 
 /**
- * Abre la ventana, o se engancha a la que ya está abierta.
+ * Abre la ventana, se engancha a la que ya está abierta si pide lo mismo, o
+ * espera turno si pide otra cosa.
+ *
+ * 🔴 **Esperar turno, no abrir encima.** La ventana atiende una ceremonia cada
+ * vez: la segunda que se abriera sustituiría a la primera y las peticiones que
+ * estaban esperando a aquélla se quedarían **ni resueltas ni rechazadas**, sus
+ * `await` sin volver nunca — el mismo final que `cancelarStepUpEnCurso` existe
+ * para evitar.
+ *
+ * 🔴 **Y al llegar su turno se reenvía, no se abre otra ventana. Lo que evita
+ * eso es un intento fallido contra el bloqueo de la cuenta.** Reabrir con el
+ * rechazo **viejo** vuelve a exigir prueba de factor, y lo que hay delante es
+ * el mismo código de la aplicación, todavía en pantalla dentro de su medio
+ * minuto: teclearlo otra vez es un reenvío del mismo paso, el servidor lo tiene
+ * sellado como usado, lo da por no válido y **carga un intento** de los cinco
+ * que bloquean la cuenta entera del ERP; con el código del correo o uno de
+ * recuperación, además, se gasta. Reenviando la petición tal cual, el servidor
+ * nombra lo que falta **ahora** —el factor acaba de probarse en la ceremonia de
+ * al lado, así que lo que queda es la contraseña— y la ventana que salga de ese
+ * rechazo pide sólo eso.
+ *
+ * Cuesta una ida y vuelta y un reintento del presupuesto de ese motivo, donde
+ * cabe de sobra. Y **sólo se reenvía cuando la ceremonia de al lado se
+ * resolvió**, que es lo único que pudo cambiar el estado de la sesión: si se
+ * canceló, el rechazo viejo sigue describiendo exactamente lo que falta y el
+ * viaje no enseñaría nada.
  *
  * La promesa se limpia en `finally` pase lo que pase: si se quedara colgada,
  * la siguiente petición rechazada esperaría eternamente a una ventana que ya
@@ -335,25 +528,69 @@ function limpiarPassword(config: ConfigConIntentos | undefined): void {
  */
 async function resolver(
   peticion: Omit<PeticionStepUp, "signal">,
-): Promise<ResultadoStepUp | null> {
-  if (ceremonia) return ceremonia;
+): Promise<DesenlaceStepUp> {
+  while (ceremonia) {
+    if (mismoPar(parCeremonia, peticion)) return ceremonia;
+    const desenlace = await ceremonia;
+    /**
+     * 🔴 **`sin-resolver` se hereda; `cancelado` no.** Los dos acaban la
+     * ceremonia sin resultado, y aun así quien esperaba turno tiene que hacer
+     * cosas distintas con cada uno.
+     *
+     * **Se hereda** porque una sesión caída no la arregla abrir otra ventana.
+     * Así termina la que se corta desde fuera —`cancelarStepUpEnCurso`—, y la
+     * ventana que abriera quien esperaba turno saldría encima de la pantalla de
+     * login, con un abortador nuevo que ya no va a abortar nadie: pidiéndole
+     * algo a quien no tiene sesión con la que responder, y sin nadie que la
+     * resuelva, así que esa petición tampoco vuelve nunca. El otro final sin
+     * resolver —la ventana lanzó al abrirse— tampoco mejora repitiéndolo.
+     *
+     * **No se hereda** la cancelación, porque ahí sí queda sitio para la
+     * siguiente: quien cancela decide sobre la operación que tenía delante, no
+     * sobre la que estaba en cola, y la sesión sigue en pie para atenderla.
+     */
+    if (desenlace.fin === "sin-resolver") return desenlace;
+    // Se resolvió: el estado de la sesión ya no es el que provocó este rechazo,
+    // así que la pregunta se le hace al servidor y no a la persona.
+    if (desenlace.fin === "resuelto") return { fin: "reenviar" };
+    // Cancelada: nada cambió, y el bucle vuelve a mirar por si mientras tanto
+    // ha nacido otra ceremonia a la que esperar.
+  }
   const fn = resolvedor;
-  if (!fn) return null;
+  if (!fn) return { fin: "sin-resolver" };
 
   const control = new AbortController();
   abortoCeremonia = control;
+  parCeremonia = { motivo: peticion.motivo, exigeContrasena: peticion.exigeContrasena };
   // Una carrera entre la ventana y `cancelarStepUpEnCurso`: gana quien llegue
   // primero, y la segunda llamada a `resolve` no hace nada — una promesa se
   // resuelve una vez. Eso es justo lo que se quiere.
-  ceremonia = new Promise<ResultadoStepUp | null>((resolve) => {
+  const propia: Promise<DesenlaceStepUp> = new Promise<DesenlaceStepUp>((resolve) => {
     cerrarCeremonia = resolve;
-    void fn({ ...peticion, signal: control.signal }).then(resolve, () => resolve(null));
+    void fn({ ...peticion, signal: control.signal }).then(
+      (r) => resolve(r ? { fin: "resuelto", resultado: r } : { fin: "cancelado" }),
+      // La ventana lanzó. Es un fallo de la ventana, no una decisión de nadie:
+      // se acaba la ceremonia sin resultado y sin atribuírsela a la persona.
+      () => resolve({ fin: "sin-resolver" }),
+    );
   }).finally(() => {
+    /**
+     * 🔴 **Limpia sólo si el estado del módulo sigue siendo el de ESTA
+     * ceremonia.** `cancelarStepUpEnCurso` resuelve la promesa y anula el
+     * estado en el acto, mientras que este `finally` corre un microtask
+     * después: si en ese hueco ha nacido otra ceremonia, borrar a ciegas le
+     * quitaría a la que está viva su resolvedor, su abortador y su par — y con
+     * el par ya perdido, la siguiente petición no podría saber si le vale la
+     * ventana que tiene delante.
+     */
+    if (ceremonia !== propia) return;
     ceremonia = null;
     cerrarCeremonia = null;
     abortoCeremonia = null;
+    parCeremonia = null;
   });
-  return ceremonia;
+  ceremonia = propia;
+  return propia;
 }
 
 /**
@@ -379,10 +616,11 @@ export function cancelarStepUpEnCurso(): void {
   // Lo que sí hay que hacer es **resolver** la ceremonia viva, no soltarla:
   // soltar la referencia deja a quien la esperaba ni resuelto ni rechazado.
   abortoCeremonia?.abort();
-  cerrarCeremonia?.(null);
+  cerrarCeremonia?.({ fin: "sin-resolver" });
   ceremonia = null;
   cerrarCeremonia = null;
   abortoCeremonia = null;
+  parCeremonia = null;
 }
 
 /**
@@ -398,12 +636,24 @@ const CODIGO_FACTOR_PENDIENTE = "FACTOR_PENDIENTE";
 const RUTA_SEGUNDO_FACTOR = "/app/segundo-factor";
 
 /**
- * Lo que se enseña cuando se acabó el plazo y no hay factor.
+ * Se para la operación porque falta terminar de configurar el segundo factor:
+ * se enseñan las dos cosas que hacen falta y se devuelve el rechazo.
+ *
+ * 🔴 **Una sola función porque son dos negativas distintas con la misma
+ * carencia y el mismo remedio** — la de la puerta del step-up y la que contesta
+ * `authenticate` cuando se acaba el plazo sin ningún factor. Que se vean igual
+ * era el argumento entero para tocarlas; tenerlo escrito dos veces es
+ * exactamente como dejan de verse igual.
  *
  * 🔴 **No abre la ventana, y no puede.** Aquí no hay nada que teclear: el
  * único remedio es registrar un segundo factor, así que una ventana pidiendo
- * una contraseña que el servidor no va a mirar giraría para siempre. Es un
- * aviso con un enlace, y se acabó.
+ * una contraseña que el servidor no va a mirar giraría para siempre.
+ *
+ * **Las dos cosas, y dicen cosas distintas a propósito.** El aviso lleva el
+ * botón y dice **dónde se arregla**; la frase marcada sustituye al «no se
+ * pudo» genérico de la pantalla y dice **qué le pasó a la operación**. Si las
+ * dos dijeran lo mismo, la segunda sería el aviso idéntico y sin botón que
+ * `http.ts` lleva evitando desde que existe.
  *
  * Antes de esto, `createRol`, `editRol` y `createUsuario` se tragaban la
  * respuesta con un `.catch(() => 400)` y enseñaban un «no se pudo» pelado:
@@ -411,9 +661,10 @@ const RUTA_SEGUNDO_FACTOR = "/app/segundo-factor";
  * acababa preguntando.
  *
  * El `id` fijo es lo que evita que quince peticiones fallidas apilen quince
- * avisos idénticos: sonner reemplaza el que ya está en pantalla.
+ * avisos idénticos: sonner reemplaza el que ya está en pantalla. Lo comparten
+ * las dos negativas, que para esto son el mismo problema.
  */
-function avisarFactorPendiente(mensaje: string | undefined): void {
+function pararPorFactorIncompleto(error: AxiosError, mensaje: string | undefined): Promise<never> {
   toast.error(mensaje ?? "Termina de configurar tu segundo factor para continuar.", {
     id: "factor-pendiente",
     duration: 10_000,
@@ -425,6 +676,8 @@ function avisarFactorPendiente(mensaje: string | undefined): void {
       onClick: () => { window.location.href = RUTA_SEGUNDO_FACTOR; },
     },
   });
+  marcarExplicacion(error, MENSAJE_FACTOR_INCOMPLETO);
+  return Promise.reject(error);
 }
 
 /** Registra el interceptor. La llama `http.ts` una sola vez, al importarse. */
@@ -450,8 +703,7 @@ export function instalarInterceptorStepUp(): number {
         datos?.code === CODIGO_FACTOR_PENDIENTE &&
         esNuestraApi(config)
       ) {
-        avisarFactorPendiente(datos.message);
-        return Promise.reject(error);
+        return pararPorFactorIncompleto(error, datos.message);
       }
 
       if (
@@ -494,47 +746,108 @@ export function instalarInterceptorStepUp(): number {
       // ventana puede obtener. Reintentar aquí es un bucle infinito
       // garantizado, y hoy se alcanza en dos rutas de verdad.
       if (datos?.motivo === MOTIVO_ESTADO_INCOMPLETO) {
+        // La misma salida que la otra negativa que pide esto, y por eso la
+        // misma función: hasta ahora ésta no enseñaba ninguna de las dos cosas,
+        // así que quien llegaba aquí leía el «no se pudo» de su pantalla y se
+        // quedaba sin saber ni qué le faltaba ni dónde arreglarlo.
+        return pararPorFactorIncompleto(error, datos.message);
+      }
+
+      const motivo = datos?.motivo ?? "";
+      const intentos = intentosDe(config);
+      // Se comprueba el tipo en ejecución y no sólo en la declaración: `datos`
+      // es JSON sin validar, y una cadena colada aquí no sería ni «el servidor
+      // dijo un número» ni «el servidor no dijo nada», que son los dos casos
+      // que se reparten las comprobaciones de abajo.
+      const restantes =
+        typeof datos?.intentosRestantes === "number" ? datos.intentosRestantes : undefined;
+
+      /**
+       * 🔴 **El `0` del servidor es un final, no una sugerencia** — lo dice
+       * `RechazoStepUp`, en `stepUp.ts`. Volver a abrir la ventana aquí le pide
+       * a alguien que teclee algo que ya no le van a comparar, y la respuesta
+       * al envío que saldría de ahí es la de un presupuesto agotado.
+       *
+       * Y hasta ahora eso llegaba a pantalla como el «no se pudo» genérico de
+       * la pantalla, sin que nadie se enterase de que acababa de gastar el
+       * último intento — justo lo que este campo existe para evitar.
+       */
+      if (restantes !== undefined && restantes <= 0) {
+        marcarExplicacion(error, MENSAJE_SIN_INTENTOS);
         return Promise.reject(error);
       }
 
-      const intentos = config.__stepUpIntentos ?? 0;
-      if (intentos >= MAX_REINTENTOS) return Promise.reject(error);
+      // Los dos frenos de este lado: el del motivo cubre a un servidor que no
+      // diga cuántos quedan, y el de la petición entera es lo que impide girar
+      // para siempre cuando el servidor alterna motivos.
+      if (
+        (restantes === undefined && cuentaDe(intentos, motivo) >= MAX_REINTENTOS_POR_MOTIVO) ||
+        totalDe(intentos) >= MAX_REINTENTOS
+      ) {
+        return Promise.reject(error);
+      }
 
-      const resultado = await resolver({
-        motivo: datos?.motivo ?? "",
+      const desenlace = await resolver({
+        motivo,
         exigeContrasena: datos?.exigeContrasena === true,
-        intentosRestantes: datos?.intentosRestantes,
+        intentosRestantes: restantes,
         metodos: metodosDe(datos?.metodos),
         mensaje: datos?.message ?? null,
       });
 
-      // Canceló, o no hay ventana montada. El rechazo original sigue su
-      // camino: la pantalla que llamó decide qué enseñar.
-      if (!resultado) return Promise.reject(error);
+      /**
+       * 🔴 **Cancelar es lo único de aquí que decidió quien está delante, y por
+       * eso es lo único que se cuenta.** El rechazo original sigue su camino en
+       * los dos casos —la pantalla que llamó tiene que enterarse de que su
+       * operación no ocurrió—, pero sin esta frase lo que leía era su propio
+       * «No se pudo crear el rol»: cierto, y sin decir que la cancelación había
+       * sido suya. La frase viaja aparte de `normalized` porque el normalizador
+       * corre después y lo sustituye entero; el porqué está en `fallo.ts`.
+       */
+      if (desenlace.fin === "cancelado") {
+        marcarExplicacion(error, MENSAJE_CANCELADO);
+        return Promise.reject(error);
+      }
+      // Ni ventana montada, ni sesión, ni una ventana que funcione. Nada que
+      // contar desde aquí: en el primer caso la aplicación todavía no ha
+      // arrancado, y en el segundo el proveedor de sesión ya se está llevando
+      // la pantalla al login.
+      if (desenlace.fin === "sin-resolver") return Promise.reject(error);
+      // Los dos finales que siguen al reenvío. `reenviar` es el de la petición
+      // que esperaba turno y a la que la ceremonia de al lado le cambió el
+      // estado de la sesión: sale tal cual, sin nada añadido, y lo que conteste
+      // el servidor es lo que dirá qué falta de verdad ahora. Cuenta un
+      // reintento igual, porque es un viaje más de esta petición.
+      const resultado = desenlace.fin === "resuelto" ? desenlace.resultado : {};
 
-      config.__stepUpIntentos = intentos + 1;
+      config.__stepUpIntentos = { ...intentos, [claveDe(motivo)]: cuentaDe(intentos, motivo) + 1 };
       if (resultado.password) inyectarPassword(config, resultado.password);
+      /**
+       * 🔴 Borrar la contraseña del cuerpo antes de que salga de aquí, gane o
+       * pierda el reintento.
+       *
+       * Axios adjunta a la respuesta —o al error, si el reintento vuelve a
+       * fallar— la configuración de la petición que acaba de mandar, y esa
+       * configuración lleva el cuerpo que acabamos de ampliar. Sin esta
+       * limpieza, quien recibe la respuesta o el error —cada pantalla, en su
+       * `.then()` o en su `.catch()`— se encuentra, en claro:
+       *
+       *     response.config.data === '{"name":"x","stepup_password":"…"}'
+       *
+       * Hoy no hay ningún sitio en `web/src` que registre esos errores —ni
+       * Sentry, ni un `console.error` en un `catch`, ni un botón de «informar
+       * de un problema»—, así que nada la exfiltra. Pero el día que alguien
+       * añada cualquiera de las tres cosas, el ERP empezaría a mandar las
+       * contraseñas de la gente a un tercero, y ese cambio no tendría por qué
+       * pasar por nadie que conozca este fichero. Se limpia aquí, que es
+       * donde se sabe — en los dos caminos, porque la mitad de los reintentos
+       * salen bien.
+       */
       try {
-        return await axios(config);
+        const respuesta = await axios(config);
+        limpiarPassword(respuesta.config as ConfigConIntentos);
+        return respuesta;
       } catch (fallo) {
-        /**
-         * 🔴 Borrar la contraseña del error antes de que salga de aquí.
-         *
-         * Axios adjunta la configuración de la petición al error, y esa
-         * configuración lleva el cuerpo que acabamos de ampliar. Sin esta
-         * limpieza, el error que recibe el `.catch()` de cada pantalla
-         * contiene, en claro, la contraseña que la persona acaba de teclear:
-         *
-         *     error.config.data === '{"name":"x","stepup_password":"…"}'
-         *
-         * Hoy no hay ningún sitio en `web/src` que registre esos errores —ni
-         * Sentry, ni un `console.error` en un `catch`, ni un botón de «informar
-         * de un problema»—, así que nada la exfiltra. Pero el día que alguien
-         * añada cualquiera de las tres cosas, el ERP empezaría a mandar las
-         * contraseñas de la gente a un tercero, y ese cambio no tendría por qué
-         * pasar por nadie que conozca este fichero. Se limpia aquí, que es
-         * donde se sabe.
-         */
         limpiarPassword((fallo as { config?: ConfigConIntentos } | undefined)?.config);
         throw fallo;
       }

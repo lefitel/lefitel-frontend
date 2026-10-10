@@ -13,7 +13,13 @@ export interface UsuarioDetalleData {
   load: () => void;
 }
 
-export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
+/**
+ * `verBitacora` is whether the activity log of *this* account may be read: your
+ * own always, somebody else's with `bitacora.ver`. It is not asked for without
+ * it — see `usePosteDetalleData` for why: one refused read rejected the whole
+ * `Promise.all` and the account itself was discarded.
+ */
+export function useUsuarioDetalleData(id: number, { verBitacora }: { verBitacora: boolean }): UsuarioDetalleData {
   const [usuario, setUsuario] = useState<UsuarioInterface | null>(null);
   const [eventos, setEventos] = useState<EventoInterface[]>([]);
   const [bitacora, setBitacora] = useState<BitacoraInterface[]>([]);
@@ -25,7 +31,7 @@ export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
       const [u, e, b] = await Promise.all([
         searchUsuario(id),
         getEvento_usuario(id),
-        getBitacora(id, 50),
+        verBitacora ? getBitacora(id, 50) : Promise.resolve({ data: [] as BitacoraInterface[] }),
       ]);
       setUsuario(u);
       setEventos([...e].sort((a, b) => {
@@ -38,7 +44,7 @@ export function useUsuarioDetalleData(id: number): UsuarioDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, verBitacora]);
 
   useEffect(() => { load(); }, [load]);
 

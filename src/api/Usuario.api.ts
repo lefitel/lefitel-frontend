@@ -1,7 +1,7 @@
 import axios from "axios";
 import { urlUsuario, urlApi } from "./url";
 import { todasLasFilas } from "./listado";
-import { descargarListado, type FormatoDescarga } from "./descarga";
+import { descargarListado, mensajeDeError, type FormatoDescarga } from "./descarga";
 import { UsuarioInterface } from "../interfaces/interfaces";
 
 /** The whole directory, and an error rather than part of it. */
@@ -68,31 +68,59 @@ export const editUsuario = (data: UsuarioInterface): Promise<UsuarioInterface> =
 };
 
 /**
- * Rename an account. `oldPass` is the caller's *current* password, and the
- * server demands it whenever the account being renamed is their own.
+ * 🔴 **Why the wrappers below read `mensajeDeError` and not
+ * `e.response.data.message`.**
  *
- * It rides on the same request as the change, rather than being confirmed
- * beforehand through `POST /api/auth/confirm-password` — an endpoint retired for
- * this very reason. Two reasons, and the first one settles it: the server
- * requires it now, so a prior confirmation cannot stand in for it; it would only
- * add a second comparison, out of a second budget, in a second place where the
- * rule can drift. And the credential that authorises an operation belongs in the
- * request that performs it, which is how `editUserPass` has always worked.
+ * Every route they call sits behind the step-up gate, so any of them can be
+ * interrupted by the re-authentication dialog. When somebody cancels that
+ * dialog, the interceptor knows what happened and the server does not: the
+ * response body still carries what the gate asked for before anyone decided
+ * anything — "Introduce tu contraseña actual para completar esta operación."
+ * Reading the body straight puts that sentence on screen **immediately after
+ * the dialog asking for the password was closed by the person reading it** —
+ * an administrator cancels out of the permission matrix and is told to type
+ * the password they just declined to type.
  *
- * Not needed when an administrator renames somebody else: there is no password
- * they could be expected to know. `undefined` is what goes in then, and axios
- * omits the key.
+ * `mensajeDeError` reads `error.normalized` first, which is where `http.ts`
+ * copies the interceptor's own explanation, and falls back to the server's
+ * sentence when there is none. It is the funnel the other ~130 call sites in
+ * this application already use, so this is not a new pattern — it is these
+ * joining the one that exists. See §4.1 of
+ * `api/docs/specs/2026-08-25-estandar-api-design.md`.
+ *
+ * The `{ status, message }` return shape is unchanged: the screens branch on
+ * the number, and `mensajeDeError` only decides which sentence goes in
+ * `message`.
+ */
+
+/**
+ * Rename an account. **No password parameter, and that is load-bearing.**
+ *
+ * This took `oldPass` — the caller's current password — for as long as
+ * `updateUserName` compared one. It does not any more: the demand moved to the
+ * step-up gate in front of the route, which reads `stepup_password` and is
+ * answered by `stepUpInterceptor.ts` on the retry, from one dialog, once every
+ * ten minutes rather than once per request.
+ *
+ * So adding a password back here does not re-tighten anything. The server would
+ * ignore the field, the gate would ask anyway, and the person would type the
+ * same secret twice for one rename — which is the complaint the whole
+ * reauthentication window exists to answer. `Usuario.api.test.ts` holds the
+ * absence, at the type level as well as on the wire.
+ *
+ * `editUserPass` below is the deliberate exception: there `oldPass` is not a
+ * proof of identity but half of what is being changed.
  */
 export const editUserName = (
-  data: UsuarioInterface & { oldPass?: string }
+  data: UsuarioInterface
 ): Promise<{ status: number; message?: string }> => {
   return axios
     .put(urlApi + urlUsuario + "username/" + data.id, data)
     .then((response) => ({ status: response.status }))
-    .catch((e) => {
-      const msg = e.response?.data?.message || "Error desconocido";
-      return { status: e.response?.status || 500, message: msg };
-    });
+    .catch((e) => ({
+      status: e.response?.status || 500,
+      message: mensajeDeError(e, "Error desconocido"),
+    }));
 };
 
 export const editUserPass = (
@@ -101,10 +129,56 @@ export const editUserPass = (
   return axios
     .put(urlApi + urlUsuario + "userpass/" + data.id, data)
     .then((response) => ({ status: response.status }))
-    .catch((e) => {
-      const msg = e.response?.data?.message || "Error desconocido";
-      return { status: e.response?.status || 500, message: msg };
-    });
+    .catch((e) => ({
+      status: e.response?.status || 500,
+      message: mensajeDeError(e, "Error desconocido"),
+    }));
+};
+
+/**
+ * Move an account to another role — `PUT /api/usuario/:id/rol`.
+ *
+ * 🔴 **This is the only address that changes the role of an account that
+ * already exists, and until this function there was none.** `id_rol` used to
+ * travel inside `editUsuario`, and the server took it. It does not any more:
+ * the field left that route's allowlist and became this sub-resource, because
+ * `PUT /api/usuario/:id` is also how a person edits their own profile and it
+ * joined the ten-minute reauthentication window for that reason — saving a
+ * telephone number must not ask for a password again. Handing out authority
+ * must. So the field moved out rather than the route staying out.
+ *
+ * While this function did not exist, `editUsuario` went on sending `id_rol`
+ * and the server went on answering 200 after discarding it: the screen said
+ * "Usuario actualizado" and the role had not moved.
+ *
+ * **Two rules the caller has to keep, both of them the server's:**
+ *
+ * 1. **Never on the caller's own account.** The refusal there is
+ *    unconditional and answers 403 — even when the role sent is the one the
+ *    account already has. Losing your own access is the one mistake with no
+ *    way back, and nobody else can hand it to you.
+ * 2. **Only when the role actually moved.** Not a rule of the wire — the
+ *    server answers 204 and writes nothing when the number matches — but of
+ *    the person in front of it: this route asks for the password on **every**
+ *    request, window or no window, so a call that changes nothing still opens
+ *    the reauthentication dialog.
+ *
+ * `204` on success, so there is nothing to read back. The `{ status, message }`
+ * shape and `mensajeDeError` are its neighbours' above, for the reason their
+ * shared note gives: cancelling the dialog this call opens must not leave the
+ * gate's "type your password" sentence on screen.
+ */
+export const asignarRol = (
+  id: number,
+  id_rol: number,
+): Promise<{ status: number; message?: string }> => {
+  return axios
+    .put(urlApi + urlUsuario + id + "/rol", { id_rol })
+    .then((response) => ({ status: response.status }))
+    .catch((e) => ({
+      status: e.response?.status || 500,
+      message: mensajeDeError(e, "Error desconocido"),
+    }));
 };
 
 /**
@@ -132,10 +206,10 @@ export const resetMfaUsuario = (id: number): Promise<{ status: number; message?:
     // primera petición y cierra el bucle en origen.
     .post(urlApi + urlUsuario + id + "/mfa/reset", {})
     .then((response) => ({ status: response.status }))
-    .catch((e) => {
-      const msg = e.response?.data?.message || "Error desconocido";
-      return { status: e.response?.status || 500, message: msg };
-    });
+    .catch((e) => ({
+      status: e.response?.status || 500,
+      message: mensajeDeError(e, "Error desconocido"),
+    }));
 };
 
 /**
@@ -149,10 +223,10 @@ export const desbloquearUsuario = (id: number): Promise<{ status: number; messag
     // Mismo motivo que `resetMfaUsuario` — ver su comentario.
     .patch(urlApi + urlUsuario + id + "/desbloquear", {})
     .then((response) => ({ status: response.status }))
-    .catch((e) => {
-      const msg = e.response?.data?.message || "Error desconocido";
-      return { status: e.response?.status || 500, message: msg };
-    });
+    .catch((e) => ({
+      status: e.response?.status || 500,
+      message: mensajeDeError(e, "Error desconocido"),
+    }));
 };
 
 export const deleteUsuario = (id: number): Promise<void> => {

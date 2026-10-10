@@ -245,13 +245,23 @@ function PantallaSegundoFactor() {
   );
 }
 
+/** The profile, showing whatever came after the path in the address. */
+function PantallaPerfil() {
+  const location = useLocation();
+  return <span data-testid="resto">{location.search}{location.hash}</span>;
+}
+
 function HarnessConDestinos({
   onSesion,
   desde,
 }: {
   onSesion: (s: SesionInterface) => void;
-  /** The screen somebody was on before `PrivateRoutes` sent them to log in. */
-  desde?: string;
+  /**
+   * The screen somebody was on before `PrivateRoutes` sent them to log in. An
+   * object when the address had more than a path — `PrivateRoutes` hands over
+   * the whole location, and what follows the path is part of where they were.
+   */
+  desde?: string | { pathname: string; search?: string; hash?: string };
 }) {
   const [sesion, setSesionState] = useState<SesionInterface>({
     usuario: usuarioExample,
@@ -267,7 +277,9 @@ function HarnessConDestinos({
   };
 
   const value: contextProps = { sesion, setSesion, loading: false, logout: vi.fn() };
-  const entrada = desde ? { pathname: "/login", state: { from: { pathname: desde } } } : "/login";
+  const entrada = desde
+    ? { pathname: "/login", state: { from: typeof desde === "string" ? { pathname: desde } : desde } }
+    : "/login";
 
   return (
     <ThemeProvider>
@@ -285,6 +297,7 @@ function HarnessConDestinos({
             </Route>
             <Route path="/app/home" element={<div>pantalla-app</div>} />
             <Route path="/app/eventos/5" element={<div>pantalla-evento</div>} />
+            <Route path="/app/perfil" element={<PantallaPerfil />} />
           </Routes>
         </MemoryRouter>
       </SesionContext.Provider>
@@ -313,6 +326,7 @@ describe("a session with a factor still owed (plan 4B, hallazgo A10/D4)", () => 
       status: 200,
       usuario: { ...usuarioExample, user: "ada" },
       estado: "parcial",
+      metodos: ["correo", "codigo"],
     });
 
     const user = userEvent.setup();
@@ -334,6 +348,9 @@ describe("a session with a factor still owed (plan 4B, hallazgo A10/D4)", () => 
     expect(sesiones).toHaveLength(1);
     expect(sesiones[0]).toMatchObject({ autenticado: false, estado: "parcial" });
     expect(sesiones[0].usuario.user).toBe("ada");
+    // And the account's factors go with it: the next screen draws only those,
+    // and it has nowhere else to learn them from.
+    expect(sesiones[0].metodos).toEqual(["correo", "codigo"]);
   });
 
   it("tells the second step where to go back to afterwards", async () => {
@@ -379,6 +396,32 @@ describe("a session with a factor still owed (plan 4B, hallazgo A10/D4)", () => 
 
     expect(await screen.findByText("pantalla-evento")).toBeInTheDocument();
     expect(screen.queryByText("pantalla-app")).not.toBeInTheDocument();
+  });
+
+  it("returns to the whole address, not only to its path", async () => {
+    // The link in the verification email is `/app/perfil#verify_email=TOKEN`.
+    // Opened in a browser with no session it goes through here, and the login
+    // used to keep the path and drop the rest: the person landed on their
+    // profile with nothing verified and nothing said about it.
+    loginUsuario.mockResolvedValue({
+      status: 200,
+      message: null,
+      usuario: { usuario: { ...usuarioExample, user: "ada" }, permisos: sinPermisos(), autenticado: false },
+    });
+
+    const user = userEvent.setup();
+    render(
+      <HarnessConDestinos
+        onSesion={() => {}}
+        desde={{ pathname: "/app/perfil", search: "?tab=acceso", hash: "#verify_email=abc123" }}
+      />,
+    );
+
+    await user.type(screen.getByLabelText("Usuario"), "ada");
+    await user.type(screen.getByLabelText("Contraseña"), "secreto");
+    await user.click(screen.getByRole("button", { name: /iniciar sesión/i }));
+
+    expect(await screen.findByTestId("resto")).toHaveTextContent("?tab=acceso#verify_email=abc123");
   });
 
   it("logs an onboarding account straight in — there is no factor to prove", async () => {

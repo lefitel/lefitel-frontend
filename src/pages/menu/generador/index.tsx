@@ -1,16 +1,17 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  AlertTriangleIcon, CopyIcon, DownloadIcon, FilePlus2Icon, FileTextIcon, Loader2Icon,
-  LockIcon, PlayIcon, RefreshCwIcon, SaveIcon, StarIcon, Trash2Icon, UsersIcon,
+  AlertTriangleIcon, ArchiveIcon, ChevronDownIcon, CopyIcon, DownloadIcon, FilePlus2Icon,
+  FileTextIcon, Loader2Icon, LockIcon, PlayIcon, RefreshCwIcon, SaveIcon, StarIcon, UsersIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useSearchParams } from "react-router-dom";
 
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { cn } from "../../../lib/utils";
 import {
   actualizarReporte, contarReporte, crearReporte, duplicarReporte, eliminarReporte,
-  exportarReporte, getCatalogo, getReportesGuardados, mensajeDeError, mensajeDeErrorAsync,
+  exportarReporte, getCatalogo, getReportesGuardados, getReporteGuardado, mensajeDeError, mensajeDeErrorAsync,
   runReporte,
   type AggFn, type Catalog, type CatalogField, type CatalogRoot, type ExportFormat,
   type FilterCondition,
@@ -146,6 +147,7 @@ const GeneradorPage = () => {
    * page 4 produced a file starting at row 1 and nothing said so.
    */
   const [exportScope, setExportScope] = useState<"all" | "page">("all");
+  const [exportOpen, setExportOpen] = useState(false);
   /** A level-of-detail change waiting to be confirmed, and what it would cost. */
   const [pendingRoot, setPendingRoot] = useState<
     { root: CatalogRoot; cleaned: ReportConfig; lost: number } | null
@@ -300,6 +302,15 @@ const GeneradorPage = () => {
   const problemsRef = useRef(problems);
   problemsRef.current = problems;
   const chosen = useMemo(() => new Set(config.columns.map((c) => c.path)), [config.columns]);
+  // The fields that already carry a filter, for the same tick the column picker
+  // gives a column already added. Only the conditions the panel lists by field
+  // name: a group or an existence filter is not "a filter on" any one field.
+  const filtered = useMemo(
+    () => new Set(
+      (config.filters?.conditions ?? []).flatMap((node) => ("path" in node ? [node.path] : [])),
+    ),
+    [config.filters],
+  );
   const description = useMemo(() => describeConfig(config, root), [config, root]);
 
   /** True when the table on screen no longer matches the configuration above it. */
@@ -364,6 +375,12 @@ const GeneradorPage = () => {
    * a stale table is not shown then either, because there is no table.
    */
   const canExport = result !== null && !shapeChanged;
+  // More rows than one page holds: only then is "this page" a different file.
+  const exportPaged = result !== null && result.total > result.limit;
+  const exportRows = result === null ? 0
+    : exportPaged && exportScope === "page"
+      ? Math.min(result.limit, result.total - result.offset)
+      : result.total;
 
   /**
    * Filters as the panel lists them, which is the top level only.
@@ -1011,6 +1028,51 @@ const GeneradorPage = () => {
   };
 
   /**
+   * `?vista=12`, which is how the Bitácora links to a saved report.
+   *
+   * Asked for by id rather than looked up in `saved`: that list is a page, and
+   * the report may not be on it. Waits for the catalog because `handleOpen`
+   * prunes against it. Attended once and taken out of the address, so a reload
+   * does not open it again over whatever has been built since.
+   *
+   * The builder is usable from the moment the catalog arrives, and this answer
+   * arrives after. Whatever was started in between is not overwritten: opening
+   * from the picker is a gesture and may replace the work; this is not one.
+   *
+   * A refusal is shown in the server's own words — "es privado", "no existe".
+   */
+  const [parametros, setParametros] = useSearchParams();
+  const vistaPedida = Number(parametros.get("vista")) || null;
+  const vistaAtendida = useRef(false);
+  const algoQuePerder = useRef(somethingToDiscard);
+  algoQuePerder.current = somethingToDiscard;
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => { montado.current = false; };
+  }, []);
+  useEffect(() => {
+    if (!vistaPedida || !catalog || vistaAtendida.current) return;
+    vistaAtendida.current = true;
+    setParametros((actuales) => { actuales.delete("vista"); return actuales; }, { replace: true });
+    getReporteGuardado(vistaPedida)
+      .then((report) => {
+        if (!montado.current) return;
+        if (algoQuePerder.current) {
+          toast.info(`«${report.name}» no se abrió para no pisar lo que ya tiene en pantalla. Está en sus reportes guardados.`);
+          return;
+        }
+        handleOpen(report);
+      })
+      .catch((error) => {
+        if (montado.current) toast.error(mensajeDeError(error, "No se pudo abrir el reporte"));
+      });
+    // `handleOpen` is a new function on every render and reads nothing that
+    // changes between this one and the answer: the catalog is already in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vistaPedida, catalog, setParametros]);
+
+  /**
    * Loads a template into the builder.
    *
    * Deliberately not `handleOpen`. A template is not a saved report: `current`
@@ -1206,7 +1268,7 @@ const GeneradorPage = () => {
   }
 
   return (
-    <div className="@container/card w-full space-y-4 px-6 pt-4 pb-6 animate-in fade-in duration-500 md:px-8 md:pb-8">
+    <div className="@container/card w-full space-y-page p-page animate-in fade-in duration-500">
       {/*
         One header, which is what every other page in this application has: a
         heading, one line under it, and the page's own controls on the right of
@@ -1426,7 +1488,7 @@ const GeneradorPage = () => {
                           className="h-7 w-7 text-muted-foreground hover:text-destructive"
                           aria-label={`Archivar ${current.name}`}
                         >
-                          <Trash2Icon className="h-3.5 w-3.5" />
+                          <ArchiveIcon className="h-3.5 w-3.5" />
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
@@ -1575,7 +1637,9 @@ const GeneradorPage = () => {
 
         Each panel caps its own height and scrolls inside itself rather than the
         band scrolling as a whole, so every heading stays visible and only the
-        long one — sixty columns, a hundred filters — moves. `items-start` keeps
+        long one — sixty columns, a hundred filters — moves. The cap is 448
+        pixels: at 288 it showed four columns, and an ordinary report of eight
+        was built and reordered through a slot. `items-start` keeps
         a panel holding two saved reports from being stretched to the height of
         one holding forty columns.
 
@@ -1639,7 +1703,7 @@ const GeneradorPage = () => {
                 />
               </div>
             </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto space-y-3">
+            <CardContent className="max-h-112 overflow-y-auto space-y-3">
               {/*
                 The rule, said before it is broken instead of after.
 
@@ -1721,7 +1785,7 @@ const GeneradorPage = () => {
                   )}
                 <FieldPicker
                   root={menuRoot}
-                  chosen={new Set()}
+                  chosen={filtered}
                   label="Añadir filtro"
                   onPick={(field) => {
                     if (filterLimitReached(config, limits)) {
@@ -1735,11 +1799,12 @@ const GeneradorPage = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="max-h-72 overflow-y-auto">
+            <CardContent className="max-h-112 overflow-y-auto">
               <FilterBuilder
                 config={config}
                 root={root}
                 optionLists={catalog.optionLists}
+                periods={catalog.periods}
                 onUpdate={handleUpdateFilter}
                 onRemove={handleRemoveFilter}
                 onSetJoin={handleSetJoin}
@@ -1759,78 +1824,85 @@ const GeneradorPage = () => {
       <div>
           <Card className="border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <CardTitle className="text-base">Resultado</CardTitle>
-                  <CardDescription className="truncate">{description}</CardDescription>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {hasPhotoColumns && (
-                    <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
-                      <Switch
-                        id="rep-fotos"
-                        checked={withPhotos}
-                        onCheckedChange={setWithPhotos}
-                        disabled={exporting !== null}
-                      />
-                      <Label htmlFor="rep-fotos" className="cursor-pointer text-xs font-normal">
-                        Fotos en el Excel
-                      </Label>
+              {/*
+                Two groups, by what they are for. On the left, making the table:
+                the button that does it, how big the answer will be, and whether
+                it redoes itself. On the right, taking the table away as a file.
+
+                It was one row of up to nine controls with Generar last and the
+                same size as the rest — the page's main action, found by reading
+                past eight others.
+              */}
+              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+                  <div className="min-w-0">
+                    <CardTitle className="text-base">Resultado</CardTitle>
+                    <CardDescription className="truncate">{description}</CardDescription>
+                  </div>
+
+                  <Button onClick={handleGenerate} disabled={running}>
+                    {running
+                      ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
+                      : <PlayIcon className="mr-1.5 h-4 w-4" />}
+                    Generar
+                  </Button>
+
+                  {/*
+                    How big the answer is, before asking for it.
+
+                    The space is held whether or not there is a number in it.
+                    The count is cleared and asked again on every keystroke of a
+                    filter value, and with the chip appearing and disappearing
+                    the control to its right slid left and back on each letter
+                    typed — the most frequent movement on the page, right
+                    beside the button being aimed at.
+                  */}
+                  {problems.length === 0 && (
+                    // A div, not a span: the placeholder below is one, and a
+                    // block element inside a span is invalid markup.
+                    <div className="w-20 text-xs tabular-nums text-muted-foreground">
+                      {estimate !== null ? (
+                        `${estimate.toLocaleString("es-BO")} fila${estimate === 1 ? "" : "s"}`
+                      ) : (
+                        <Skeleton className="h-3 w-14" aria-hidden="true" />
+                      )}
                     </div>
                   )}
 
                   {/*
-                    Only when the report does not fit in one page. When it does,
-                    "todo el reporte" and "esta página" name the same rows, and
-                    a control whose two answers are identical is one more thing
-                    to read and decide about for nothing.
+                    It said "Auto" and nothing else, and somebody had to ask
+                    what it did — which is the whole test of a label. The label
+                    now says what happens; the tooltip keeps the part a label
+                    has no room for: when it refreshes, and why it starts off.
                   */}
-                  {result && result.total > result.limit && (
-                    <Select
-                      value={exportScope}
-                      onValueChange={(value) => setExportScope(value as "all" | "page")}
-                      disabled={exporting !== null}
-                    >
-                      <SelectTrigger className="h-8 w-auto gap-1.5 text-xs" aria-label="Qué se exporta">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">
-                          Todo el reporte ({result.total.toLocaleString("es-BO")})
-                        </SelectItem>
-                        <SelectItem value="page">
-                          Solo esta página ({Math.min(result.limit, result.total - result.offset).toLocaleString("es-BO")})
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
+                        <Switch
+                          id="rep-auto"
+                          checked={auto}
+                          onCheckedChange={setAuto}
+                          aria-label="Actualizar la tabla automáticamente"
+                        />
+                        <Label htmlFor="rep-auto" className="cursor-pointer text-xs font-normal">
+                          Actualizar sola
+                        </Label>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Rehace la tabla sola cuando cambia algo, un momento después de que pare de
+                      tocar. Viene apagado porque cada refresco es una consulta entera: enciéndalo
+                      para ir probando variantes y se queda encendido en este navegador.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
 
+                <div className="flex flex-wrap items-center gap-2">
                   {result !== null && shapeChanged && problems.length === 0 && !running && (
                     <span role="status" className="self-center text-xs text-muted-foreground">
                       Pulse Generar para exportar este reporte
                     </span>
                   )}
-
-                  <Button
-                    variant="outline" size="sm"
-                    disabled={!canExport || exporting !== null}
-                    onClick={() => runExport("excel")}
-                  >
-                    {exporting === "excel"
-                      ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
-                      : <DownloadIcon className="mr-1.5 h-4 w-4" />}
-                    Excel
-                  </Button>
-                  <Button
-                    variant="outline" size="sm"
-                    disabled={!canExport || exporting !== null}
-                    onClick={() => runExport("pdf")}
-                  >
-                    {exporting === "pdf"
-                      ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
-                      : <FileTextIcon className="mr-1.5 h-4 w-4" />}
-                    PDF
-                  </Button>
 
                   {/* Only while a file is being made. The server sends nothing
                       until it is finished, so there is no honest percentage to
@@ -1851,62 +1923,85 @@ const GeneradorPage = () => {
                       </button>
                     </div>
                   )}
-                  {/*
-                    How big the answer is, before asking for it.
 
-                    The space is held whether or not there is a number in it.
-                    The count is cleared and asked again on every keystroke of a
-                    filter value, and with the chip appearing and disappearing
-                    the four controls to its right slid left and back on each
-                    letter typed — the most frequent movement on the page, right
-                    under the button being aimed at.
+                  {/*
+                    One button in front of both formats and of the two choices
+                    that only matter to a file. They are used once per report,
+                    after everything else, and were four places in the row all
+                    of the time.
+
+                    A popover and not a menu: two of the four things in it are
+                    switches that have to stay open while they are set, and a
+                    menu closes on every press.
                   */}
-                  {problems.length === 0 && (
-                    // A div, not a span: the placeholder below is one, and a
-                    // block element inside a span is invalid markup.
-                    <div className="w-20 self-center text-right text-xs tabular-nums text-muted-foreground">
-                      {estimate !== null ? (
-                        `${estimate.toLocaleString("es-BO")} fila${estimate === 1 ? "" : "s"}`
-                      ) : (
-                        <Skeleton className="ml-auto h-3 w-14" aria-hidden="true" />
+                  <Popover open={exportOpen} onOpenChange={setExportOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline" size="sm"
+                        disabled={!canExport || exporting !== null}
+                      >
+                        {exporting !== null
+                          ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
+                          : <DownloadIcon className="mr-1.5 h-4 w-4" />}
+                        Exportar
+                        <ChevronDownIcon className="ml-1 h-3.5 w-3.5 opacity-60" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent align="end" className="w-64 p-1">
+                      {(["excel", "pdf"] as const).map((format) => (
+                        <button
+                          key={format}
+                          type="button"
+                          onClick={() => { setExportOpen(false); runExport(format); }}
+                          className="flex w-full cursor-pointer items-center justify-between gap-3 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                        >
+                          <span className="flex items-center gap-2">
+                            {format === "excel"
+                              ? <DownloadIcon className="h-4 w-4 text-muted-foreground" />
+                              : <FileTextIcon className="h-4 w-4 text-muted-foreground" />}
+                            {format === "excel" ? "Excel" : "PDF"}
+                          </span>
+                          {/* What the switch below decides, said on the thing
+                              it changes: how many rows this file will carry. */}
+                          {result && (
+                            <span className="text-xs tabular-nums text-muted-foreground">
+                              {exportRows.toLocaleString("es-BO")} fila{exportRows === 1 ? "" : "s"}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+
+                      {(exportPaged || hasPhotoColumns) && <div className="my-1 border-t" />}
+
+                      {/*
+                        Only when the report does not fit in one page. When it
+                        does, the whole report and this page are the same rows,
+                        and a choice whose two answers are identical is one more
+                        thing to read and decide about for nothing.
+                      */}
+                      {exportPaged && (
+                        <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+                          <Label htmlFor="rep-pagina" className="cursor-pointer text-sm font-normal">
+                            Solo esta página
+                          </Label>
+                          <Switch
+                            id="rep-pagina"
+                            checked={exportScope === "page"}
+                            onCheckedChange={(on) => setExportScope(on ? "page" : "all")}
+                          />
+                        </div>
                       )}
-                    </div>
-                  )}
 
-                  {/*
-                    A tooltip because the control says "Auto" and nothing else.
-                    What it does was written down — in the help panel behind the
-                    ⓘ — which is a place you go on purpose, not where the switch
-                    is. Somebody had to ask what it did, which is the whole test
-                    of a label.
-                  */}
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1">
-                        <Switch
-                          id="rep-auto"
-                          checked={auto}
-                          onCheckedChange={setAuto}
-                          aria-label="Actualizar la tabla automáticamente"
-                        />
-                        <Label htmlFor="rep-auto" className="cursor-pointer text-xs font-normal">
-                          Auto
-                        </Label>
-                      </div>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-xs">
-                      Rehace la tabla sola cuando cambia algo, un momento después de que pare de
-                      tocar. Viene apagado porque cada refresco es una consulta entera: enciéndalo
-                      para ir probando variantes y se queda encendido en este navegador.
-                    </TooltipContent>
-                  </Tooltip>
-
-                  <Button size="sm" onClick={handleGenerate} disabled={running}>
-                    {running
-                      ? <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />
-                      : <PlayIcon className="mr-1.5 h-4 w-4" />}
-                    Generar
-                  </Button>
+                      {hasPhotoColumns && (
+                        <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+                          <Label htmlFor="rep-fotos" className="cursor-pointer text-sm font-normal">
+                            Fotos en el Excel
+                          </Label>
+                          <Switch id="rep-fotos" checked={withPhotos} onCheckedChange={setWithPhotos} />
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 </div>
               </div>
             </CardHeader>
@@ -2000,8 +2095,7 @@ const GeneradorPage = () => {
                   than showing them again.
                 */
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  Elija las columnas en el panel de configuración para ir viendo aquí cómo queda el
-                  reporte
+                  Añada columnas arriba, en «Columnas», para ir viendo aquí cómo queda el reporte
                   {(catalog.templates?.length ?? 0) > 0
                     ? ", o abra una de las plantillas desde «Reporte», arriba."
                     : "."}

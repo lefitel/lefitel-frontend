@@ -24,7 +24,7 @@
 
 import axios from "axios";
 import { instalarInterceptorStepUp } from "./stepUpInterceptor";
-import { marcarFallo, SIN_CONEXION } from "./fallo";
+import { marcarFallo, explicacionDe, SIN_CONEXION } from "./fallo";
 
 /**
  * The header every write carries, so the server can tell a request from this
@@ -198,19 +198,42 @@ export const ID_NORMALIZADOR = axios.interceptors.response.use(
       const respuesta = error.response;
       const datos = respuesta?.data as { message?: unknown; code?: unknown } | undefined;
       const suyo = datos?.message;
-      // Una negativa del protocolo del segundo factor se queda sin frase, y a
-      // propósito: `code` sólo aparece en esa respuesta de todo el servidor, y
-      // el interceptor que la lee **ya ha sacado su propio aviso** —con su
-      // botón «Configurarlo»— antes de volver a rechazar. Sin esta línea, los
-      // cuarenta `catch` nuevos sacarían un segundo aviso con exactamente el
-      // mismo texto y sin el botón.
+      // La frase del servidor se descarta cuando el rechazo es del protocolo
+      // del segundo factor, y a propósito: `code` sólo aparece en esa respuesta
+      // de todo el servidor, y el interceptor que la lee puede **haber sacado
+      // ya su propio aviso** —con su botón «Configurarlo»— antes de volver a
+      // rechazar. Sin esta línea, los `catch` de las pantallas sacarían un
+      // segundo aviso con exactamente el mismo texto y sin el botón.
+      //
+      // Descartar la del servidor no es quedarse sin ninguna: cuando el
+      // interceptor no enseña nada por su cuenta, deja la que toca en
+      // `explicacion`, justo debajo.
       const delProtocolo = typeof datos?.code === "string";
+      /**
+       * Lo que el interceptor del segundo factor dejó escrito sobre **por cuál
+       * de sus salidas** se fue.
+       *
+       * Va por delante de todo lo demás, y esa es la razón de que exista: el
+       * cuerpo de la respuesta dice qué pidió el servidor, no qué pasó después
+       * con la ventana. Las dos cosas llegan aquí con el mismo `code` y el
+       * mismo 403 — una cancelación y una negativa que la ventana ni llegó a
+       * ver son indistinguibles mirando sólo `datos`.
+       *
+       * Copiarla al `message` es lo que hace que las pantallas no tengan que
+       * aprender nada: `mensajeDeError` ya lee este campo y ellas ya lo
+       * llaman. **Y sólo ellas**, que es lo que advierte `fallo.ts`: un
+       * `.catch` que se fabrique el mensaje leyendo `e.response.data.message`
+       * se salta esto y vuelve a enseñar la frase cruda del servidor.
+       */
+      const explicacion = explicacionDe(error);
       marcarFallo(error, {
         status: respuesta?.status ?? 0,
         // Sin respuesta, la frase es nuestra. Con respuesta, o es la del
         // servidor o no hay ninguna: la genérica la pone la pantalla, que sabe
         // qué estaba haciendo.
-        message: respuesta === undefined ? SIN_CONEXION : !delProtocolo && typeof suyo === "string" ? suyo : "",
+        message:
+          explicacion ??
+          (respuesta === undefined ? SIN_CONEXION : !delProtocolo && typeof suyo === "string" ? suyo : ""),
       });
     }
     return Promise.reject(error);

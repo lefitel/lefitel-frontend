@@ -17,8 +17,9 @@ import type { Permisos } from "../lib/permissions";
  *
  * **Misma forma que `Mfa.api.ts`, y por el mismo motivo.** `POST
  * /auth/webauthn/register/options` y `/register/verify` están las dos detrás
- * de `requireStepUp({ exigeContrasena: true })`, así que registrar una llave
- * son **dos** peticiones que piden la contraseña. Dejar que las conteste el
+ * de la puerta con `sinVentana: true` —la opción que hasta el 2026-09-08 se
+ * llamaba `exigeContrasena`; el campo del cable sí conserva ese nombre—, así
+ * que registrar una llave son **dos** peticiones que piden la contraseña. Dejar que las conteste el
  * interceptor global sería: 403 → ventana de contraseña → opciones → **el
  * diálogo biométrico del sistema** → 403 → ventana de contraseña otra vez.
  * Tres avisos para un solo gesto. Y peor: el reto que emiten las opciones

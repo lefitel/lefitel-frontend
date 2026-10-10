@@ -61,10 +61,14 @@ const HomePage = () => {
   const { scroller, fade } = useScrollFade<HTMLElement, HTMLDivElement>(location.pathname);
 
   return (
-    <SidebarProvider className="h-svh overflow-hidden">
+    <SidebarProvider defaultOpen={false} className="h-svh overflow-hidden">
       <AppSidebar />
       <SidebarInset className="bg-sidebar h-full min-h-0">
-        <div className="bg-background relative overflow-hidden flex flex-col flex-1 min-h-0 sm:m-2 sm:rounded-xl sm:shadow-sm sm:border">
+        {/* The sidebar's own padding is already the gap: its entries sit 8px
+            from the wall, and the card's margin on top of that left them 16px
+            from the page. From `md` only — below it there is no sidebar
+            beside the card, and the margin is all the gap there is. */}
+        <div className="bg-background relative overflow-hidden flex flex-col flex-1 min-h-0 sm:m-2 md:ml-0 sm:rounded-xl sm:shadow-sm sm:border">
           <header className="border-b flex shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
             <div className="flex items-center gap-2 p-2 w-full">
               <SidebarTrigger />

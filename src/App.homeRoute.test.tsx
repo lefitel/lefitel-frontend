@@ -8,7 +8,7 @@
 // comes back 403, and the dashboard reports "no hay conexión con el servidor"
 // for a refusal that is permanent and has nothing to do with the network.
 //
-// A role created from Seguridad starts with all thirty-two cells denied, so the
+// A role created from the roles screen starts with all thirty-two cells denied, so the
 // third case below is not exotic: it is what every new role sees before anybody
 // grants it anything.
 
@@ -47,6 +47,10 @@ function renderAt() {
           <Route path="/app/home" element={<HomeRoute />} />
           <Route path="/app/postes" element={<div>PANTALLA DE POSTES</div>} />
           <Route path="/app/reportes" element={<div>PANTALLA DE REPORTES</div>} />
+          <Route path="/app/parametros" element={<div>PANTALLA DE PARAMETROS</div>} />
+          <Route path="/app/archivos" element={<div>PANTALLA DE ARCHIVOS</div>} />
+          <Route path="/app/bitacora" element={<div>PANTALLA DE BITACORA</div>} />
+          <Route path="/app/roles" element={<div>PANTALLA DE ROLES</div>} />
         </Routes>
       </MemoryRouter>
     </SesionContext.Provider>,
@@ -85,7 +89,7 @@ describe("HomeRoute", () => {
 
     renderAt();
 
-    // Postes comes before Reportes in the menu, so that is the one it lands on:
+    // Postes comes before Informes in the menu, so that is the one it lands on:
     // the first screen with real content, in the order the sidebar lists them.
     expect(screen.getByText("PANTALLA DE POSTES")).toBeInTheDocument();
     expect(screen.queryByText("PANEL")).not.toBeInTheDocument();
@@ -175,5 +179,32 @@ describe("HomeRoute", () => {
 
     expect(screen.getByText("PANTALLA DE SEGUNDO FACTOR")).toBeInTheDocument();
     expect(screen.queryByText("PANEL")).not.toBeInTheDocument();
+  });
+});
+
+// Where somebody lands is "the first screen they may open, in the order the
+// menu lists them" — so regrouping the menu moved people. These are the moves,
+// written down: before the menu had blocks, the first two landed on Parámetros
+// and on Archivos.
+describe("the landing screen follows the order of the menu", () => {
+  it("lands on Informes rather than Parámetros, which the menu now lists after it", () => {
+    setPermisos(ROL, matrizCon("parametros", "reportes"));
+    renderAt();
+
+    expect(screen.getByText("PANTALLA DE REPORTES")).toBeInTheDocument();
+  });
+
+  it("lands on Bitácora rather than Archivos, which the menu now lists after it", () => {
+    setPermisos(ROL, matrizCon("archivos", "bitacora"));
+    renderAt();
+
+    expect(screen.getByText("PANTALLA DE BITACORA")).toBeInTheDocument();
+  });
+
+  it("lands on roles for somebody who holds only that, which had no screen of its own before", () => {
+    setPermisos(ROL, matrizCon("roles"));
+    renderAt();
+
+    expect(screen.getByText("PANTALLA DE ROLES")).toBeInTheDocument();
   });
 });

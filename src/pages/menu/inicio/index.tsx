@@ -4,7 +4,7 @@ import { Button } from "../../../components/ui/button";
 import { ArrowUpRightIcon, BarChart3Icon, CloudOffIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
+import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { useInicioData } from "./useInicioData";
@@ -23,7 +23,7 @@ const InicioPage = () => {
   const d = useInicioData();
 
   return (
-    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-8 animate-in fade-in duration-500">
+    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -32,11 +32,16 @@ const InicioPage = () => {
           <p className="text-muted-foreground">Resumen operativo de postes y eventos en el sistema.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          <Button variant="outline" onClick={() => navigate("/app/reportes")} className="gap-2">
-            <BarChart3Icon className="h-4 w-4" />
-            <span>Ver Reportes</span>
-            <ArrowUpRightIcon className="h-3 w-3 opacity-50" />
-          </Button>
+          {/* Only to somebody who may open it. Without `reportes.ver` the
+              press went to a route that sent them straight back here, and
+              nothing visible happened. */}
+          {can(rol, "reportes", "ver") && (
+            <Button variant="outline" onClick={() => navigate("/app/reportes")} className="gap-2">
+              <BarChart3Icon className="h-4 w-4" />
+              <span>Ver informes</span>
+              <ArrowUpRightIcon className="h-3 w-3 opacity-50" />
+            </Button>
+          )}
           {can(rol, "eventos", "crear") && (
             <Button onClick={() => setOpenAddEvento(true)} className="gap-2">
               <PlusIcon className="h-4 w-4" />
@@ -112,7 +117,7 @@ const InicioPage = () => {
 
       {/* Dialogs */}
       <PermissionGuard module="eventos" action="crear" open={openAddEvento} onOpenChange={setOpenAddEvento}>
-        <AddEventoPageSheet onSuccess={d.load} open={openAddEvento} setOpen={setOpenAddEvento} />
+        <EventoSheet onSuccess={d.load} open={openAddEvento} setOpen={setOpenAddEvento} />
       </PermissionGuard>
       {d.dataPoste.id != null && (
         <PermissionGuard module="postes" action="editar" open={d.openEditPoste} onOpenChange={d.setOpenEditPoste}>

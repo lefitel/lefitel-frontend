@@ -47,6 +47,21 @@ describe("SonarMarker", () => {
     expect(queryByTestId("popup")).not.toBeNull();
   });
 
+  it("sits above the other dots, and lets clicks through everything but the dot", () => {
+    // The neighbours of a stretch load after the subject and were drawn over it.
+    // Raising a 96 px wrapper without this would trade that for a worse one: a
+    // square around the subject where no other dot can be clicked.
+    markerProps.mockClear();
+    const { container } = render(
+      <SonarMarker center={[1, 2]} fillColor="#000" strokeColor="#fff" rgb="0, 0, 0" />,
+    );
+    const style = markerProps.mock.calls[0][0].style as React.CSSProperties;
+    expect(style.zIndex).toBe(1);
+    expect(style.pointerEvents).toBe("none");
+    expect((container.querySelector(".sonar-root") as HTMLElement).style.pointerEvents).toBe("none");
+    expect((container.querySelector(".sonar-dot") as HTMLElement).style.pointerEvents).toBe("auto");
+  });
+
   it("keeps its click from reaching the map, which would move the pin underneath", () => {
     stopPropagation.mockClear();
     const { getByTestId } = render(

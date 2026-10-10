@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CameraIcon, Loader2Icon } from "lucide-react";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import type { UsuarioInterface } from "../../../interfaces/interfaces";
 
 /** Same ceiling `Upload.api.ts` compresses down to, refused here before the wait. */
@@ -98,7 +98,7 @@ export default function PerfilHeader({ usuario, loading, onCambiarFoto }: Props)
 
       <div className="relative shrink-0">
         <Avatar className="h-16 w-16 border-2 border-border shadow">
-          {usuario?.image && <AvatarImage src={url + usuario.image} alt="" />}
+          {usuario?.image && <AvatarImage src={imageUrl(usuario.image) ?? undefined} alt="" />}
           <AvatarFallback className="text-lg font-bold">{iniciales}</AvatarFallback>
         </Avatar>
 

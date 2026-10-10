@@ -17,7 +17,6 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
 import BitacoraPanel from "./BitacoraPanel";
 
 const getAllBitacora = vi.fn();
@@ -31,9 +30,7 @@ beforeEach(() => {
 
 const pintar = () =>
   render(
-    <MemoryRouter>
-      <BitacoraPanel entity="Poste" entityId={5} />
-    </MemoryRouter>,
+    <BitacoraPanel entity="Poste" entityId={5} />,
   );
 
 /** A rejection shaped like axios's, which is what the component reads. */
@@ -70,5 +67,38 @@ describe("what the panel says when it has nothing to show", () => {
     expect(await screen.findByText(/No se pudo cargar/)).toBeInTheDocument();
     expect(screen.queryByText(/No tiene permiso/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Sin actividad registrada/)).not.toBeInTheDocument();
+  });
+});
+
+describe("what an entry says", () => {
+  it("names the action as the server does, and offers no link to the sheet already open", async () => {
+    // The panel asks for the entries of the very record on screen, so a link on
+    // each one led to the page the person was on. It used to lead to the home
+    // page instead, through an address that did not exist; neither is a link.
+    getAllBitacora.mockResolvedValue({
+      total: 1,
+      data: [{
+        id: 1, id_usuario: 7, action: "UPDATE_POSTE", action_label: "Editó poste",
+        entity: "Poste", entity_label: "Poste", entity_id: 5, detail: "Editó Poste #5",
+      }],
+    });
+
+    pintar();
+
+    expect(await screen.findByText("Editó Poste #5")).toBeInTheDocument();
+    expect(screen.getByText("Editó poste")).toBeInTheDocument();
+    expect(screen.queryByText("UPDATE_POSTE")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Poste #5/ })).toBeNull();
+  });
+
+  it("shows the stored code when the server sent no name, rather than nothing", async () => {
+    getAllBitacora.mockResolvedValue({
+      total: 1,
+      data: [{ id: 1, id_usuario: 7, action: "UPDATE_POSTE", entity: "Poste", entity_id: 5, detail: "Editó Poste #5" }],
+    });
+
+    pintar();
+
+    expect(await screen.findByText("UPDATE_POSTE")).toBeInTheDocument();
   });
 });

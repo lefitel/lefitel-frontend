@@ -205,7 +205,7 @@ const CardSkeleton = ({
  */
 export const PageSkeleton = () => (
   <div
-    className="@container/card w-full space-y-4 px-6 pt-4 pb-6 md:px-8 md:pb-8"
+    className="@container/card w-full space-y-page p-page"
     role="status"
     aria-live="polite"
     aria-busy="true"

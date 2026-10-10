@@ -1,5 +1,6 @@
 import axios from "axios";
 import { urlApi } from "./url";
+import { mensajeDeError } from "./descarga";
 import type { Accion, Modulo, Permisos } from "../lib/permissions";
 
 export interface RolResumen {
@@ -28,6 +29,18 @@ export const getMatrizPermisos = (): Promise<MatrizPermisos> =>
     .get(urlApi + "permiso")
     .then((r) => r.data as MatrizPermisos);
 
+/**
+ * 🔴 **`mensajeDeError` and not `e.response.data.message`, for the same reason
+ * the wrappers in `Usuario.api.ts` do it — see the note above them.**
+ *
+ * This route is behind the step-up gate, so saving the matrix can open the
+ * re-authentication dialog. Read straight from the body, cancelling that
+ * dialog showed the gate's own "Introduce tu contraseña actual para completar
+ * esta operación." on the permissions screen, one moment after the person
+ * closed the box that was asking for it. `mensajeDeError` reads
+ * `error.normalized`, which is where `http.ts` copies what the interceptor
+ * knows.
+ */
 export const savePermisos = (
   id_rol: number,
   permisos: Partial<Record<Modulo, Partial<Record<Accion, boolean>>>>,
@@ -37,5 +50,5 @@ export const savePermisos = (
     .then((r) => ({ status: r.status }))
     .catch((e) => ({
       status: e.response?.status ?? 500,
-      message: e.response?.data?.message ?? "No se pudo guardar.",
+      message: mensajeDeError(e, "No se pudo guardar."),
     }));

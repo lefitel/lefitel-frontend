@@ -57,17 +57,19 @@ export default function PosteDetalleEventosAbiertos({
 
   if (abiertos.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center text-center py-10 px-4 gap-3">
-        <div className="h-12 w-12 rounded-full bg-emerald-500/10 flex items-center justify-center">
-          <CheckCircle2Icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+      // One line, not a centred block: the panel is short, and "nothing is
+      // wrong" does not need a third of it.
+      <div className="flex items-center gap-2.5">
+        <div className="h-8 w-8 shrink-0 rounded-full bg-emerald-500/10 flex items-center justify-center">
+          <CheckCircle2Icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
         </div>
-        <div className="space-y-1">
-          <p className="font-medium">Sin eventos abiertos</p>
-          <p className="text-sm text-muted-foreground">Este poste está operativo.</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-tight">Sin eventos abiertos</p>
+          <p className="text-xs text-muted-foreground">Este poste está operativo.</p>
         </div>
         {canCreateEventos && (
-          <Button variant="outline" size="sm" onClick={onNuevoEvento} className="mt-1">
-            Reportar nuevo evento
+          <Button variant="outline" size="sm" onClick={onNuevoEvento} className="h-7 text-xs shrink-0">
+            Reportar
           </Button>
         )}
       </div>
@@ -100,7 +102,7 @@ function EventoCard({
   const tagBg = isCritico ? "bg-red-500/10" : "bg-amber-500/10";
 
   return (
-    <li className={`group relative rounded-lg border ${accent} p-4 transition-colors hover:bg-card/50`}>
+    <li className={`group relative rounded-lg border ${accent} p-3 transition-colors hover:bg-card/50`}>
       <div className="flex items-start gap-3">
         <span className={`mt-1 h-2.5 w-2.5 rounded-full ${dotBg} ring-4 ${dotRing} shrink-0 ${isCritico ? "event-marker-critical" : ""}`} />
 
@@ -118,11 +120,15 @@ function EventoCard({
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+      </div>
+
+      {/* Under the text, not beside it: the panel is narrow, and beside it the
+          three of them left the description a column a few words wide. */}
+      <div className="flex items-center gap-1.5 mt-2.5 pl-5.5">
           {canEdit && (
             <Button
               size="sm"
-              className="h-8 text-xs gap-1.5"
+              className="h-7 text-xs gap-1.5"
               onClick={() => actions.onResolver(evento)}
             >
               <CheckCircle2Icon className="h-3.5 w-3.5" />
@@ -132,7 +138,7 @@ function EventoCard({
           <Button
             size="sm"
             variant="outline"
-            className="h-8 text-xs"
+            className="h-7 text-xs"
             onClick={() => actions.onVerDetalle(evento.id as number)}
           >
             Ver
@@ -140,7 +146,7 @@ function EventoCard({
           {canEdit && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon-sm" variant="ghost" className="h-8 w-8 text-muted-foreground">
+                <Button size="icon-sm" variant="ghost" className="h-7 w-7 text-muted-foreground">
                   <MoreHorizontalIcon className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -154,7 +160,6 @@ function EventoCard({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-        </div>
       </div>
     </li>
   );

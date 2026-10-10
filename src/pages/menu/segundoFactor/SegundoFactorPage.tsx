@@ -49,7 +49,7 @@ import RecoveryCodesSection from "./RecoveryCodesSection";
  */
 const SegundoFactorPage = () => {
   return (
-    <div className="pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full max-w-2xl space-y-6 animate-in fade-in duration-500">
+    <div className="p-page w-full max-w-2xl space-y-page animate-in fade-in duration-500">
       <div className="flex items-center gap-2">
         <ShieldCheckIcon className="h-5 w-5 text-muted-foreground" />
         <h1 className="text-xl font-semibold">Segundo factor</h1>

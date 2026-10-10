@@ -19,7 +19,12 @@ export interface CiudadDetalleData {
   load: () => void;
 }
 
-export function useCiudadDetalleData(id: number): CiudadDetalleData {
+/**
+ * `verPostes` is whether this role holds `postes.ver`, and the city's poles are
+ * not asked for without it — see `usePosteDetalleData` for why: one refused
+ * read rejected the whole `Promise.all` and the city itself was discarded.
+ */
+export function useCiudadDetalleData(id: number, { verPostes }: { verPostes: boolean }): CiudadDetalleData {
   const [ciudad, setCiudad] = useState<CiudadInterface | null>(null);
   const [postes, setPostes] = useState<PosteInterface[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,7 +34,7 @@ export function useCiudadDetalleData(id: number): CiudadDetalleData {
     try {
       const [c, p] = await Promise.all([
         searchCiudad(id),
-        getPosteByCiudad(id),
+        verPostes ? getPosteByCiudad(id) : Promise.resolve([]),
       ]);
       setCiudad(c);
       setPostes(p);
@@ -38,7 +43,7 @@ export function useCiudadDetalleData(id: number): CiudadDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, verPostes]);
 
   useEffect(() => { load(); }, [load]);
 

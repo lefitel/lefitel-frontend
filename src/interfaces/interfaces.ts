@@ -58,6 +58,15 @@ export interface SesionInterface {
    * real answers always carry one of the three strings above.
    */
   estado?: EstadoSesion;
+  /**
+   * The factors this account has, as `GET /auth/me` lists them — and it only
+   * does for a `parcial` session, the one that still owes one. In the order
+   * the second-step screen should offer them: `"passkey"`, `"totp"`,
+   * `"correo"`, `"codigo"` (a recovery code). Absent in every other state, and
+   * from a server that predates the list — read that as "not told", never as
+   * "has none".
+   */
+  metodos?: string[];
 }
 export interface ReporteInterface {
   TramoInicial: number | null;
@@ -94,6 +103,14 @@ export interface RolInterface {
   id?: number | null;
   name: string;
   description: string;
+  /**
+   * How many accounts hold it, archived ones included — they keep it from being
+   * archived just the same. Sent by the listing, and by nothing else.
+   */
+  cuentas?: number;
+  /** How many of those are archived accounts. */
+  cuentasArchivadas?: number;
+  deletedAt?: Date | null;
   createdAt?: Date | null;
   updatedAt?: Date | null;
 }
@@ -101,6 +118,13 @@ export interface RolInterface {
 export interface BitacoraInterface {
   id?: number | null;
   action: string;
+  /**
+   * What the action and the entity are called on screen, sent by the server
+   * with every row. Optional only because a server older than this client does
+   * not send them; `nombreDeAccion` falls back to the stored code.
+   */
+  action_label?: string;
+  entity_label?: string;
   detail: string;
   entity: string;
   entity_id?: number | null;

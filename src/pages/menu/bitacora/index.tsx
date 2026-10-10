@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
-import { getAllBitacora, getAutoresBitacora, BitacoraFilters, AutorBitacora } from "../../../api/Bitacora.api";
+import { getAllBitacora, getAutoresBitacora, getVocabularioBitacora, BitacoraFilters, AutorBitacora, OpcionDeFiltro } from "../../../api/Bitacora.api";
 import { BitacoraInterface } from "../../../interfaces/interfaces";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
@@ -13,25 +13,11 @@ import { DatePicker } from "../../../components/ui/date-picker";
 import { ChevronDownIcon, InfoIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import DataTable from "../../../components/table/DataTable";
-import { ACTION_LABELS } from "../../../constants/bitacora";
+import { enlaceDeFila, nombreDeAccion, nombreDeEntidad } from "../../../constants/bitacora";
+import { SesionContext } from "../../../context/SesionContext";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { chooserTrigger } from "../../../components/ui/control-surface";
 import { cn } from "../../../lib/utils";
-
-const ENTITIES = ["Evento", "Poste", "Ciudad", "Material", "Propietario", "Obs", "TipoObs", "Solución", "Revisión", "Usuario", "Adss", "Rol", "File"];
-
-const ACTION_PREFIXES = [
-  { value: "CREATE",  label: "Crear" },
-  { value: "UPDATE",  label: "Actualizar" },
-  { value: "DELETE",  label: "Eliminar" },
-  { value: "RESTORE", label: "Restaurar" },
-  { value: "RESOLVE", label: "Resolver" },
-  { value: "REABRIR", label: "Reabrir" },
-  { value: "ADD",     label: "Agregar" },
-  { value: "LOGIN",   label: "Login" },
-  { value: "CHANGE",  label: "Cambiar" },
-  { value: "UPLOAD",  label: "Subir archivo" },
-];
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -64,13 +50,6 @@ const SEVERITY_LABELS: Record<string, string> = {
   info:     "Info",
   warning:  "Advertencia",
   critical: "Crítico",
-};
-
-const ENTITY_ROUTE: Partial<Record<string, string>> = {
-  Poste:   "/app/postes",
-  Evento:  "/app/eventos",
-  Ciudad:  "/app/ciudades",
-  Usuario: "/app/seguridad",
 };
 
 const fmtVal = (v: unknown): string => {
@@ -169,6 +148,19 @@ function MetadataPopover({ metadata, ip }: { metadata: Record<string, unknown>; 
   );
 }
 
+/** A day as the address carries it: `2026-10-03`, in the reader's own time. */
+const diaDe = (f: Date): string =>
+  `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+
+const fechaDe = (v: string | null, finDelDia: boolean): Date | undefined => {
+  if (!v || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return undefined;
+  const [anio, mes, dia] = v.split("-").map(Number);
+  const f = new Date(anio, mes - 1, dia, finDelDia ? 23 : 0, finDelDia ? 59 : 0, finDelDia ? 59 : 0, 0);
+  return Number.isNaN(f.getTime()) ? undefined : f;
+};
+
+const TAMANO_DE_PAGINA = 50;
+
 const mkDate = (daysAgo: number, endOfDay = false) => {
   const d = new Date();
   d.setDate(d.getDate() - daysAgo);
@@ -199,15 +191,35 @@ const DROPDOWN_TRIGGER_CLS = cn(chooserTrigger, "h-8");
 
 const BitacoraPage = () => {
   const navigate = useNavigate();
+  const { sesion } = useContext(SesionContext);
+
+  // The filters and the page live in the address as well as here. Every link
+  // out of this screen is a push, and state kept only in the component is gone
+  // on the way back: somebody three pages into one person's week pressed
+  // «Rol #7», looked, pressed Back, and was at the defaults again. Read once on
+  // arrival, written back (below) whenever one of them changes.
+  const [parametros, setParametros] = useSearchParams();
+  const [alLlegar] = useState(() => ({
+    from: fechaDe(parametros.get("desde"), false) ?? mkDate(7),
+    to: fechaDe(parametros.get("hasta"), true) ?? mkDate(0, true),
+    entity: parametros.get("entidad") ?? "all",
+    severity: parametros.get("severidad") ?? "all",
+    action: parametros.get("accion") ?? "all",
+    userId: parametros.get("usuario") ?? "all",
+    pagina: Math.max(1, Math.trunc(Number(parametros.get("pagina"))) || 1),
+    porPagina: Math.max(1, Math.trunc(Number(parametros.get("porPagina"))) || TAMANO_DE_PAGINA),
+  }));
 
   const [autores,   setAutores]   = useState<AutorBitacora[]>([]);
-  const [from,     setFrom]     = useState<Date | undefined>(() => mkDate(7));
-  const [to,       setTo]       = useState<Date | undefined>(() => mkDate(0, true));
-  const [entity,   setEntity]   = useState("all");
-  const [severity, setSeverity] = useState("all");
-  const [action,   setAction]   = useState("all");
-  const [userId,   setUserId]   = useState("all");
-  const [pageSize, setPageSize] = useState(50);
+  const [familias,  setFamilias]  = useState<OpcionDeFiltro[]>([]);
+  const [entidades, setEntidades] = useState<OpcionDeFiltro[]>([]);
+  const [from,     setFrom]     = useState<Date | undefined>(alLlegar.from);
+  const [to,       setTo]       = useState<Date | undefined>(alLlegar.to);
+  const [entity,   setEntity]   = useState(alLlegar.entity);
+  const [severity, setSeverity] = useState(alLlegar.severity);
+  const [action,   setAction]   = useState(alLlegar.action);
+  const [userId,   setUserId]   = useState(alLlegar.userId);
+  const [pageSize, setPageSize] = useState(alLlegar.porPagina);
   const [total,    setTotal]    = useState(0);
   const [sorting,  setSorting]  = useState<SortingState>([]);
   const [rows,     setRows]     = useState<BitacoraInterface[] | null>(null);
@@ -221,6 +233,11 @@ const BitacoraPage = () => {
     getAutoresBitacora()
       .then(setAutores)
       .catch(avisar("No se pudo cargar la lista de usuarios para filtrar."));
+    // What the two menus offer is the server's to say: both lists were written
+    // out in this file once, and fell behind what the server writes.
+    getVocabularioBitacora()
+      .then((v) => { setFamilias(v.families); setEntidades(v.entities); })
+      .catch(avisar("No se pudieron cargar las opciones de los filtros."));
   }, []);
 
   const usuarioOptions = useMemo(() => [
@@ -258,7 +275,7 @@ const BitacoraPage = () => {
     if (t) { const d = new Date(t); d.setHours(23, 59, 59, 0); params.to   = d.toISOString(); }
     if (entityRef.current   !== "all") params.entity      = entityRef.current;
     if (severityRef.current !== "all") params.severity    = severityRef.current;
-    if (actionRef.current   !== "all") params.action      = actionRef.current;
+    if (actionRef.current   !== "all") params.family      = actionRef.current;
     if (userIdRef.current   !== "all") params.id_usuario  = Number(userIdRef.current);
     try {
       const r = await getAllBitacora(params);
@@ -281,14 +298,43 @@ const BitacoraPage = () => {
     [from, to, entity, severity, action, userId]
   );
 
+  // The page belongs to the filters it was reached under: kept with their key,
+  // so that changing any filter is page one again without an effect to reset
+  // it — and so the table, which is remounted on that same key, is told the
+  // right page in the same render rather than one late.
+  const [pagina, setPagina] = useState({ clave: filtersKey, n: alLlegar.pagina });
+  const page = pagina.clave === filtersKey ? pagina.n : 1;
+  const pageRef = useRef(page); pageRef.current = page;
+  const filtersKeyRef = useRef(filtersKey); filtersKeyRef.current = filtersKey;
+
   useEffect(() => {
-    doFetch(1, pageSizeRef.current);
+    doFetch(pageRef.current, pageSizeRef.current);
   }, [filtersKey, doFetch]);
 
   const handlePageChange = useCallback((p: number, ps: number) => {
     setPageSize(ps);
+    setPagina({ clave: filtersKeyRef.current, n: p });
     doFetch(p, ps);
   }, [doFetch]);
+
+  useEffect(() => {
+    const siguiente = new URLSearchParams();
+    // Only what differs from an untouched screen, so the plain address stays
+    // plain and "the last seven days" keeps meaning that tomorrow.
+    if (from && diaDe(from) !== diaDe(mkDate(7))) siguiente.set("desde", diaDe(from));
+    if (to && diaDe(to) !== diaDe(mkDate(0))) siguiente.set("hasta", diaDe(to));
+    if (entity !== "all") siguiente.set("entidad", entity);
+    if (action !== "all") siguiente.set("accion", action);
+    if (severity !== "all") siguiente.set("severidad", severity);
+    if (userId !== "all") siguiente.set("usuario", userId);
+    if (page > 1) siguiente.set("pagina", String(page));
+    if (pageSize !== TAMANO_DE_PAGINA) siguiente.set("porPagina", String(pageSize));
+    // `replace`: adjusting a filter is not somewhere to go Back to.
+    setParametros(siguiente, { replace: true });
+    // `filtersKey` stands for the six filters; the setter is not a dependency
+    // because its identity changes with the address it has just written.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtersKey, page, pageSize]);
 
   const handleReset = () => {
     setFrom(mkDate(7));
@@ -328,7 +374,7 @@ const BitacoraPage = () => {
         const { action: act, severity: sev } = row.original;
         const style = actionStyle(act);
         const dot   = sev ? SEVERITY_DOT[sev] : undefined;
-        const label = ACTION_LABELS[act] ?? act;
+        const label = nombreDeAccion(row.original);
         return (
           <div className="relative inline-flex">
             <Badge variant={style.variant} className={`text-xs ${style.className ?? ""}`}>
@@ -346,18 +392,17 @@ const BitacoraPage = () => {
       header: "Entidad",
       cell: ({ row }) => {
         const { entity: ent, entity_id } = row.original;
-        const route = ent ? ENTITY_ROUTE[ent] : undefined;
-        return route && entity_id ? (
+        const enlace = enlaceDeFila(sesion.usuario, row.original);
+        const texto = `${ent ? nombreDeEntidad(row.original) : "—"}${entity_id ? ` #${entity_id}` : ""}`;
+        return enlace ? (
           <button
             className="text-sm text-primary hover:underline whitespace-nowrap"
-            onClick={() => navigate(`${route}/${entity_id}`)}
+            onClick={() => navigate(enlace)}
           >
-            {ent} #{entity_id}
+            {texto}
           </button>
         ) : (
-          <span className="text-sm text-muted-foreground whitespace-nowrap">
-            {ent ?? "—"}{entity_id ? ` #${entity_id}` : ""}
-          </span>
+          <span className="text-sm text-muted-foreground whitespace-nowrap">{texto}</span>
         );
       },
     },
@@ -376,10 +421,10 @@ const BitacoraPage = () => {
         );
       },
     },
-  ], [navigate]);
+  ], [navigate, sesion.usuario]);
 
   return (
-    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-3 animate-in fade-in duration-500">
+    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Bitácora</h1>
@@ -419,14 +464,14 @@ const BitacoraPage = () => {
             <span className="text-xs text-muted-foreground">Entidad</span>
             <DropdownMenu>
               <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
-                {entity === "all" ? "Todas" : entity}
+                {entity === "all" ? "Todas" : entidades.find((e) => e.value === entity)?.label ?? entity}
                 <ChevronDownIcon className="size-4 opacity-50" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-40">
+              <DropdownMenuContent className="w-56">
                 <DropdownMenuRadioGroup value={entity} onValueChange={setEntity}>
                   <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
-                  {ENTITIES.map((e) => (
-                    <DropdownMenuRadioItem key={e} value={e}>{e}</DropdownMenuRadioItem>
+                  {entidades.map((e) => (
+                    <DropdownMenuRadioItem key={e.value} value={e.value}>{e.label}</DropdownMenuRadioItem>
                   ))}
                 </DropdownMenuRadioGroup>
               </DropdownMenuContent>
@@ -436,13 +481,13 @@ const BitacoraPage = () => {
             <span className="text-xs text-muted-foreground">Acción</span>
             <DropdownMenu>
               <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
-                {ACTION_PREFIXES.find((p) => p.value === action)?.label ?? "Todas"}
+                {action === "all" ? "Todas" : familias.find((f) => f.value === action)?.label ?? action}
                 <ChevronDownIcon className="size-4 opacity-50" />
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-40">
+              <DropdownMenuContent className="w-56">
                 <DropdownMenuRadioGroup value={action} onValueChange={setAction}>
                   <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
-                  {ACTION_PREFIXES.map((p) => (
+                  {familias.map((p) => (
                     <DropdownMenuRadioItem key={p.value} value={p.value}>{p.label}</DropdownMenuRadioItem>
                   ))}
                 </DropdownMenuRadioGroup>
@@ -476,7 +521,8 @@ const BitacoraPage = () => {
         rowSize="sm"
         hasOptions={false}
         actions={<></>}
-        initialPageSize={50}
+        initialPageSize={pageSize}
+        initialPage={page}
         serverSide={{
           total,
           onPageChange: handlePageChange,

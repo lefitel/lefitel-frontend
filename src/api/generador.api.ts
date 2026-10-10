@@ -14,7 +14,31 @@ export type Operator =
   | "between"
   | "in"
   | "like"
-  | "isnull" | "notnull";
+  | "isnull" | "notnull"
+  // Dates only: "falls inside this named period". The value is a `Period`.
+  | "period";
+
+/**
+ * A stretch of time named relative to the day the report runs — "la semana
+ * pasada", "este mes". The server turns it into two instants each time, which
+ * is what lets a saved report stay current. Mirrors the server's own type; the
+ * list actually offered, with its labels, arrives in `Catalog.periods`.
+ */
+export type Period =
+  | "hoy"
+  | "ayer"
+  | "ultimos_7_dias"
+  | "ultimos_30_dias"
+  | "esta_semana"
+  | "semana_pasada"
+  | "este_mes"
+  | "mes_pasado";
+
+/** One named period, with the words to show for it. */
+export interface CatalogPeriod {
+  key: Period;
+  label: string;
+}
 
 export type AggFn = "count" | "sum" | "avg" | "min" | "max";
 
@@ -104,6 +128,12 @@ export interface Catalog {
    * normal even when it arrives — see `CatalogField.optionList`.
    */
   optionLists?: Record<string, string[]>;
+  /**
+   * The periods the «está en el periodo» operator accepts, in the order to
+   * list them. Optional for the same reason as the two above; a server that
+   * does not send them does not offer the operator either.
+   */
+  periods?: CatalogPeriod[];
 }
 
 // ─── Report configuration ────────────────────────────────────────────────────
@@ -256,6 +286,16 @@ export const getReportesGuardados = (
       params: { limit: page.limit, offset: page.offset },
     })
     .then((r) => r.data);
+
+/**
+ * One saved report, by id — what a link from the Bitácora asks for.
+ *
+ * The list above is paginated, so the report a link names may not be on the
+ * page that is loaded. The server answers 404 when it is gone and 403 when it
+ * is private to somebody else, and records that refusal.
+ */
+export const getReporteGuardado = (id: number): Promise<SavedReport> =>
+  axios.get(urlApi + urlGenerador + `reportes/${id}`).then((r) => r.data);
 
 export const crearReporte = (payload: SaveReportPayload): Promise<SavedReport> =>
   axios.post(urlApi + urlGenerador + "reportes", payload).then((r) => r.data);

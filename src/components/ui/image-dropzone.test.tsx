@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ImageDropzone } from "./image-dropzone";
 
@@ -72,7 +72,27 @@ describe("ImageDropzone", () => {
   it("shows nothing but the image when read-only", () => {
     render(<ImageDropzone file={null} onChange={vi.fn()} existingUrl="/p.jpg" readOnly />);
 
-    expect(screen.getByAltText("preview")).toHaveAttribute("src", "/p.jpg");
+    expect(screen.getByAltText("Foto")).toHaveAttribute("src", "/p.jpg");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("says a stored photo could not be loaded, and still offers to replace it", () => {
+    // It used to stay on screen as the browser's broken-image icon beside the
+    // word "preview", which was the alt text.
+    render(<ImageDropzone file={null} onChange={vi.fn()} existingUrl="/gone.jpg" />);
+    fireEvent.error(screen.getByAltText("Foto"));
+
+    expect(screen.getByText(/no se pudo cargar/i)).toBeTruthy();
+    expect(screen.queryByAltText("Foto")).toBeNull();
+    expect(screen.getByRole("button", { name: /Hacer foto/i })).toBeTruthy();
+  });
+
+  it("says the same and offers nothing when read-only", () => {
+    render(<ImageDropzone file={null} onChange={vi.fn()} existingUrl="/gone.jpg" readOnly />);
+    fireEvent.error(screen.getByAltText("Foto"));
+
+    expect(screen.getByText(/no se pudo cargar/i)).toBeTruthy();
+    expect(screen.queryByText(/subir otra/i)).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
 });

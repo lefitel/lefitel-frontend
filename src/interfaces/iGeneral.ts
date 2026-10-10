@@ -1,5 +1,6 @@
-import { AdssInterface, BitacoraInterface, CiudadInterface, EventoInterface, MaterialInterface, ObsInterface, PosteInterface, PropietarioInterface, TipoObsInterface, UsuarioInterface } from "./interfaces";
+import { AdssInterface, BitacoraInterface, CiudadInterface, EventoInterface, MaterialInterface, ObsInterface, PosteInterface, PropietarioInterface, RolInterface, TipoObsInterface, UsuarioInterface } from "./interfaces";
 import { OrphanFileInfo } from "../api/Files.api";
+import type { Programacion } from "../api/Programacion.api";
 
 export type IGeneral =
     | EventoInterface
@@ -12,4 +13,6 @@ export type IGeneral =
     | TipoObsInterface 
     | ObsInterface
     | OrphanFileInfo
-    | BitacoraInterface;
+    | BitacoraInterface
+    | RolInterface
+    | Programacion;

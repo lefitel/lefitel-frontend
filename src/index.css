@@ -69,6 +69,13 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
   --font-sans: 'Geist Variable', sans-serif;
+  /*
+   * The margin every screen keeps from the shell, and the gap between its
+   * blocks. One value, so changing it here changes all of them: `p-page`,
+   * `px-page`, `gap-page`, `space-y-page`, and `-mx-page` for a sticky header
+   * that has to reach the edges again.
+   */
+  --spacing-page: 1rem;
 }
 
 * {
@@ -226,6 +233,11 @@
 }
 
 /* MapLibre popup — theme-aware */
+/* Over the subject's dot, which SonarMarker raises above the other markers. */
+.maplibregl-popup {
+  z-index: 2;
+}
+
 .maplibregl-popup-content {
   background: var(--card) !important;
   color: var(--card-foreground) !important;
@@ -296,7 +308,7 @@
      * stays dark in both themes and always takes white.
      */
     --primary: oklch(0.505 0.105 255);
-    --primary-fill: oklch(0.400 0.132 255);
+    --primary-fill: oklch(0.450 0.118 255);
     --primary-foreground: oklch(0.99 0 0);
     --secondary: oklch(0.945 0.012 255);
     --secondary-foreground: oklch(0.470 0.105 255);
@@ -307,7 +319,7 @@
     /* Same split as the blue: --destructive is READ (error text, invalid
        borders — 104 uses), --destructive-fill is PAINTED and takes white. */
     --destructive: oklch(0.505 0.180 27);
-    --destructive-fill: oklch(0.470 0.170 27);
+    --destructive-fill: oklch(0.500 0.160 27);
     --destructive-foreground: oklch(0.99 0 0);
     /* --border is decorative; --input outlines a control the user must find,
        so it carries the 3:1 the border does not need. */
@@ -317,12 +329,29 @@
     --radius: 0.75rem;
     --sidebar: oklch(0.944 0.010 255);
     --sidebar-foreground: oklch(0.16 0.018 255);
-    --sidebar-primary: oklch(0.400 0.132 255);
+    --sidebar-primary: oklch(0.450 0.118 255);
     --sidebar-primary-foreground: oklch(0.99 0 0);
     --sidebar-accent: oklch(0.932 0.016 255);
     --sidebar-accent-foreground: oklch(0.470 0.105 255);
     --sidebar-border: oklch(0.878 0.012 255);
     --sidebar-ring: oklch(0.505 0.105 255);
+
+    /*
+     * The quiet dots of a map: the two cities a stretch runs between, and the
+     * other poles along it. They were two fixed greys chosen against the light
+     * base map — #374151 and #9ca3af at 65-75% — and on the dark one the cities
+     * all but vanished and the poles went dim. Tokens rather than a prop,
+     * because these are DOM markers and can simply follow the theme.
+     * --map-pole is the border; --map-pole-fill carries the transparency.
+     */
+    --map-endpoint: #374151;
+    --map-pole: #9ca3af;
+    --map-pole-fill: rgb(156 163 175 / 0.7);
+    /* The dot a form is placing: --primary as a literal, because the ripple
+       needs its three channels and cannot take them from an oklch(). A form
+       does not speak about state, so this is never one of the health colours. */
+    --map-subject: #38669f;
+    --map-subject-rgb: 56, 102, 159;
 
     /*
      * Depth. Light falls from a point off the top-left corner, so a control
@@ -396,7 +425,7 @@
     --popover: oklch(0.288 0.020 262);
     --popover-foreground: oklch(0.965 0.004 255);
     --primary: oklch(0.700 0.115 255);
-    --primary-fill: oklch(0.400 0.132 255);
+    --primary-fill: oklch(0.475 0.116 255);
     --primary-foreground: oklch(0.99 0 0);
     --secondary: oklch(0.318 0.020 262);
     --secondary-foreground: oklch(0.965 0.004 255);
@@ -405,7 +434,7 @@
     --accent: oklch(0.340 0.022 262);
     --accent-foreground: oklch(0.965 0.004 255);
     --destructive: oklch(0.720 0.140 25);
-    --destructive-fill: oklch(0.470 0.170 27);
+    --destructive-fill: oklch(0.515 0.155 27);
     --destructive-foreground: oklch(0.99 0 0);
     --border: oklch(0.372 0.020 262);
     --input: oklch(0.578 0.028 262);
@@ -413,12 +442,19 @@
     --ring: oklch(0.720 0.115 255);
     --sidebar: oklch(0.250 0.018 262);
     --sidebar-foreground: oklch(0.965 0.004 255);
-    --sidebar-primary: oklch(0.400 0.132 255);
+    --sidebar-primary: oklch(0.475 0.116 255);
     --sidebar-primary-foreground: oklch(0.99 0 0);
     --sidebar-accent: oklch(0.340 0.022 262);
     --sidebar-accent-foreground: oklch(0.965 0.004 255);
     --sidebar-border: oklch(0.372 0.020 262);
     --sidebar-ring: oklch(0.720 0.115 255);
+
+    /* See the light theme: the same three, read against the dark base map. */
+    --map-endpoint: #e5e7eb;
+    --map-pole: #cbd2dc;
+    --map-pole-fill: rgb(203 210 220 / 0.9);
+    --map-subject: #6ca1e5;
+    --map-subject-rgb: 108, 161, 229;
 
     --surface-up: oklch(0.965 0.004 255);
     --surface-down: oklch(0 0 0);

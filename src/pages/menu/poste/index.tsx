@@ -669,7 +669,7 @@ const PostePage = () => {
     const hasData = !!list?.length;
 
     return (
-        <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+        <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Postes</h1>

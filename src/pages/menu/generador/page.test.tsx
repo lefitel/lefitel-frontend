@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter, useLocation } from "react-router-dom";
+import { rechazoDelServidor } from "../../../test/fallos";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import { SesionContext } from "../../../context/SesionContext";
 import type { Catalog, ReportConfig, ReportResult, SavedReport } from "../../../api/generador.api";
@@ -13,6 +15,7 @@ const api = {
   runReporte: vi.fn(),
   contarReporte: vi.fn(),
   getReportesGuardados: vi.fn(),
+  getReporteGuardado: vi.fn(),
   crearReporte: vi.fn(),
   actualizarReporte: vi.fn(),
   eliminarReporte: vi.fn(),
@@ -28,6 +31,7 @@ vi.mock("../../../api/generador.api", async () => {
     runReporte: (...a: unknown[]) => api.runReporte(...a),
     contarReporte: (...a: unknown[]) => api.contarReporte(...a),
     getReportesGuardados: (...a: unknown[]) => api.getReportesGuardados(...a),
+    getReporteGuardado: (...a: unknown[]) => api.getReporteGuardado(...a),
     crearReporte: (...a: unknown[]) => api.crearReporte(...a),
     actualizarReporte: (...a: unknown[]) => api.actualizarReporte(...a),
     eliminarReporte: (...a: unknown[]) => api.eliminarReporte(...a),
@@ -171,13 +175,22 @@ const sesion = {
   logout: vi.fn(),
 };
 
-const renderPage = () =>
+/** Prints the address, so a test can see what the page did to it. */
+const Direccion = () => {
+  const { pathname, search } = useLocation();
+  return <p data-testid="direccion">{pathname + search}</p>;
+};
+
+const renderPage = (direccion = "/app/generador") =>
   render(
-    <SesionContext.Provider value={sesion as never}>
-      <TooltipProvider>
-        <GeneradorPage />
-      </TooltipProvider>
-    </SesionContext.Provider>,
+    <MemoryRouter initialEntries={[direccion]}>
+      <SesionContext.Provider value={sesion as never}>
+        <TooltipProvider>
+          <GeneradorPage />
+        </TooltipProvider>
+      </SesionContext.Provider>
+      <Direccion />
+    </MemoryRouter>,
   );
 
 /**
@@ -223,6 +236,12 @@ const templateRow = (name: string) =>
  * while a confirmation is open, to prove nothing has been discarded yet.
  */
 const columnCount = () => screen.queryAllByLabelText(/^Mover /).length;
+
+/** Excel and PDF sit behind one button: open it, then pick the format. */
+const exportAs = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
+  await user.click(screen.getByRole("button", { name: "Exportar" }));
+  await user.click(await screen.findByRole("button", { name }));
+};
 
 const addColumn = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => {
   await user.click(screen.getAllByRole("button", { name: /añadir columna/i })[0]);
@@ -300,9 +319,11 @@ describe("catalog loading", () => {
     expect(api.getCatalogo).toHaveBeenCalledTimes(1);
 
     rerender(
-      <SesionContext.Provider value={{ ...sesion, sesion: { ...sesion.sesion } } as never}>
-        <TooltipProvider><GeneradorPage /></TooltipProvider>
-      </SesionContext.Provider>,
+      <MemoryRouter initialEntries={["/app/generador"]}>
+        <SesionContext.Provider value={{ ...sesion, sesion: { ...sesion.sesion } } as never}>
+          <TooltipProvider><GeneradorPage /></TooltipProvider>
+        </SesionContext.Provider>
+      </MemoryRouter>,
     );
     await ready();
     expect(api.getCatalogo).toHaveBeenCalledTimes(1);
@@ -751,6 +772,88 @@ describe("saving", () => {
     await waitFor(() => expect(api.crearReporte).toHaveBeenCalledTimes(1));
   });
 
+  describe("a report named in the address, which is how the Bitácora links to one", () => {
+    const linked: SavedReport = {
+      id: 12, name: "Postes de Tarija", description: null, id_usuario: 7,
+      visibility: "private", favorite: false,
+      config: { root: "evento", columns: [{ path: "description" }] },
+    };
+
+    it("is asked for by its id and opened, though the saved list does not hold it", async () => {
+      // The list is a page. A link to a report that is not on it has to work
+      // anyway, so the list here is empty on purpose.
+      api.getReporteGuardado.mockResolvedValue(linked);
+
+      renderPage("/app/generador?vista=12");
+      await ready();
+
+      await waitFor(() => expect(api.getReporteGuardado).toHaveBeenCalledWith(12));
+      await waitFor(() =>
+        expect(toasts.some((t) => t.kind === "info" && /Postes de Tarija/.test(t.text))).toBe(true),
+      );
+      expect(api.getReporteGuardado).toHaveBeenCalledTimes(1);
+      // Opened, not merely announced: its one column is on the builder, and
+      // the page knows which report it is holding.
+      expect(columnCount()).toBe(1);
+      expect(screen.getByRole("button", { name: /^actualizar$/i })).toBeInTheDocument();
+    });
+
+    it("takes the report out of the address once it has asked, so a reload does not open it again", async () => {
+      api.getReporteGuardado.mockResolvedValue(linked);
+
+      renderPage("/app/generador?vista=12");
+      await ready();
+      await waitFor(() => expect(api.getReporteGuardado).toHaveBeenCalled());
+
+      // The router applies the change a tick after the effect asks for it.
+
+      await waitFor(() => expect(screen.getByTestId("direccion")).toHaveTextContent(/^\/app\/generador$/));
+    });
+
+    it("says what the server said when it refuses, instead of opening nothing in silence", async () => {
+      // An error shaped the way the interceptor leaves it, so the sentence has
+      // to travel the real path. The page's own fallback is "No se pudo abrir
+      // el reporte"; accepting either would pass with the server's words lost.
+      api.getReporteGuardado.mockRejectedValue(rechazoDelServidor(403, "Este reporte es privado."));
+
+      renderPage("/app/generador?vista=12");
+      await ready();
+
+      await waitFor(() => expect(toasts.some((t) => t.kind === "error")).toBe(true));
+      expect(toasts.find((t) => t.kind === "error")?.text).toBe("Este reporte es privado.");
+      expect(columnCount()).toBe(0);
+    });
+
+    it("does not overwrite what the person started while the report was on its way", async () => {
+      // The builder is usable as soon as the catalog arrives, and this answer
+      // arrives after. Opening from the picker is a gesture and may replace the
+      // work; an answer to a link is not one.
+      let entregar!: (r: SavedReport) => void;
+      api.getReporteGuardado.mockReturnValue(new Promise<SavedReport>((r) => { entregar = r; }));
+      const user = userEvent.setup();
+
+      renderPage("/app/generador?vista=12");
+      await ready();
+      await addColumn(user, /Resuelto/);
+      expect(columnCount()).toBe(1);
+
+      entregar(linked);
+
+      await waitFor(() =>
+        expect(toasts.some((t) => t.kind === "info" && /no se abrió/i.test(t.text))).toBe(true),
+      );
+      // Still the column they added, and no report adopted.
+      expect(columnCount()).toBe(1);
+      expect(screen.queryByRole("button", { name: /^actualizar$/i })).toBeNull();
+    });
+
+    it("asks for nothing when the address names no report", async () => {
+      renderPage();
+      await ready();
+      expect(api.getReporteGuardado).not.toHaveBeenCalled();
+    });
+  });
+
   it("saves someone else's report as a copy instead of overwriting it", async () => {
     const theirs: SavedReport = {
       id: 5, name: "De Ana", description: null, id_usuario: 99,
@@ -941,7 +1044,7 @@ describe("exporting", () => {
     await generate(user);
     const runsBefore = api.runReporte.mock.calls.length;
 
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config, options] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig, { format: string }];
@@ -955,7 +1058,7 @@ describe("exporting", () => {
     const user = userEvent.setup();
     await generate(user);
 
-    await user.click(screen.getByRole("button", { name: /pdf/i }));
+    await exportAs(user, /pdf/i);
 
     await waitFor(() => expect(downloaded).toHaveLength(1));
     expect(downloaded[0].name).toBe("Reporte_06-08-2026_00-00-00.pdf");
@@ -970,7 +1073,7 @@ describe("exporting", () => {
     await generate(user);
     await addFilterOn(user, /Descripción/, "x");
 
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
@@ -985,19 +1088,18 @@ describe("exporting", () => {
     // banner needs a table to sit on.
     const user = userEvent.setup();
     await generate(user);
-    expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Exportar" })).not.toBeDisabled();
 
     await addColumn(user, /Resuelto/);
     await screen.findByText(/Vista previa/);
 
-    expect(screen.getByRole("button", { name: /excel/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /pdf/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Exportar" })).toBeDisabled();
     expect(screen.getByText("Pulse Generar para exportar este reporte")).toBeInTheDocument();
 
     // And generating it brings them back, for the report that is now on screen.
     await user.click(screen.getByRole("button", { name: "Generar" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled());
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Exportar" })).not.toBeDisabled());
+    await exportAs(user, /excel/i);
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
     expect(config.columns).toHaveLength(2);
@@ -1012,7 +1114,7 @@ describe("exporting", () => {
     const runsBefore = api.runReporte.mock.calls.length;
 
     await user.type(screen.getByLabelText(/^Nombre de la columna /), "Qué pasó");
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config] = api.exportarReporte.mock.calls[api.exportarReporte.mock.calls.length - 1] as [ReportConfig];
@@ -1026,7 +1128,7 @@ describe("exporting", () => {
 
     const user = userEvent.setup();
     await generate(user);
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
     expect(downloaded).toHaveLength(0);
@@ -1036,6 +1138,9 @@ describe("exporting", () => {
     const user = userEvent.setup();
     await generate(user);
 
+    // Opened first: with the menu shut the switch is absent from every report.
+    await user.click(screen.getByRole("button", { name: "Exportar" }));
+    expect(await screen.findByRole("button", { name: /excel/i })).toBeInTheDocument();
     expect(screen.queryByLabelText(/Fotos en el Excel/)).not.toBeInTheDocument();
   });
 
@@ -1049,10 +1154,12 @@ describe("exporting", () => {
 
     const user = userEvent.setup();
     await generate(user);
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(screen.getByText(/Generando en el servidor/)).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: /pdf/i })).toBeDisabled();
+    // One button in front of both formats, so one thing to switch off.
+    expect(screen.getByRole("button", { name: "Exportar" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /pdf/i })).not.toBeInTheDocument();
 
     release();
     await waitFor(() => expect(downloaded).toHaveLength(1));
@@ -1284,7 +1391,7 @@ describe("a request the user has moved on from", () => {
       expect(toasts.some((t) => t.text.includes("cargado"))).toBe(true),
     );
     expect(screen.queryByText("de la anterior")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /excel/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Exportar" })).toBeDisabled();
   });
 });
 
@@ -1316,7 +1423,7 @@ describe("paging", () => {
 
     await waitFor(() => expect(toasts[toasts.length - 1]?.kind).toBe("error"));
     expect(screen.getByText("primera página")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /excel/i })).not.toBeDisabled();
+    expect(screen.getByRole("button", { name: "Exportar" })).not.toBeDisabled();
   });
 });
 
@@ -1592,7 +1699,7 @@ describe("what the screen shows while it waits", () => {
     await user.click(screen.getByRole("button", { name: "Generar" }));
 
     await waitFor(() => expect(api.runReporte).toHaveBeenCalled());
-    expect(screen.queryByText(/Elija las columnas en el panel de configuración/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Añada columnas arriba, en «Columnas»/)).not.toBeInTheDocument();
     // The headers are the report's own, taken from the configuration that was
     // just sent, so nothing in the header row moves when the rows land.
     expect(screen.getByRole("columnheader", { name: "Descripción" })).toBeInTheDocument();
@@ -2044,7 +2151,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    expect(screen.getByText(/Elija las columnas en el panel de configuración/)).toBeInTheDocument();
+    expect(screen.getByText(/Añada columnas arriba, en «Columnas»/)).toBeInTheDocument();
     // Opened, because with the picker closed "no templates on screen" is true
     // of every page and proves nothing about this one.
     await openPicker(user);
@@ -2259,10 +2366,12 @@ describe("the controls that were missing", () => {
     await ready();
     await withRows(user, 1376);
 
-    expect(screen.getByRole("combobox", { name: "Qué se exporta" })).toBeInTheDocument();
-    await user.click(screen.getByRole("combobox", { name: "Qué se exporta" }));
-    await user.click(screen.getByRole("option", { name: /Solo esta página/ }));
-    await user.click(screen.getByRole("button", { name: /^Excel$/ }));
+    await user.click(screen.getByRole("button", { name: "Exportar" }));
+    // Each format says how many rows it will carry, so the choice shows.
+    expect(await screen.findByRole("button", { name: /^Excel.*1\.376 filas/ })).toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Solo esta página" }));
+    expect(screen.queryByRole("button", { name: /1\.376 filas/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Excel/ }));
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const options = api.exportarReporte.mock.calls[0][1] as { scope?: string };
@@ -2277,7 +2386,9 @@ describe("the controls that were missing", () => {
     await ready();
     await withRows(user, 1);
 
-    expect(screen.queryByRole("combobox", { name: "Qué se exporta" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Exportar" }));
+    expect(await screen.findByRole("button", { name: /^Excel/ })).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Solo esta página" })).not.toBeInTheDocument();
   });
 
   it("exports the whole report unless told otherwise", async () => {
@@ -2286,7 +2397,7 @@ describe("the controls that were missing", () => {
     await ready();
     await withRows(user, 1376);
 
-    await user.click(screen.getByRole("button", { name: /^Excel$/ }));
+    await exportAs(user, /^Excel/);
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const options = api.exportarReporte.mock.calls[0][1] as { scope?: string };
@@ -2567,7 +2678,7 @@ describe("what the audit of these changes found", () => {
     await user.type(screen.getByLabelText(/^Nombre de la columna /), "Qué pasó");
     await addFilterOn(user, /Descripción/, "x");
     expect(screen.getByRole("button", { name: "Ordenar la tabla por Qué pasó" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /excel/i }));
+    await exportAs(user, /excel/i);
 
     await waitFor(() => expect(api.exportarReporte).toHaveBeenCalled());
     const [config] = api.exportarReporte.mock.calls.at(-1) as [ReportConfig];
@@ -2689,5 +2800,27 @@ describe("what the audit of these changes found", () => {
     await open(user, "Sin describirla");
     expect(toasts[toasts.length - 1]?.text).toMatch(/sin al menos 2 elementos/);
     expect(columnCount()).toBe(1);
+  });
+});
+
+describe("the filter picker", () => {
+  it("ticks a field that already carries a filter, and still offers it", async () => {
+    // The column picker has always marked what is already in the report. This
+    // one marked nothing, so the only way to learn a field was filtered was to
+    // scroll the panel beside it.
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+    expect(screen.getByRole("option", { name: /Descripción/ })).not.toHaveClass("text-muted-foreground");
+    await user.click(screen.getByRole("option", { name: /Descripción/ }));
+
+    await user.click(screen.getByRole("button", { name: /añadir filtro/i }));
+    expect(screen.getByRole("option", { name: /Descripción/ })).toHaveClass("text-muted-foreground");
+    // A second condition on the same field is a real thing to want: a range
+    // built from two comparisons, a text that contains one word and not another.
+    await user.click(screen.getByRole("option", { name: /Descripción/ }));
+    expect(screen.getAllByRole("button", { name: /Quitar filtro sobre Descripción/ })).toHaveLength(2);
   });
 });

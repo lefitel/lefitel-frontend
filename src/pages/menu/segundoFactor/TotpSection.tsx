@@ -75,8 +75,8 @@ type Banner409 = "correo" | "factor" | null;
  * **Every one of the three requests below carries the account's current
  * password, every time — setup, confirm and delete alike.** That is not
  * this component being cautious; `api/src/routes/totp.routes.ts` mounts all
- * three behind `requireStepUp({ exigeContrasena: true })`, so a call missing
- * it is simply refused. See `Mfa.api.ts`'s header comment for why the
+ * three behind the step-up gate with `sinVentana: true`, so a call missing it
+ * is simply refused. See `Mfa.api.ts`'s header comment for why the
  * password is asked once, at the start of a registration attempt, and
  * reused for the `confirm` that follows moments later rather than asked
  * twice for one continuous action.

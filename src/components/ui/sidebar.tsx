@@ -23,15 +23,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 
-const SIDEBAR_COOKIE_NAME = "sidebar_state"
-const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "13rem"
 const SIDEBAR_WIDTH_MOBILE = "18rem"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
-const SIDEBAR_WIDTH_MIN_PX = 160
-const SIDEBAR_WIDTH_MAX_PX = 340
-const SIDEBAR_WIDTH_STORAGE_KEY = "sidebar_width"
 
 type SidebarContextProps = {
   state: "expanded" | "collapsed"
@@ -41,8 +36,6 @@ type SidebarContextProps = {
   setOpenMobile: (open: boolean) => void
   isMobile: boolean
   toggleSidebar: () => void
-  sidebarWidth: string
-  setSidebarWidth: (width: string) => void
 }
 
 const SidebarContext = React.createContext<SidebarContextProps | null>(null)
@@ -71,14 +64,6 @@ function SidebarProvider({
 }) {
   const isMobile = useIsMobile()
   const [openMobile, setOpenMobile] = React.useState(false)
-  const [sidebarWidth, setSidebarWidthState] = React.useState(
-    () => localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY) ?? SIDEBAR_WIDTH
-  )
-  const setSidebarWidth = React.useCallback((width: string) => {
-    setSidebarWidthState(width)
-    localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, width)
-  }, [])
-
   const [_open, _setOpen] = React.useState(defaultOpen)
   const open = openProp ?? _open
   const setOpen = React.useCallback(
@@ -89,8 +74,6 @@ function SidebarProvider({
       } else {
         _setOpen(openState)
       }
-
-      document.cookie = `${SIDEBAR_COOKIE_NAME}=${openState}; path=/; max-age=${SIDEBAR_COOKIE_MAX_AGE}`
     },
     [setOpenProp, open]
   )
@@ -125,10 +108,8 @@ function SidebarProvider({
       openMobile,
       setOpenMobile,
       toggleSidebar,
-      sidebarWidth,
-      setSidebarWidth,
     }),
-    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar, sidebarWidth, setSidebarWidth]
+    [state, open, setOpen, isMobile, openMobile, setOpenMobile, toggleSidebar]
   )
 
   return (
@@ -138,7 +119,7 @@ function SidebarProvider({
           data-slot="sidebar-wrapper"
           style={
             {
-              "--sidebar-width": sidebarWidth,
+              "--sidebar-width": SIDEBAR_WIDTH,
               "--sidebar-width-icon": SIDEBAR_WIDTH_ICON,
               ...style,
             } as React.CSSProperties
@@ -279,47 +260,6 @@ function SidebarTrigger({
       <PanelLeftIcon />
       <span className="sr-only">Toggle Sidebar</span>
     </Button>
-  )
-}
-
-function SidebarRail({ className, ...props }: Omit<React.ComponentProps<"div">, "onMouseDown">) {
-  const { setSidebarWidth } = useSidebar()
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    const startX = e.clientX
-    const container = e.currentTarget.closest<HTMLElement>('[data-slot="sidebar-container"]')
-    const startWidth = container?.getBoundingClientRect().width ?? 208
-
-    const onMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.min(SIDEBAR_WIDTH_MAX_PX, Math.max(SIDEBAR_WIDTH_MIN_PX, startWidth + e.clientX - startX))
-      setSidebarWidth(`${newWidth}px`)
-    }
-    const onMouseUp = () => {
-      document.removeEventListener("mousemove", onMouseMove)
-      document.removeEventListener("mouseup", onMouseUp)
-      document.body.style.cursor = ""
-      document.body.style.userSelect = ""
-    }
-
-    document.body.style.cursor = "col-resize"
-    document.body.style.userSelect = "none"
-    document.addEventListener("mousemove", onMouseMove)
-    document.addEventListener("mouseup", onMouseUp)
-  }
-
-  return (
-    <div
-      data-sidebar="rail"
-      data-slot="sidebar-rail"
-      onMouseDown={handleMouseDown}
-      className={cn(
-        "absolute inset-y-0 z-20 hidden w-4 -translate-x-1/2 cursor-col-resize group-data-[side=left]:-right-4 group-data-[side=right]:left-0 sm:flex",
-        "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:bg-transparent after:transition-colors hover:after:bg-border",
-        className
-      )}
-      {...props}
-    />
   )
 }
 
@@ -733,7 +673,6 @@ export {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
   SidebarProvider,
-  SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
   useSidebar,

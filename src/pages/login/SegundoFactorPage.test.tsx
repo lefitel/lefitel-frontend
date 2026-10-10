@@ -53,15 +53,19 @@ function Harness({
   onSesion,
   initialEntries = ["/segundo-factor"],
   usuario = usuarioExample,
+  metodos,
 }: {
   onSesion: (s: SesionInterface) => void;
   initialEntries?: InitialEntry[];
   usuario?: SesionInterface["usuario"];
+  /** The account's factors, as `/auth/me` lists them for a `parcial` session. */
+  metodos?: string[];
 }) {
   const [sesion, setSesionState] = useState<SesionInterface>({
     usuario,
     autenticado: false,
     estado: "parcial",
+    metodos,
   });
 
   const setSesion: contextProps["setSesion"] = (next) => {
@@ -319,6 +323,70 @@ describe("cancelling", () => {
  * pantalla sólo tenía las dos pestañas de código, y quien sólo tuviera llave
  * quemaba un código de recuperación por login hasta quedarse fuera.
  * ───────────────────────────────────────────────────────────────────────── */
+describe("only the ways in this account has", () => {
+  // The screen used to draw all three code tabs and the passkey button for
+  // everybody, and open on the authenticator app. An account whose only factor
+  // is a verified address — the usual first one — was asked for a code it had
+  // no way to produce. `/auth/me` now lists the account's factors for a
+  // `parcial` session and the screen is drawn from that list.
+  const pestanas = () => screen.queryAllByRole("tab").map((t) => t.textContent);
+
+  it("goes straight to the email code when that is the only factor, with no tabs to choose from", () => {
+    render(<Harness onSesion={() => {}} metodos={["correo"]} />);
+
+    expect(pestanas()).toEqual([]);
+    expect(screen.getByLabelText(/código recibido por correo/i)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/código de seis dígitos/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /enviar código/i })).toBeInTheDocument();
+  });
+
+  it("offers a tab per factor and opens on the first one the server named", () => {
+    render(<Harness onSesion={() => {}} metodos={["correo", "codigo"]} />);
+
+    expect(pestanas()).toEqual(["Código por correo", "Código de recuperación"]);
+    // Open on email, not on an app this account never set up.
+    expect(screen.getByLabelText(/código recibido por correo/i)).toBeInTheDocument();
+  });
+
+  it("opens on the app code for an account that has one, as it always did", () => {
+    render(<Harness onSesion={() => {}} metodos={["totp", "correo", "codigo"]} />);
+
+    expect(pestanas()).toEqual(["Código de la app", "Código por correo", "Código de recuperación"]);
+    expect(screen.getByLabelText(/código de seis dígitos/i)).toBeInTheDocument();
+  });
+
+  it("does not offer the passkey to an account that has none, even in a browser that could use one", () => {
+    soporta = true;
+    render(<Harness onSesion={() => {}} metodos={["totp"]} />);
+
+    expect(screen.queryByRole("button", { name: /llave de acceso/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the passkey alone when it is the only factor: no code field, nothing to verify", () => {
+    soporta = true;
+    render(<Harness onSesion={() => {}} metodos={["passkey"]} />);
+
+    expect(screen.getByRole("button", { name: /llave de acceso/i })).toBeInTheDocument();
+    expect(pestanas()).toEqual([]);
+    expect(screen.queryByRole("button", { name: /verificar/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/o con un código/i)).not.toBeInTheDocument();
+  });
+
+  it("says so when the only factor is a passkey and this browser cannot use one", () => {
+    // Otherwise the screen would be a title and a cancel link.
+    soporta = false;
+    render(<Harness onSesion={() => {}} metodos={["passkey"]} />);
+
+    expect(screen.getByText(/este navegador no puede usar llaves de acceso/i)).toBeInTheDocument();
+  });
+
+  it("draws everything when the server sent no list, which is what an older server does", () => {
+    render(<Harness onSesion={() => {}} />);
+
+    expect(pestanas()).toEqual(["Código de la app", "Código por correo", "Código de recuperación"]);
+  });
+});
+
 describe("entering with the passkey", () => {
   // Leaving the screen with the system dialog open would leave it orphaned:
   // the library aborts from a module singleton, and this is the one place a

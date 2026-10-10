@@ -22,7 +22,7 @@
 // nowhere.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import axios from "axios";
+import axios, { AxiosError } from "axios";
 import {
   comprobarToken,
   loginUsuario,
@@ -33,6 +33,7 @@ import {
   verifySecondFactor,
   esRechazoStepUp,
   CODIGO_STEP_UP,
+  endSession,
 } from "./Login.api";
 import { sinPermisos } from "../lib/permissions";
 import type { UsuarioInterface } from "../interfaces/interfaces";
@@ -129,6 +130,34 @@ describe("comprobarToken", () => {
 
     expect(res.estado).toBe("parcial");
     expect(res.permisos).toBeUndefined();
+  });
+
+  // Tarea 10. `useStepUpCeremony.ts`'s `refrescarSesion` is the one caller that
+  // needs `axios` itself to give up — see `TIMEOUT_CONFIRMACION_MS`'s own
+  // comment in `stepUp.ts` for the hang this closes. `SesionProvider.tsx`'s
+  // startup effect and `LoginPage.tsx` both call this with no arguments, and
+  // the next two cases pin that leaving `opciones` out still asks with no
+  // limit at all — the same as before this parameter existed.
+  it("passes `opciones.timeout` straight to axios, per call", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({
+      status: 200,
+      data: { usuario: usuarioDelServidor, permisos: permisosDelServidor },
+    });
+
+    await comprobarToken({ timeout: 20_000 });
+
+    expect(get.mock.calls[0][1]).toEqual({ timeout: 20_000 });
+  });
+
+  it("asks with no timeout at all when called with no arguments — the startup and login callers", async () => {
+    const get = vi.spyOn(axios, "get").mockResolvedValue({
+      status: 200,
+      data: { usuario: usuarioDelServidor, permisos: permisosDelServidor },
+    });
+
+    await comprobarToken();
+
+    expect(get.mock.calls[0][1]).toEqual({ timeout: undefined });
   });
 });
 
@@ -303,18 +332,58 @@ describe("loginUsuario", () => {
   });
 });
 
+/**
+ * Un rechazo con la forma exacta que produce axios de verdad.
+ *
+ * 🔴 **`AxiosError` y no un `Error` con un `response` pegado encima.** Desde
+ * que `sendVerificationEmail` saca su frase por `mensajeDeError`, la
+ * diferencia decide el resultado: esa función pregunta
+ * `axios.isAxiosError(error)` antes de mirar el cuerpo, así que un impostor de
+ * pato se lleva el respaldo genérico y el test diría que el servidor no habló
+ * cuando en producción sí habla. Un fixture que no puede salir del código que
+ * imita no está midiendo ese código.
+ *
+ * El resto del fichero conserva la forma antigua a propósito: sus envoltorios
+ * leen el cuerpo directamente y ahí el impostor es fiel. Gemelo del helper del
+ * mismo nombre en `Usuario.api.test.ts`, por el mismo motivo.
+ */
+const rechazoDelServidor = (status: number, message: string) =>
+  new AxiosError(
+    String(status),
+    String(status),
+    undefined,
+    {},
+    { status, data: { message }, statusText: "", headers: {}, config: {} } as never,
+  );
+
 describe("sendVerificationEmail", () => {
-  it("posts to POST /api/auth/email/send with the address and the current password", async () => {
+  it("posts to POST /api/auth/email/send with the address and no password key at all", async () => {
+    /**
+     * 🔴 **`Object.keys` and not `toEqual`, and the difference is the whole
+     * test.** `toEqual({ email })` passes against a body of
+     * `{ email, pass: undefined }` — vitest treats an explicitly-undefined
+     * property as absent — which is exactly the shape this function would keep
+     * if the parameter were left on the signature and simply never passed.
+     * `Object.keys` sees the key. This file's neighbour `Usuario.api.test.ts`
+     * opens with the same warning, about the same class of mistake, after it
+     * cost a production defect.
+     *
+     * Why the key must not be there: the password on this route is the gate's
+     * now, and the gate reads `stepup_password`. A `pass` alongside it is a
+     * second prompt for one secret in one request — the thing this arc exists
+     * to remove — and the server ignores it, so nothing would ever go red.
+     */
     const post = vi.spyOn(axios, "post").mockResolvedValue({
       status: 200,
       data: { message: "Si la dirección es válida, se envió un enlace de verificación." },
     });
 
-    await sendVerificationEmail("nueva@osefi.net", "la-mia");
+    await sendVerificationEmail("nueva@osefi.net");
 
     expect(post).toHaveBeenCalledTimes(1);
     expect(post.mock.calls[0][0]).toMatch(/auth\/email\/send$/);
-    expect(post.mock.calls[0][1]).toEqual({ email: "nueva@osefi.net", pass: "la-mia" });
+    expect(Object.keys(post.mock.calls[0][1] as object)).toEqual(["email"]);
+    expect(post.mock.calls[0][1]).toEqual({ email: "nueva@osefi.net" });
   });
 
   it("passes the uniform 200 through untouched, without guessing at what happened server-side", async () => {
@@ -323,7 +392,7 @@ describe("sendVerificationEmail", () => {
       data: { message: "Si la dirección es válida, se envió un enlace de verificación." },
     });
 
-    const res = await sendVerificationEmail("nueva@osefi.net", "la-mia");
+    const res = await sendVerificationEmail("nueva@osefi.net");
 
     expect(res).toEqual({
       status: 200,
@@ -338,26 +407,21 @@ describe("sendVerificationEmail", () => {
     // this wrapper hard-codes `status: 500` on every rejection.
     for (const respuesta of [
       { status: 400, message: "Debe indicar una dirección de correo válida." },
-      { status: 400, message: "Debe proporcionar su contraseña actual." },
-      { status: 401, message: "La contraseña actual suministrada no es correcta." },
       { status: 401, message: "Su cuenta ya no está activa." },
+      { status: 403, message: "Esta operación necesita que confirmes tu identidad." },
       { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
     ]) {
       vi.restoreAllMocks();
-      vi.spyOn(axios, "post").mockRejectedValue(
-        Object.assign(new Error(String(respuesta.status)), {
-          response: { status: respuesta.status, data: { message: respuesta.message } },
-        })
-      );
+      vi.spyOn(axios, "post").mockRejectedValue(rechazoDelServidor(respuesta.status, respuesta.message));
 
-      expect(await sendVerificationEmail("nueva@osefi.net", "la-mia"), JSON.stringify(respuesta)).toEqual(respuesta);
+      expect(await sendVerificationEmail("nueva@osefi.net"), JSON.stringify(respuesta)).toEqual(respuesta);
     }
   });
 
   it("reports 500 and something to show when nothing answered at all", async () => {
     vi.spyOn(axios, "post").mockRejectedValue(new Error("network down"));
 
-    expect(await sendVerificationEmail("nueva@osefi.net", "la-mia")).toEqual({
+    expect(await sendVerificationEmail("nueva@osefi.net")).toEqual({
       status: 500,
       message: "No se pudo conectar con el servidor.",
     });
@@ -528,9 +592,67 @@ describe("resetPassword", () => {
   });
 });
 
+/**
+ * `endSession` — cerrar **una** sesión desde «Mi perfil».
+ *
+ * 🔴 **Este envoltorio no tenía ningún test, y por eso se le pasó el mismo
+ * defecto dos rondas seguidas.** Su ruta, `DELETE /api/auth/sessions/:id`,
+ * lleva `requireStepUp()` — está en `STEP_UP_OPTIONS` como `CON_VENTANA` — y
+ * **no** está en `RUTAS_EXCLUIDAS`, así que el diálogo de reautenticación se
+ * abre delante de ella. El propio comentario del `.delete` ya lo decía sin
+ * darse cuenta: manda `{ data: {} }` precisamente para que el interceptor
+ * tenga dónde meter la contraseña.
+ *
+ * Lo que se lee al cancelar esa ventana se mide en `statusPropagation.test.ts`,
+ * que monta la cadena entera. Aquí va la mitad unitaria: que el estado y la
+ * frase del servidor llegan intactos.
+ */
+describe("endSession", () => {
+  it("borra la sesión por su id, con cuerpo para que el interceptor pueda usarlo", async () => {
+    const del = vi.spyOn(axios, "delete").mockResolvedValue({ status: 200, data: {} });
+
+    await endSession("una-sesion-cualquiera");
+
+    expect(del).toHaveBeenCalledTimes(1);
+    expect(del.mock.calls[0][0]).toMatch(/auth\/sessions\/una-sesion-cualquiera$/);
+    // 🔴 El `data` no es decorativo: `axios.delete(url)` sin él descarta el
+    // cuerpo, y sin cuerpo el interceptor no tiene dónde reinyectar
+    // `stepup_password` al reenviar — la ventana se abriría una y otra vez con
+    // la contraseña correcta. Mismo motivo escrito en `deleteUsuario`.
+    expect(del.mock.calls[0][1]).toMatchObject({ data: {} });
+  });
+
+  it("conserva el estado y la frase del servidor en vez de aplanarlos", async () => {
+    // 404 es la respuesta deliberadamente ambigua de esta ruta — «no existe» y
+    // «no es tuya» se contestan igual para que no sirva de censo de sesiones —,
+    // y 403 es la puerta. Son cosas distintas que decir y ninguna es un cierre
+    // que ocurrió.
+    for (const respuesta of [
+      { status: 404, message: "Esa sesión no es tuya." },
+      { status: 403, message: "Introduce tu contraseña actual para completar esta operación." },
+    ]) {
+      vi.restoreAllMocks();
+      vi.spyOn(axios, "delete").mockRejectedValue(rechazoDelServidor(respuesta.status, respuesta.message));
+
+      expect(await endSession("x"), JSON.stringify(respuesta)).toEqual(respuesta);
+    }
+  });
+
+  it("dice algo que se puede enseñar cuando no contestó nadie", async () => {
+    vi.spyOn(axios, "delete").mockRejectedValue(new Error("network down"));
+
+    expect(await endSession("x")).toEqual({
+      status: 500,
+      message: "No se pudo cerrar la sesión.",
+    });
+  });
+});
+
 // `confirmarPassword` had eight tests here and they went with it. The wrapper and
-// the `POST /api/auth/confirm-password` behind it are retired: the password now
-// travels on the write that needs it — `oldPass` on `editUserName` and
-// `editUserPass`, covered in `Usuario.api.test.ts` — so there was nothing left
-// for these to defend but an unreachable path. The reasoning is written out where
-// the function used to be, in `Login.api.ts`.
+// the `POST /api/auth/confirm-password` behind it are retired, and so is the
+// arrangement that replaced it: for a while the password travelled on the write
+// that needed it, as `oldPass`. It travels on neither now except where it is
+// half of what is being changed (`editUserPass`, covered in
+// `Usuario.api.test.ts`). Everywhere else the step-up gate asks, once, and the
+// interceptor answers it — so there is nothing left for these to defend. The
+// reasoning is written out where the function used to be, in `Login.api.ts`.

@@ -23,10 +23,10 @@ const ReportePage = () => {
   const [tab, setTab] = useState<Tab>("general");
 
   return (
-    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-3 animate-in fade-in duration-500">
+    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Reportes</h1>
-        <p className="text-muted-foreground">Generación y exportación de reportes del sistema.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Informes</h1>
+        <p className="text-muted-foreground">Generación y exportación de informes del sistema.</p>
       </div>
 
       {/* Mobile: Select */}

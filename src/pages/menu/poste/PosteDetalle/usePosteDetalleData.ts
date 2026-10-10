@@ -38,7 +38,17 @@ export interface PosteDetalleData {
   reabrirEvento: (evento: EventoInterface) => Promise<void>;
 }
 
-export function usePosteDetalleData(id: number): PosteDetalleData {
+/**
+ * `verEventos` is whether this role holds `eventos.ver`, and the incidents are
+ * not asked for without it.
+ *
+ * The two reads used to travel together whatever the role. The pole asks for
+ * `postes.ver` and its incidents for `eventos.ver`, so a role with the first
+ * and not the second had the incidents refused — and one refusal rejects the
+ * whole `Promise.all`, throwing away the pole that had arrived. The sheet said
+ * "Error al cargar los datos del poste" about a pole the role may see.
+ */
+export function usePosteDetalleData(id: number, { verEventos }: { verEventos: boolean }): PosteDetalleData {
   const [poste, setPoste] = useState<PosteInterface | null>(null);
   const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
   const [eventos, setEventos] = useState<EventoInterface[]>([]);
@@ -55,7 +65,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
     try {
       const [p, e] = await Promise.all([
         searchPoste(id),
-        getEvento_poste(id),
+        verEventos ? getEvento_poste(id) : Promise.resolve([]),
       ]);
       setPoste(p);
       setDataPoste(p);
@@ -65,7 +75,7 @@ export function usePosteDetalleData(id: number): PosteDetalleData {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, verEventos]);
 
   useEffect(() => {
     setPoste(null);

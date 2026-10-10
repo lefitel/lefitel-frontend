@@ -16,7 +16,8 @@ import { DashboardEvento } from "../../../api/dashboard.api";
 import { latExample, lngExample } from "../../../data/example";
 import { MapMarker, MapTab } from "./types";
 import { searchPoste } from "../../../api/Poste.api";
-import { MAP_RADIUS, MAP_WEIGHT } from "../../../components/map/mapConstants";
+import { MAP_RADIUS, MAP_WEIGHT, SUBJECT_PAINT } from "../../../components/map/mapConstants";
+import { useTheme } from "../../../components/theme-provider";
 import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
 import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
@@ -36,6 +37,9 @@ export function OperationsMap({
 }: OperationsMapProps) {
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
+  // The poles are painted on the canvas, which cannot read a theme token.
+  const { resolvedTheme } = useTheme();
+  const posteColor = SUBJECT_PAINT[resolvedTheme === "dark" ? "dark" : "light"];
   const rol = sesion.usuario.id_rol;
   const [resolverEvento, setResolverEvento] = useState<DashboardEvento | null>(null);
   const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
@@ -188,13 +192,13 @@ export function OperationsMap({
       lat: m.lat,
       lng: m.lng,
       color: m.isPoste
-        ? "#596BAB"
+        ? posteColor
         : mapTab === "pendientes"
           ? (m.item.priority ? "#DD0031" : "#FF5500")
           : "#249243",
       item: m,
     })),
-    [mapMarkers, mapTab],
+    [mapMarkers, mapTab, posteColor],
   );
 
   // mapMarkers.length counts rows before the 0,0 ("no coordinates yet") ones
@@ -244,7 +248,7 @@ export function OperationsMap({
           <div className="absolute bottom-3 left-3 z-1000 bg-background/90 supports-backdrop-filter:backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm border border-border/60 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             {mapTab === "postes" && (
               <span className="flex items-center gap-1.5">
-                <span className="inline-block h-3 w-3 rounded-full" style={{ background: "#596BAB" }} />
+                <span className="inline-block h-3 w-3 rounded-full" style={{ background: posteColor }} />
                 Poste revisado
               </span>
             )}

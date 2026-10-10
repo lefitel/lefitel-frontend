@@ -40,7 +40,7 @@ const NovedadesPage = () => {
   useEffect(markReleaseSeen, []);
 
   return (
-    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-8 animate-in fade-in duration-500">
+    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Novedades</h1>
         <p className="text-muted-foreground">

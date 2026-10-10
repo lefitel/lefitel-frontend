@@ -28,7 +28,6 @@ import {
 } from "../../../lib/criticality";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
 import DataTable, { type ActiveFilter } from "../../../components/table/DataTable";
-import AddEventoPageSheet from "../../../components/dialogs/AddEventoPageSheet";
 import AddRevisionSheet from "../../../components/dialogs/AddRevisionSheet";
 import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet";
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
@@ -627,7 +626,7 @@ const EventoPage = () => {
     const hasData = !!list?.length;
 
     return (
-        <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+        <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight">Eventos</h1>
@@ -803,7 +802,7 @@ const EventoPage = () => {
             />
 
             <PermissionGuard module="eventos" action="crear" open={addOpen} onOpenChange={setAddOpen}>
-                <AddEventoPageSheet
+                <EventoSheet
                     open={addOpen}
                     setOpen={setAddOpen}
                     onSuccess={load}

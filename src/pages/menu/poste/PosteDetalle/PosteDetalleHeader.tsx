@@ -1,93 +1,146 @@
 import { PosteInterface } from "../../../../interfaces/interfaces";
 import { Button } from "../../../../components/ui/button";
 import { Skeleton } from "../../../../components/ui/skeleton";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
-} from "../../../../components/ui/dropdown-menu";
-import { ChevronRightIcon, MoreHorizontalIcon, PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { HealthStatus, STATUS_CONFIG } from "./posteHealth";
 
 interface Props {
   loading: boolean;
   poste: PosteInterface | null;
+  /** `null` for a role that may not see incidents: the state is made of them. */
+  status?: HealthStatus | null;
   posicionEnTramo?: { index: number; total: number } | null;
+  /** The poles either side of this one along the stretch, towards each city. */
+  anterior?: PosteInterface | null;
+  siguiente?: PosteInterface | null;
   canCreateEvento: boolean;
   canEditPoste: boolean;
   onNuevoEvento: () => void;
   onEditarPoste: () => void;
   onRefrescar: () => void;
+  onVerPoste?: (id: number) => void;
 }
 
+/**
+ * The first card of the pole's panel, under its photograph: its name, its state, what
+ * can be done to it and the way to the poles either side.
+ */
 export default function PosteDetalleHeader({
-  loading, poste, posicionEnTramo,
+  loading, poste, status, posicionEnTramo, anterior, siguiente,
   canCreateEvento, canEditPoste,
-  onNuevoEvento, onEditarPoste, onRefrescar,
+  onNuevoEvento, onEditarPoste, onRefrescar, onVerPoste,
 }: Props) {
+  const cfg = status ? STATUS_CONFIG[status] : null;
+
   return (
-    <div className="sticky top-0 z-20 -mx-6 md:-mx-8 px-6 md:px-8 py-4 bg-background/85 supports-backdrop-filter:backdrop-blur-md border-b border-border/40">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          {loading ? (
-            <>
-              <Skeleton className="h-7 w-44 mb-1.5" />
-              <Skeleton className="h-4 w-64" />
-            </>
-          ) : (
-            <>
-              <h1 className="text-2xl font-bold tracking-tight truncate">
+    <div className="p-3 space-y-2.5">
+      <div className="min-w-0">
+        {loading ? (
+          <>
+            <Skeleton className="h-6 w-36 mb-1.5" />
+            <Skeleton className="h-4 w-48" />
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-lg font-bold tracking-tight leading-tight truncate">
                 Poste {poste?.name ?? "—"}
               </h1>
-              <p className="text-sm text-muted-foreground flex items-center gap-1 flex-wrap">
-                <span className="truncate max-w-[8rem]">{poste?.ciudadA?.name ?? "—"}</span>
-                <ChevronRightIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                <span className="truncate max-w-[8rem]">{poste?.ciudadB?.name ?? "—"}</span>
-                {posicionEnTramo && (
-                  <>
-                    <span className="text-muted-foreground/40 mx-1">·</span>
-                    <span className="text-xs">
-                      Posición {posicionEnTramo.index} de {posicionEnTramo.total}
-                    </span>
-                  </>
-                )}
-              </p>
-            </>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {canCreateEvento && (
-            <Button
-              className="gap-1.5"
-              onClick={onNuevoEvento}
-              disabled={loading || !poste}
-            >
-              <PlusIcon className="h-4 w-4" />
-              Nuevo evento
-            </Button>
-          )}
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="h-9 w-9" disabled={loading}>
-                <MoreHorizontalIcon className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-44">
-              {canEditPoste && (
-                <DropdownMenuItem onClick={onEditarPoste} disabled={!poste}>
-                  <PencilIcon className="h-4 w-4" />
-                  Editar poste
-                </DropdownMenuItem>
+              {cfg && (
+                <span className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                  {cfg.label}
+                </span>
               )}
-              {canEditPoste && <DropdownMenuSeparator />}
-              <DropdownMenuItem onClick={onRefrescar} disabled={loading}>
-                <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-                Refrescar
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+            </div>
+            <p className="text-sm text-muted-foreground flex items-center gap-1 min-w-0">
+              <span className="truncate">{poste?.ciudadA?.name ?? "—"}</span>
+              <ChevronRightIcon className="h-3 w-3 shrink-0 text-muted-foreground/50" />
+              <span className="truncate">{poste?.ciudadB?.name ?? "—"}</span>
+            </p>
+          </>
+        )}
       </div>
+
+      {/*
+        On the panel, not behind a «⋯». That menu held these two and nothing
+        else, so each of them cost a click to find and a click to press, for
+        the sake of hiding two buttons there was room for. Editing keeps its
+        word because it is the one somebody looks for; refreshing is an icon
+        every table here already uses, and is named for whoever cannot see it.
+      */}
+      <div className="flex items-center gap-2">
+        {canCreateEvento && (
+          <Button
+            size="sm"
+            className="gap-1.5 flex-1"
+            onClick={onNuevoEvento}
+            disabled={loading || !poste}
+          >
+            <PlusIcon className="h-3.5 w-3.5" />
+            Nuevo evento
+          </Button>
+        )}
+        {canEditPoste && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={onEditarPoste}
+            disabled={loading || !poste}
+          >
+            <PencilIcon className="h-3.5 w-3.5" />
+            Editar
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={onRefrescar}
+          disabled={loading}
+          aria-label="Refrescar"
+          title="Refrescar"
+        >
+          <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+        </Button>
+      </div>
+
+      {!loading && posicionEnTramo && (
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-xs text-muted-foreground">
+          <div className="min-w-0 justify-self-start">
+            {anterior && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-1.5 gap-0.5 max-w-full"
+                aria-label={`Poste anterior, ${anterior.name}`}
+                onClick={() => onVerPoste?.(anterior.id as number)}
+              >
+                <ChevronLeftIcon className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{anterior.name}</span>
+              </Button>
+            )}
+          </div>
+          <span className="tabular-nums">
+            Posición {posicionEnTramo.index} de {posicionEnTramo.total}
+          </span>
+          <div className="min-w-0 justify-self-end">
+            {siguiente && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-1.5 gap-0.5 max-w-full"
+                aria-label={`Poste siguiente, ${siguiente.name}`}
+                onClick={() => onVerPoste?.(siguiente.id as number)}
+              >
+                <span className="truncate">{siguiente.name}</span>
+                <ChevronRightIcon className="h-3.5 w-3.5 shrink-0" />
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

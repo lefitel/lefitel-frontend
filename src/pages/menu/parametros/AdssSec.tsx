@@ -11,9 +11,8 @@ import { TagIcon, TrendingUpIcon, AlertCircleIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import {
-    Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription,
-} from "../../../components/ui/sheet";
+import FormDialog from "../../../components/dialogs/FormDialog";
+import { Textarea } from "../../../components/ui/textarea";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -24,12 +23,17 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
+import { useRegistroEnlazado, type RegistroEnlazado } from "./useRegistroEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { mensajeDeError } from "../../../api/descarga";
 
-interface Props { innerTab: InnerTab; }
+interface Props {
+    innerTab: InnerTab;
+    /** The record the address asks for, when it is one of this catalogue's. */
+    enlace?: RegistroEnlazado;
+}
 
-const AdssSec = ({ innerTab }: Props) => {
+const AdssSec = ({ innerTab, enlace }: Props) => {
     const { sesion } = useContext(SesionContext);
     const rol = sesion.usuario.id_rol;
 
@@ -105,6 +109,11 @@ const AdssSec = ({ innerTab }: Props) => {
         setSheetOpen(true);
     }, []);
 
+    useRegistroEnlazado({
+        enlace, activos: list, archivados: archivedList,
+        abrir: can(rol, "parametros", "editar") ? openEdit : undefined,
+    });
+
     const openAdd = () => {
         setSelected(null);
         setName("");
@@ -115,7 +124,7 @@ const AdssSec = ({ innerTab }: Props) => {
     const handleClose = () => { setSheetOpen(false); setSelected(null); };
 
     const handleSave = async () => {
-        if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
+        if (!name.trim() || !description.trim()) return;
         setSaving(true);
         const payload: AdssInterface = { ...selected, name, description };
         try {
@@ -295,32 +304,28 @@ const AdssSec = ({ innerTab }: Props) => {
 
             {can(rol, "parametros", "editar") && (
                 <>
-                    <Sheet open={sheetOpen} onOpenChange={(v) => { if (!v) handleClose(); }}>
-                        <SheetContent>
-                            <SheetHeader>
-                                <SheetTitle>{selected?.id ? "Editar ADSS" : "Nuevo ADSS"}</SheetTitle>
-                                <SheetDescription>Completa los campos y guarda los cambios.</SheetDescription>
-                            </SheetHeader>
-                            <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 py-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <Label htmlFor="adss-name">Nombre</Label>
-                                    <Input id="adss-name" value={name} onChange={(e) => setName(e.target.value)} />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label htmlFor="adss-desc">Descripción</Label>
-                                    <Input id="adss-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
-                                </div>
-                            </div>
-                            <SheetFooter className="flex justify-end px-4">
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={handleClose} disabled={saving}>Cancelar</Button>
-                                    <Button size="sm" onClick={handleSave} disabled={saving}>
-                                        {saving ? "Guardando..." : "Guardar"}
-                                    </Button>
-                                </div>
-                            </SheetFooter>
-                        </SheetContent>
-                    </Sheet>
+                    <FormDialog
+                        open={sheetOpen}
+                        onClose={handleClose}
+                        size="sm"
+                        title={selected?.id ? "Editar ADSS" : "Nuevo ADSS"}
+                        description="Ferretería de sujeción que se marca al registrar un poste."
+                        dirty={name !== (selected?.name ?? "") || description !== (selected?.description ?? "")}
+                        missing={[!name.trim() && "Nombre", !description.trim() && "Descripción"].filter((c): c is string => !!c)}
+                        saving={saving}
+                        submitLabel={selected?.id ? "Guardar cambios" : "Crear ADSS"}
+                        onSubmit={handleSave}
+                        bodyClassName="flex flex-col gap-4"
+                    >
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="adss-name">Nombre <span className="text-destructive">*</span></Label>
+                            <Input id="adss-name" value={name} onChange={(e) => setName(e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="adss-desc">Descripción <span className="text-destructive">*</span></Label>
+                            <Textarea id="adss-desc" className="resize-none min-h-20" value={description} onChange={(e) => setDescription(e.target.value)} />
+                        </div>
+                    </FormDialog>
 
                     <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                         <AlertDialogContent>

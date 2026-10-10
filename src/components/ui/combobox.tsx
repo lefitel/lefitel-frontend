@@ -43,8 +43,13 @@ export function Combobox({
     const inputRef = useRef<HTMLInputElement>(null)
 
     const selected = options.find((o) => o.value === value)
+    // `?? ""` against the type, on purpose. The options are built from rows the
+    // server sends, and a row with no name — a role saved without one — arrives
+    // as `label: null` whatever the interface says. Reading it here threw during
+    // render, and with no error boundary above that is the whole screen gone,
+    // from a control whose job was to list it.
     const filtered = options.filter((o) =>
-        o.label.toLowerCase().includes(search.toLowerCase())
+        String(o.label ?? "").toLowerCase().includes(search.toLowerCase())
     )
 
     return (

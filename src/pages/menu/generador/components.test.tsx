@@ -4,7 +4,9 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { TooltipProvider } from "../../../components/ui/tooltip";
 import type { CatalogRoot, ReportConfig, ReportResult, SavedReport } from "../../../api/generador.api";
-import { emptyConfig, renameColumn } from "../../../lib/reportConfig";
+import {
+  emptyConfig, operatorNeedsTwoValues, operatorNeedsValue, renameColumn, updateFilter,
+} from "../../../lib/reportConfig";
 
 import ColumnList from "./ColumnList";
 import FieldPicker from "./FieldPicker";
@@ -38,10 +40,95 @@ describe("FieldPicker", () => {
     wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
 
     await openPicker(user);
-    expect(screen.getByText("Evento › Poste")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^Poste/ }));
 
     await user.click(screen.getByRole("option", { name: /^Tramo/ }));
     expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "poste.tramo" }));
+  });
+
+  it("opens on the root's own fields and keeps every other group folded", async () => {
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    expect(screen.getByRole("button", { name: /^Evento/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("option", { name: "Descripción" })).toBeInTheDocument();
+
+    // The count is what says a folded group is worth opening.
+    const poste = screen.getByRole("button", { name: /^Poste/ });
+    expect(poste).toHaveAttribute("aria-expanded", "false");
+    expect(poste).toHaveTextContent("1");
+    expect(screen.queryByRole("option", { name: /^Tramo/ })).not.toBeInTheDocument();
+  });
+
+  it("folds a group again, the root's included", async () => {
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /^Evento/ }));
+    expect(screen.queryByRole("option", { name: "Descripción" })).not.toBeInTheDocument();
+  });
+
+  it("finds a field inside a folded group when searching", async () => {
+    // The one way a folded list could be worse than the flat one it replaces.
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    expect(screen.queryByRole("option", { name: /^Tramo/ })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("Buscar campo"), "tram");
+
+    expect(screen.getByRole("option", { name: /^Tramo/ })).toBeInTheDocument();
+    // Nothing to fold while searching: every match is already in view.
+    expect(screen.queryByRole("button", { name: /^Poste/ })).not.toBeInTheDocument();
+  });
+
+  it("does not walk the arrow keys into a folded group", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
+
+    await openPicker(user);
+    // Up from the first entry wraps to the last one on screen, and "Tramo",
+    // last in the catalog, is folded away.
+    await user.type(screen.getByLabelText("Buscar campo"), "{ArrowUp}{Enter}");
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "state" }));
+  });
+
+  it("keeps typing in the search box after a group is opened", async () => {
+    const onPick = vi.fn();
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={onPick} />);
+
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /^Poste/ }));
+    // Focus is back in the box and the highlight is on the group just opened.
+    await user.keyboard("{Enter}");
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ path: "poste.tramo" }));
+  });
+
+  it("remembers an opened group the next time the picker opens", async () => {
+    // Picking closes the picker, and columns from one group are added in runs.
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} />);
+
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /^Poste/ }));
+    await user.click(screen.getByRole("option", { name: /^Tramo/ }));
+
+    await openPicker(user);
+    expect(screen.getByRole("option", { name: /^Tramo/ })).toBeInTheDocument();
+  });
+
+  it("files a count under the group of the relation it counts", async () => {
+    // Counts used to trail the whole list under a second copy of their header.
+    const user = userEvent.setup();
+    wrap(<FieldPicker root={root} chosen={new Set()} onPick={vi.fn()} onPickAggregate={vi.fn()} />);
+
+    await openPicker(user);
+    expect(screen.getAllByRole("button", { name: /^Evento/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: /^Evento/ })).toHaveTextContent("5");
   });
 
   it("filters the list as the user types", async () => {
@@ -267,7 +354,8 @@ describe("ColumnList", () => {
         onReorder={vi.fn()} onRemove={vi.fn()} onRename={vi.fn()} onSetAgg={vi.fn()} onToggleGroup={vi.fn()} onToggleSort={vi.fn()}
       />,
     );
-    expect(screen.getByText(/cada columna no agrupada necesita un resumen/i)).toBeInTheDocument();
+    // The rule itself is stated once, by the page, above the list.
+    expect(screen.queryByText(/necesita un resumen/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /dejar de agrupar/i })).toHaveAttribute("aria-pressed", "true");
     expect(screen.queryByLabelText("Resumen de Tramo")).not.toBeInTheDocument();
   });
@@ -396,6 +484,72 @@ describe("FilterBuilder", () => {
       </TooltipProvider>,
     );
     expect(screen.getByLabelText("Combinación de filtros")).toBeInTheDocument();
+  });
+});
+
+describe("FilterBuilder — filters it cannot edit", () => {
+  // Nested groups and existence filters only ever arrive inside a saved report.
+  // The row used to read "Filtro avanzado" and nothing else: a condition that
+  // shaped the whole report, with a button to delete it and no way to know what
+  // deleting it would change.
+  const advanced = (conditions: NonNullable<ReportConfig["filters"]>["conditions"]) =>
+    wrap(
+      <FilterBuilder
+        config={{ ...emptyConfig("evento"), filters: { op: "and", conditions } }}
+        root={root} onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+
+  it("reads a nested group back as a sentence", () => {
+    advanced([{
+      op: "or",
+      conditions: [
+        { path: "description", operator: "like", value: "poste" },
+        { path: "state", operator: "eq", value: true },
+      ],
+    }]);
+    expect(screen.getByText("Descripción contiene «poste» o Resuelto es igual a Sí")).toBeInTheDocument();
+  });
+
+  it("writes a date the way the rest of the panel does", () => {
+    advanced([{
+      op: "and",
+      conditions: [{ path: "date", operator: "between", value: ["2026-01-01", "2026-06-30"] }],
+    }]);
+    expect(screen.getByText("Fecha del evento está entre 01/01/2026 y 30/06/2026")).toBeInTheDocument();
+  });
+
+  it("brackets a group inside a group, where the order of y and o matters", () => {
+    advanced([{
+      op: "and",
+      conditions: [
+        { path: "state", operator: "eq", value: false },
+        {
+          op: "or",
+          conditions: [
+            { path: "description", operator: "isnull" },
+            { path: "altura", operator: "gte", value: 12 },
+          ],
+        },
+      ],
+    }]);
+    expect(
+      screen.getByText("Resuelto es igual a No y (Descripción está vacío o Altura es mayor o igual que 12)"),
+    ).toBeInTheDocument();
+  });
+
+  it("names the relation an existence filter asks about", () => {
+    advanced([
+      { exists: "revisiones" },
+      { exists: "revisiones", negate: true },
+      {
+        exists: "revisiones",
+        where: { op: "and", conditions: [{ path: "x", operator: "eq", value: 1 }] },
+      },
+    ]);
+    expect(screen.getByText("Tiene revisiones")).toBeInTheDocument();
+    expect(screen.getByText("No tiene revisiones")).toBeInTheDocument();
+    expect(screen.getByText("Tiene revisiones que cumplen 1 condición")).toBeInTheDocument();
   });
 });
 
@@ -817,5 +971,99 @@ describe("PreviewTable when the data moved under it", () => {
 
     expect(screen.getByText("Mostrando 101–101 de 250")).toBeInTheDocument();
     expect(screen.queryByText(/ya no existe/)).not.toBeInTheDocument();
+  });
+});
+
+describe("FilterBuilder — a named period", () => {
+  // The server publishes the periods beside the catalog, and offers the
+  // operator on every date field. The screen keeps neither list.
+  const PERIODOS = [
+    { key: "hoy" as const, label: "Hoy" },
+    { key: "semana_pasada" as const, label: "La semana pasada" },
+    { key: "mes_pasado" as const, label: "El mes pasado" },
+  ];
+  const conPeriodo: CatalogRoot = {
+    ...root,
+    fields: root.fields.map((f) =>
+      f.path === "date" ? { ...f, operators: ["between", "period", "gte"] } : f),
+  };
+  const filtro = (operator: "between" | "period", value?: unknown): ReportConfig => ({
+    ...emptyConfig("evento"),
+    filters: { op: "and", conditions: [{ path: "date", operator, ...(value !== undefined ? { value } : {}) }] },
+  });
+
+  it("offers the operator under the words the server uses for it", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("between")} root={conPeriodo} periods={PERIODOS}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    await user.click(screen.getByRole("combobox", { name: "Operador para Fecha del evento" }));
+    await user.click(screen.getByRole("option", { name: "está en el periodo" }));
+    expect(onUpdate).toHaveBeenLastCalledWith(0, { operator: "period" }, false);
+  });
+
+  it("shows the periods as one list and writes the key, not the label", async () => {
+    const onUpdate = vi.fn();
+    const user = userEvent.setup();
+    wrap(
+      <FilterBuilder
+        config={filtro("period")} root={conPeriodo} periods={PERIODOS}
+        onUpdate={onUpdate} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    // No calendar: a period is chosen by name.
+    expect(screen.queryByLabelText(/^Rango para/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Periodo para Fecha del evento" }));
+    await user.click(screen.getByRole("option", { name: "La semana pasada" }));
+    expect(onUpdate).toHaveBeenLastCalledWith(0, { value: "semana_pasada" });
+  });
+
+  it("reads a stored period back by its label", () => {
+    wrap(
+      <FilterBuilder
+        config={filtro("period", "mes_pasado")} root={conPeriodo} periods={PERIODOS}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: "Periodo para Fecha del evento" })).toHaveTextContent("El mes pasado");
+  });
+
+  it("keeps a stored period on screen when the server did not send the list", () => {
+    // A saved report opened against a server that publishes no periods: the
+    // filter is set and running, so the row must not read as empty.
+    wrap(
+      <FilterBuilder
+        config={filtro("period", "mes_pasado")} root={conPeriodo}
+        onUpdate={vi.fn()} onRemove={vi.fn()} onSetJoin={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("combobox", { name: "Periodo para Fecha del evento" })).toHaveTextContent("mes_pasado");
+  });
+});
+
+describe("a named period in the configuration rules", () => {
+  const base: ReportConfig = {
+    ...emptyConfig("evento"),
+    filters: { op: "and", conditions: [{ path: "date", operator: "between", value: ["2026-01-01", "2026-01-31"] }] },
+  };
+
+  it("drops a date range when the operator becomes a period, and a period when it becomes a range", () => {
+    // Two different shapes: a pair of days and a name. Carrying either across
+    // would send the server a value the new operator cannot read.
+    const aPeriodo = updateFilter(base, 0, { operator: "period" });
+    expect(aPeriodo.filters?.conditions[0]).toEqual({ path: "date", operator: "period" });
+
+    const conValor = updateFilter(aPeriodo, 0, { value: "mes_pasado" });
+    const aRango = updateFilter(conValor, 0, { operator: "between" });
+    expect(aRango.filters?.conditions[0]).toEqual({ path: "date", operator: "between" });
+  });
+
+  it("is one value, not two", () => {
+    expect(operatorNeedsValue("period")).toBe(true);
+    expect(operatorNeedsTwoValues("period")).toBe(false);
   });
 });

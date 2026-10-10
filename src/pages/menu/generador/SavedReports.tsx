@@ -1,4 +1,4 @@
-import { CopyIcon, Loader2Icon, StarIcon, Trash2Icon, UsersIcon, LockIcon } from "lucide-react";
+import { ArchiveIcon, CopyIcon, Loader2Icon, StarIcon, UsersIcon, LockIcon } from "lucide-react";
 import type { SavedReport } from "../../../api/generador.api";
 import { Button } from "../../../components/ui/button";
 import {
@@ -163,7 +163,7 @@ const SavedReports = ({
                     className="h-7 w-7 text-muted-foreground hover:text-destructive"
                     aria-label={`Archivar ${report.name}`}
                   >
-                    <Trash2Icon className="h-3.5 w-3.5" />
+                    <ArchiveIcon className="h-3.5 w-3.5" />
                   </Button>
                 </AlertDialogTrigger>
                 <AlertDialogContent>

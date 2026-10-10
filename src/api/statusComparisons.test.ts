@@ -98,8 +98,8 @@ const AUTENTICACION = {
   // registration endpoint, which has answered 201 since before C4 and is not
   // one of the fifteen this task moved.
   "api/passkeyCeremony.ts": 6,
-  "components/PermisosPanel.tsx": 1,
-  "components/dialogs/StepUpDialog.tsx": 3,
+  "components/dialogs/upsert/RolDialog.tsx": 2,
+  "components/dialogs/useStepUpCeremony.ts": 3,
   "context/SesionProvider.tsx": 2,
   "pages/ForgotPasswordPage.tsx": 1,
   "pages/LoginPage.tsx": 2,

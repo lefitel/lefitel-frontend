@@ -73,6 +73,13 @@ interface Props<T extends IGeneral> {
     rowSize?: RowSize;
     serverSide?: ServerSideProps;
     initialPageSize?: number;
+    /**
+     * The page to start on, counted from 1. Only for a server-side table whose
+     * owner keeps the page somewhere that outlives the table — the Bitácora
+     * keeps it in the address, so that coming back from a link lands on the
+     * page that was left.
+     */
+    initialPage?: number;
 }
 
 const DataTable = <T extends IGeneral>({
@@ -91,6 +98,7 @@ const DataTable = <T extends IGeneral>({
     rowSize = "sm",
     serverSide,
     initialPageSize = 15,
+    initialPage = 1,
 }: Props<T>) => {
     const [filterOpen, setFilterOpen] = useState(false);
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -98,7 +106,7 @@ const DataTable = <T extends IGeneral>({
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
     const [sorting, setSorting] = useState<SortingState>(initialSorting);
     const [pagination, setPagination] = useState({
-        pageIndex: 0,
+        pageIndex: Math.max(0, initialPage - 1),
         pageSize: hasPaginated ? initialPageSize : 1_000_000,
     });
 

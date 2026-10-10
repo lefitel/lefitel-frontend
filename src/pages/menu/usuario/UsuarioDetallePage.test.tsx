@@ -145,7 +145,7 @@ function Harness({ quien = YO }: { quien?: number }) {
  * the thing being asserted is what the screen does with what somebody typed —
  * and the password field only exists at all when the profile is your own.
  */
-async function renombrar(nuevo: string, password: string) {
+async function renombrar(nuevo: string) {
   const user = userEvent.setup();
   render(<Harness />);
 
@@ -153,13 +153,12 @@ async function renombrar(nuevo: string, password: string) {
   const campoUsuario = await screen.findByLabelText("Nuevo usuario");
   await user.clear(campoUsuario);
   await user.type(campoUsuario, nuevo);
-  await user.type(screen.getByLabelText("Contraseña actual"), password);
-  await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+  await user.click(screen.getByRole("button", { name: /^guardar cambios$/i }));
   return user;
 }
 
 /** The single object `editUserName` was called with. */
-const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface & { oldPass?: string };
+const enviado = () => editUserName.mock.calls[0][0] as UsuarioInterface;
 
 /**
  * Open the "Contraseña" panel, fill it in and press save.
@@ -174,7 +173,7 @@ async function cambiarPassword(nueva: string, actual?: string) {
   await user.type(await screen.findByLabelText("Nueva contraseña"), nueva);
   await user.type(screen.getByLabelText("Confirmar contraseña"), nueva);
   if (actual !== undefined) await user.type(screen.getByLabelText("Contraseña actual"), actual);
-  await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+  await user.click(screen.getByRole("button", { name: /^cambiar contraseña$/i }));
   return user;
 }
 
@@ -201,59 +200,72 @@ beforeEach(() => {
 });
 
 describe("changing your own username", () => {
-  it("sends the password along with the change", async () => {
-    // The break-it test of this task on the client. Drop `oldPass` from the
-    // call — which is exactly what this screen used to do, having confirmed the
-    // password a moment earlier — and this fails. Nothing else would: the
-    // request still goes out, the toast is still the happy one, and the only
-    // thing that changes is that the server refuses it.
-    await renombrar("isalas", "la-mia");
-
-    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
-    expect(enviado().user).toBe("isalas");
-    expect(enviado().oldPass).toBe("la-mia");
-  });
-
-  it("sends the password that was typed, and not some other field of the record", async () => {
-    // Cheap, and it caught its own family of mistake earlier in this plan: a
-    // test that compared against `undefined` because the fixture carried no
-    // password would have passed against an endpoint that sent nothing. So the
-    // value asserted is one only the keyboard could have produced.
-    await renombrar("isalas", "una-contraseña-inconfundible");
-
-    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
-    expect(enviado().oldPass).toBe("una-contraseña-inconfundible");
-    // Not the `pass` field of the user record, which is empty on this fixture
-    // and is a hash on a real one.
-    expect(enviado().oldPass).not.toBe(usuario.pass);
-  });
-
-  it("sends nothing at all when the password box was left empty", async () => {
-    // The case somebody actually hits: fill in the name, forget the password,
-    // press save. Nothing should leave the browser — an empty attempt would be
-    // refused anyway, and it would spend one of the five confirmations the
-    // account is allowed in a quarter of an hour.
+  it("offers a name and no password box, even on your own profile", async () => {
+    /**
+     * 🔴 The break-it test of this task on this screen, and the one that has to
+     * name "your own profile": this box was only ever drawn for a self-rename
+     * (`isOwnProfile`), so a test on somebody else's account would pass with the
+     * field still in the code. `sesion.usuario.id` is this fixture's own id, so
+     * the panel opened below is the self case.
+     *
+     * The name field is asserted present in the same breath, so the absence
+     * cannot be "the panel never opened".
+     */
     const user = userEvent.setup();
     render(<Harness />);
 
     await user.click(screen.getByRole("button", { name: /cambiar usuario/i }));
-    const campoUsuario = await screen.findByLabelText("Nuevo usuario");
-    await user.clear(campoUsuario);
-    await user.type(campoUsuario, "isalas");
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
 
-    expect(editUserName).not.toHaveBeenCalled();
-    expect(searchUsuario_user).not.toHaveBeenCalled();
+    expect(await screen.findByLabelText("Nuevo usuario")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/contraseña/i, { selector: "input" })).toBeNull();
+  });
+
+  it("sends the rename with no password on the payload", async () => {
+    /**
+     * The wire half. `Object.keys` and not a value comparison: a screen that
+     * kept the state and sent `oldPass: currentPassUser` with an empty string
+     * puts the key on the body, the server ignores it, and nothing else in
+     * this repository would notice.
+     *
+     * Why it goes: `PUT /usuario/username/:id` proves identity at the step-up
+     * gate now — which asks once per ten minutes, and asks for a *factor*
+     * instead from an account that has one. A box here on top of that is the
+     * same secret typed twice for one rename.
+     */
+    await renombrar("isalas");
+
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(enviado().user).toBe("isalas");
+    expect(Object.keys(enviado())).not.toContain("oldPass");
+  });
+
+  it("renames with nothing typed but the name, and reloads", async () => {
+    // This used to be "sends nothing at all when the password box was left
+    // empty" — the screen refused a rename with no password, because the server
+    // refused it too. Both are gone, so the same journey now has to *work*.
+    //
+    // Followed through to the reload rather than stopping at "the call
+    // happened": a save that leaves the panel showing stale data is the shape
+    // this screen has regressed into before.
+    await renombrar("isalas");
+
+    await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
+    expect(searchUsuario_user).toHaveBeenCalled();
+    await waitFor(() => expect(load).toHaveBeenCalled());
   });
 
   it("keeps the refusal visible instead of pretending it worked", async () => {
-    // What a refused rename looks like now that the server is the one refusing:
-    // a 400 for a missing password, a 401 for a wrong one, a 429 for too many
-    // tries. None of them may be reported as a success, and none may leave the
-    // session's username updated to a name the server did not accept.
+    // What a refused rename looks like: a 403 when the step-up window is shut
+    // and the ceremony was cancelled, a 409 for a name somebody else holds, a
+    // 429 for too many tries, a 500. None may be reported as a success, and
+    // none may leave the session's username updated to a name the server did
+    // not accept.
+    //
+    // The 400 and 401 this used to list were `updateUserName`'s own answers
+    // about `oldPass`, which it no longer compares.
     for (const respuesta of [
-      { status: 400, message: "Debe proporcionar su contraseña actual." },
-      { status: 401, message: "La contraseña actual suministrada no es correcta." },
+      { status: 403, message: "Cancelaste la confirmación de identidad, así que la operación no se realizó." },
+      { status: 409, message: "El nombre de usuario ya está tomado por otra persona." },
       { status: 429, message: "Demasiados intentos. Espere unos minutos antes de volver a confirmar." },
       { status: 500, message: "Error desconocido" },
     ]) {
@@ -266,7 +278,7 @@ describe("changing your own username", () => {
       searchUsuario_user.mockRejectedValue(new Error("no existe"));
       editUserName.mockResolvedValue(respuesta);
 
-      await renombrar("isalas", "algo");
+      await renombrar("isalas");
 
       const { toast } = await import("sonner");
       await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
@@ -368,7 +380,7 @@ describe("resetting somebody else's password", () => {
     await user.type(screen.getByLabelText("Confirmar contraseña"), "una-clave-de-prueba");
     // No box, so `oldPass` below cannot have come from something somebody typed.
     expect(screen.queryByLabelText("Contraseña actual")).toBeNull();
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    await user.click(screen.getByRole("button", { name: /^cambiar contraseña$/i }));
 
     await waitFor(() => expect(editUserPass).toHaveBeenCalledTimes(1));
     expect(enviadoPass().pass).toBe("una-clave-de-prueba");
@@ -377,18 +389,23 @@ describe("resetting somebody else's password", () => {
 });
 
 describe("renaming somebody else's account", () => {
-  it("sends no password, because there is none the caller could know", async () => {
+  it("sends exactly what a self-rename sends, because the two are one request now", async () => {
     /**
-     * The other half of the decision, and the reason the rule is not "always".
+     * This used to be the *other half* of a decision: a self-rename carried
+     * `oldPass` and an administrator renaming somebody else did not, because
+     * there is no password they could be expected to know. With no password on
+     * either, the two calls are the same shape and the branch that told them
+     * apart (`isOwnProfile`) is gone from the handler.
+     *
+     * What still differs, and is what this now holds: **whose record gets
+     * renamed**. `quien` on the harness is the *session's* id, so this is 99
+     * looking at 7's profile — and the request has to name 7, the account on
+     * screen. A screen that fell back to the session's own id would be an ugly
+     * way to rename yourself by accident, and with both requests now identical
+     * in shape, the id is the only thing left distinguishing them.
      *
      * `seguridad.editar` is what authorises acting on another account, and the
-     * target's password is unknown to the caller by design — so there is nothing
-     * to confirm. The server draws the same line: `requiresOwnPassword`
-     * is true only for the caller's own id, permission or no permission.
-     *
-     * There is no password field on screen in this case at all, which is what
-     * makes the assertion below possible: whatever `oldPass` is, it cannot have
-     * come from a box somebody typed in.
+     * route's own permission guard is what enforces it — not this screen.
      */
     const user = userEvent.setup();
     render(<Harness quien={OTRA_PERSONA} />);
@@ -397,12 +414,13 @@ describe("renaming somebody else's account", () => {
     const campoUsuario = await screen.findByLabelText("Nuevo usuario");
     await user.clear(campoUsuario);
     await user.type(campoUsuario, "isalas");
-    expect(screen.queryByLabelText("Contraseña actual")).toBeNull();
-    await user.click(screen.getByRole("button", { name: /^guardar$/i }));
+    expect(screen.queryByLabelText(/contraseña/i, { selector: "input" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: /^guardar cambios$/i }));
 
     await waitFor(() => expect(editUserName).toHaveBeenCalledTimes(1));
     expect(enviado().user).toBe("isalas");
-    expect(enviado().oldPass).toBeUndefined();
+    expect(enviado().id).toBe(usuario.id);
+    expect(Object.keys(enviado())).not.toContain("oldPass");
   });
 });
 
@@ -576,5 +594,50 @@ describe("unlocking an account", () => {
     const { toast } = await import("sonner");
     expect(toast.error).toHaveBeenCalled();
     expect(toast.success).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The three ways of changing an account from its header — rename, password,
+ * profile — are each behind `requireSelfOrPermission("seguridad", "editar")` on
+ * the server. The screen opens on `seguridad.ver`, and showed all three to
+ * somebody who could only look: each opened its form, took what was typed, and
+ * ended in a 403.
+ */
+describe("the buttons that change an account", () => {
+  const botones = () => ({
+    renombrar: screen.queryByRole("button", { name: /cambiar usuario/i }),
+    password: screen.queryByRole("button", { name: /^contraseña$/i }),
+    editar: screen.queryByRole("button", { name: "Editar datos" }),
+  });
+
+  it("are not offered on somebody else's account to a session that may only look", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    expect(botones()).toEqual({ renombrar: null, password: null, editar: null });
+    // What is left is the one thing they may do: read it again.
+    expect(screen.getByRole("button", { name: "Refrescar" })).toBeInTheDocument();
+  });
+
+  it("are offered on somebody else's account with seguridad.editar", () => {
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    const { renombrar, password, editar } = botones();
+    expect(renombrar).toBeInTheDocument();
+    expect(password).toBeInTheDocument();
+    expect(editar).toBeInTheDocument();
+  });
+
+  it("are always offered on your own account, whatever the session may do to others", () => {
+    // The server lets anybody through for their own record. Hidden here, a
+    // field worker could not change their own password from this screen.
+    canMock.mockReturnValue(false);
+    render(<Harness quien={YO} />);
+
+    const { renombrar, password, editar } = botones();
+    expect(renombrar).toBeInTheDocument();
+    expect(password).toBeInTheDocument();
+    expect(editar).toBeInTheDocument();
   });
 });

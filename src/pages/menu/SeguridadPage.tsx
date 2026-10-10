@@ -8,7 +8,7 @@ import { SesionContext } from "../../context/SesionContext";
 import { can } from "../../lib/permissions";
 import { deleteUsuario, desarchivarUsuario, exportarUsuarios, getUsuario } from "../../api/Usuario.api";
 import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../api/descarga";
-import { url } from "../../api/url";
+import { imageUrl } from "../../lib/imageUrl";
 import { UsuarioInterface } from "../../interfaces/interfaces";
 import { Button } from "../../components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "../../components/ui/avatar";
@@ -25,10 +25,9 @@ import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import DataTable from "../../components/table/DataTable";
 import UsuarioSheet from "../../components/dialogs/upsert/UsuarioSheet";
 import PermissionGuard from "../../components/PermissionGuard";
-import PermisosPanel from "../../components/PermisosPanel";
-import RolesPanel from "../../components/RolesPanel";
 import { ImageLightbox } from "../../components/ui/image-viewer";
 import { maskEmail } from "../../lib/email";
+import { nombreDeRol } from "../../lib/roles";
 import { rowNumberColumn } from "../../components/table/rowNumberColumn";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -39,7 +38,7 @@ function UsuarioAvatar({ name, image, onImageClick }: {
     onImageClick: (src: string) => void;
 }) {
     const [loaded, setLoaded] = useState(false);
-    const imgSrc = image ? `${url}${image}` : null;
+    const imgSrc = imageUrl(image);
     return (
         <Avatar
             className={loaded ? "cursor-zoom-in" : ""}
@@ -60,17 +59,18 @@ function UsuarioAvatar({ name, image, onImageClick }: {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-type InnerTab = "activos" | "archivados" | "permisos";
+type InnerTab = "activos" | "archivados";
 
 const SeguridadPage = () => {
     const { sesion } = useContext(SesionContext);
     const rol = sesion.usuario.id_rol;
 
+    const puedeAsignarRol = can(rol, "roles", "ver") && can(rol, "roles", "editar");
+
     const [innerTab, setInnerTab] = useState<InnerTab>("activos");
 
     /** Which file is being built, or `null`. See the twin in the pole screen. */
     const [exportando, setExportando] = useState<FormatoDescarga | null>(null);
-    const [matrizKey, setMatrizKey] = useState(0);
 
     const [list, setList] = useState<UsuarioInterface[] | null>(null);
     const [loading, setLoading] = useState(true);
@@ -157,7 +157,7 @@ const SeguridadPage = () => {
             cell: ({ row }) => (
                 <button
                     className="font-medium text-sm text-primary hover:underline text-left"
-                    onClick={(e) => { e.stopPropagation(); navigate(`/app/seguridad/${row.original.id}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/app/usuarios/${row.original.id}`); }}
                 >
                     {row.original.name}
                 </button>
@@ -169,7 +169,9 @@ const SeguridadPage = () => {
         {
             accessorKey: "id_rol",
             header: "Rol",
-            cell: ({ row }) => row.original.rol?.name ?? `Rol ${row.original.id_rol}`,
+            // The role arrives with the account, and does not when it is
+            // archived: then all there is to show is its number.
+            cell: ({ row }) => row.original.rol ? nombreDeRol(row.original.rol) : `Rol #${row.original.id_rol}`,
         },
         {
             id: "recoveryEmail",
@@ -251,7 +253,7 @@ const SeguridadPage = () => {
                             <MoreVerticalIcon className="h-4 w-4" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-36">
-                            <DropdownMenuItem onClick={() => navigate(`/app/seguridad/${row.original.id}`)}>
+                            <DropdownMenuItem onClick={() => navigate(`/app/usuarios/${row.original.id}`)}>
                                 Ver detalle
                             </DropdownMenuItem>
                             {can(rol, "seguridad", "editar") && (
@@ -293,7 +295,9 @@ const SeguridadPage = () => {
         {
             accessorKey: "id_rol",
             header: "Rol",
-            cell: ({ row }) => row.original.rol?.name ?? `Rol ${row.original.id_rol}`,
+            // The role arrives with the account, and does not when it is
+            // archived: then all there is to show is its number.
+            cell: ({ row }) => row.original.rol ? nombreDeRol(row.original.rol) : `Rol #${row.original.id_rol}`,
         },
         {
             accessorKey: "deletedAt",
@@ -308,7 +312,10 @@ const SeguridadPage = () => {
             id: "actions",
             header: "",
             enableSorting: false,
-            cell: ({ row }) => (
+            // Bringing an account back is the same permission as archiving
+            // it, on the server as well. Offered to everybody who could see
+            // the list, it asked for confirmation and then answered 403.
+            cell: ({ row }) => can(rol, "seguridad", "archivar") && (
                 <div className="flex justify-end pr-2">
                     <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setUnarchiveTarget(row.original)}>
                         Desarchivar
@@ -316,7 +323,7 @@ const SeguridadPage = () => {
                 </div>
             ),
         },
-    ], []);
+    ], [rol]);
 
     const hasData = !!list?.length;
 
@@ -350,19 +357,16 @@ const SeguridadPage = () => {
     };
 
     return (
-        <div className="@container/card  p-4 md:p-8 w-full space-y-6 animate-in fade-in duration-500">
+        <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Seguridad</h1>
+                    <h1 className="text-2xl font-bold tracking-tight">Usuarios</h1>
                     <p className="text-sm text-muted-foreground mt-1">Gestión de usuarios del sistema</p>
                 </div>
                 <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
                     <TabsList>
                         <TabsTrigger value="activos">Activos</TabsTrigger>
                         <TabsTrigger value="archivados">Archivados</TabsTrigger>
-                        {can(sesion.usuario.id_rol, "roles", "ver") && (
-                            <TabsTrigger value="permisos">Permisos</TabsTrigger>
-                        )}
                     </TabsList>
                 </Tabs>
             </div>
@@ -415,8 +419,25 @@ const SeguridadPage = () => {
                         <Button variant="outline" size="icon-sm" onClick={load} disabled={loading}>
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
+                        {/* Creating an account is also handing out a role, and
+                            the server asks for that permission too — and the
+                            form cannot list the roles without the one to see
+                            them. Offered on `seguridad.crear` alone, the form
+                            filled in whole, uploaded the photo, and was then
+                            refused, with a critical line in the audit log
+                            against somebody who had only used the button they
+                            were given. So it is shown, held, and says what is
+                            missing. */}
                         {can(rol, "seguridad", "crear") && (
-                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                            <Button
+                                className="gap-2"
+                                aria-label="Nuevo Usuario"
+                                onClick={() => setAddOpen(true)}
+                                disabled={!puedeAsignarRol}
+                                title={puedeAsignarRol
+                                    ? undefined
+                                    : "Crear una cuenta es también asignarle un rol: hace falta además el permiso de ver y editar roles."}
+                            >
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo Usuario</span>
                             </Button>
@@ -439,19 +460,6 @@ const SeguridadPage = () => {
                     }
                 />
             )}
-
-            {innerTab === "permisos" && (
-                                /* Roles above the grid they are the columns of.
-                                   Creating one used to be impossible from here —
-                                   `Rol.api.ts` exposed only `getRol` — so a role
-                                   created by hand appeared in the matrix with no
-                                   way to have been made. The key bump reloads the
-                                   matrix when the list of roles changes. */
-                                <div className="space-y-6">
-                                    <RolesPanel onChange={() => setMatrizKey((k) => k + 1)} />
-                                    <PermisosPanel key={matrizKey} />
-                                </div>
-                            )}
 
             <PermissionGuard module="seguridad" action="editar" open={editOpen} onOpenChange={setEditOpen}>
                 <UsuarioSheet

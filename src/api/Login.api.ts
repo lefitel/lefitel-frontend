@@ -1,5 +1,6 @@
 import axios from "axios";
 import { urlApi } from "./url";
+import { mensajeDeError } from "./descarga";
 import { SesionActivaInterface, SesionInterface, UsuarioInterface } from "../interfaces/interfaces";
 import type { EstadoSesion } from "../interfaces/interfaces";
 import type { Permisos } from "../lib/permissions";
@@ -31,11 +32,10 @@ import type { Permisos } from "../lib/permissions";
  * unflattened, with nothing turning red.
  *
  * There is no confirmation wrapper here to point at instead, and that is the
- * point: the password now rides on the request that performs the change —
- * `editUserName` and `editUserPass` in `Usuario.api.ts` — and the server
- * compares it there. So there is no status code anywhere for a screen to be
- * accidentally right about, and nothing on this side deciding whether a
- * credential was good.
+ * point: the password is compared by the step-up gate in front of whatever
+ * route needs it, answered from the dialog by `stepUpInterceptor.ts`. So there
+ * is no status code anywhere for a screen to be accidentally right about, and
+ * nothing on this side deciding whether a credential was good.
  */
 export const loginUsuario = (
   data: UsuarioInterface
@@ -105,19 +105,21 @@ export const loginUsuario = (
  *
  * **Why the replacement went too.** A confirmation that lives only in the client
  * is optional by definition: whoever does not want to type the password uses the
- * other screen, or `curl`. So the server was made to demand it on the write, and
- * the screens send it there — `oldPass` on `editUserName` and `editUserPass` in
- * `Usuario.api.ts`. That left this asking a question nothing needed answered,
- * and the rule it broke is the one the whole plan turns on: the credential that
- * authorises an operation travels in the request that performs it. Confirming
- * first *and* sending it would compare one password twice, out of two budgets,
- * from two pieces of code that have to agree.
+ * other screen, or `curl`. So the server was made to demand it, and the rule
+ * that settles where it is demanded is the one the whole plan turns on: the
+ * credential that authorises an operation travels in the request that performs
+ * it. Confirming first *and* sending it would compare one password twice, out
+ * of two budgets, from two pieces of code that have to agree.
  *
- * **The step-up of the MFA plan does not bring it back.** That design has the
- * first enrolment of a factor re-ask for the password, and under the same rule
- * that means `pass` on the enrolment request itself, not a confirmation
- * beforehand; everything else on its list is satisfied by how recently the
- * factor was used, not by a password at all.
+ * **Where it travels today is `stepup_password`, put there by the
+ * interceptor.** For a while each screen carried its own copy — `oldPass` on a
+ * rename, `pass` on the recovery address — which satisfied the rule and broke
+ * it at the same time: a self-rename asked once in the form and once in the
+ * step-up dialog, for one secret, in one request. The gate is the single asker
+ * now, and `stepUpInterceptor.ts` answers it on the retry, so the field still
+ * rides on the request that performs the change and there is still only one of
+ * it. `editUserPass` is the one exception, and it is not a confirmation: there
+ * the current password is half of what is being changed.
  *
  * **What keeping it cost.** It was the only endpoint in the API that compared a
  * password with no operation behind it, reachable by any authenticated session,
@@ -156,20 +158,36 @@ export const loginUsuario = (
  * a deadline the server had already moved by days. Leaving the field out of
  * this shape is what makes that unwriteable rather than merely discouraged —
  * there is nothing here for a future caller to pick up by mistake.
+ *
+ * `opciones.timeout` is per-call and defaults to unset — plain `axios`
+ * behaviour, no limit. Whoever calls this with no arguments keeps exactly the
+ * behaviour it had before this parameter existed, which is the point: this is
+ * not the place to decide how long the rest of the application should wait.
+ * `useStepUpCeremony.ts`'s own call is the one that passes
+ * `TIMEOUT_CONFIRMACION_MS` — see that constant's comment in `stepUp.ts` for
+ * why: this is the only request in the whole re-authentication ceremony that
+ * reached this file without one.
  */
 /**
  * `POST /auth/email/send` — register (or replace) the recovery address on my
  * own account, and ask me to confirm it.
  *
- * Takes `pass`, the caller's *current* password, and it is not optional: the
- * server refuses this call without it. That requirement is not in the
- * original design for this screen — it was added after the fact to close a
- * real account-takeover chain (steal a live session, point recovery at an
- * address you control, verify it, wait, then reset the password and lock the
- * real owner out through the very door meant to let them back in). See
- * `api/src/controllers/email.controller.ts`'s comment on `sendVerificationEmail`
- * for the full chain. `PerfilPage.tsx` is what collects this password; it is
- * never the record's own `pass` field, which on this side is a hash.
+ * **Takes the address and nothing else, and the absence is deliberate.** This
+ * call used to carry `pass`, the caller's current password, because the server
+ * refused it without one — a requirement added after the fact to close a real
+ * account-takeover chain (steal a live session, point recovery at an address
+ * you control, verify it, wait, then reset the password and lock the real
+ * owner out through the very door meant to let them back in). That chain is
+ * still closed and the password is still demanded: **by the step-up gate on
+ * the route**, which reads a field of its own (`stepup_password`) and is
+ * answered by `stepUpInterceptor.ts` from the dialog, not by this screen's
+ * form. See `api/src/controllers/email.controller.ts`'s comment on
+ * `sendVerificationEmail`.
+ *
+ * So do not add a password parameter back. The two fields are not
+ * interchangeable — the gate never reads `pass` — and a form that collects one
+ * anyway is the double prompt this arc removed: the person types the same
+ * secret into the page and then into the dialog for one operation.
  *
  * **Status is preserved, not folded to 500 the way `loginUsuario` above folds
  * it.** That flattening is deliberate there, for a screen with one question
@@ -186,20 +204,28 @@ export const loginUsuario = (
  * through untouched — this wrapper does not know and must not guess whether
  * the address was free, already claimed by another unverified account, or
  * whether the mail actually went out.
+ *
+ * 🔴 **The failure sentence comes from `mensajeDeError`, not from the response
+ * body.** This route is behind the step-up gate, so the re-authentication
+ * dialog opens on every send. Read straight from the body, cancelling that
+ * dialog showed the gate's own "Introduce tu contraseña actual para completar
+ * esta operación." on the recovery-address card — the sentence asking for a
+ * password, one instant after the person closed the box that was asking for
+ * it. `mensajeDeError` reads `error.normalized` first, which is where `http.ts`
+ * copies what the interceptor knows about **why** the request failed.
  */
 export const sendVerificationEmail = (
-  email: string,
-  pass: string
+  email: string
 ): Promise<{ status: number; message: string | null }> => {
   return axios
-    .post(urlApi + "auth/email/send", { email, pass })
+    .post(urlApi + "auth/email/send", { email })
     .then((response) => ({
       status: response.status,
       message: (response.data?.message as string | undefined) ?? null,
     }))
     .catch((e) => ({
       status: e.response?.status ?? 500,
-      message: e.response?.data?.message ?? "No se pudo conectar con el servidor.",
+      message: mensajeDeError(e, "No se pudo conectar con el servidor."),
     }));
 };
 
@@ -314,19 +340,22 @@ export const resetPassword = (
  * entries, and this is the one field that lets either of them tell a
  * finished login from one still owing a factor.
  */
-export const comprobarToken = (): Promise<{
+export const comprobarToken = (opciones?: { timeout?: number }): Promise<{
   status: number;
   usuario: UsuarioInterface | null;
   permisos?: Permisos;
   estado?: EstadoSesion;
+  /** The account's factors — sent for a `parcial` session only. */
+  metodos?: string[];
 }> => {
   return axios
-    .get(`${urlApi}auth/me`)
+    .get(`${urlApi}auth/me`, { timeout: opciones?.timeout })
     .then((response) => ({
       status: response.status,
       usuario: response.data.usuario as UsuarioInterface,
       permisos: response.data.permisos as Permisos | undefined,
       estado: response.data.estado as EstadoSesion | undefined,
+      metodos: response.data.metodos as string[] | undefined,
     }))
     .catch((e) => ({
       status: e.response?.status ?? 500,
@@ -448,9 +477,16 @@ export const endSession = (
     // cuerpo donde el interceptor de step-up pueda meter la contraseña.
     .delete(`${urlApi}auth/sessions/${id}`, { data: {} })
     .then((r) => ({ status: r.status, message: r.data?.message ?? null }))
+    // 🔴 `mensajeDeError` y no el cuerpo a pelo, por lo mismo que el comentario
+    // de arriba: si el interceptor tiene dónde meter la contraseña es porque
+    // **esta ruta está detrás de la puerta** (`requireStepUp()` en
+    // `api/src/routes/auth.routes.ts`), así que el diálogo se abre aquí. Quien
+    // lo cancele leía «Introduce tu contraseña actual para completar esta
+    // operación.» sobre la lista de sesiones, un instante después de cerrar la
+    // caja que se la pedía.
     .catch((e) => ({
       status: e.response?.status ?? 500,
-      message: e.response?.data?.message ?? "No se pudo cerrar la sesión.",
+      message: mensajeDeError(e, "No se pudo cerrar la sesión."),
     }));
 
 /**

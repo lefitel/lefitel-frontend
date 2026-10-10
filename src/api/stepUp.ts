@@ -18,10 +18,16 @@
  * El campo del cuerpo donde viaja la contraseña — `STEP_UP_PASSWORD_FIELD` en
  * `api/src/config/security.ts`.
  *
- * 🔴 Y no es lo mismo que `oldPass` ni que `pass`, que otras rutas usan para
- * pedir la contraseña actual como parte de lo que hacen (cambiarla, renombrar
- * la cuenta, registrar el correo). Éste lo lee **la puerta**, antes de que el
- * controlador vea nada.
+ * 🔴 Y no es lo mismo que `oldPass`, que el cambio de contraseña manda como
+ * parte de lo que hace: ahí «contraseña actual» no prueba quién eres, es la
+ * mitad de lo que se está cambiando. Éste lo lee **la puerta**, antes de que
+ * el controlador vea nada.
+ *
+ * Hubo un tiempo en que varios formularios pedían la contraseña por su cuenta
+ * además de este diálogo, y eso significaba teclear el mismo secreto dos veces
+ * por operación: una en la página y otra aquí. Es la molestia que dio origen a
+ * este trabajo, y la forma de no repetirla es la regla de arriba — no una
+ * lista de pantallas, que caduca sola.
  */
 export const STEP_UP_PASSWORD_FIELD = "stepup_password";
 
@@ -41,6 +47,83 @@ export const MOTIVO_ESTADO_INCOMPLETO = "estado-incompleto";
 export const MOTIVO_SIN_FACTOR_RECIENTE = "sin-factor-reciente";
 export const MOTIVO_CONTRASENA_INCORRECTA = "contraseña-incorrecta";
 export const MOTIVO_CONTRASENA_REQUERIDA = "contraseña-requerida";
+
+/**
+ * Lo que lee quien llamó cuando la ventana se cierra sin resolver nada porque
+ * la persona lo decidió.
+ *
+ * 🔴 **Sustituye a la frase de la pantalla, no se suma a ella.** La pantalla
+ * dice «No se pudo crear el rol», que es lo que sabe: que falló. Quien cancela
+ * ya sabe que falló y lo que no sabía era que la cancelación contara como
+ * fallo. Y no se compone con la de la pantalla porque no todas terminan igual
+ * —hay fallbacks que acaban en punto— y pegarles algo detrás produce frases
+ * rotas en unas y no en otras.
+ */
+export const MENSAJE_CANCELADO =
+  "Cancelaste la confirmación de identidad, así que la operación no se realizó.";
+
+/**
+ * Lo que lee quien llamó cuando el servidor ha dicho que no le queda ningún
+ * intento — `intentosRestantes` a `0`, más abajo.
+ *
+ * 🔴 **No nombra la contraseña, y eso es deliberado.** `intentosRestantes`
+ * cuenta lo que falte para agotar el presupuesto **o** para bloquear la cuenta
+ * —lo dice su propia documentación, aquí al lado—, así que una frase que diera
+ * por hecho cuál de los dos se acaba de gastar sería falsa la mitad de las
+ * veces. Se pide esperar en vez de volver a probar, que es lo que contesta el
+ * propio servidor cuando es él quien corta — `PASSWORD_CONFIRM_MESSAGE` en
+ * `api/src/middleware/loginLimiters.ts`.
+ */
+export const MENSAJE_SIN_INTENTOS =
+  "Se acabaron los intentos para confirmar tu identidad. Espera unos minutos antes de volver a intentarlo.";
+
+/**
+ * Lo que lee quien llamó cuando la operación se paró porque falta terminar de
+ * configurar el segundo factor.
+ *
+ * Sirve para las dos negativas que piden eso — la de la puerta del step-up y
+ * la que contesta `authenticate` cuando se acaba el plazo sin ningún factor.
+ * Son la misma carencia y el mismo remedio, así que se leen igual.
+ *
+ * 🔴 **No repite la frase del aviso, la completa.** El interceptor saca además
+ * un aviso con el botón que lleva a arreglarlo, y las dos cosas salen a la vez:
+ * si dijeran lo mismo, ésta sería el segundo aviso idéntico y sin botón que
+ * `http.ts` lleva evitando desde que existe. Ésta dice qué le pasó a la
+ * operación que la persona pidió; la del aviso dice dónde se arregla.
+ */
+export const MENSAJE_FACTOR_INCOMPLETO =
+  "La operación no se realizó: te falta terminar de configurar tu segundo factor.";
+
+/**
+ * Lo que el diálogo dice sobre para qué sirve la confirmación y cuánto dura.
+ *
+ * 🔴 **Son dos frases porque hay dos comportamientos, y prometer el de la
+ * ventana en una ruta que no la tiene sería mentir.** Las rutas que dan de
+ * alta o de baja un factor —o que registran un correo, que desde el plan 4E
+ * es un factor— piden la contraseña en **cada** petición: son las que
+ * contestan con `exigeContrasena: true`, que es el mismo campo con el que el
+ * servidor dice «esta ruta va sin ventana». En las demás, una confirmación
+ * cubre un rato de trabajo.
+ *
+ * 🔴 **«Unos minutos» y no una cifra, a propósito.** El plazo real lo
+ * decide `STEP_UP_WINDOW_MINUTES` (`api/src/config/security.ts`) y **no viaja
+ * por el cable**: no hay ningún campo del 403 que lo diga. Una cifra escrita
+ * aquí sería una copia de un número de otro repositorio que se despliega
+ * aparte, así que el día que allí cambiara, esta pantalla prometería un plazo
+ * falso **y todo seguiría en verde** — justo la clase de deriva silenciosa que
+ * este trabajo existe para quitar. Una frase que no afirma un número no puede
+ * desincronizarse de nadie, y cumple lo que se pedía: que se sepa que el
+ * permiso se guarda un rato. (Isaias, 2026-09-09.)
+ *
+ * `exigeContrasena` es opcional en el cable —un servidor anterior no lo
+ * manda— y su ausencia se lee como «con ventana», que es el caso de la
+ * inmensa mayoría de las rutas y el único en el que la frase larga aporta
+ * algo.
+ */
+export const describeProteccion = (sinVentana: boolean | undefined): string =>
+  sinVentana
+    ? "Esta operación cambia cómo entras a tu cuenta, así que la confirmamos cada vez."
+    : "Lo preguntamos para proteger tu cuenta. No volveremos a pedírtelo durante unos minutos.";
 
 export type MotivoStepUp =
   | typeof MOTIVO_ESTADO_INCOMPLETO
@@ -239,12 +322,16 @@ export function describeStepUpError(
  * Cuánto espera la ventana antes de rendirse.
  *
  * 🔴 Sin esto, el diálogo puede dejar la aplicación inservible. Mientras la
- * confirmación está en vuelo se deshabilitan sus dos botones y se traga la
+ * confirmación está en vuelo se deshabilitan **los dos** botones y se traga la
  * tecla Escape —para que nadie cierre la ventana a medias—, y `axios` no trae
  * ningún tiempo límite por defecto. Una petición que se acepta y nunca se
  * contesta (un móvil que entra en un túnel a mitad del envío es el caso
  * corriente) deja una ventana modal encima de la pantalla, con los dos botones
  * muertos, para siempre. La única salida sería recargar, y recargar pierde el
  * formulario del que venía la operación.
+ *
+ * El otro camino que espera este plazo —probar la llave— **no apaga
+ * «Cancelar»**, a propósito: es la única salida cuando la llave es el único
+ * método. Ahí lo que se atasca es terminar la ceremonia, no salir de ella.
  */
 export const TIMEOUT_CONFIRMACION_MS = 20_000;

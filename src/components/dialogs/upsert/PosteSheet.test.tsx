@@ -172,7 +172,7 @@ describe("when the server refuses", () => {
   it("disables saving, because none of the four required fields can be filled", async () => {
     pintar(null);
 
-    const guardar = await screen.findByRole("button", { name: /Guardar/i });
+    const guardar = await screen.findByRole("button", { name: /Crear poste/i });
     await waitFor(() => expect((guardar as HTMLButtonElement).disabled).toBe(true));
   });
 });
@@ -192,6 +192,35 @@ describe("when it is the pole's own ADSS that fails", () => {
     const guardar = await screen.findByRole("button", { name: /Guardar/i });
     await waitFor(() => expect((guardar as HTMLButtonElement).disabled).toBe(false));
   });
+
+  it("says so, because the boxes it leaves unticked are not this pole's answer", async () => {
+    // Saving stays possible, so the sentence is the only thing between an
+    // editor and a form that shows every ADSS unticked for a pole that has
+    // three: whatever gets ticked next *replaces* the real set on save. The
+    // toast was written and never fired — it compared the failure with
+    // `"listas"`, which a failure is never classified as.
+    const { toast } = await import("sonner");
+    getAdssPoste.mockRejectedValue(new Error("Network Error"));
+
+    pintar(POSTE);
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("No se pudo cargar el ADSS de este poste"),
+    );
+  });
+
+  it("stays quiet when it was refused, since the catalogues already said so", async () => {
+    const { toast } = await import("sonner");
+    const denegado = Object.assign(new Error("Forbidden"), { isAxiosError: true, response: { status: 403 } });
+    getOpcionesPoste.mockRejectedValue(denegado);
+    getAdssPoste.mockRejectedValue(denegado);
+
+    pintar(POSTE);
+
+    await waitFor(() => expect(getAdssPoste).toHaveBeenCalled());
+    await screen.findByText(/No tiene permiso/i);
+    expect(toast.error).not.toHaveBeenCalledWith("No se pudo cargar el ADSS de este poste");
+  });
 });
 
 describe("when the request simply fails", () => {
@@ -202,5 +231,78 @@ describe("when the request simply fails", () => {
 
     expect(await screen.findByText(/No se pudieron cargar los catálogos/i)).toBeTruthy();
     expect(screen.queryByText(/No tiene permiso/i)).toBeNull();
+  });
+});
+
+describe("a location that is not a place", () => {
+  // The two boxes take whatever is typed, and nothing checked the result: a
+  // decimal point left out was saved as a latitude of minus twenty-two thousand
+  // million, and that pole then cost its whole stretch the road route.
+  const guardar = async () => {
+    const boton = await screen.findByRole("button", { name: /Guardar/i });
+    await waitFor(() => expect(boton).not.toBeDisabled());
+    boton.click();
+  };
+
+  it("is refused beside the boxes, and nothing is sent", async () => {
+    const { editPoste } = await import("../../../api/Poste.api");
+    getAdssPoste.mockResolvedValue([{ id_adss: 3 }]);
+
+    pintar({ ...POSTE, lat: -22048385017.82594 });
+    await guardar();
+
+    expect(await screen.findByText(/Esa ubicación no existe/)).toBeTruthy();
+    expect(editPoste).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about a pole that is somewhere", async () => {
+    // The control: the same pole, with the latitude it was meant to have.
+    // And it has to reach the save, or "no message" is true of a button that
+    // did nothing at all.
+    const { editPoste } = await import("../../../api/Poste.api");
+    getAdssPoste.mockResolvedValue([{ id_adss: 3 }]);
+
+    pintar({ ...POSTE, lat: -22.048385 });
+    await guardar();
+
+    await waitFor(() => expect(editPoste).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Esa ubicación no existe/)).toBeNull();
+  });
+});
+
+describe("what the form shows at a glance", () => {
+  it("names the stretch the pole is on, in the header", async () => {
+    pintar(POSTE);
+    expect(await screen.findByText("Tramo Tacna — Ilo")).toBeTruthy();
+  });
+
+  it("marks the ADSS the pole carries, and counts them", async () => {
+    // They were a column of boxes to be scanned one by one. They are toggles
+    // now, and still have to answer as checkboxes to whoever cannot see them.
+    getAdssPoste.mockResolvedValue([{ id_adss: 3 }]);
+    pintar(POSTE);
+
+    const preformado = await screen.findByRole("checkbox", { name: "Preformado" });
+    await waitFor(() => expect(preformado.getAttribute("aria-checked")).toBe("true"));
+    expect(screen.getByText("1 elegida")).toBeTruthy();
+
+    preformado.click();
+    await waitFor(() => expect(preformado.getAttribute("aria-checked")).toBe("false"));
+    expect(screen.queryByText(/elegida/)).toBeNull();
+  });
+
+  it("says beside the button everything a new pole still needs", async () => {
+    pintar(null);
+    const crear = await screen.findByRole("button", { name: /Crear poste/i });
+    await waitFor(() => expect(crear).not.toBeDisabled());
+    crear.click();
+
+    // Six and not seven: "Ubicación" is not among them, because a new pole
+    // opens already placed on the example coordinates. That is how the form
+    // has always started, and it means a pole can be saved where nobody put it.
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toBe(
+      "Faltan 6 campos: Número, Propietario, Material, Tramo, Ferretería y Foto",
+    );
   });
 });

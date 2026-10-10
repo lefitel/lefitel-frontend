@@ -61,7 +61,7 @@ const describeEmailError = (status: number, message: string | null): string => {
 /** Which editor is open. Exactly one, or none. */
 type Editor = "personal" | EditorAcceso;
 
-const CUENTA_VACIA: DatosCuenta = { user: "", userPass: "", oldPass: "", pass: "", confirmPass: "" };
+const CUENTA_VACIA: DatosCuenta = { user: "", oldPass: "", pass: "", confirmPass: "" };
 
 /**
  * "Mi perfil": who you are, how you get in, and where you are already in.
@@ -104,15 +104,14 @@ const PerfilPage = () => {
   const [datosGuardados, setDatosGuardados] = useState<DatosPersonales>(datos);
 
   /**
-   * `userPass` is the current password the *rename* has to carry, and it is a
-   * field of its own rather than a reuse of `oldPass` below.
+   * The three credential boxes, of which exactly one is a password the person
+   * types on this screen: `oldPass`, on the password editor.
    *
-   * They are two forms. Sharing one value would mean typing the password to
-   * change your password and finding the rename already armed with it — or
-   * worse, sending a rename carrying whatever was left in a box somebody had
-   * been using for something else. Only one of the two is ever on screen now,
-   * which makes the confusion impossible rather than merely unlikely, but the
-   * separation is what the tests actually pin.
+   * There was a second, `userPass`, carried by the rename — kept deliberately
+   * apart from this one so that typing the password to change your password
+   * could not leave the rename already armed with it. That whole problem went
+   * away with the field: renaming asks for nothing here, because the step-up
+   * gate asks once, in a dialog, and then stops asking for ten minutes.
    */
   const [cuenta, setCuenta] = useState<DatosCuenta>(CUENTA_VACIA);
 
@@ -128,7 +127,7 @@ const PerfilPage = () => {
     email: null,
     verifiedAt: null,
   });
-  const [emailForm, setEmailForm] = useState({ email: "", pass: "" });
+  const [emailForm, setEmailForm] = useState({ email: "" });
 
   const [guardandoPersonal, setGuardandoPersonal] = useState(false);
   const [guardandoUsuario, setGuardandoUsuario] = useState(false);
@@ -242,25 +241,26 @@ const PerfilPage = () => {
     if (cual === "personal") {
       return (Object.keys(datos) as (keyof DatosPersonales)[]).some((k) => datos[k] !== datosGuardados[k]);
     }
-    if (cual === "usuario") return cuenta.user !== (d.usuario?.user ?? "") || cuenta.userPass !== "";
+    if (cual === "usuario") return cuenta.user !== (d.usuario?.user ?? "");
     if (cual === "password") return cuenta.oldPass !== "" || cuenta.pass !== "" || cuenta.confirmPass !== "";
-    if (cual === "email") return emailForm.email.trim() !== (recovery.email ?? "") || emailForm.pass !== "";
+    if (cual === "email") return emailForm.email.trim() !== (recovery.email ?? "");
     return false;
   };
 
   /**
    * Put an editor back the way the server has it.
    *
-   * Every password box is emptied rather than restored, in all three cases:
-   * there is nothing on the server to restore them to, and a cancelled editor
-   * that kept a typed password would leave a credential sitting in a detached
-   * form's state for the rest of the session.
+   * The password boxes are emptied rather than restored: there is nothing on
+   * the server to restore them to, and a cancelled editor that kept a typed
+   * password would leave a credential sitting in a detached form's state for
+   * the rest of the session. Only the password editor has any now — the other
+   * two are put back to what the server holds.
    */
   const limpiar = (cual: Editor) => {
     if (cual === "personal") setDatos(datosGuardados);
-    if (cual === "usuario") setCuenta((prev) => ({ ...prev, user: d.usuario?.user ?? "", userPass: "" }));
+    if (cual === "usuario") setCuenta((prev) => ({ ...prev, user: d.usuario?.user ?? "" }));
     if (cual === "password") setCuenta((prev) => ({ ...prev, oldPass: "", pass: "", confirmPass: "" }));
-    if (cual === "email") setEmailForm({ email: recovery.email ?? "", pass: "" });
+    if (cual === "email") setEmailForm({ email: recovery.email ?? "" });
   };
 
   const abrir = (cual: Editor) => {
@@ -351,34 +351,34 @@ const PerfilPage = () => {
   };
 
   /**
-   * Renaming this account sends the current password with the change.
+   * Renaming this account sends the new name and no password at all.
    *
-   * **The hole this closes.** This screen changed the username having asked for
-   * nothing at all, while `UsuarioDetallePage` — the other screen that renames
-   * the same account — asked for a password. Same operation, same account, two
-   * screens: whoever did not want to type it used this one. And a username is
-   * half the credential, so what that bought was locking somebody out of their
-   * own account without ever knowing their password — the unattended machine in
-   * the office, or the shared field laptop.
+   * **What is still being protected.** This screen once changed the username
+   * having asked for nothing, while `UsuarioDetallePage` — the other screen
+   * that renames the same account — asked for a password. Same operation, same
+   * account, two screens: whoever did not want to type it used this one. And a
+   * username is half the credential, so what that bought was locking somebody
+   * out of their own account without ever knowing their password.
    *
-   * **Sent with the change, not confirmed before it.** `updateUserName` demands
-   * it server-side now, so a prior call to `POST /api/auth/confirm-password`
-   * could not stand in for this: it would only add a second comparison, out of a
-   * second budget, in a second place the rule can drift. That endpoint has since
-   * been retired, for exactly this reason.
+   * **Who asks now.** The step-up gate in front of `PUT /usuario/username/:id`,
+   * answered by `stepUpInterceptor.ts` from a dialog. That is a stronger check
+   * than a box here ever was — it takes a recently proved *factor* from an
+   * account that has one, which no password field can — and a cheaper one to
+   * live with, because one confirmation covers ten minutes of editing instead
+   * of one per request.
    *
-   * The password is left in the box on failure and cleared only on success, so
-   * a 429 or a mistyped name does not cost it twice.
+   * **So no password field, and putting one back would not tighten anything.**
+   * The server ignores it; the gate asks anyway; the person types the same
+   * secret twice for one rename. That double prompt is the complaint this work
+   * exists to answer.
    */
   const guardarUsuario = async () => {
     setGuardandoUsuario(true);
     try {
-      const payload: UsuarioInterface = { ...base(), user: cuenta.user };
-      const response = await editUserName({ ...payload, oldPass: cuenta.userPass });
+      const response = await editUserName({ ...base(), user: cuenta.user });
       if (response.status === 200) {
         setSesion((prev) => ({ ...prev, usuario: { ...prev.usuario, user: cuenta.user } }));
         d.actualizarUsuario({ user: cuenta.user });
-        setCuenta((prev) => ({ ...prev, userPass: "" }));
         cerrarTrasGuardar("usuario");
         toast.success("Nombre de usuario modificado.");
       } else {
@@ -421,10 +421,9 @@ const PerfilPage = () => {
     setGuardandoEmail(true);
     try {
       const direccion = emailForm.email.trim();
-      const response = await sendVerificationEmail(direccion, emailForm.pass);
+      const response = await sendVerificationEmail(direccion);
       if (response.status === 200) {
         toast.success(response.message || "Se envió un enlace de verificación.");
-        setEmailForm((prev) => ({ ...prev, pass: "" }));
         setRecovery({ email: direccion, verifiedAt: null });
         cerrarTrasGuardar("email");
       } else {
@@ -440,10 +439,6 @@ const PerfilPage = () => {
 
   const pedirGuardarUsuario = () => {
     if (!cuenta.user) return toast.warning("El nombre de usuario no puede estar vacío");
-    // Nothing leaves the browser without it. Not a security check — the server
-    // refuses an empty one anyway — but an empty attempt would spend one of the
-    // five confirmations the account is allowed in a quarter of an hour.
-    if (!cuenta.userPass) return toast.warning("Debe confirmar su contraseña actual.");
     setConfirmUsername(true);
   };
 
@@ -471,14 +466,19 @@ const PerfilPage = () => {
     setConfirmPass(true);
   };
 
+  /**
+   * The address is checked here and the identity is not, which is the split
+   * this screen settled on.
+   *
+   * A malformed address is worth catching before the round trip — the server
+   * answers 400 and nothing is learned by asking it. The password is the
+   * step-up gate's business: it is asked for on the way out, by the dialog, and
+   * asking here as well would be the same secret typed twice for one send.
+   */
   const pedirEnviarEmail = () => {
     const direccion = emailForm.email.trim();
     if (!direccion) return toast.warning("Debe indicar una dirección de correo.");
     if (!EMAIL_SHAPE.test(direccion)) return toast.warning("Debe indicar una dirección de correo válida.");
-    // Same reasoning as `cuenta.userPass` above: an attempt with no password is
-    // refused by the server anyway, and letting it leave the browser would spend
-    // one of the five confirmations this account gets per quarter of an hour.
-    if (!emailForm.pass) return toast.warning("Debe proporcionar su contraseña actual.");
     setConfirmEmail(true);
   };
 
@@ -527,7 +527,7 @@ const PerfilPage = () => {
   const abrirCorreo = () => abrir("email");
 
   return (
-    <div className="pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="p-page w-full space-y-page animate-in fade-in duration-500">
 
       <PerfilHeader usuario={d.usuario} loading={d.loading} onCambiarFoto={cambiarFoto} />
 

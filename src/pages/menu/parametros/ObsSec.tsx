@@ -15,9 +15,8 @@ import { Label } from "../../../components/ui/label";
 import { Combobox } from "../../../components/ui/combobox";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
 import { CRITICALITY_LEVELS } from "../../../lib/criticality";
-import {
-    Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription,
-} from "../../../components/ui/sheet";
+import FormDialog from "../../../components/dialogs/FormDialog";
+import { Textarea } from "../../../components/ui/textarea";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -28,12 +27,17 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
+import { useRegistroEnlazado, type RegistroEnlazado } from "./useRegistroEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { mensajeDeError } from "../../../api/descarga";
 
-interface Props { innerTab: InnerTab; }
+interface Props {
+    innerTab: InnerTab;
+    /** The record the address asks for, when it is one of this catalogue's. */
+    enlace?: RegistroEnlazado;
+}
 
-const ObsSec = ({ innerTab }: Props) => {
+const ObsSec = ({ innerTab, enlace }: Props) => {
     const { sesion } = useContext(SesionContext);
     const rol = sesion.usuario.id_rol;
 
@@ -159,6 +163,11 @@ const ObsSec = ({ innerTab }: Props) => {
         setSheetOpen(true);
     }, [loadTipoObs]);
 
+    useRegistroEnlazado({
+        enlace, activos: list, archivados: archivedList,
+        abrir: can(rol, "parametros", "editar") ? openEdit : undefined,
+    });
+
     const openAdd = () => {
         setSelected(null);
         setName("");
@@ -194,8 +203,8 @@ const ObsSec = ({ innerTab }: Props) => {
     }, [loadStats]);
 
     const handleSave = async () => {
-        if (!name.trim() || !description.trim()) return toast.warning("Nombre y descripción son requeridos");
-        if (!idTipoObs) return toast.warning("Selecciona un tipo de observación");
+        if (!name.trim() || !description.trim()) return;
+        if (!idTipoObs) return;
         setSaving(true);
         const payload: ObsInterface = { ...selected, name, description, id_tipoObs: idTipoObs, criticality };
         try {
@@ -440,56 +449,52 @@ const ObsSec = ({ innerTab }: Props) => {
 
             {can(rol, "parametros", "editar") && (
                 <>
-                    <Sheet open={sheetOpen} onOpenChange={(v) => { if (!v) handleClose(); }}>
-                        <SheetContent>
-                            <SheetHeader>
-                                <SheetTitle>{selected?.id ? "Editar Observación" : "Nueva Observación"}</SheetTitle>
-                                <SheetDescription>Completa los campos y guarda los cambios.</SheetDescription>
-                            </SheetHeader>
-                            <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 py-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <Label htmlFor="obs-name">Nombre</Label>
-                                    <Input id="obs-name" value={name} onChange={(e) => setName(e.target.value)} />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label htmlFor="obs-desc">Descripción</Label>
-                                    <Input id="obs-desc" value={description} onChange={(e) => setDescription(e.target.value)} />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label>Tipo de Observación</Label>
-                                    <Combobox
-                                        options={tipoObsOptions}
-                                        value={idTipoObs ? String(idTipoObs) : ""}
-                                        onValueChange={(v) => setIdTipoObs(Number(v))}
-                                        placeholder="Seleccionar tipo..."
-                                    />
-                                </div>
-                                <div className="flex flex-col gap-1.5">
-                                    <Label>Criticidad</Label>
-                                    <Combobox
-                                        options={[
-                                            { value: "null", label: "Sin clasificar" },
-                                            ...CRITICALITY_LEVELS.map((c) => ({
-                                                value: String(c.level),
-                                                label: `${c.level} — ${c.label}`,
-                                            })),
-                                        ]}
-                                        value={criticality == null ? "null" : String(criticality)}
-                                        onValueChange={(v) => setCriticality(v === "null" || !v ? null : Number(v))}
-                                        placeholder="Seleccionar criticidad..."
-                                    />
-                                </div>
-                            </div>
-                            <SheetFooter className="flex justify-end px-4">
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={handleClose} disabled={saving}>Cancelar</Button>
-                                    <Button size="sm" onClick={handleSave} disabled={saving}>
-                                        {saving ? "Guardando..." : "Guardar"}
-                                    </Button>
-                                </div>
-                            </SheetFooter>
-                        </SheetContent>
-                    </Sheet>
+                    <FormDialog
+                        open={sheetOpen}
+                        onClose={handleClose}
+                        size="sm"
+                        title={selected?.id ? "Editar Observación" : "Nueva Observación"}
+                        description="Se marca al registrar un evento."
+                        dirty={name !== (selected?.name ?? "") || description !== (selected?.description ?? "") || idTipoObs !== (selected?.id_tipoObs ?? 0) || criticality !== (selected?.criticality ?? null)}
+                        missing={[!name.trim() && "Nombre", !description.trim() && "Descripción", !idTipoObs && "Tipo de observación"].filter((c): c is string => !!c)}
+                        saving={saving}
+                        submitLabel={selected?.id ? "Guardar cambios" : "Crear observación"}
+                        onSubmit={handleSave}
+                        bodyClassName="flex flex-col gap-4"
+                    >
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="obs-name">Nombre <span className="text-destructive">*</span></Label>
+                            <Input id="obs-name" value={name} onChange={(e) => setName(e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="obs-desc">Descripción <span className="text-destructive">*</span></Label>
+                            <Textarea id="obs-desc" className="resize-none min-h-20" value={description} onChange={(e) => setDescription(e.target.value)} />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label>Tipo de observación <span className="text-destructive">*</span></Label>
+                            <Combobox
+                                options={tipoObsOptions}
+                                value={idTipoObs ? String(idTipoObs) : ""}
+                                onValueChange={(v) => setIdTipoObs(Number(v))}
+                                placeholder="Seleccionar tipo..."
+                            />
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label>Criticidad</Label>
+                            <Combobox
+                                options={[
+                                    { value: "null", label: "Sin clasificar" },
+                                    ...CRITICALITY_LEVELS.map((c) => ({
+                                        value: String(c.level),
+                                        label: `${c.level} — ${c.label}`,
+                                    })),
+                                ]}
+                                value={criticality == null ? "null" : String(criticality)}
+                                onValueChange={(v) => setCriticality(v === "null" || !v ? null : Number(v))}
+                                placeholder="Seleccionar criticidad..."
+                            />
+                        </div>
+                    </FormDialog>
 
                     <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                         <AlertDialogContent>

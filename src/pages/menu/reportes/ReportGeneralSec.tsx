@@ -8,7 +8,7 @@ import {
   estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
 } from "../../../api/opciones.api";
 import { EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button, buttonVariants } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
@@ -322,7 +322,7 @@ const ReportGeneralSec = () => {
       enableSorting: false,
       cell: ({ row }) =>
         row.original.image ? (
-          <img src={`${url}${row.original.image}`} className="h-14 w-14 object-cover rounded" loading="lazy" />
+          <img src={imageUrl(row.original.image) ?? undefined} className="h-14 w-14 object-cover rounded" loading="lazy" />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         ),
@@ -365,7 +365,7 @@ const ReportGeneralSec = () => {
       cell: ({ row }) => {
         const sol = row.original.solucions?.[0];
         return sol?.image ? (
-          <img src={`${url}${sol.image}`} className="h-14 w-14 object-cover rounded" loading="lazy" />
+          <img src={imageUrl(sol.image) ?? undefined} className="h-14 w-14 object-cover rounded" loading="lazy" />
         ) : (
           <span className="text-xs text-muted-foreground">—</span>
         );

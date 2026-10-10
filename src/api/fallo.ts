@@ -51,3 +51,52 @@ export const marcarFallo = (error: unknown, fallo: FalloNormalizado): void => {
 
 /** What a request that never reached the server says. */
 export const SIN_CONEXION = "Sin conexión con el servidor";
+
+interface ConExplicacion {
+  explicacion?: string;
+}
+
+/**
+ * La frase de un interceptor que sabe **por qué** falló algo, cuando el cuerpo
+ * de la respuesta no lo dice.
+ *
+ * El caso que la trajo: la ventana del segundo factor. Su interceptor devuelve
+ * el rechazo original tal cual, así que quien cancelaba al crear un rol leía
+ * «No se pudo crear el rol» — la frase que la pantalla pone cuando no sabe nada
+ * de por qué falló. El interceptor es el único que sabe por cuál de sus salidas
+ * se fue; la pantalla sólo sabe qué estaba intentando hacer.
+ *
+ * 🔴 **Va aparte de `normalized`, y no por gusto.** El normalizador de `http.ts`
+ * se registra después del interceptor del segundo factor, o sea que corre
+ * después de él, y `marcarFallo` **sustituye** `error.normalized` entero: una
+ * frase escrita ahí antes se borraría sin que nada avisara. Esto es una
+ * propiedad distinta, que `marcarFallo` no toca, y el normalizador la copia al
+ * `message` a propósito — que es donde `mensajeDeError` ya mira.
+ *
+ * 🔴 **Lo hereda quien saca sus fallos por `mensajeDeError`, y sólo ése.**
+ * Quedan `.catch` en esta carpeta que se fabrican el mensaje leyendo
+ * `e.response?.data?.message`, y no pasa nada mientras su ruta no esté detrás
+ * de la puerta del segundo factor: sin ventana que cancelar, el cuerpo del
+ * servidor es lo único que hay que contar. **La regla no es «todos», es «el
+ * que pueda encontrarse el diálogo delante»**, y no la escribo como una lista
+ * porque una lista de otros ficheros caduca sola.
+ *
+ * El modo de fallar al que se vuelve, escrito porque es exactamente lo que
+ * este campo existe para evitar: cancelar la ventana dejaba en pantalla lo que
+ * la puerta había pedido — el texto reclamando la contraseña, justo después
+ * de cerrar el diálogo que la pedía.
+ *
+ * Así que un `.catch` nuevo sobre una ruta con puerta se salta esto sin que
+ * nada se ponga rojo por sí solo. Lo que lo sujeta es
+ * `statusPropagation.test.ts`, que recorre los cinco por la cadena real.
+ */
+export const marcarExplicacion = (error: unknown, frase: string): void => {
+  if (error && typeof error === "object") (error as ConExplicacion).explicacion = frase;
+};
+
+/** La frase que un interceptor dejó escrita sobre este rechazo, si la hay. */
+export const explicacionDe = (error: unknown): string | undefined => {
+  if (!error || typeof error !== "object") return undefined;
+  const frase = (error as ConExplicacion).explicacion;
+  return typeof frase === "string" && frase.trim() !== "" ? frase : undefined;
+};

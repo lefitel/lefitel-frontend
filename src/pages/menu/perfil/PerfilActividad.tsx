@@ -40,7 +40,7 @@ function cuando(iso: Date | string | null | undefined): string {
  * The last few things this account did, from its own bitácora.
  *
  * **Why it lives on this page at all.** It was going to be a link — "ver mi
- * actividad" — pointing at `/app/seguridad/:id`, the admin screen that already
+ * actividad" — pointing at `/app/usuarios/:id`, the admin screen that already
  * renders this. That route is behind the Seguridad module, which most accounts
  * do not have, so the link would have been dead for exactly the people who
  * cannot see their history any other way. The list is cheaper than the link

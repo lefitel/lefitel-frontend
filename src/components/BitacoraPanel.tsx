@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getAllBitacora } from "../api/Bitacora.api";
 import { BitacoraInterface } from "../interfaces/interfaces";
-import { ACTION_LABELS } from "../constants/bitacora";
+import { nombreDeAccion } from "../constants/bitacora";
 import { Skeleton } from "./ui/skeleton";
 import {
   ActivityIcon, AtSignIcon, CheckCircle2Icon, ClockIcon, ImageIcon, InfoIcon,
@@ -74,14 +73,6 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
 const SEVERITY_DOT: Record<string, string> = {
   warning:  "bg-amber-500",
   critical: "bg-destructive-fill",
-};
-
-const ENTITY_ROUTES: Partial<Record<string, (id: number) => string>> = {
-  "Evento":   (id) => `/eventos/${id}`,
-  "Revisión": (id) => `/eventos/${id}`,
-  "Solución": (id) => `/eventos/${id}`,
-  "Poste":    (id) => `/postes/${id}`,
-  "Ciudad":   (id) => `/ciudades/${id}`,
 };
 
 const fmtVal = (v: unknown): string => {
@@ -186,7 +177,6 @@ interface Props {
 }
 
 export default function BitacoraPanel({ entity, entityId }: Props) {
-  const navigate = useNavigate();
   const [entries, setEntries] = useState<BitacoraInterface[]>([]);
   const [loading, setLoading] = useState(false);
   /**
@@ -256,7 +246,6 @@ export default function BitacoraPanel({ entity, entityId }: Props) {
       <div className="space-y-4">
         {entries.map((entry, i) => {
           const config = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.DEFAULT;
-          const route = ENTITY_ROUTES[entry.entity];
           const severityDot = entry.severity ? SEVERITY_DOT[entry.severity] : undefined;
           return (
             <div key={entry.id ?? i} className="flex gap-4 relative">
@@ -274,21 +263,13 @@ export default function BitacoraPanel({ entity, entityId }: Props) {
                     <MetadataPopover metadata={(entry.metadata as Record<string, unknown>) ?? {}} ip={entry.ip_address} />
                   )}
                   <p className="text-sm">{entry.detail}</p>
-                  {route && entry.entity_id && (
-                    <button
-                      className="text-xs text-primary hover:underline font-medium"
-                      onClick={() => navigate(route!(entry.entity_id!))}
-                    >
-                      {entry.entity} #{entry.entity_id}
-                    </button>
-                  )}
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
                   {entry.usuario && (
                     <span>{entry.usuario.name} {entry.usuario.lastname}</span>
                   )}
                   {entry.usuario && <span className="opacity-40">-</span>}
-                  <span className="opacity-40">{ACTION_LABELS[entry.action] ?? entry.action}</span>
+                  <span className="opacity-40">{nombreDeAccion(entry)}</span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   {entry.createdAt

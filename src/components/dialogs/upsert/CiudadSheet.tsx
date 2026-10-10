@@ -2,21 +2,19 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import BaseMap from "../../map/BaseMap";
 import { SonarMarker } from "../../map/SonarMarker";
+import { MAP_RADIUS, MAP_DOT } from "../../map/mapConstants";
 import MapSearch from "../../map/MapSearch";
 import { createCiudad, editCiudad } from "../../../api/Ciudad.api";
 import { uploadImage } from "../../../api/Upload.api";
 import { mensajeDeError } from "../../../api/descarga";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { CiudadInterface } from "../../../interfaces/interfaces";
 import { latExample, lngExample } from "../../../data/example";
-import { Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription } from "../../ui/sheet";
+import FormDialog from "../FormDialog";
+import CoordInputs from "../../map/CoordInputs";
 import { Input } from "../../ui/input";
 import { Label } from "../../ui/label";
-import { Loader2Icon } from "lucide-react";
 import { ImageDropzone } from "../../ui/image-dropzone";
-import { Button } from "../../ui/button";
-import { flatControl } from "../../ui/control-surface";
-import { cn } from "../../../lib/utils";
 
 interface Props {
   ciudad?: CiudadInterface | null;
@@ -90,116 +88,105 @@ export default function CiudadSheet({ ciudad, open, setOpen, onSuccess }: Props)
     }
   };
 
+  const sinUbicacion = lat === 0 && lng === 0;
+
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent side="right" className="flex flex-col gap-0 p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-          <SheetTitle>{isEditing ? "Editar Ciudad" : "Nueva Ciudad"}</SheetTitle>
-          <SheetDescription>
-            {isEditing
-              ? "Modifica el nombre, ubicación e imagen de la ciudad."
-              : "Registra una nueva ciudad como nodo de red."}
-          </SheetDescription>
-        </SheetHeader>
+    <FormDialog
+      open={open}
+      onClose={handleClose}
+      title={isEditing ? "Editar ciudad" : "Nueva ciudad"}
+      description={isEditing
+        ? "Modifica el nombre, la ubicación o la foto de la ciudad."
+        : "Un nodo de la red: los tramos corren de una ciudad a otra."}
+      dirty={
+        name !== (ciudad?.name ?? "") || lat !== (ciudad?.lat ?? 0) || lng !== (ciudad?.lng ?? 0) || !!imageFile
+      }
+      missing={[
+        !name.trim() && "Nombre",
+        sinUbicacion && "Ubicación",
+        !isEditing && !imageFile && "Foto",
+      ].filter((c): c is string => !!c)}
+      saving={saving}
+      submitLabel={isEditing ? "Guardar cambios" : "Crear ciudad"}
+      onSubmit={() => void handleSave()}
+      bodyClassName="space-y-5"
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="ciudad-name">
+          Nombre <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="ciudad-name"
+          value={name}
+          onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
+          placeholder="Nombre de la ciudad"
+          aria-invalid={!!errors.name}
+        />
+        {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
+      </div>
 
-        <div className="flex-1 overflow-y-auto px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-3 items-start content-start">
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label htmlFor="ciudad-name">
-              Nombre <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="ciudad-name"
-              value={name}
-              onChange={(e) => { setName(e.target.value); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
-              placeholder="Nombre de la ciudad"
-              aria-invalid={!!errors.name}
-            />
-            {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>
-              Coordenadas <span className="text-destructive">*</span>
-              <span className="text-xs text-muted-foreground ml-1.5 font-normal">(haz clic en el mapa)</span>
-            </Label>
-            <div className="relative h-72 rounded-lg overflow-hidden border border-border isolate">
-              <BaseMap
-                key={`${ciudad?.id ?? "new"}-${open}`}
-                center={lat !== 0 && lng !== 0
-                  ? { lat, lng }
-                  : { lat: latExample, lng: lngExample }}
-                zoom={lat !== 0 ? 13 : 5}
-                style={{ height: "100%" }}
-                onMapClick={(p) => {
-                  setLat(p.lat);
-                  setLng(p.lng);
-                  if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
-                }}
-              >
-                <MapSearch />
-                {lat !== 0 && lng !== 0 && (
-                  <SonarMarker
-                    center={[lat, lng]}
-                    fillColor="#596BAB"
-                    strokeColor="#ffffff"
-                    rgb="89, 107, 171"
-                    dotRadius={8}
-                    weight={1.5}
-                  />
-                )}
-              </BaseMap>
-
-              <div className="absolute bottom-3 left-3 right-3 z-1000 flex gap-2">
-                <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
-                  <span className="text-xs text-muted-foreground shrink-0">Lat</span>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={lat}
-                    onChange={(e) => { setLat(parseFloat(e.target.value) || 0); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
-                  />
-                </div>
-                <div className="flex items-center gap-2 bg-background/90 supports-backdrop-filter:backdrop-blur-sm border border-border rounded-md px-2.5 py-1.5 flex-1 shadow-sm">
-                  <span className="text-xs text-muted-foreground shrink-0">Lng</span>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={lng}
-                    onChange={(e) => { setLng(parseFloat(e.target.value) || 0); if (errors.location) setErrors(p => ({ ...p, location: "" })); }}
-                    className={cn(flatControl, "h-5 p-0 text-xs focus-visible:ring-0 focus-visible:ring-offset-0")}
-                  />
-                </div>
-              </div>
-            </div>
-            {errors.location && <p className="text-xs text-destructive mt-1">{errors.location}</p>}
-          </div>
-
-          <div className="space-y-1.5 sm:col-span-2">
-            <Label>
-              Imagen{" "}
-              {isEditing
-                ? <span className="text-xs text-muted-foreground">(opcional)</span>
-                : <span className="text-destructive">*</span>}
-            </Label>
-            <ImageDropzone
-              file={imageFile}
-              onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
-              existingUrl={ciudad?.image ? `${url}${ciudad.image}` : undefined}
-              error={errors.image}
-            />
-          </div>
+      <div className="space-y-2">
+        <Label>
+          Ubicación <span className="text-destructive">*</span>
+        </Label>
+        {/* Enter in the place search looks a place up; it does not save the form. */}
+        <div data-no-submit className="relative h-64 rounded-lg overflow-hidden border border-border isolate">
+          <BaseMap
+            key={`${ciudad?.id ?? "new"}-${open}`}
+            center={lat !== 0 && lng !== 0
+              ? { lat, lng }
+              : { lat: latExample, lng: lngExample }}
+            zoom={lat !== 0 ? 13 : 5}
+            style={{ height: "100%" }}
+            onMapClick={(p) => {
+              setLat(p.lat);
+              setLng(p.lng);
+              if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+            }}
+          >
+            <MapSearch />
+            {lat !== 0 && lng !== 0 && (
+              <SonarMarker
+                center={[lat, lng]}
+                fillColor={MAP_DOT.subject}
+                strokeColor="#ffffff"
+                rgb={MAP_DOT.subjectRgb}
+                dotRadius={MAP_RADIUS.main}
+                weight={1.5}
+              />
+            )}
+          </BaseMap>
         </div>
+        <CoordInputs
+          id="ciudad"
+          lat={lat}
+          lng={lng}
+          invalid={!!errors.location}
+          onChange={(nuevaLat, nuevaLng) => {
+            setLat(nuevaLat);
+            setLng(nuevaLng);
+            if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+          }}
+        />
+        {errors.location
+          ? <p className="text-xs text-destructive">{errors.location}</p>
+          : <p className="text-xs text-muted-foreground">Pulsa en el mapa para colocar la ciudad, o escribe las coordenadas.</p>}
+      </div>
 
-        <SheetFooter className="px-6 py-4 border-t border-border/40">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>
-            Cancelar
-          </Button>
-          <Button onClick={handleSave} disabled={saving}>
-            {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : isEditing ? "Guardar" : "Crear ciudad"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+      <div className="space-y-1.5">
+        <Label>
+          Foto{" "}
+          {isEditing
+            ? <span className="text-xs text-muted-foreground">(opcional)</span>
+            : <span className="text-destructive">*</span>}
+        </Label>
+        <ImageDropzone
+          file={imageFile}
+          onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
+          existingUrl={imageUrl(ciudad?.image) ?? undefined}
+          error={errors.image}
+        />
+      </div>
+    </FormDialog>
   );
 }

@@ -21,16 +21,21 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { toast } from "sonner";
 import UsuarioSheet from "./UsuarioSheet";
+import { SesionContext, type contextProps } from "../../../context/SesionContext";
+import type { UsuarioInterface } from "../../../interfaces/interfaces";
 import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
+import { olvidarPermisos, setPermisos, sinPermisos } from "../../../lib/permissions";
 
 const createUsuario = vi.fn();
 const editUsuario = vi.fn();
 const searchUsuario_user = vi.fn();
+const asignarRol = vi.fn();
 
 vi.mock("../../../api/Usuario.api", () => ({
   createUsuario: (...args: unknown[]) => createUsuario(...args),
   editUsuario: (...args: unknown[]) => editUsuario(...args),
   searchUsuario_user: (...args: unknown[]) => searchUsuario_user(...args),
+  asignarRol: (...args: unknown[]) => asignarRol(...args),
 }));
 const getRol = vi.fn();
 vi.mock("../../../api/Rol.api", () => ({ getRol: () => getRol() }));
@@ -43,8 +48,27 @@ vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
 }));
 
+/** The role of whoever is using the sheet, and what it may do with roles. */
+const ROL_SESION = 2;
+function puedeConRoles({ ver = true, editar = true } = {}) {
+  const p = sinPermisos();
+  p.roles.ver = ver;
+  p.roles.editar = editar;
+  setPermisos(ROL_SESION, p);
+}
+const conSesion = (hoja: React.ReactNode, id = 99) => (
+  <SesionContext.Provider value={{ sesion: { usuario: { id, id_rol: ROL_SESION } } } as unknown as contextProps}>
+    {hoja}
+  </SesionContext.Provider>
+);
+
 beforeEach(() => {
   vi.clearAllMocks();
+  // Listing the roles and handing one out are permissions of their own; the
+  // sheet only offers the role to somebody who holds both. Granted here so the
+  // tests about everything else see the form an administrator sees.
+  olvidarPermisos();
+  puedeConRoles();
   // "Not found" is what a free username looks like through this API: the sheet
   // treats a resolved search as "taken" and a rejection as "available".
   searchUsuario_user.mockRejectedValue(new Error("no existe"));
@@ -63,7 +87,7 @@ beforeEach(() => {
  */
 async function crearCon(password: string) {
   const user = userEvent.setup();
-  render(<UsuarioSheet open setOpen={vi.fn()} onSuccess={vi.fn()} />);
+  render(conSesion(<UsuarioSheet open setOpen={vi.fn()} onSuccess={vi.fn()} />));
 
   await user.type(screen.getByLabelText(/^Nombre/), "Ada");
   await user.type(screen.getByLabelText(/^Apellido/), "Lovelace");
@@ -121,7 +145,7 @@ describe("the password a new account is created with", () => {
  * for a role no control can set.
  */
 describe("when the role list is refused", () => {
-  const abrir = () => render(<UsuarioSheet open setOpen={vi.fn()} onSuccess={vi.fn()} />);
+  const abrir = () => render(conSesion(<UsuarioSheet open setOpen={vi.fn()} onSuccess={vi.fn()} />));
 
   it("says so, and leaves the form usable instead of a skeleton for ever", async () => {
     getRol.mockRejectedValue(
@@ -151,5 +175,253 @@ describe("when the role list is refused", () => {
 
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith(
       "No se pudo cargar la lista de roles, así que no se puede asignar uno."));
+  });
+});
+
+/**
+ * Changing somebody's role, which this sheet stopped being able to do without
+ * anybody noticing.
+ *
+ * `id_rol` came off `PUT /api/usuario/:id`'s allowlist and moved to a
+ * sub-resource of its own, `PUT /api/usuario/:id/rol`. This sheet was never
+ * told: it went on putting the role inside the profile save, the server
+ * discarded the field it no longer accepts, wrote the rest and answered 200 —
+ * so the toast said "Usuario actualizado", the table reloaded, and the role was
+ * the one it had been before. The only way to hand out authority from the ERP
+ * agreed and did nothing, and it did so **only for the people allowed to do
+ * it**: somebody without `roles.editar` still got a 403 with a sentence.
+ *
+ * Saving an edit is therefore two requests now, and what these pin is the order
+ * and what is said when only one of them lands. The role goes first because it
+ * is the interruptible one — that route asks for the password on every attempt,
+ * so the reauthentication dialog opens every time and can be cancelled. First
+ * means the cancellation finds nothing written.
+ */
+describe("el rol, que ya no viaja dentro del perfil", () => {
+  const YO = 7;
+  const OTRA_PERSONA = 99;
+  const COORDINADOR = 3;
+  const ADMINISTRADOR = 5;
+
+  const cuenta = (id: number, id_rol = COORDINADOR): UsuarioInterface => ({
+    id,
+    name: "Ada",
+    lastname: "Lovelace",
+    birthday: new Date("1990-01-01"),
+    image: "",
+    phone: "700",
+    user: "ada",
+    pass: "",
+    id_rol,
+  });
+
+  /** The sheet in edit mode, and who is doing the editing. */
+  const abrir = (usuario: UsuarioInterface, quienEdita = YO) => {
+    const user = userEvent.setup();
+    const setOpen = vi.fn();
+    const onSuccess = vi.fn();
+    render(
+      <SesionContext.Provider
+        value={{ sesion: { usuario: { id: quienEdita, id_rol: ROL_SESION } } } as unknown as contextProps}
+      >
+        <UsuarioSheet usuario={usuario} open setOpen={setOpen} onSuccess={onSuccess} />
+      </SesionContext.Provider>,
+    );
+    return { user, setOpen, onSuccess };
+  };
+
+  const guardar = () => screen.getByRole("button", { name: /^guardar/i });
+
+  beforeEach(() => {
+    getRol.mockResolvedValue([
+      { id: COORDINADOR, name: "Coordinador", description: "" },
+      { id: ADMINISTRADOR, name: "Administrador", description: "" },
+    ]);
+    asignarRol.mockResolvedValue({ status: 204 });
+    editUsuario.mockResolvedValue({});
+  });
+
+  it("abre aunque haya un rol sin nombre, y lo lista diciendo cuál es", async () => {
+    // The row that took the screen down: a role saved with no name. Typed
+    // against the interface because that is how it arrives — the server sends
+    // what the column holds.
+    getRol.mockResolvedValue([
+      { id: COORDINADOR, name: "Coordinador", description: "" },
+      { id: 7, name: null as unknown as string, description: "" },
+    ]);
+    const { user } = abrir(cuenta(OTRA_PERSONA));
+
+    await user.click(await screen.findByText("Coordinador"));
+
+    expect(await screen.findByText("Rol sin nombre (#7)")).toBeInTheDocument();
+  });
+
+  it("lo manda a su propia ruta, y antes que el resto del perfil", async () => {
+    // The order, recorded rather than inferred. Both calls happening is not the
+    // property: which one goes first decides what a cancelled dialog leaves
+    // behind.
+    const orden: string[] = [];
+    asignarRol.mockImplementation(async () => { orden.push("rol"); return { status: 204 }; });
+    editUsuario.mockImplementation(async () => { orden.push("perfil"); return {}; });
+
+    const { user, setOpen, onSuccess } = abrir(cuenta(OTRA_PERSONA));
+
+    await user.click(await screen.findByText("Coordinador"));
+    await user.click(await screen.findByText("Administrador"));
+    await user.click(guardar());
+
+    await waitFor(() => expect(asignarRol).toHaveBeenCalledWith(OTRA_PERSONA, ADMINISTRADOR));
+    expect(orden).toEqual(["rol", "perfil"]);
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("Usuario actualizado"));
+    expect(setOpen).toHaveBeenCalledWith(false);
+    expect(onSuccess).toHaveBeenCalled();
+  });
+
+  it("no lo manda cuando el rol no ha cambiado", async () => {
+    // Not an optimisation. That route asks for the password on every request,
+    // so posting the role alongside every save would open the reauthentication
+    // dialog on somebody correcting a telephone number — which is the prompt
+    // this whole piece of work exists to remove.
+    const { user } = abrir(cuenta(OTRA_PERSONA));
+
+    await user.type(screen.getByLabelText(/^Teléfono/), "1");
+    await user.click(guardar());
+
+    await waitFor(() => expect(editUsuario).toHaveBeenCalledTimes(1));
+    expect(asignarRol).not.toHaveBeenCalled();
+  });
+
+  it("si el rol se rechaza, no guarda nada más y no dice que se actualizó", async () => {
+    // Cancelling the dialog is the everyday case, and it arrives here as a
+    // refusal carrying the interceptor's own sentence. Nothing may be written
+    // after it: a profile saved behind a cancelled confirmation is the
+    // half-done save reported as a whole one.
+    asignarRol.mockResolvedValue({
+      status: 403,
+      message: "Se canceló la confirmación de identidad.",
+    });
+
+    const { user, setOpen, onSuccess } = abrir(cuenta(OTRA_PERSONA));
+
+    await user.click(await screen.findByText("Coordinador"));
+    await user.click(await screen.findByText("Administrador"));
+    await user.click(guardar());
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith("Se canceló la confirmación de identidad."));
+    expect(editUsuario).not.toHaveBeenCalled();
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(setOpen).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+  });
+
+  it("si el perfil falla con el rol ya movido, lo dice en vez de callarlo", async () => {
+    // The half no ordering can avoid: two requests can disagree. The person has
+    // to be told which of the two landed, or they retry a save whose role half
+    // already happened and read the second dialog as evidence that the first
+    // one did nothing.
+    editUsuario.mockRejectedValue(new Error("network down"));
+
+    const { user, setOpen } = abrir(cuenta(OTRA_PERSONA));
+
+    await user.click(await screen.findByText("Coordinador"));
+    await user.click(await screen.findByText("Administrador"));
+    await user.click(guardar());
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    const dicho = String((toast.error as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0]);
+    expect(dicho).toContain("El rol sí se cambió");
+    expect(dicho).toContain("No se pudo guardar");
+    expect(toast.success).not.toHaveBeenCalled();
+    // Still open, on everything that was typed: this is the save to retry.
+    expect(setOpen).not.toHaveBeenCalled();
+  });
+
+  it("en la cuenta propia no ofrece el rol, y dice por qué", async () => {
+    // The server refuses this route against the caller's own row
+    // unconditionally — 403 even when the role sent is the one already stored.
+    // A picker that takes a choice and then refuses it on save is worse than
+    // one that never takes it, so the field is shown and not offered, with the
+    // reason where the control was.
+    const { user } = abrir(cuenta(YO), YO);
+
+    expect(await screen.findByText(/Nadie puede cambiar su propio rol/)).toBeInTheDocument();
+    expect(screen.queryByText("Seleccionar rol...")).toBeNull();
+    const campo = screen.getByLabelText(/^Rol/);
+    expect(campo).toBeDisabled();
+    expect(campo).toHaveValue("Coordinador");
+
+    await user.click(guardar());
+
+    await waitFor(() => expect(editUsuario).toHaveBeenCalledTimes(1));
+    expect(asignarRol).not.toHaveBeenCalled();
+  });
+});
+
+// The sheet opens on `seguridad` — handing out accounts. Seeing the roles and
+// changing somebody's are `roles.ver` and `roles.editar`, separate on purpose.
+// Without them the list was asked for anyway and refused, so every opening of
+// an edit that was perfectly allowed began with an error notice over a role
+// field that looked empty and required.
+describe("editar una cuenta sin los permisos de roles", () => {
+  const OTRA_PERSONA = 99;
+  const cuenta = (extra: Partial<UsuarioInterface> = {}): UsuarioInterface => ({
+    id: 40, name: "Ada", lastname: "Lovelace", birthday: new Date("1990-01-01"),
+    image: "", phone: "700", user: "ada", pass: "", id_rol: 3,
+    rol: { id: 3, name: "Coordinador", description: "" },
+    ...extra,
+  });
+  const abrir = (usuario = cuenta()) => {
+    render(conSesion(<UsuarioSheet usuario={usuario} open setOpen={vi.fn()} onSuccess={vi.fn()} />, OTRA_PERSONA));
+    return userEvent.setup();
+  };
+
+  it("sin poder ver roles: no pide la lista, no avisa de nada y enseña el rol que tiene", async () => {
+    puedeConRoles({ ver: false, editar: false });
+    abrir();
+
+    expect(await screen.findByLabelText(/^Rol/)).toHaveValue("Coordinador");
+    expect(screen.getByLabelText(/^Rol/)).toBeDisabled();
+    expect(screen.getByText(/necesita el permiso de ver y editar roles/i)).toBeInTheDocument();
+    expect(getRol).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("pudiendo verlos pero no cambiarlos: lo enseña, no lo ofrece", async () => {
+    // Offered, the picker accepted a choice the server then refused with a
+    // sentence that named no permission.
+    puedeConRoles({ ver: true, editar: false });
+    getRol.mockResolvedValue([
+      { id: 3, name: "Coordinador", description: "" },
+      { id: 5, name: "Administrador", description: "" },
+    ]);
+    abrir();
+
+    expect(await screen.findByLabelText(/^Rol/)).toHaveValue("Coordinador");
+    expect(screen.queryByText("Seleccionar rol...")).toBeNull();
+  });
+
+  it("guarda el resto del perfil, y no toca el rol", async () => {
+    puedeConRoles({ ver: false, editar: false });
+    editUsuario.mockResolvedValue({});
+    const user = abrir();
+    const telefono = await screen.findByLabelText(/^Teléfono/);
+
+    await user.clear(telefono);
+    await user.type(telefono, "711");
+    await user.click(screen.getByRole("button", { name: /^guardar/i }));
+
+    await waitFor(() => expect(editUsuario).toHaveBeenCalledTimes(1));
+    expect(editUsuario.mock.calls[0][0]).toMatchObject({ phone: "711", id_rol: 3 });
+    expect(asignarRol).not.toHaveBeenCalled();
+    expect(toast.success).toHaveBeenCalledWith("Usuario actualizado");
+  });
+
+  it("le da nombre al rol que no lo tiene, también cuando viene vacío y no nulo", async () => {
+    // `??` catches a null name and lets an empty one through as a blank field.
+    puedeConRoles({ ver: false, editar: false });
+    abrir(cuenta({ id_rol: 7, rol: { id: 7, name: "  ", description: "" } }));
+
+    expect(await screen.findByLabelText(/^Rol/)).toHaveValue("Rol sin nombre (#7)");
   });
 });

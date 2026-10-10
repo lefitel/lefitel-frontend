@@ -11,9 +11,7 @@ import { Building2Icon, MapPinIcon, AlertTriangleIcon } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import {
-    Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter, SheetDescription,
-} from "../../../components/ui/sheet";
+import FormDialog from "../../../components/dialogs/FormDialog";
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
     AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -24,12 +22,17 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
+import { useRegistroEnlazado, type RegistroEnlazado } from "./useRegistroEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { mensajeDeError } from "../../../api/descarga";
 
-interface Props { innerTab: InnerTab; }
+interface Props {
+    innerTab: InnerTab;
+    /** The record the address asks for, when it is one of this catalogue's. */
+    enlace?: RegistroEnlazado;
+}
 
-const PropietarioSec = ({ innerTab }: Props) => {
+const PropietarioSec = ({ innerTab, enlace }: Props) => {
     const { sesion } = useContext(SesionContext);
     const rol = sesion.usuario.id_rol;
 
@@ -103,6 +106,11 @@ const PropietarioSec = ({ innerTab }: Props) => {
         setSheetOpen(true);
     }, []);
 
+    useRegistroEnlazado({
+        enlace, activos: list, archivados: archivedList,
+        abrir: can(rol, "parametros", "editar") ? openEdit : undefined,
+    });
+
     const openAdd = () => {
         setSelected(null);
         setName("");
@@ -112,7 +120,7 @@ const PropietarioSec = ({ innerTab }: Props) => {
     const handleClose = () => { setSheetOpen(false); setSelected(null); };
 
     const handleSave = async () => {
-        if (!name.trim()) return toast.warning("El nombre es requerido");
+        if (!name.trim()) return;
         setSaving(true);
         const payload: PropietarioInterface = { ...selected, name };
         try {
@@ -290,28 +298,24 @@ const PropietarioSec = ({ innerTab }: Props) => {
 
             {can(rol, "parametros", "editar") && (
                 <>
-                    <Sheet open={sheetOpen} onOpenChange={(v) => { if (!v) handleClose(); }}>
-                        <SheetContent>
-                            <SheetHeader>
-                                <SheetTitle>{selected?.id ? "Editar Propietario" : "Nuevo Propietario"}</SheetTitle>
-                                <SheetDescription>Completa los campos y guarda los cambios.</SheetDescription>
-                            </SheetHeader>
-                            <div className="flex-1 overflow-y-auto flex flex-col gap-4 px-4 py-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <Label htmlFor="prop-name">Nombre</Label>
-                                    <Input id="prop-name" value={name} onChange={(e) => setName(e.target.value)} />
-                                </div>
-                            </div>
-                            <SheetFooter className="flex justify-end px-4">
-                                <div className="flex gap-2">
-                                    <Button variant="outline" size="sm" onClick={handleClose} disabled={saving}>Cancelar</Button>
-                                    <Button size="sm" onClick={handleSave} disabled={saving}>
-                                        {saving ? "Guardando..." : "Guardar"}
-                                    </Button>
-                                </div>
-                            </SheetFooter>
-                        </SheetContent>
-                    </Sheet>
+                    <FormDialog
+                        open={sheetOpen}
+                        onClose={handleClose}
+                        size="sm"
+                        title={selected?.id ? "Editar Propietario" : "Nuevo Propietario"}
+                        description="Se elige al registrar un poste."
+                        dirty={name !== (selected?.name ?? "")}
+                        missing={[!name.trim() && "Nombre"].filter((c): c is string => !!c)}
+                        saving={saving}
+                        submitLabel={selected?.id ? "Guardar cambios" : "Crear propietario"}
+                        onSubmit={handleSave}
+                        bodyClassName="flex flex-col gap-4"
+                    >
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="prop-name">Nombre <span className="text-destructive">*</span></Label>
+                            <Input id="prop-name" value={name} onChange={(e) => setName(e.target.value)} />
+                        </div>
+                    </FormDialog>
 
                     <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
                         <AlertDialogContent>

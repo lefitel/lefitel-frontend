@@ -58,8 +58,15 @@ const LoginPage = () => {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const fromPath = (location.state as { from?: { pathname?: string } })?.from?.pathname;
-  const from = !fromPath || fromPath === "/login" ? "/app/home" : fromPath;
+  // The whole address, not only its path. `PrivateRoutes` hands over the full
+  // location, and this kept `pathname` alone — so the link in the verification
+  // email, `/app/perfil#verify_email=TOKEN`, opened in a browser with no
+  // session came back from the login as a bare `/app/perfil`, with nothing
+  // verified and nothing said. Same for any address carrying a query.
+  const desde = (location.state as { from?: { pathname?: string; search?: string; hash?: string } })?.from;
+  const from = !desde?.pathname || desde.pathname === "/login"
+    ? "/app/home"
+    : `${desde.pathname}${desde.search ?? ""}${desde.hash ?? ""}`;
 
   // Salir de la página con el diálogo del sistema abierto lo deja huérfano:
   // la librería lo aborta desde un singleton, y cancelarlo aquí es lo único
@@ -121,7 +128,7 @@ const LoginPage = () => {
        * kept passing because its harness drew `/segundo-factor` without the
        * guard in front of it.
        */
-      setSesion({ usuario: yo.usuario, permisos: yo.permisos, estado: "parcial", autenticado: false });
+      setSesion({ usuario: yo.usuario, permisos: yo.permisos, estado: "parcial", metodos: yo.metodos, autenticado: false });
       return navigate("/segundo-factor", { replace: true, state: { from } });
     }
 

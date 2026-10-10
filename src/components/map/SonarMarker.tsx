@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Marker, Popup } from "@vis.gl/react-maplibre";
+import { MAP_RADIUS, MAP_WEIGHT } from "./mapConstants";
 
 interface SonarMarkerProps {
   /** Latitude first, the way the screens already write it. */
@@ -25,8 +26,8 @@ export function SonarMarker({
   fillColor,
   strokeColor,
   rgb,
-  dotRadius = 8,
-  weight = 1.5,
+  dotRadius = MAP_RADIUS.main,
+  weight = MAP_WEIGHT.main,
   popupMinWidth = 240,
   children,
 }: SonarMarkerProps) {
@@ -40,6 +41,13 @@ export function SonarMarker({
         longitude={center[1]}
         latitude={center[0]}
         anchor="center"
+        // Above every other dot, always. Markers carry no order of their own and
+        // stack as they are inserted, so the neighbours of a stretch — which load
+        // after the subject — were landing on top of it. And no pointer events
+        // on the wrapper: it is the size of the ripple, and raised like this it
+        // would swallow the clicks of every dot within 48 px. Only the dot
+        // itself takes them.
+        style={{ zIndex: 1, pointerEvents: "none" }}
         onClick={(e) => {
           e.originalEvent?.stopPropagation();
           if (children) setOpen(true);
@@ -52,7 +60,7 @@ export function SonarMarker({
             height: areaPx,
             ["--dot" as string]: `${dotPx}px`,
             ["--rgb" as string]: rgb,
-            cursor: children ? "pointer" : "default",
+            pointerEvents: "none",
           }}
         >
           <span className="sonar-ring sonar-ring-1" />
@@ -66,6 +74,13 @@ export function SonarMarker({
               height: dotPx,
               background: fillColor,
               border: `${weight}px solid ${strokeColor}`,
+              // The border outside the radius, as `MapPoint` draws it. Under
+              // the page's `border-box` it went inside, so the same radius gave
+              // a smaller dot here than there — and this is the one that has
+              // to be the largest on the map.
+              boxSizing: "content-box",
+              pointerEvents: "auto",
+              cursor: children ? "pointer" : "default",
             }}
           />
         </div>

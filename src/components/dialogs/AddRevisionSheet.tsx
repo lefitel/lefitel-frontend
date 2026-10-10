@@ -3,13 +3,9 @@ import { toast } from "sonner";
 import { createRevision } from "../../api/Revision.api";
 import { mensajeDeError } from "../../api/descarga";
 import { DatePicker } from "../ui/date-picker";
-import { Loader2Icon } from "lucide-react";
-import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { Label } from "../ui/label";
-import {
-    Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../ui/sheet";
+import FormDialog from "./FormDialog";
 
 interface Props {
     eventoId: number | null;
@@ -68,14 +64,19 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
     };
 
     return (
-        <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-            <SheetContent className="flex flex-col gap-0 p-0">
-                <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-                    <SheetTitle>Agregar Revisión</SheetTitle>
-                    <SheetDescription>Registra una nueva revisión para este evento.</SheetDescription>
-                </SheetHeader>
-
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+        <FormDialog
+            open={open}
+            onClose={handleClose}
+            size="sm"
+            title="Agregar revisión"
+            description="Registra una nueva revisión para este evento."
+            dirty={!!description.trim()}
+            missing={description.trim() ? [] : ["Descripción"]}
+            saving={saving}
+            submitLabel="Guardar revisión"
+            onSubmit={() => void handleSave()}
+            bodyClassName="space-y-5"
+        >
                     <div className="space-y-1.5">
                         <Label>Fecha</Label>
                         <DatePicker value={date} onSelect={(d) => d && setDate(d)} />
@@ -90,20 +91,6 @@ export default function AddRevisionSheet({ eventoId, open, setOpen, onSuccess }:
                         />
                         {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
                     </div>
-                </div>
-
-                <SheetFooter className="px-6 py-4 border-t border-border/40">
-                    <Button variant="outline" onClick={handleClose} disabled={saving}>
-                        Cancelar
-                    </Button>
-                    <Button
-                        onClick={handleSave}
-                        disabled={saving}
-                    >
-                        {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Guardar revisión"}
-                    </Button>
-                </SheetFooter>
-            </SheetContent>
-        </Sheet>
+        </FormDialog>
     );
 }

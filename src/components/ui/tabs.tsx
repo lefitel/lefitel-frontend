@@ -1,7 +1,15 @@
 import * as React from "react";
 import { motion, AnimatePresence, LayoutGroup } from "motion/react";
-import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
+
+// ─── Shared skin ──────────────────────────────────────────────────────────────
+// The pill-in-a-track drawing, shared with SegmentedControl so both stay one shape.
+
+// Dark flips the pair: a well darker than any surface it sits on, and a thumb lighter than
+// the card. The hairline keeps the well visible on the page ground, which is the same colour.
+export const pillTrack = "rounded-full bg-muted dark:bg-background dark:inset-ring dark:inset-ring-border/60";
+export const pillThumb = "absolute inset-0 z-0 rounded-full bg-background shadow-sm dark:bg-accent";
+export const pillSpring = { type: "spring", stiffness: 380, damping: 32 } as const;
 
 // ─── Context ──────────────────────────────────────────────────────────────────
 
@@ -10,7 +18,6 @@ interface TabsContextValue {
   setValue: (v: string) => void;
   groupId: string;
   orientation: "horizontal" | "vertical";
-  variant: "default" | "line";
 }
 
 const TabsContext = React.createContext<TabsContextValue | null>(null);
@@ -52,22 +59,13 @@ function Tabs({
     [isControlled, onValueChange]
   );
 
-  // variant gets injected by TabsList children (default unless TabsList specifies "line")
-  const [variant, setVariant] = React.useState<"default" | "line">("default");
-
   const ctx = React.useMemo(
-    () => ({ value, setValue, groupId, orientation, variant }),
-    [value, setValue, groupId, orientation, variant]
-  );
-
-  // expose setVariant via internal context (pasamos por children)
-  const ctxWithSetter = React.useMemo(
-    () => ({ ...ctx, _setVariant: setVariant }),
-    [ctx]
+    () => ({ value, setValue, groupId, orientation }),
+    [value, setValue, groupId, orientation]
   );
 
   return (
-    <TabsContext.Provider value={ctxWithSetter as unknown as TabsContextValue}>
+    <TabsContext.Provider value={ctx}>
       <LayoutGroup id={groupId}>
         <div
           data-slot="tabs"
@@ -87,39 +85,18 @@ function Tabs({
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-const tabsListVariants = cva(
-  "group/tabs-list relative inline-flex w-fit items-center justify-center rounded-lg p-[2px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col data-[variant=line]:rounded-none",
-  {
-    variants: {
-      variant: {
-        default: "bg-muted",
-        line: "gap-1 bg-transparent",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-    },
-  }
-);
-
-interface TabsListProps
-  extends React.HTMLAttributes<HTMLDivElement>,
-    VariantProps<typeof tabsListVariants> {}
-
-function TabsList({ className, variant = "default", ...props }: TabsListProps) {
-  const ctx = useTabsContext("TabsList");
-  // sync variant up to context
-  const setVariant = (ctx as unknown as { _setVariant: (v: "default" | "line") => void })._setVariant;
-  React.useEffect(() => {
-    setVariant?.(variant ?? "default");
-  }, [variant, setVariant]);
+function TabsList({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  useTabsContext("TabsList");
 
   return (
     <div
       role="tablist"
       data-slot="tabs-list"
-      data-variant={variant}
-      className={cn(tabsListVariants({ variant }), className)}
+      className={cn(
+        "group/tabs-list relative inline-flex w-fit items-center justify-center p-[2px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
+        pillTrack,
+        className
+      )}
       {...props}
     />
   );
@@ -147,7 +124,7 @@ function TabsTrigger({ className, value, children, onClick, ...props }: TabsTrig
         onClick?.(e);
       }}
       className={cn(
-        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent px-3 py-0.5 text-sm font-medium whitespace-nowrap transition-colors group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative inline-flex h-[calc(100%-1px)] flex-1 items-center justify-center gap-1.5 rounded-full border border-transparent px-3 py-0.5 text-sm font-medium whitespace-nowrap transition-colors group-data-[orientation=vertical]/tabs:w-full group-data-[orientation=vertical]/tabs:justify-start focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         isActive
           ? "text-foreground"
           : "text-foreground/60 hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground",
@@ -156,18 +133,11 @@ function TabsTrigger({ className, value, children, onClick, ...props }: TabsTrig
       {...props}
     >
       {/* Animated highlighter — only rendered on active tab; layoutId drives the slide */}
-      {isActive && ctx.variant === "default" && (
+      {isActive && (
         <motion.span
           layoutId={`tabs-highlighter-${ctx.groupId}`}
-          className="absolute inset-0 rounded-md bg-background shadow-sm dark:bg-card z-0"
-          transition={{ type: "spring", stiffness: 380, damping: 32 }}
-        />
-      )}
-      {isActive && ctx.variant === "line" && (
-        <motion.span
-          layoutId={`tabs-underline-${ctx.groupId}`}
-          className="absolute inset-x-0 -bottom-1.25 h-0.5 bg-foreground"
-          transition={{ type: "spring", stiffness: 380, damping: 32 }}
+          className={pillThumb}
+          transition={pillSpring}
         />
       )}
       <span className="relative z-10 inline-flex items-center gap-1.5">
@@ -207,4 +177,4 @@ function TabsContent({ className, value, children }: TabsContentProps) {
   );
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants };
+export { Tabs, TabsList, TabsTrigger, TabsContent };

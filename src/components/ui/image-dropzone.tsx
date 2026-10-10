@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { CameraIcon, ImageIcon, UploadCloudIcon, XIcon } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CameraIcon, ImageIcon, ImageOffIcon, UploadCloudIcon, XIcon } from "lucide-react";
 
 interface ImageDropzoneProps {
   file: File | null;
@@ -36,7 +36,25 @@ export function ImageDropzone({ file, onChange, existingUrl, error, readOnly }: 
   const preview = useMemo(() => (file ? URL.createObjectURL(file) : null), [file]);
   useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
 
-  const shown = preview ?? existingUrl;
+  /**
+   * The address that failed to load, when one did.
+   *
+   * A stored photo whose file is gone used to be drawn anyway: the browser's
+   * broken-image icon beside the word "preview", which was the `alt`. Keeping
+   * the address rather than a flag means a new file, or a different stored
+   * photo, starts clean without an effect to reset it.
+   */
+  const [rota, setRota] = useState<string | null>(null);
+  const candidata = preview ?? existingUrl;
+  const noCarga = !!candidata && rota === candidata;
+  const shown = noCarga ? undefined : candidata;
+
+  const aviso = noCarga && (
+    <p className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+      <ImageOffIcon className="h-4 w-4 shrink-0" />
+      La foto guardada no se pudo cargar.{readOnly ? "" : " Puedes subir otra."}
+    </p>
+  );
 
   const take = (e: React.ChangeEvent<HTMLInputElement>) => {
     onChange(e.target.files?.[0] ?? null);
@@ -52,13 +70,20 @@ export function ImageDropzone({ file, onChange, existingUrl, error, readOnly }: 
   };
 
   if (readOnly) {
+    if (noCarga) return aviso;
     return existingUrl ? (
-      <img src={existingUrl} alt="preview" className="w-full h-auto block rounded-lg border border-border" />
+      <img
+        src={existingUrl}
+        alt="Foto"
+        onError={() => setRota(existingUrl)}
+        className="w-full h-auto block rounded-lg border border-border"
+      />
     ) : null;
   }
 
   return (
     <div className="space-y-1.5">
+      {aviso}
       {/* `capture` opens the rear camera straight away; the second input is the
           way back to photos already taken, which `capture` alone would close off. */}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={take} />
@@ -71,7 +96,7 @@ export function ImageDropzone({ file, onChange, existingUrl, error, readOnly }: 
             onDragOver={(e) => e.preventDefault()}
             onDrop={handleDrop}
           >
-            <img src={shown} alt="preview" className="w-full h-auto block" />
+            <img src={shown} alt="Foto" onError={() => setRota(shown)} className="w-full h-auto block" />
 
             {/* A real button, so it answers the keyboard too — it used to be a
                 div with an onClick. Only where there is a pointer to hover

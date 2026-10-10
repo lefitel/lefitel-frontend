@@ -1,6 +1,7 @@
 import * as React from "react";
 import { motion, LayoutGroup } from "motion/react";
 import { cn } from "@/lib/utils";
+import { pillSpring, pillThumb, pillTrack } from "./tabs";
 
 export interface SegmentedControlOption<T extends string> {
   value: T;
@@ -41,7 +42,8 @@ export function SegmentedControl<T extends string>({
         role="tablist"
         aria-label={ariaLabel}
         className={cn(
-          "inline-flex items-center rounded-lg bg-muted p-0.5 gap-0.5",
+          "inline-flex items-center p-0.5 gap-0.5",
+          pillTrack,
           heightClass,
           scrollable && "overflow-x-auto max-w-full no-scrollbar",
           className
@@ -57,7 +59,7 @@ export function SegmentedControl<T extends string>({
               aria-selected={isActive}
               onClick={() => onValueChange(opt.value)}
               className={cn(
-                "relative inline-flex items-center justify-center gap-1.5 rounded-md px-2 sm:px-3 font-medium whitespace-nowrap shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+                "relative inline-flex items-center justify-center gap-1.5 rounded-full px-2 sm:px-3 font-medium whitespace-nowrap shrink-0 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
                 buttonHeight,
                 textClass,
                 isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -66,8 +68,8 @@ export function SegmentedControl<T extends string>({
               {isActive && (
                 <motion.span
                   layoutId={`seg-highlight-${groupId}`}
-                  className="absolute inset-0 rounded-md bg-background shadow-sm dark:bg-card z-0"
-                  transition={{ type: "spring", stiffness: 380, damping: 32 }}
+                  className={pillThumb}
+                  transition={pillSpring}
                 />
               )}
               <span className="relative z-10 inline-flex items-center gap-1.5">

@@ -13,25 +13,21 @@
 // the panel must take its shape from the server's answer rather than from a
 // list of its own — the whole reason the vocabulary travels with the data is
 // that a module added later appears here without anybody remembering to add it.
+//
+// The grid does not load or save any more: it is one part of a role's form,
+// which holds both. So what is asserted here is what it draws and what it
+// reports as changed; what goes on the wire is pinned in `RolDialog.test.tsx`.
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { describe, it, expect, beforeEach } from "vitest";
+import { useState } from "react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SesionContext, type contextProps } from "../context/SesionContext";
 import type { SesionInterface } from "../interfaces/interfaces";
+import type { MatrizPermisos } from "../api/Permisos.api";
 import { setPermisos, olvidarPermisos, sinPermisos } from "../lib/permissions";
+import { cambiosDePermisos, type PermisosPendientes as Pending } from "../lib/roles";
 import PermisosPanel from "./PermisosPanel";
-
-const getMatrizPermisos = vi.hoisted(() => vi.fn());
-const savePermisos = vi.hoisted(() => vi.fn());
-const toastError = vi.hoisted(() => vi.fn());
-const toastSuccess = vi.hoisted(() => vi.fn());
-const toastWarning = vi.hoisted(() => vi.fn());
-
-vi.mock("../api/Permisos.api", () => ({ getMatrizPermisos, savePermisos }));
-vi.mock("sonner", () => ({
-  toast: { error: toastError, success: toastSuccess, warning: toastWarning },
-}));
 
 const MI_ROL = 1;
 const OTRO_ROL = 3;
@@ -58,20 +54,49 @@ function matriz() {
       { key: "editar", label: "Editar" },
       { key: "archivar", label: "Archivar" },
     ],
+    // Two roles, and they differ in every cell of the first row. With only one
+    // in here, a grid that ignored which role it was given and read the only
+    // one there would have passed every test in this file.
     permisos: {
+      [MI_ROL]: {
+        postes: { ver: false, crear: true, editar: true, archivar: true },
+        archivos: { ver: true, archivar: true },
+        bitacora: { ver: true },
+      },
       [OTRO_ROL]: {
         postes: { ver: true, crear: false, editar: false, archivar: false },
         archivos: { ver: false, archivar: false },
         bitacora: { ver: false },
       },
     },
-  };
+  } as unknown as MatrizPermisos;
 }
 
-function renderPanel() {
+/** What the form around the grid would be holding. */
+let pendiente: Pending = {};
+
+/**
+ * The grid of one role, held the way its form holds it. Somebody else's unless
+ * a test says otherwise: the panel refuses to edit the reader's own, so every
+ * test that ticks a box has to be looking at another one.
+ */
+function renderPanel(rolId = OTRO_ROL, disabled = false) {
+  const Formulario = () => {
+    const [pending, setPending] = useState<Pending>({});
+    pendiente = pending;
+    return (
+      <PermisosPanel
+        matriz={matriz()}
+        rolId={rolId}
+        pending={pending}
+        onPendingChange={setPending}
+        disabled={disabled}
+      />
+    );
+  };
   render(
     <SesionContext.Provider value={{ sesion } as unknown as contextProps}>
-      <PermisosPanel />
+      <Formulario />
     </SesionContext.Provider>,
   );
 }
@@ -87,43 +112,23 @@ function puedeEditarPermisos() {
 /** The row of the grid for a module, found by its visible label. */
 const filaDe = (label: string) => screen.getByRole("row", { name: new RegExp(label, "i") });
 
-/**
- * Move off your own role before editing anything.
- *
- * The panel opens on the first role the server sent, which is the lowest id and
- * in practice the administrator's own — and it refuses to edit that one, because
- * unticking your own access to this screen is the one mistake with no way back.
- * So every test that saves has to do what an administrator does: pick somebody
- * else's role first.
- */
-async function irAlRolCliente(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(await screen.findByRole("tab", { name: /cliente/i }));
-}
-
 beforeEach(() => {
   olvidarPermisos();
   setPermisos(MI_ROL, puedeEditarPermisos());
-  getMatrizPermisos.mockReset();
-  savePermisos.mockReset();
-  toastError.mockReset();
-  toastSuccess.mockReset();
-  toastWarning.mockReset();
-  getMatrizPermisos.mockResolvedValue(matriz());
-  savePermisos.mockResolvedValue({ status: 200 });
+  pendiente = {};
 });
 
 describe("the grid takes its shape from the server", () => {
-  it("draws a row per module the server sent", async () => {
+  it("draws a row per module the server sent", () => {
     renderPanel();
 
-    expect(await screen.findByText("Postes")).toBeInTheDocument();
+    expect(screen.getByText("Postes")).toBeInTheDocument();
     expect(screen.getByText("Archivos")).toBeInTheDocument();
     expect(screen.getByText("Bitácora")).toBeInTheDocument();
   });
 
-  it("draws a box only where the module has that action", async () => {
+  it("draws a box only where the module has that action", () => {
     renderPanel();
-    await screen.findByText("Postes");
 
     // Four verbs, four boxes.
     expect(within(filaDe("Postes")).getAllByRole("checkbox")).toHaveLength(4);
@@ -133,17 +138,16 @@ describe("the grid takes its shape from the server", () => {
     expect(within(filaDe("Bitácora")).getAllByRole("checkbox")).toHaveLength(1);
   });
 
-  it("marks the cell as not applicable, with no checkbox in it", async () => {
+  it("marks the cell as not applicable, with no checkbox in it", () => {
     // The distinction this whole file exists for, asserted on the cell rather
     // than on the box. A disabled checkbox reads as "not granted yet, somebody
     // enable this" and the administrator waits for it; an empty cell says there
     // is nothing to grant.
     //
-    // Deliberately not asserted as "the remaining box is enabled": the panel
-    // opens on the reader's own role and disables every box there, so that
-    // assertion would pass or fail on a different rule entirely.
+    // Deliberately not asserted as "the remaining box is enabled": whether a
+    // box can be ticked is a different rule — whose role this is, and what the
+    // reader may do — with tests of its own below.
     renderPanel();
-    await screen.findByText("Bitácora");
 
     // One label cell plus one per verb.
     const celdas = within(filaDe("Bitácora")).getAllByRole("cell");
@@ -157,20 +161,49 @@ describe("the grid takes its shape from the server", () => {
       expect(within(celda).getByLabelText("No aplica")).toBeInTheDocument();
     }
   });
+
+  it("shows the boxes of the role it was given, and no other's", () => {
+    renderPanel(OTRO_ROL);
+
+    // This role's row, which is the reverse of the other one's in every cell.
+    const cajas = within(filaDe("Postes")).getAllByRole("checkbox");
+    expect(cajas.map((c) => (c as HTMLInputElement).getAttribute("aria-checked"))).toEqual(
+      ["true", "false", "false", "false"],
+    );
+  });
+
+  it("shows the other role's boxes when it is given the other role", () => {
+    renderPanel(MI_ROL);
+
+    const cajas = within(filaDe("Postes")).getAllByRole("checkbox");
+    expect(cajas.map((c) => (c as HTMLInputElement).getAttribute("aria-checked"))).toEqual(
+      ["false", "true", "true", "true"],
+    );
+  });
 });
 
-describe("what reaches the server", () => {
-  it("sends only the cell that was ticked", async () => {
+describe("what it reports as changed", () => {
+  it("reports only the cell that was ticked", async () => {
     renderPanel();
-    await screen.findByText("Postes");
     const user = userEvent.setup();
 
-    await irAlRolCliente(user);
     await user.click(within(filaDe("Archivos")).getAllByRole("checkbox")[0]);
-    await user.click(screen.getByRole("button", { name: /guardar/i }));
 
-    await waitFor(() => expect(savePermisos).toHaveBeenCalled());
-    expect(savePermisos.mock.calls[0][1]).toEqual({ archivos: { ver: true } });
+    expect(pendiente).toEqual({ "archivos.ver": true });
+  });
+
+  it("drops a cell ticked back to where it started", async () => {
+    // Otherwise the form would say there is something to lose, and send a
+    // change that changes nothing.
+    renderPanel();
+    const user = userEvent.setup();
+    const caja = within(filaDe("Postes")).getAllByRole("checkbox")[0];
+
+    await user.click(caja);
+    expect(pendiente).toEqual({ "postes.ver": false });
+
+    await user.click(caja);
+    expect(pendiente).toEqual({});
   });
 
   it("never names a cell the module does not have", async () => {
@@ -184,31 +217,37 @@ describe("what reaches the server", () => {
     // has one box or four, so it could never observe the failure it is named
     // after. An audit caught it by moving the click; this is that move, kept.
     renderPanel();
-    await screen.findByText("Bitácora");
     const user = userEvent.setup();
 
-    await irAlRolCliente(user);
     const cajas = within(filaDe("Bitácora")).getAllByRole("checkbox");
     expect(cajas).toHaveLength(1);
 
     await user.click(cajas[cajas.length - 1]);
-    await user.click(screen.getByRole("button", { name: /guardar/i }));
 
-    await waitFor(() => expect(savePermisos).toHaveBeenCalled());
-    const enviado = savePermisos.mock.calls[0][1] as Record<string, Record<string, boolean>>;
-    expect(Object.keys(enviado.bitacora ?? {})).toEqual(["ver"]);
+    expect(Object.keys(pendiente)).toEqual(["bitacora.ver"]);
   });
 
-  it("does not offer to edit the reader's own role", async () => {
-    // The panel opens on the first role the server sent, which is the reader's
-    // own here. The server refuses that with a 409, and offering a box it will
-    // reject is how an administrator learns to distrust the screen.
+  it("groups what changed by module, the way the server takes it", () => {
+    expect(cambiosDePermisos({
+      "postes.crear": true, "postes.archivar": false, "archivos.ver": true,
+    })).toEqual({
+      postes: { crear: true, archivar: false },
+      archivos: { ver: true },
+    });
+    expect(cambiosDePermisos({})).toEqual({});
+  });
+});
+
+describe("who may tick a box", () => {
+  it("does not offer to edit the reader's own role", () => {
+    // Shown the reader's own role. The server refuses that with a 409, and
+    // offering a box it will reject is how an administrator learns to distrust
+    // the screen.
     //
     // Both this and the test below were missing entirely: an audit deleted each
-    // half of `disabled={!puedeEditar || esPropioRol || saving}` in turn and the
-    // six tests here stayed green through both.
-    renderPanel();
-    await screen.findByText("Postes");
+    // half of `disabled={!puedeEditar || esPropioRol || disabled}` in turn and
+    // the six tests here stayed green through both.
+    renderPanel(MI_ROL);
 
     for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
       expect(caja).toBeDisabled();
@@ -216,35 +255,29 @@ describe("what reaches the server", () => {
     expect(screen.getByText(/no puedes cambiarlos/i)).toBeInTheDocument();
   });
 
-  it("does not offer to edit anything to somebody who may only look", async () => {
+  it("does not offer to edit anything to somebody who may only look", () => {
     const solo = sinPermisos();
     solo.roles.ver = true;
     setPermisos(MI_ROL, solo);
     renderPanel();
-    await screen.findByText("Postes");
-    const user = userEvent.setup();
 
-    await irAlRolCliente(user);
     for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
       expect(caja).toBeDisabled();
     }
     expect(screen.getByText(/solo puedes consultar/i)).toBeInTheDocument();
   });
 
-  it("shows the server's refusal instead of inventing one", async () => {
-    savePermisos.mockResolvedValue({
-      status: 400,
-      message: 'El módulo "bitacora" no tiene la acción "archivar".',
-    });
-    renderPanel();
-    await screen.findByText("Postes");
-    const user = userEvent.setup();
+  it("offers them to somebody who may edit another role", () => {
+    renderPanel(OTRO_ROL);
+    for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
+      expect(caja).toBeEnabled();
+    }
+  });
 
-    await irAlRolCliente(user);
-    await user.click(within(filaDe("Postes")).getAllByRole("checkbox")[1]);
-    await user.click(screen.getByRole("button", { name: /guardar/i }));
-
-    await waitFor(() => expect(toastError).toHaveBeenCalled());
-    expect(String(toastError.mock.calls[0][0])).toContain("archivar");
+  it("holds every box still while a save is out", () => {
+    renderPanel(OTRO_ROL, true);
+    for (const caja of within(filaDe("Postes")).getAllByRole("checkbox")) {
+      expect(caja).toBeDisabled();
+    }
   });
 });

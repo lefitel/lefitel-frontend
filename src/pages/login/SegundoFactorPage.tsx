@@ -21,6 +21,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 /** The three code tabs. The passkey is a button above them, not a tab. */
 type Modo = "totp" | "correo" | "recuperacion";
 
+/** Every code tab, in the order they are drawn, with the name the server gives each. */
+const PESTANAS: { modo: Modo; metodo: string; titulo: string }[] = [
+  { modo: "totp", metodo: "totp", titulo: "Código de la app" },
+  { modo: "correo", metodo: "correo", titulo: "Código por correo" },
+  { modo: "recuperacion", metodo: "codigo", titulo: "Código de recuperación" },
+];
+
 /**
  * The second step of a login for an account that already has a factor
  * registered — reached only through `SegundoFactorRoute` in `App.tsx`, which
@@ -83,7 +90,27 @@ const SegundoFactorPage = () => {
   const location = useLocation();
   const from = (location.state as { from?: string } | null)?.from || "/app/home";
 
-  const [modo, setModo] = useState<Modo>("totp");
+  /**
+   * Only the ways in this account has. `/auth/me` lists them for a `parcial`
+   * session (`sesion.metodos`), and the screen is drawn from that list: a tab
+   * per code factor, the key button only for an account with a key, and no
+   * tab bar at all when there is a single way in.
+   *
+   * It used to draw everything for everybody and open on the authenticator
+   * app, so an account with only a verified address was asked for a code it
+   * could not produce.
+   *
+   * **No list means "not told", and everything is drawn** — a server from
+   * before this field answers that way, and hiding every door from it would
+   * lock people out of a login that works.
+   */
+  const metodos = sesion.metodos;
+  const tiene = (metodo: string) => metodos === undefined || metodos.includes(metodo);
+  const pestanas = PESTANAS.filter((p) => tiene(p.metodo));
+
+  // Open on the first one the account has. Read once: the list belongs to the
+  // session this screen was opened for and does not change under it.
+  const [modo, setModo] = useState<Modo>(() => pestanas[0]?.modo ?? "totp");
   const [codigo, setCodigo] = useState("");
   const [loading, setLoading] = useState(false);
   /**
@@ -114,6 +141,10 @@ const SegundoFactorPage = () => {
   // Una sola vez: es una propiedad del navegador, no cambia durante la vida
   // de la página.
   const [soportaLlave] = useState(() => soportaPasskeys());
+  /** The key button: the browser can, and the account has one. */
+  const ofreceLlave = soportaLlave && tiene("passkey");
+  /** A key is this account's only factor and this browser cannot run one. */
+  const soloLlaveSinSoporte = pestanas.length === 0 && !ofreceLlave;
   const [probandoLlave, setProbandoLlave] = useState(false);
 
   // Salir de la pantalla con el diálogo del sistema abierto lo deja huérfano;
@@ -319,7 +350,7 @@ const SegundoFactorPage = () => {
           </p>
         </div>
 
-        {soportaLlave && (
+        {ofreceLlave && (
           <div className="mb-6 space-y-3">
             <Button
               type="button"
@@ -338,20 +369,33 @@ const SegundoFactorPage = () => {
                 </>
               )}
             </Button>
-            <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
-              <div className="h-px flex-1 bg-border" />
-              o con un código
-              <div className="h-px flex-1 bg-border" />
-            </div>
+            {pestanas.length > 0 && (
+              <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
+                <div className="h-px flex-1 bg-border" />
+                o con un código
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
           </div>
         )}
 
+        {soloLlaveSinSoporte && (
+          <p className="mb-6 text-sm text-muted-foreground" role="status">
+            Tu cuenta se confirma con una llave de acceso, y este navegador no puede usar llaves
+            de acceso. Entrá desde el equipo o el navegador donde la registraste.
+          </p>
+        )}
+
+        {pestanas.length > 0 && (
         <Tabs value={modo} onValueChange={(v) => { setModo(v as Modo); setCodigo(""); }}>
-          <TabsList className="w-full mb-5">
-            <TabsTrigger value="totp" className="flex-1">Código de la app</TabsTrigger>
-            <TabsTrigger value="correo" className="flex-1">Código por correo</TabsTrigger>
-            <TabsTrigger value="recuperacion" className="flex-1">Código de recuperación</TabsTrigger>
-          </TabsList>
+          {/* A bar to choose from only when there is a choice. */}
+          {pestanas.length > 1 && (
+            <TabsList className="w-full mb-5">
+              {pestanas.map((p) => (
+                <TabsTrigger key={p.modo} value={p.modo} className="flex-1">{p.titulo}</TabsTrigger>
+              ))}
+            </TabsList>
+          )}
 
           <TabsContent value="totp">
             <div className="space-y-2 mb-5">
@@ -446,7 +490,12 @@ const SegundoFactorPage = () => {
             </div>
           </TabsContent>
         </Tabs>
+        )}
 
+        {/* Both belong to the code forms: with a key as the only way in there
+            is no code to verify, and the key already counts as the second
+            factor, so there is nothing to remember either. */}
+        {pestanas.length > 0 && (<>
         <label
           htmlFor="recordar-equipo"
           className="mb-5 flex items-start gap-2.5 cursor-pointer select-none"
@@ -477,6 +526,7 @@ const SegundoFactorPage = () => {
             </>
           )}
         </Button>
+        </>)}
 
         {/* The warning before the lock (plan 4E): five wrong codes lock the whole
             account, and the error sentence is the same as for a typo. */}

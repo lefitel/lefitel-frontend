@@ -10,7 +10,7 @@ import {
 } from "../../../api/Usuario.api";
 import { passwordLengthError } from "../../../lib/password";
 import { can } from "../../../lib/permissions";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
@@ -20,13 +20,14 @@ import { Label } from "../../../components/ui/label";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { ImageLightbox } from "../../../components/ui/image-viewer";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from "../../../components/ui/sheet";
+import FormDialog from "../../../components/dialogs/FormDialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "../../../components/ui/alert-dialog";
 import DataTable from "../../../components/table/DataTable";
 import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
+import { nombreDeRol } from "../../../lib/roles";
 import {
   CalendarIcon, PhoneIcon, UserIcon, ShieldIcon, MailIcon,
   PencilIcon, RefreshCwIcon, ActivityIcon, CheckCircle2Icon,
@@ -39,6 +40,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
 import { BitacoraInterface } from "../../../interfaces/interfaces";
+import { enlaceDeFila, nombreDeEntidad } from "../../../constants/bitacora";
 
 // ─── Bitácora config ───────────────────────────────────────────────────────────
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
@@ -58,13 +60,6 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
   DEFAULT:          { icon: <ActivityIcon className="h-3.5 w-3.5 text-muted-foreground" />, bg: "bg-muted" },
 };
 
-const ENTITY_ROUTES: Partial<Record<string, (id: number) => string>> = {
-  "Evento":   (id) => `/eventos/${id}`,
-  "Revisión": (id) => `/eventos/${id}`,
-  "Solución": (id) => `/eventos/${id}`,
-  "Poste":    (id) => `/postes/${id}`,
-};
-
 function calcEdad(birthday: Date | string): number {
   return Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
 }
@@ -73,7 +68,14 @@ export default function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
-  const d = useUsuarioDetalleData(Number(id));
+  // The same rule the server applies to `/usuario/:id/bitacora`: your own
+  // activity always, somebody else's with `bitacora.ver`. Read from the address
+  // and not from the loaded account, because the hook needs it before anything
+  // has loaded. Without it the sheet does not ask for the log and does not draw
+  // the block.
+  const verBitacora =
+    sesion.usuario.id === Number(id) || can(sesion.usuario.id_rol, "bitacora", "ver");
+  const d = useUsuarioDetalleData(Number(id), { verBitacora });
 
   const [openEdit, setOpenEdit]         = useState(false);
   const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null);
@@ -87,7 +89,6 @@ export default function UsuarioDetallePage() {
 
   // username form
   const [newUser, setNewUser]       = useState("");
-  const [currentPassUser, setCurrentPassUser] = useState("");
   const [savingUser, setSavingUser] = useState(false);
 
   // password form
@@ -124,12 +125,20 @@ export default function UsuarioDetallePage() {
   /** Whether this session may act on somebody else's account at all — the
    * permission the server checks on both rescue routes below. */
   const rol = sesion.usuario.id_rol;
+  /**
+   * Whether this session may change this account at all: its own, always, and
+   * anybody else's with `seguridad.editar`. It is the server's rule for the
+   * three writes behind the buttons it guards — rename, password, profile —
+   * each of which sits behind `requireSelfOrPermission("seguridad", "editar")`.
+   * The screen opens on `seguridad.ver`, and offered all three to somebody who
+   * could only look: each one opened its form, took what was typed, and ended
+   * in a 403.
+   */
+  const puedeGestionar = isOwnProfile || can(rol, "seguridad", "editar");
 
   const handleSaveUsername = async () => {
     if (!newUser.trim()) return toast.warning("El nombre de usuario no puede estar vacío");
     if (!d.usuario?.id) return;
-    if (isOwnProfile && !currentPassUser.trim()) return toast.warning("Ingresa tu contraseña actual para confirmar");
-
     setSavingUser(true);
 
     try {
@@ -140,45 +149,41 @@ export default function UsuarioDetallePage() {
     } catch { /* no existe, se puede continuar */ }
 
     /**
-     * The password travels with the change, and it is the server that checks it.
+     * The rename carries a name and no credential of its own. The step-up gate
+     * in front of `PUT /usuario/username/:id` is what proves who is asking.
      *
-     * **What this replaced, twice over.** First it called `loginUsuario` and read
-     * `auth.status === 500`: that opened a second session, and the rotation on
-     * the way in revoked the one this very tab was using; it wrote "Inició
-     * sesión" into the bitácora for a login nobody performed; a mistyped
-     * password counted as a failed login attempt, so trying a few times here
-     * **locked the account out of the ERP**; and the comparison itself was only
-     * accidentally right, since the API answered 400 and `Login.api.ts` flattens
-     * every non-2xx to 500.
+     * **What this replaced, three times over.** First this screen called
+     * `loginUsuario` and read `auth.status === 500`: that opened a second
+     * session, and the rotation on the way in revoked the one this very tab was
+     * using; it wrote "Inició sesión" into the bitácora for a login nobody
+     * performed; a mistyped password counted as a failed login attempt, so
+     * trying a few times here **locked the account out of the ERP**; and the
+     * comparison itself was only accidentally right.
      *
      * Then it asked `confirmarPassword` — an endpoint that issued nothing and
-     * answered with a field, since retired along with its wrapper — and, having
-     * been told yes, sent the rename **with no password on it at all**. Which is
-     * why the gate was worth nothing: the other screen that renames the same
-     * account, `PerfilPage`, asked for nothing and the server accepted it. A
-     * confirmation that lives only in the client is optional by definition —
-     * whoever does not want to type it uses the other screen, or `curl`.
+     * answered with a field, since retired — and, having been told yes, sent
+     * the rename **with no password on it at all**, which is why that gate was
+     * worth nothing: `PerfilPage` renamed the same account asking for nothing,
+     * and the server accepted it. A confirmation that lives only in the client
+     * is optional by definition.
      *
-     * So `updateUserName` demands it now, and this sends it. **One path and not
-     * both:** confirming first and then sending it too would compare the same
-     * password twice, out of two budgets, from two pieces of code that have to
-     * agree — and the divergence between two ways of doing one thing is the
-     * accident this whole plan has been chasing.
+     * Then the password rode along with the change as `oldPass`, and the server
+     * compared it. That was right about *where* the check belongs and wrong
+     * about how often to ask: the step-up gate was already asking for the same
+     * secret on the same request, through its own dialog, so a self-rename
+     * prompted twice for one password. Now the gate is the only asker — and it
+     * asks once per ten minutes, and takes a recently proved factor instead
+     * from an account that has one, which no box on this screen could.
      *
-     * Only when the profile is your own. Renaming somebody else is what
-     * `seguridad.editar` authorises, and there is no password here anybody could
-     * be expected to know; the server draws the same line.
+     * **So there is nothing here about `isOwnProfile` any more.** Renaming
+     * yourself and renaming somebody else send the identical request; the gate
+     * and the permission guard on the route are what tell them apart.
      */
-    const res = await editUserName({
-      ...d.usuario,
-      user: newUser,
-      oldPass: isOwnProfile ? currentPassUser : undefined,
-    });
+    const res = await editUserName({ ...d.usuario, user: newUser });
     if (res.status === 200) {
       toast.success("Nombre de usuario actualizado");
       setOpenUsername(false);
       setNewUser("");
-      setCurrentPassUser("");
       d.load();
     } else {
       toast.error(res.message ?? "No se pudo actualizar");
@@ -369,7 +374,7 @@ export default function UsuarioDetallePage() {
   ], [navigate]);
 
   return (
-    <div className="@container/card pt-4 px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -386,11 +391,11 @@ export default function UsuarioDetallePage() {
             <>
               <Avatar
                 className={`h-16 w-16 border-2 border-border shadow${avatarLoaded ? " cursor-zoom-in" : ""}`}
-                onClick={avatarLoaded ? () => setLightboxSrc(url + d.usuario!.image) : undefined}
+                onClick={avatarLoaded ? () => setLightboxSrc(imageUrl(d.usuario!.image)) : undefined}
               >
                 {d.usuario?.image && (
                   <AvatarImage
-                    src={url + d.usuario.image}
+                    src={imageUrl(d.usuario.image) ?? undefined}
                     onLoad={() => setAvatarLoaded(true)}
                     onError={() => setAvatarLoaded(false)}
                   />
@@ -415,18 +420,22 @@ export default function UsuarioDetallePage() {
           )}
         </div>
         <div className="flex flex-wrap gap-2 self-start sm:self-auto">
-          <Button variant="outline" className="gap-1.5"
-            disabled={d.loading || !d.usuario}
-            onClick={() => { setNewUser(d.usuario?.user ?? ""); setOpenUsername(true); }}>
-            <AtSignIcon className="h-3.5 w-3.5" />
-            Cambiar usuario
-          </Button>
-          <Button variant="outline" className="gap-1.5"
-            disabled={d.loading || !d.usuario}
-            onClick={() => setOpenPassword(true)}>
-            <KeyRoundIcon className="h-3.5 w-3.5" />
-            Contraseña
-          </Button>
+          {puedeGestionar && (
+            <Button variant="outline" className="gap-1.5"
+              disabled={d.loading || !d.usuario}
+              onClick={() => { setNewUser(d.usuario?.user ?? ""); setOpenUsername(true); }}>
+              <AtSignIcon className="h-3.5 w-3.5" />
+              Cambiar usuario
+            </Button>
+          )}
+          {puedeGestionar && (
+            <Button variant="outline" className="gap-1.5"
+              disabled={d.loading || !d.usuario}
+              onClick={() => setOpenPassword(true)}>
+              <KeyRoundIcon className="h-3.5 w-3.5" />
+              Contraseña
+            </Button>
+          )}
           {can(rol, "seguridad", "editar") && (
             <Button variant="outline" className="gap-1.5"
               disabled={d.loading || !d.usuario}
@@ -446,12 +455,16 @@ export default function UsuarioDetallePage() {
               Restablecer 2FA
             </Button>
           )}
+          {puedeGestionar && (
+            <Button variant="outline" size="icon" className="h-8 w-8"
+              aria-label="Editar datos" title="Editar datos"
+              disabled={d.loading || !d.usuario}
+              onClick={() => setOpenEdit(true)}>
+              <PencilIcon className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="outline" size="icon" className="h-8 w-8"
-            disabled={d.loading || !d.usuario}
-            onClick={() => setOpenEdit(true)}>
-            <PencilIcon className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="icon" className="h-8 w-8"
+            aria-label="Refrescar" title="Refrescar"
             disabled={d.loading} onClick={d.load}>
             <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
           </Button>
@@ -502,7 +515,7 @@ export default function UsuarioDetallePage() {
               <InfoRow icon={<AtSignIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
                 label="Nombre de usuario" value={d.usuario?.user ?? "—"} />
               <InfoRow icon={<ShieldIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Rol" value={d.usuario?.rol?.name ?? "—"} />
+                label="Rol" value={d.usuario?.rol ? nombreDeRol(d.usuario.rol) : "—"} />
               <InfoRow icon={<PhoneIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
                 label="Teléfono" value={d.usuario?.phone || "—"} />
               {/*
@@ -554,6 +567,7 @@ export default function UsuarioDetallePage() {
       </div>
 
       {/* Bitácora */}
+      {verBitacora && (
       <div className="space-y-3">
         <div>
           <h2 className="text-base font-semibold">Actividad reciente</h2>
@@ -580,7 +594,7 @@ export default function UsuarioDetallePage() {
                 <div className="absolute left-3.5 top-3 bottom-3 w-px bg-border" />
                 <div className="space-y-4">
                   {d.bitacora.map((entry, i) => (
-                    <BitacoraRow key={entry.id ?? i} entry={entry} navigate={navigate} />
+                    <BitacoraRow key={entry.id ?? i} entry={entry} enlace={enlaceDeFila(sesion.usuario, entry)} navigate={navigate} />
                   ))}
                 </div>
               </div>
@@ -588,6 +602,7 @@ export default function UsuarioDetallePage() {
           </CardContent>
         </Card>
       </div>
+      )}
 
       <ImageLightbox src={lightboxSrc ?? ""} open={!!lightboxSrc} onClose={() => setLightboxSrc(null)} />
 
@@ -595,49 +610,41 @@ export default function UsuarioDetallePage() {
       <UsuarioSheet usuario={d.usuario} open={openEdit} setOpen={setOpenEdit} onSuccess={d.load} />
 
       {/* Sheet: cambiar nombre de usuario */}
-      <Sheet open={openUsername} onOpenChange={(v) => { if (!v) { setOpenUsername(false); setNewUser(""); setCurrentPassUser(""); } }}>
-        <SheetContent className="sm:max-w-sm">
-          <SheetHeader>
-            <SheetTitle>Cambiar nombre de usuario</SheetTitle>
-            <SheetDescription>El usuario utiliza este nombre para iniciar sesión.</SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-4 px-4 py-6">
+      <FormDialog
+        open={openUsername}
+        onClose={() => { setOpenUsername(false); setNewUser(""); }}
+        size="sm"
+        title="Cambiar nombre de usuario"
+        description="El usuario utiliza este nombre para iniciar sesión. Al guardar te pediremos confirmar que eres tú."
+        dirty={!!newUser.trim()}
+        missing={newUser.trim() ? [] : ["Nuevo usuario"]}
+        saving={savingUser}
+        onSubmit={() => void handleSaveUsername()}
+        bodyClassName="flex flex-col gap-4"
+      >
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="new-user">Nuevo usuario</Label>
               <Input id="new-user" value={newUser} onChange={(e) => setNewUser(e.target.value)}
                 placeholder="ej. jperez" />
             </div>
-            {isOwnProfile && (
-              <div className="flex flex-col gap-1.5">
-                <Label htmlFor="cu-pass">Contraseña actual</Label>
-                <Input id="cu-pass" type="password" value={currentPassUser}
-                  onChange={(e) => setCurrentPassUser(e.target.value)} />
-              </div>
-            )}
-          </div>
-          <SheetFooter className="px-4">
-            <Button variant="outline" onClick={() => setOpenUsername(false)} disabled={savingUser}>Cancelar</Button>
-            <Button onClick={handleSaveUsername} disabled={savingUser}>
-              {savingUser ? "Guardando..." : "Guardar"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      </FormDialog>
 
       {/* Sheet: cambiar contraseña */}
-      <Sheet open={openPassword} onOpenChange={(v) => {
-        if (!v) { setOpenPassword(false); setOldPass(""); setNewPass(""); setNewPass2(""); }
-      }}>
-        <SheetContent className="sm:max-w-sm">
-          <SheetHeader>
-            <SheetTitle>Cambiar contraseña</SheetTitle>
-            <SheetDescription>
-              {isOwnProfile
-                ? "Ingresa la contraseña actual y la nueva."
-                : "Como administrador puedes cambiar la contraseña sin necesitar la actual."}
-            </SheetDescription>
-          </SheetHeader>
-          <div className="flex flex-col gap-4 px-4 py-6">
+      <FormDialog
+        open={openPassword}
+        onClose={() => { setOpenPassword(false); setOldPass(""); setNewPass(""); setNewPass2(""); }}
+        size="sm"
+        title="Cambiar contraseña"
+        description={isOwnProfile
+          ? "Ingresa la contraseña actual y la nueva."
+          : "Como administrador puedes cambiar la contraseña sin necesitar la actual."}
+        dirty={!!(oldPass || newPass || newPass2)}
+        missing={newPass.trim() ? [] : ["Nueva contraseña"]}
+        saving={savingPass}
+        submitLabel="Cambiar contraseña"
+        onSubmit={() => void handleSavePassword()}
+        bodyClassName="flex flex-col gap-4"
+      >
             {/* Your own account, and not "whoever lacks the permission" — see
                 `handleSavePassword`. Hidden here while the server demanded it
                 is a form nobody can submit. */}
@@ -661,15 +668,7 @@ export default function UsuarioDetallePage() {
                 <p className="text-xs text-destructive">Las contraseñas no coinciden</p>
               )}
             </div>
-          </div>
-          <SheetFooter className="px-4">
-            <Button variant="outline" onClick={() => setOpenPassword(false)} disabled={savingPass}>Cancelar</Button>
-            <Button onClick={handleSavePassword} disabled={savingPass}>
-              {savingPass ? "Guardando..." : "Guardar"}
-            </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
+      </FormDialog>
 
       {/* Confirm: desbloquear cuenta */}
       <AlertDialog open={openUnlock} onOpenChange={(v) => { if (!v) setOpenUnlock(false); }}>
@@ -718,9 +717,8 @@ export default function UsuarioDetallePage() {
   );
 }
 
-function BitacoraRow({ entry, navigate }: { entry: BitacoraInterface; navigate: (path: string) => void }) {
+function BitacoraRow({ entry, enlace, navigate }: { entry: BitacoraInterface; enlace: string | null; navigate: (path: string) => void }) {
   const config = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.DEFAULT;
-  const route = ENTITY_ROUTES[entry.entity];
   return (
     <div className="flex gap-4 relative">
       <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 ${config.bg}`}>
@@ -729,12 +727,12 @@ function BitacoraRow({ entry, navigate }: { entry: BitacoraInterface; navigate: 
       <div className="flex-1 py-0.5">
         <div className="flex items-center gap-2 flex-wrap">
           <p className="text-sm">{entry.detail}</p>
-          {route && entry.entity_id && (
+          {enlace && (
             <button
               className="text-xs text-primary hover:underline font-medium"
-              onClick={() => navigate(route(entry.entity_id!))}
+              onClick={() => navigate(enlace)}
             >
-              {entry.entity} #{entry.entity_id}
+              {nombreDeEntidad(entry)}{entry.entity_id ? ` #${entry.entity_id}` : ""}
             </button>
           )}
         </div>

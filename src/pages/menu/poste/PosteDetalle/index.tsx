@@ -1,3 +1,4 @@
+import { hasCoords } from "../../../../components/map/mapGeo";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
@@ -14,21 +15,29 @@ import EventoSheet from "../../../../components/dialogs/upsert/EventoSheet";
 import AddRevisionSheet from "../../../../components/dialogs/AddRevisionSheet";
 import ResolverEventoSheet from "../../../../components/dialogs/ResolverEventoSheet";
 import PosteDetalleHeader from "./PosteDetalleHeader";
-import PosteDetalleHealthStrip from "./PosteDetalleHealthStrip";
-import PosteDetalleInfo from "./PosteDetalleInfo";
+import PosteDetalleInfo, { PosteDetalleFoto } from "./PosteDetalleInfo";
 import PosteDetalleMap from "./PosteDetalleMap";
 import PosteDetalleHistorial from "./PosteDetalleHistorial";
-import { EventoActionHandlers } from "./PosteDetalleEventosAbiertos";
+import PosteDetalleRail from "./PosteDetalleRail";
+import { VISTA_PANEL_ID, vistaTabId, type VistaPoste } from "./posteVistas";
+import PosteDetalleEventosAbiertos, { EventoActionHandlers } from "./PosteDetalleEventosAbiertos";
+import { computeMetrics } from "./posteHealth";
+import { Card } from "../../../../components/ui/card";
+import CollapsibleSection from "../../../../components/CollapsibleSection";
 
 export default function PosteDetallePage() {
   const { id } = useParams<{ id: string }>();
-  const d = usePosteDetalleData(Number(id));
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
+  // Incidents are a second permission. Without it the sheet still opens: it
+  // does not ask for them and does not draw the two blocks made of them.
+  const verEventos = can(sesion.usuario.id_rol, "eventos", "ver");
+  const d = usePosteDetalleData(Number(id), { verEventos });
 
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [tramoPosotes, setTramoPosotes] = useState<PosteInterface[]>([]);
   const [openEditCiudad, setOpenEditCiudad] = useState(false);
+  const [vista, setVista] = useState<VistaPoste>("resumen");
   const [selectedCiudad, setSelectedCiudad] = useState<CiudadInterface | null>(null);
 
   // Clear map state when navigating to a different poste
@@ -48,7 +57,7 @@ export default function PosteDetallePage() {
         const dx = b.lat - a.lat;
         const dy = b.lng - a.lng;
         const sorted = postes
-          .filter((p) => p.lat && p.lng)
+          .filter(hasCoords)
           .sort(
             (p1, p2) =>
               (p1.lat - a.lat) * dx + (p1.lng - a.lng) * dy -
@@ -75,12 +84,12 @@ export default function PosteDetallePage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [d.poste?.id]);
 
-  const hasCoords = (d.poste?.lat ?? 0) !== 0 && (d.poste?.lng ?? 0) !== 0;
+  const located = hasCoords(d.poste);
   const boundsCoords: [number, number][] = [
     ...(d.poste?.ciudadA?.lat && d.poste.ciudadA.lng ? [[d.poste.ciudadA.lat, d.poste.ciudadA.lng] as [number, number]] : []),
     ...(d.poste?.ciudadB?.lat && d.poste.ciudadB.lng ? [[d.poste.ciudadB.lat, d.poste.ciudadB.lng] as [number, number]] : []),
-    ...(hasCoords ? [[d.poste!.lat, d.poste!.lng] as [number, number]] : []),
-    ...tramoPosotes.filter((p) => p.lat && p.lng).map((p): [number, number] => [p.lat, p.lng]),
+    ...(located ? [[d.poste!.lat, d.poste!.lng] as [number, number]] : []),
+    ...tramoPosotes.filter(hasCoords).map((p): [number, number] => [p.lat, p.lng]),
   ];
 
   const handleEditarOtroPoste = useCallback(async (posteId: number) => {
@@ -103,25 +112,23 @@ export default function PosteDetallePage() {
     return { index: idx + 1, total: tramoPosotes.length };
   }, [d.poste, tramoPosotes]);
 
+  // The stretch is ordered from one city to the other, so the poles either side
+  // of this one in that order are the ones a crew would walk to next.
+  const anterior = posicionEnTramo ? tramoPosotes[posicionEnTramo.index - 2] ?? null : null;
+  const siguiente = posicionEnTramo ? tramoPosotes[posicionEnTramo.index] ?? null : null;
+
+  const metrics = useMemo(
+    () => (verEventos ? computeMetrics(d.eventos) : null),
+    [verEventos, d.eventos]
+  );
+
   return (
-    <div className="@container/card px-6 md:px-8 pb-6 md:pb-8 w-full space-y-6 animate-in fade-in duration-500">
+    // Two columns from `lg` up, and it is the right-hand one that scrolls: the
+    // page takes exactly the height the shell leaves it, so the map stays in
+    // view however long the cards grow. Below `lg` they stack and the shell scrolls.
+    <div className="w-full p-page grid grid-cols-1 gap-page lg:flex-1 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_24rem_auto] lg:grid-rows-[minmax(0,1fr)] animate-in fade-in duration-500">
 
-      <PosteDetalleHeader
-        loading={d.loading}
-        poste={d.poste}
-        posicionEnTramo={posicionEnTramo}
-        canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
-        canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
-        onNuevoEvento={() => d.setAddEventoOpen(true)}
-        onEditarPoste={() => d.setOpenEditPoste(true)}
-        onRefrescar={d.load}
-      />
-
-      <PosteDetalleHealthStrip loading={d.loading} eventos={d.eventos} />
-
-      {/* Info + Mapa */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PosteDetalleInfo loading={d.loading} poste={d.poste} />
+      <div className="h-64 lg:h-full min-h-0">
         <PosteDetalleMap
           loading={d.loading}
           poste={d.poste}
@@ -139,18 +146,79 @@ export default function PosteDetallePage() {
         />
       </div>
 
+      {/* One card for the whole panel, and inside it a card for each thing
+          about the pole. `block` rather than the card's own column: a flex
+          column of a fixed height would squeeze them instead of letting the
+          panel scroll. Its ground is tinted so the cards inside read as lifted.
+          What it holds is chosen on the rail beside it; below `lg` the rail
+          comes first, as a row, because it is what says what follows. */}
+      <Card
+        id={VISTA_PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={vistaTabId(vista)}
+        className="order-3 lg:order-2 shadow-sm border-muted/60 bg-muted/40 p-2 block space-y-2 min-h-0 lg:overflow-y-auto"
+      >
+        {vista === "resumen" ? (
+          <>
+        <Card className="py-0 gap-0 shadow-sm border-border/60 overflow-hidden">
+        <PosteDetalleFoto loading={d.loading} poste={d.poste} />
+        <PosteDetalleHeader
+          loading={d.loading}
+          poste={d.poste}
+          status={metrics?.status ?? null}
+          posicionEnTramo={posicionEnTramo}
+          anterior={anterior}
+          siguiente={siguiente}
+          canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
+          canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
+          onNuevoEvento={() => d.setAddEventoOpen(true)}
+          onEditarPoste={() => d.setOpenEditPoste(true)}
+          onRefrescar={d.load}
+          onVerPoste={(id) => navigate(`/app/postes/${id}`)}
+        />
+        </Card>
 
-      <PosteDetalleHistorial
-        loading={d.loading}
-        poste={d.poste}
-        eventos={d.eventos}
-        tramoPostes={tramoPosotes}
-        canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
-        canCreateEventos={can(sesion.usuario.id_rol, "eventos", "crear")}
-        onNuevoEvento={() => d.setAddEventoOpen(true)}
-        onVerPoste={(id) => navigate(`/app/postes/${id}`)}
-        actions={eventoActions}
-      />
+        {verEventos && (
+          <CollapsibleSection title="Eventos abiertos" count={metrics?.pendientes} defaultOpen>
+            <PosteDetalleEventosAbiertos
+              loading={d.loading}
+              eventos={d.eventos}
+              canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
+              canCreateEventos={can(sesion.usuario.id_rol, "eventos", "crear")}
+              onNuevoEvento={() => d.setAddEventoOpen(true)}
+              actions={eventoActions}
+            />
+          </CollapsibleSection>
+        )}
+
+        <CollapsibleSection title="Ficha" defaultOpen>
+          <PosteDetalleInfo loading={d.loading} poste={d.poste} metrics={metrics} />
+        </CollapsibleSection>
+
+          </>
+        ) : (
+          <PosteDetalleHistorial
+            vista={vista}
+            loading={d.loading}
+            poste={d.poste}
+            eventos={d.eventos}
+            tramoPostes={tramoPosotes}
+            onVerPoste={(id) => navigate(`/app/postes/${id}`)}
+            onVerEvento={eventoActions.onVerDetalle}
+          />
+        )}
+      </Card>
+
+      <div className="order-2 lg:order-3 min-w-0">
+        <PosteDetalleRail
+          vista={vista}
+          onVista={setVista}
+          canVerEventos={verEventos}
+          canVerBitacora={can(sesion.usuario.id_rol, "bitacora", "ver")}
+          resueltos={metrics?.totalResueltos ?? 0}
+          vecinos={Math.max(0, tramoPosotes.filter((p) => p.id !== d.poste?.id).length)}
+        />
+      </div>
 
       {/* Sheets */}
       <EventoSheet

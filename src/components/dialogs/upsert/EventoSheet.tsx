@@ -1,5 +1,4 @@
 import { useContext, useEffect, useState } from "react";
-import { Loader2Icon } from "lucide-react";
 import { ImageDropzone } from "../../ui/image-dropzone";
 import { Textarea } from "../../ui/textarea";
 import { useNavigate } from "react-router-dom";
@@ -7,6 +6,7 @@ import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { createEvento, editEvento, searchEvento } from "../../../api/Evento.api";
+import { todosLosPostes } from "../../../api/Poste.api";
 import { mensajeDeError } from "../../../api/descarga";
 import { getRevision } from "../../../api/Revision.api";
 import { getSolucion_evento } from "../../../api/Solucion.api";
@@ -15,25 +15,32 @@ import {
   estadoTrasFallo, getOpcionesEvento, EstadoOpciones, OpcionObs, OpcionSimple,
 } from "../../../api/opciones.api";
 import { uploadImage } from "../../../api/Upload.api";
-import { url } from "../../../api/url";
+import { imageUrl } from "../../../lib/imageUrl";
 import {
-  EventoInterface, RevisionInterface, SolucionInterface,
+  EventoInterface, PosteInterface, RevisionInterface, SolucionInterface,
 } from "../../../interfaces/interfaces";
-import { Button } from "../../ui/button";
+import { Combobox } from "../../ui/combobox";
 import { Label } from "../../ui/label";
 import { Badge } from "../../ui/badge";
 import { Skeleton } from "../../ui/skeleton";
-import { Separator } from "../../ui/separator";
 import { DatePicker } from "../../ui/date-picker";
-import {
-  Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../../ui/sheet";
+import FormDialog from "../FormDialog";
+import ObsPicker from "../ObsPicker";
 import { Switch } from "../../ui/switch";
-import { Checkbox } from "../../ui/checkbox";
-import {
-  CalendarIcon, ChevronDownIcon, ChevronRightIcon,
-  ClockIcon, ExternalLinkIcon, WrenchIcon,
-} from "lucide-react";
+import { CalendarIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
+
+/** One titled block of the form: what it is about, then its fields. */
+function Grupo({ titulo, extra, children }: { titulo: string; extra?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h3 className="flex items-baseline gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {titulo}
+        {extra && <span className="font-medium normal-case tracking-normal text-primary">{extra}</span>}
+      </h3>
+      {children}
+    </section>
+  );
+}
 
 interface Props {
   eventoId?: number | null;
@@ -89,7 +96,19 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
    */
   const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
   const [selectedObs, setSelectedObs] = useState<number[]>([]);
-  const [expandedTipo, setExpandedTipo] = useState<number | null>(null);
+  /** The observations the incident arrived with. What `selectedObs` is compared against to know if anything changed. */
+  const [obsInicial, setObsInicial] = useState<number[]>([]);
+
+  /**
+   * Opened with neither an incident nor a pole: the pole is chosen here.
+   *
+   * That used to be a second form, `AddEventoPageSheet`, a copy of this one
+   * with a combobox added — its accordion and its validation written out
+   * again. The home screen and the incident list open this form that way now.
+   */
+  const eligePoste = !isEditing && !posteId;
+  const [listPoste, setListPoste] = useState<PosteInterface[]>([]);
+  const [selectedPosteId, setSelectedPosteId] = useState(0);
 
   useEffect(() => {
     if (!open) return;
@@ -127,12 +146,35 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
           setPriority(ev.priority ?? false);
           setRevisions(revs);
           setSolucion(sol);
-          setSelectedObs(evObs.map((eo) => eo.id_obs));
+          const ids = evObs.map((eo) => eo.id_obs);
+          setSelectedObs(ids);
+          setObsInicial(ids);
         })
         .catch(() => toast.error("Error al cargar el evento"))
       : Promise.resolve();
 
-    Promise.all([opciones, detalle]).finally(() => setLoading(false));
+    // The pole register is its own request, not a block inside
+    // `/api/evento/options`: putting it there would serve the whole register
+    // under `eventos.ver`, which is worse than the round trip it saves.
+    // Separate also means a refusal on one does not empty the other.
+    //
+    // And a refusal is possible: `GET /api/poste/` asks for `postes.ver`,
+    // while this form opens on `eventos.crear`. A role can register incidents
+    // without reading the pole register, and then the combobox is empty for a
+    // reason worth saying — the sentence is the server's own.
+    const postes = eligePoste
+      ? todosLosPostes()
+        .then(setListPoste)
+        .catch((error) => {
+          setListPoste([]);
+          toast.error(mensajeDeError(
+            error,
+            "No se pudo cargar la lista de postes, así que no se puede elegir uno.",
+          ));
+        })
+      : Promise.resolve();
+
+    Promise.all([opciones, detalle, postes]).finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, eventoId]);
 
@@ -146,7 +188,8 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
     setRevisions([]);
     setSolucion(null);
     setSelectedObs([]);
-    setExpandedTipo(null);
+    setObsInicial([]);
+    setSelectedPosteId(0);
     setErrors({});
     setOpen(false);
   };
@@ -160,6 +203,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
     if (!description.trim()) newErrors.description = "La descripción es requerida";
     if (selectedObs.length === 0) newErrors.obs = "Selecciona al menos una observación";
     if (!isEditing) {
+      if (eligePoste && !selectedPosteId) newErrors.poste = "Selecciona un poste";
       if (!imageFile) newErrors.image = "La imagen es requerida";
       if (!revDesc.trim()) newErrors.revDesc = "La descripción de la revisión inicial es requerida";
     }
@@ -190,7 +234,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
             date: revDate,
             state: false,
             priority,
-            id_poste: posteId!,
+            id_poste: posteId ?? selectedPosteId,
             id_usuario: sesion.usuario.id ?? 0,
             obs_ids: selectedObs,
             revision: { description: revDesc, date: revDate },
@@ -208,268 +252,288 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
     }
   };
 
-  const canEdit = !isEditing || (can(sesion.usuario.id_rol, "eventos", "editar") && !evento?.state);
+  const resuelto = isEditing && !!evento?.state;
+  const canEdit = !isEditing || (can(sesion.usuario.id_rol, "eventos", "editar") && !resuelto);
+  /**
+   * Opened to be read. A resolved incident, or a role without `eventos.editar`.
+   *
+   * The second case used to draw the whole form, every field live, above a
+   * footer with no button to save it: somebody could rewrite the description
+   * and find out at the end that there was nothing to press.
+   */
+  const soloLectura = isEditing && !canEdit;
 
-  const obsAccordion = (
-    <div className="rounded-lg border border-input overflow-hidden">
-      {listTipoObs.length === 0 && (
-        <p className="px-3 py-2.5 text-sm text-muted-foreground">
-          {estadoOpciones === "denegado"
-            ? (isEditing
-              ? "No tiene permiso para consultar las observaciones, así que no puede cambiarlas. El resto del evento sí se puede editar."
-              : "No tiene permiso para consultar las observaciones, así que no puede registrar la incidencia.")
-            : estadoOpciones === "fallo"
-              ? "No se pudieron cargar las observaciones. Cierre y vuelva a abrir para reintentarlo."
-              : estadoOpciones === "cargando"
-                ? "Cargando…"
-                : "Sin observaciones configuradas."}
-        </p>
+  const posteElegido = listPoste.find((p) => p.id === selectedPosteId);
+  const poste = isEditing ? evento?.poste : posteElegido;
+  const tramo = poste?.ciudadA?.name && poste?.ciudadB?.name
+    ? `${poste.ciudadA.name} — ${poste.ciudadB.name}`
+    : null;
+
+  /** Whether closing now would lose something typed. The frame asks before it does. */
+  const cambiado = isEditing
+    ? !!evento && (
+      description !== evento.description
+      || priority !== (evento.priority ?? false)
+      || !!imageFile
+      || [...selectedObs].sort().join() !== [...obsInicial].sort().join()
+    )
+    : !!(description || priority || imageFile || revDesc || selectedObs.length || selectedPosteId);
+
+  const faltan = [
+    eligePoste && !selectedPosteId && "Poste",
+    !description.trim() && "Descripción",
+    !isEditing && !imageFile && "Foto",
+    selectedObs.length === 0 && "Observaciones",
+    !isEditing && !revDesc.trim() && "Primera revisión",
+  ].filter((c): c is string => !!c);
+
+  const estado = resuelto
+    ? <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
+    : <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>;
+
+  /** Where the incident is and who raised it — one strip, where it was a table of five rows. */
+  const contexto = isEditing && evento && (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-muted/40 px-3 py-2.5 text-sm">
+      <span className="text-muted-foreground">
+        Poste{" "}
+        {evento.poste?.id ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 font-medium text-primary hover:underline"
+            onClick={() => { handleClose(); navigate(`/app/postes/${evento.poste!.id}`); }}
+          >
+            {evento.poste.name}
+            <ExternalLinkIcon className="h-3 w-3" />
+          </button>
+        ) : (
+          <span className="font-medium text-foreground">{evento.poste?.name ?? "—"}</span>
+        )}
+      </span>
+      {evento.poste?.propietario?.name && (
+        <span className="text-muted-foreground">
+          Propietario <span className="font-medium text-foreground">{evento.poste.propietario.name}</span>
+        </span>
       )}
-      {listTipoObs.map((tipo) => {
-        const obsForTipo = listObs.filter((o) => o.id_tipoObs === tipo.id);
-        if (obsForTipo.length === 0) return null;
-        const isExpanded = expandedTipo === tipo.id;
-        return (
-          <div key={tipo.id} className="border-b border-input last:border-0">
-            <button
-              type="button"
-              className="w-full flex items-center justify-between px-3 py-2.5 text-sm font-medium hover:bg-muted/50 transition-colors"
-              onClick={() => setExpandedTipo(isExpanded ? null : (tipo.id as number))}
-            >
-              <span>{tipo.name}</span>
-              <ChevronDownIcon className={`h-4 w-4 text-muted-foreground transition-transform ${isExpanded ? "rotate-180" : ""}`} />
-            </button>
-            {isExpanded && (
-              <div className="px-3 pb-2 grid grid-cols-1 gap-1 bg-muted/20">
-                {obsForTipo.map((obs) => (
-                  <label key={obs.id} className="flex items-center gap-2 py-1 cursor-pointer">
-                    <Checkbox
-                      checked={selectedObs.includes(obs.id as number)}
-                      onCheckedChange={() => toggleObs(obs.id as number)}
-                    />
-                    <span className="text-xs">{obs.name}</span>
-                  </label>
-                ))}
-              </div>
-            )}
+      {evento.usuario && (
+        <span className="text-muted-foreground">
+          Creado por{" "}
+          <span className="font-medium text-foreground">{evento.usuario.name} {evento.usuario.lastname}</span>
+        </span>
+      )}
+      <span className="ml-auto">{estado}</span>
+    </div>
+  );
+
+  const solucionCard = solucion && (
+    <Grupo titulo="Solución">
+      <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 space-y-1.5">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <CalendarIcon className="h-3 w-3" />
+          {new Date(solucion.date).toLocaleDateString("es-ES")}
+        </div>
+        <p className="text-sm">{solucion.description}</p>
+        {solucion.image && (
+          <img src={imageUrl(solucion.image) ?? undefined} alt="Foto de la solución" className="mt-1 max-h-40 rounded-lg object-contain border border-border" />
+        )}
+      </div>
+    </Grupo>
+  );
+
+  const revisionesList = revisions.length === 0 ? (
+    <p className="text-xs text-muted-foreground">Sin revisiones registradas</p>
+  ) : (
+    <div className="space-y-2">
+      {revisions.map((rev, i) => (
+        <div key={rev.id ?? i} className="rounded-lg border border-border px-3 py-2.5 space-y-0.5">
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <CalendarIcon className="h-3 w-3" />
+            {new Date(rev.date).toLocaleDateString("es-ES")}
           </div>
-        );
-      })}
+          <p className="text-sm">{rev.description}</p>
+        </div>
+      ))}
     </div>
   );
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent side="right" className="flex flex-col gap-0 p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-          <SheetTitle>
-            {isEditing
-              ? (loading ? <Skeleton className="h-5 w-32" /> : `Evento #${evento?.id ?? ""}`)
-              : "Nuevo Evento"}
-          </SheetTitle>
-          <SheetDescription>
-            {isEditing ? "Editar los datos del evento" : "Registrar un nuevo evento en este poste"}
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-          {loading ? (
-            <div className="space-y-3">
-              {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
-            </div>
-          ) : (
-            <>
-              {/* Edit mode: read-only info panel */}
-              {isEditing && (
-                <div className="rounded-lg bg-muted/40 px-3 py-2.5 space-y-1 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Poste</span>
-                    {evento?.poste?.id ? (
-                      <button
-                        type="button"
-                        className="font-medium text-primary flex items-center gap-1 hover:underline"
-                        onClick={() => { handleClose(); navigate(`/app/postes/${evento!.poste!.id}`); }}
-                      >
-                        {evento.poste.name}
-                        <ExternalLinkIcon className="h-3 w-3" />
-                      </button>
-                    ) : (
-                      <span className="font-medium">{evento?.poste?.name ?? "—"}</span>
-                    )}
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tramo</span>
-                    <span className="font-medium text-right">
-                      {evento?.poste?.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3 mx-0.5 shrink-0" /> {evento?.poste?.ciudadB?.name ?? "—"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Propietario</span>
-                    <span className="font-medium">{evento?.poste?.propietario?.name ?? "—"}</span>
-                  </div>
-                  {evento?.usuario && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Creado por</span>
-                      <span className="font-medium">{evento.usuario.name} {evento.usuario.lastname}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Estado</span>
-                    {evento?.state ? (
-                      <Badge className="bg-primary/10 text-primary border-transparent shadow-none text-xs">Resuelto</Badge>
-                    ) : (
-                      <Badge className="bg-amber-500/10 text-amber-600 border-transparent shadow-none text-xs">Pendiente</Badge>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Resolved — no editable content */}
-              {isEditing && evento?.state ? (
-                <p className="text-sm text-muted-foreground text-center py-2">
-                  Este evento está resuelto y no puede editarse.
-                </p>
-              ) : (
-                <>
-                  {isEditing && <Separator />}
-
-                  {/* Descripción */}
-                  <div className="space-y-1.5">
-                    <Label>Descripción <span className="text-destructive">*</span></Label>
-                    <Textarea
-                      className="resize-none min-h-20" aria-invalid={!!errors.description}
-                      placeholder="Describe el problema encontrado..."
-                      value={description}
-                      onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
-                    />
-                    {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
-                  </div>
-
-                  {/* Prioridad */}
-                  <div className="flex items-center gap-2">
-                    <Switch id="evento-priority" checked={priority} onCheckedChange={setPriority} />
-                    <Label htmlFor="evento-priority" className="cursor-pointer">Evento prioritario</Label>
-                  </div>
-
-                  {/* Observaciones */}
-                  <div className="space-y-1.5">
-                    <Label>
-                      Observaciones {!isEditing && <span className="text-destructive">*</span>}
-                      {selectedObs.length > 0 && (
-                        <span className="ml-2 text-xs text-primary">({selectedObs.length} seleccionadas)</span>
-                      )}
-                    </Label>
-                    {obsAccordion}
-                    {errors.obs && <p className="text-xs text-destructive mt-1">{errors.obs}</p>}
-                  </div>
-
-                  {isEditing && <Separator />}
-
-                  {/* Imagen */}
-                  <div className="space-y-1.5">
-                    {isEditing
-                      ? <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Imagen</p>
-                      : <Label>Imagen <span className="text-destructive">*</span></Label>}
-                    <ImageDropzone
-                      file={imageFile}
-                      onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
-                      existingUrl={evento?.image ? `${url}${evento.image}` : undefined}
-                      error={errors.image}
-                    />
-                  </div>
-
-                  {/* Revisión inicial (create only) */}
-                  {!isEditing && (
-                    <div className="space-y-3 pt-1">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Revisión inicial</p>
-                      <div className="space-y-1.5">
-                        <Label>Fecha</Label>
-                        <DatePicker value={revDate} onSelect={(d) => d && setRevDate(d)} />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Descripción <span className="text-destructive">*</span></Label>
-                        <Textarea
-                          className="resize-none min-h-16" aria-invalid={!!errors.revDesc}
-                          placeholder="Describe la inspección inicial..."
-                          value={revDesc}
-                          onChange={(e) => { setRevDesc(e.target.value); if (errors.revDesc) setErrors(p => ({ ...p, revDesc: "" })); }}
-                        />
-                        {errors.revDesc && <p className="text-xs text-destructive mt-1">{errors.revDesc}</p>}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Revisiones list (edit only) */}
-                  {isEditing && (
-                    <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1.5">
-                        <ClockIcon className="h-3.5 w-3.5" />
-                        Revisiones ({revisions.length})
-                      </p>
-                      {revisions.length === 0 ? (
-                        <p className="text-xs text-muted-foreground">Sin revisiones registradas</p>
-                      ) : (
-                        <div className="space-y-2">
-                          {revisions.map((rev, i) => (
-                            <div key={rev.id ?? i} className="rounded-lg border border-border px-3 py-2.5 space-y-0.5">
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                                <CalendarIcon className="h-3 w-3" />
-                                {new Date(rev.date).toLocaleDateString("es-ES")}
-                              </div>
-                              <p className="text-sm">{rev.description}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Solución (edit only) */}
-                  {isEditing && solucion && (
-                    <>
-                      <Separator />
-                      <div className="space-y-2">
-                        <p className="text-xs font-semibold uppercase tracking-wide text-primary flex items-center gap-1.5">
-                          <WrenchIcon className="h-3.5 w-3.5" />
-                          Solución
-                        </p>
-                        <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 space-y-1.5">
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <CalendarIcon className="h-3 w-3" />
-                            {new Date(solucion.date).toLocaleDateString("es-ES")}
-                          </div>
-                          <p className="text-sm">{solucion.description}</p>
-                          {solucion.image && (
-                            <img src={`${url}${solucion.image}`} alt="solución" className="mt-1 max-h-40 rounded-lg object-contain border border-border" />
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </>
-              )}
-            </>
-          )}
+    <FormDialog
+      open={open}
+      onClose={handleClose}
+      size="wide"
+      title={isEditing
+        ? (loading ? <Skeleton className="h-6 w-32" /> : `Evento #${evento?.id ?? ""}`)
+        : "Nuevo evento"}
+      description={
+        soloLectura && !resuelto
+          ? "Solo lectura: tu rol puede ver los eventos, no editarlos."
+          : resuelto
+            ? "Este evento está resuelto y ya no se edita."
+            : tramo
+              ? `Tramo ${tramo}`
+              : isEditing
+                ? "Edita los datos del evento."
+                : eligePoste
+                  ? "Registra un evento en un poste de la red."
+                  : "Registra un evento en este poste."
+      }
+      dirty={!soloLectura && cambiado}
+      missing={faltan}
+      saving={saving}
+      submitLabel={isEditing ? "Guardar cambios" : "Crear evento"}
+      onSubmit={soloLectura ? undefined : () => void handleSave()}
+      submitDisabled={loading}
+      bodyClassName="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] items-start"
+    >
+      {loading ? (
+        <div className="space-y-3 lg:col-span-2">
+          {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-8 w-full" />)}
         </div>
+      ) : soloLectura ? (
+        // ── Read: what happened and how it ended, not a form with its fields off ──
+        <>
+          <div className="space-y-6 min-w-0">
+            {contexto}
+            <Grupo titulo="Qué pasó">
+              <p className="text-sm whitespace-pre-wrap">{description || "—"}</p>
+              {priority && <p className="text-xs font-medium text-destructive">Evento prioritario</p>}
+              <ImageDropzone file={null} onChange={() => {}} existingUrl={imageUrl(evento?.image) ?? undefined} readOnly />
+            </Grupo>
+            {solucionCard}
+          </div>
+          <div className="space-y-6 min-w-0">
+            <Grupo titulo="Observaciones">
+              {selectedObs.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sin observaciones</p>
+              ) : (
+                <ul className="flex flex-wrap gap-1.5">
+                  {selectedObs.map((id) => (
+                    <li key={id} className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium">
+                      {listObs.find((o) => o.id === id)?.name ?? `Observación #${id}`}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Grupo>
+            <Grupo titulo="Revisiones" extra={revisions.length || undefined}>
+              {revisionesList}
+            </Grupo>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* ── Left: where, what, and the first look at it ── */}
+          <div className="space-y-6 min-w-0">
+            {contexto}
 
-        {canEdit ? (
-          <SheetFooter className="px-6 py-4 border-t border-border/40 flex-row justify-end">
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={handleClose} disabled={saving}>Cancelar</Button>
-              <Button
-                onClick={handleSave}
-                disabled={saving || loading}
-              >
-                {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : isEditing ? "Guardar" : "Crear evento"}
-              </Button>
-            </div>
-          </SheetFooter>
-        ) : (
-          <SheetFooter className="px-6 py-4 border-t border-border/40">
-            <Button variant="outline" onClick={handleClose}>Cerrar</Button>
-          </SheetFooter>
-        )}
-      </SheetContent>
-    </Sheet>
+            {eligePoste && (
+              <Grupo titulo="Dónde">
+                <div className="space-y-1.5">
+                  <Label>Poste <span className="text-destructive">*</span></Label>
+                  <Combobox
+                    options={listPoste.map((p) => ({ value: String(p.id), label: p.name }))}
+                    value={selectedPosteId ? String(selectedPosteId) : ""}
+                    onValueChange={(v) => { setSelectedPosteId(Number(v)); if (errors.poste) setErrors(p => ({ ...p, poste: "" })); }}
+                    placeholder="Buscar poste..."
+                  />
+                  {errors.poste && <p className="text-xs text-destructive mt-1">{errors.poste}</p>}
+                </div>
+                {posteElegido && (
+                  <p className="text-xs text-muted-foreground">
+                    {posteElegido.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3" /> {posteElegido.ciudadB?.name ?? "—"}
+                    {posteElegido.propietario?.name && <> · {posteElegido.propietario.name}</>}
+                  </p>
+                )}
+              </Grupo>
+            )}
+
+            <Grupo titulo="Qué pasa">
+              <div className="space-y-1.5">
+                <Label htmlFor="evento-description">Descripción <span className="text-destructive">*</span></Label>
+                <Textarea
+                  id="evento-description"
+                  className="resize-none min-h-20" aria-invalid={!!errors.description}
+                  placeholder="Describe el problema encontrado..."
+                  value={description}
+                  onChange={(e) => { setDescription(e.target.value); if (errors.description) setErrors(p => ({ ...p, description: "" })); }}
+                />
+                {errors.description && <p className="text-xs text-destructive mt-1">{errors.description}</p>}
+              </div>
+
+              {/* Said with what it does. It was a switch and two words; what it
+                  changes — the colour on every map, and the pole's own state —
+                  was something to find out afterwards. */}
+              <div className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5">
+                <Switch id="evento-priority" checked={priority} onCheckedChange={setPriority} />
+                <div>
+                  <Label htmlFor="evento-priority" className="cursor-pointer">Evento prioritario</Label>
+                  <p className="text-xs text-muted-foreground">Sale en rojo en los mapas y pone el poste en estado crítico.</p>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Foto {!isEditing && <span className="text-destructive">*</span>}</Label>
+                <ImageDropzone
+                  file={imageFile}
+                  onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
+                  existingUrl={imageUrl(evento?.image) ?? undefined}
+                  error={errors.image}
+                />
+              </div>
+            </Grupo>
+
+            {!isEditing && (
+              <Grupo titulo="Primera revisión">
+                <div className="space-y-1.5">
+                  <Label>Fecha</Label>
+                  <DatePicker value={revDate} onSelect={(d) => d && setRevDate(d)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="evento-revision">Qué se vio al revisarlo <span className="text-destructive">*</span></Label>
+                  <Textarea
+                    id="evento-revision"
+                    className="resize-none min-h-16" aria-invalid={!!errors.revDesc}
+                    placeholder="Describe la inspección inicial..."
+                    value={revDesc}
+                    onChange={(e) => { setRevDesc(e.target.value); if (errors.revDesc) setErrors(p => ({ ...p, revDesc: "" })); }}
+                  />
+                  {errors.revDesc && <p className="text-xs text-destructive mt-1">{errors.revDesc}</p>}
+                </div>
+              </Grupo>
+            )}
+
+            {isEditing && (
+              // To be read, not edited: folded, so the form above stays the form.
+              <details className="group">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Revisiones ({revisions.length})
+                </summary>
+                <div className="pt-3">{revisionesList}</div>
+              </details>
+            )}
+            {isEditing && solucionCard}
+          </div>
+
+          {/* ── Right: the observations, all of them in view ── */}
+          <div className="min-w-0">
+            <Grupo
+              titulo={isEditing ? "Observaciones" : "Observaciones *"}
+              extra={selectedObs.length > 0
+                ? `${selectedObs.length} ${selectedObs.length === 1 ? "elegida" : "elegidas"}`
+                : undefined}
+            >
+              <ObsPicker
+                tipos={listTipoObs}
+                obs={listObs}
+                selected={selectedObs}
+                onToggle={(id) => { toggleObs(id); if (errors.obs) setErrors(p => ({ ...p, obs: "" })); }}
+                estado={estadoOpciones}
+                editing={isEditing}
+              />
+              {errors.obs && <p className="text-xs text-destructive">{errors.obs}</p>}
+            </Grupo>
+          </div>
+        </>
+      )}
+    </FormDialog>
   );
 }

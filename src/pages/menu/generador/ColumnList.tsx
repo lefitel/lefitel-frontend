@@ -20,7 +20,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "../../../components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../../../components/ui/tooltip";
-import { AGG_LABEL, columnKeys, fieldLabel, findField, isSummary } from "../../../lib/reportConfig";
+import { AGG_LABEL, columnKeys, fieldLabel, findField } from "../../../lib/reportConfig";
 import { cn } from "../../../lib/utils";
 import { flatControl } from "../../../components/ui/control-surface";
 
@@ -94,10 +94,12 @@ function HeaderInput({ stored, placeholder, onRename }: {
  * has around 640 and they all fit on one line — and a control you can see and
  * reach beats a control one press away, every time.
  *
- * The two that act rather than describe — order and group — are icons alone,
- * with the tooltip carrying what they do. They spelt themselves out in words
+ * Order is an icon alone, with the tooltip carrying what it does: an arrow is
+ * read as "sort" without help. Both it and group spelt themselves out in words
  * until the row had a select in it too and the whole pill read as a sentence
- * nobody was reading.
+ * nobody was reading — but group got its word back. It is the hardest idea on
+ * the screen, it changes what a row of the report is, and a stack of layers
+ * fourteen pixels wide said none of that to somebody who had not hovered it.
  *
  * Memoised because the parent re-renders on every keystroke of any rename or
  * filter value, and sixty of these re-reconciling with their selects on each
@@ -248,13 +250,14 @@ const ColumnChip = memo(function ColumnChip({
           <TooltipTrigger asChild>
             <Button
               variant={isGrouped ? "default" : "ghost"}
-              size="icon"
-              className="h-7 w-7 shrink-0 rounded-md"
+              size="sm"
+              className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
               aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
               aria-pressed={isGrouped}
               onClick={() => onToggleGroup(index)}
             >
               <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+              Agrupar
             </Button>
           </TooltipTrigger>
           <TooltipContent>
@@ -334,7 +337,6 @@ const ColumnList = ({
     onReorder(String(active.id), String(over.id));
   };
 
-  const summary = isSummary(config);
   const grouped = new Set(config.groupBy ?? []);
   // Keyed by column, not by field: the minimum and the maximum of the same date
   // are two columns, and keyed by path alone one arrow lit both of them while
@@ -359,8 +361,10 @@ const ColumnList = ({
   const ids = columnKeys(config);
 
   return (
-    <div className="space-y-2">
-      <DndContext
+    // The rule a grouped report imposes on its columns is stated by the panel,
+    // above this list. It was repeated under it too, and the same sentence
+    // twice in a panel 288 pixels tall cost a column's worth of room.
+    <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         // Up and down, and only within itself: the pills are stacked, so a drag
@@ -411,13 +415,6 @@ const ColumnList = ({
           </ul>
         </SortableContext>
       </DndContext>
-
-      {summary && (
-        <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-          Reporte agrupado: cada columna no agrupada necesita un resumen.
-        </p>
-      )}
-    </div>
   );
 };
 

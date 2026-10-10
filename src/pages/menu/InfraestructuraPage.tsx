@@ -229,7 +229,7 @@ const RIESGOS: { nivel: "alto" | "medio"; texto: string }[] = [
 ];
 
 const InfraestructuraPage = () => (
-  <div className="flex flex-col w-full gap-8 pt-4 px-6 md:px-8 pb-6 md:pb-8 animate-in fade-in duration-500">
+  <div className="flex flex-col w-full gap-page p-page animate-in fade-in duration-500">
     <div>
       <h1 className="text-2xl font-bold tracking-tight text-foreground">Infraestructura</h1>
       <p className="text-muted-foreground">

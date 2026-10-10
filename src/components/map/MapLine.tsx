@@ -1,21 +1,24 @@
 import { Source, Layer } from "@vis.gl/react-maplibre";
 import type { Feature, LineString } from "geojson";
+import { useTheme } from "../theme-provider";
+import { ROUTE_PAINT } from "./mapConstants";
 import { toLngLatList, type LatLng } from "./mapGeo";
 
 interface MapLineProps {
   /** MapLibre names its sources and layers; two lines sharing an id collide. */
   id: string;
   positions: LatLng[];
+  /** Leave unset to follow the theme, which is what every route on a map wants. */
   color?: string;
   width?: number;
   opacity?: number;
 }
 
-export default function MapLine({
-  id, positions, color = "#596BAB", width = 3, opacity = 0.7,
-}: MapLineProps) {
+export default function MapLine({ id, positions, color, width = 3, opacity }: MapLineProps) {
+  const { resolvedTheme } = useTheme();
   if (positions.length < 2) return null;
 
+  const themed = ROUTE_PAINT[resolvedTheme === "dark" ? "dark" : "light"];
   const data: Feature<LineString> = {
     type: "Feature",
     properties: {},
@@ -28,7 +31,11 @@ export default function MapLine({
         id={`${id}-line`}
         type="line"
         layout={{ "line-cap": "round", "line-join": "round" }}
-        paint={{ "line-color": color, "line-width": width, "line-opacity": opacity }}
+        paint={{
+          "line-color": color ?? themed.color,
+          "line-width": width,
+          "line-opacity": opacity ?? themed.opacity,
+        }}
       />
     </Source>
   );

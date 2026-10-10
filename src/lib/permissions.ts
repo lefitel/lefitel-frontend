@@ -6,7 +6,7 @@
  * that. It ran in the browser, so it decided which buttons to draw and nothing
  * more — the server never asked, and every write endpoint was open to any
  * account with a session. And it could not know about a role created from the
- * Seguridad screen, so a fourth role could do nothing and there was nowhere to
+ * roles screen, so a fourth role could do nothing and there was nowhere to
  * change that.
  *
  * The matrix now lives in the database and the server enforces it. What arrives
@@ -18,7 +18,7 @@
 // There was a `ROLES = { ADMIN: 1, EDITOR: 2, VIEWER: 3 }` here, exported and
 // imported by nobody. It was the last piece of the hardcoded matrix described
 // above: three role ids written down in the one file whose own header explains
-// that roles are database rows and can be created from the Seguridad screen.
+// that roles are database rows and can be created from the roles screen.
 // Removed rather than left for a reader to trust — a name that promises the
 // roles are these three is worse than no name, and a fourth role has been
 // creatable for as long as that constant sat here saying otherwise.
@@ -32,7 +32,7 @@
  * client half of ending that; the binding half is the server's.
  *
  * Kept in step by hand, like the labels above it. `getMatrizPermisos` sends the
- * real list with every response, so the Seguridad screen never reads this
+ * real list with every response, so the roles screen never reads this
  * constant — it is here for `sinPermisos()` and for the types.
  */
 /**
@@ -43,7 +43,7 @@
  * accepts any string, which on the server side meant a permission that gets
  * honoured, cannot be revoked from the screen, and is never drawn.
  */
-export const ACCIONES = ["ver", "crear", "editar", "archivar"] as const;
+export const ACCIONES = ["ver", "crear", "editar", "archivar", "programar"] as const;
 
 export const PERMISOS = {
   postes: ["ver", "crear", "editar", "archivar"],
@@ -51,7 +51,9 @@ export const PERMISOS = {
   ciudades: ["ver", "crear", "editar", "archivar"],
   parametros: ["ver", "crear", "editar", "archivar"],
   reportes: ["ver"],
-  generador: ["ver", "crear", "editar", "archivar"],
+  // `programar`: may schedule a saved report to be mailed. The generator's
+  // alone, and granted to the Administrador only until somebody opens it.
+  generador: ["ver", "crear", "editar", "archivar", "programar"],
   seguridad: ["ver", "crear", "editar", "archivar"],
   roles: ["ver", "crear", "editar", "archivar"],
   archivos: ["ver", "archivar"],

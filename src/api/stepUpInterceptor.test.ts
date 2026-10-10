@@ -16,7 +16,13 @@ import {
   cancelarStepUpEnCurso,
   inyectarPassword,
 } from "./stepUpInterceptor";
-import { CODIGO_STEP_UP } from "./stepUp";
+import {
+  CODIGO_STEP_UP,
+  MENSAJE_CANCELADO,
+  MENSAJE_FACTOR_INCOMPLETO,
+  MENSAJE_SIN_INTENTOS,
+} from "./stepUp";
+import { explicacionDe } from "./fallo";
 import { toast } from "sonner";
 import { url } from "./url";
 
@@ -167,6 +173,36 @@ describe("qué NO abre la ventana", () => {
     expect(resolvedor).not.toHaveBeenCalled();
   });
 
+  it("`estado-incompleto` enseña el mismo remedio que la otra negativa que lo pide", async () => {
+    // 🔴 **El mismo remedio tiene que verse igual.** `FACTOR_PENDIENTE` y este
+    // motivo piden exactamente lo mismo —registra un segundo factor— y hasta
+    // ahora uno sacaba un aviso con botón y el otro no sacaba nada: quien
+    // llegaba por aquí leía el «no se pudo» de su pantalla y se quedaba sin
+    // saber ni qué le faltaba ni dónde arreglarlo.
+    const aviso = vi.spyOn(toast, "error").mockReturnValue("" as never);
+    const resolvedor = vi.fn();
+    registrarResolvedorStepUp(resolvedor);
+    const err = rechazo({
+      code: CODIGO_STEP_UP,
+      motivo: "estado-incompleto",
+      message: "Termina de configurar tu segundo factor antes de realizar esta operación.",
+    });
+
+    await expect(alFallar(err)).rejects.toBe(err);
+
+    // Sigue sin abrir la ventana: aquí no hay nada que teclear.
+    expect(resolvedor).not.toHaveBeenCalled();
+    // El botón que lleva a arreglarlo.
+    expect(aviso).toHaveBeenCalledWith(
+      "Termina de configurar tu segundo factor antes de realizar esta operación.",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Configurarlo" }) }),
+    );
+    // Y la frase que sustituye al «no se pudo» genérico de la pantalla. Las dos
+    // cosas, porque arreglan problemas distintos: el aviso dice dónde ir, la
+    // marca dice qué le pasó a la operación que la persona pidió.
+    expect(explicacionDe(err)).toBe(MENSAJE_FACTOR_INCOMPLETO);
+  });
+
   it("un cuerpo que caduca: el código de seis dígitos vale treinta segundos", async () => {
     const resolvedor = vi.fn();
     registrarResolvedorStepUp(resolvedor);
@@ -206,6 +242,9 @@ describe("cuando se acabó el plazo sin configurar nada", () => {
       "Termina de configurar tu segundo factor antes de realizar esta operación.",
       expect.objectContaining({ action: expect.objectContaining({ label: "Configurarlo" }) }),
     );
+    // Y la pantalla deja de decir su «no se pudo» pelado: el aviso dice dónde
+    // se arregla, y esto dice qué le pasó a la operación que se pidió.
+    expect(explicacionDe(err)).toBe(MENSAJE_FACTOR_INCOMPLETO);
   });
 
   it("no apila un aviso por cada petición fallida", async () => {
@@ -228,6 +267,10 @@ describe("cuando se acabó el plazo sin configurar nada", () => {
 
     await expect(alFallar(err)).rejects.toBe(err);
     expect(aviso).not.toHaveBeenCalled();
+    // Ni el aviso ni la frase: un host ajeno controla su cuerpo, así que
+    // dejarle escribir lo que lee la pantalla es la misma puerta con otra
+    // forma.
+    expect(explicacionDe(err)).toBeUndefined();
   });
 });
 
@@ -295,6 +338,18 @@ describe("cortar la ceremonia cuando muere la sesión", () => {
 });
 
 describe("la ceremonia", () => {
+  /** Otro rechazo sobre la MISMA petición: es lo que ve el manejador cuando
+   *  un reenvío vuelve a fallar, y lo que hace girar la ceremonia. */
+  const otraVuelta = (config: unknown, datos: Record<string, unknown>): AxiosError =>
+    ({
+      config,
+      response: { status: 403, data: datos, headers: {}, statusText: "", config: {} },
+      isAxiosError: true,
+      name: "AxiosError",
+      message: "",
+      toJSON: () => ({}),
+    }) as unknown as AxiosError;
+
   it("reenvía la petición con la contraseña dentro", async () => {
     const { enviados, restaurar } = capturarReenvios();
     registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
@@ -487,6 +542,219 @@ describe("la ceremonia", () => {
     expect(abiertas).toBe(2);
   });
 
+  /**
+   * 🔴 **Una sola ventana para dos carencias distintas entrega lo que no era.**
+   *
+   * En la pantalla del perfil conviven las sesiones y los editores de la
+   * cuenta: cerrar la sesión de otro dispositivo se cubre probando el factor y
+   * cambiar el nombre necesita además la contraseña. Las dos rechazan con
+   * `sin-factor-reciente` y sólo se distinguen por `exigeContrasena`, así que
+   * enganchar la segunda a la ventana de la primera le da un resultado sin
+   * contraseña: el reenvío vuelve a fallar, gasta un reintento y abre una
+   * segunda ventana de todas formas.
+   *
+   * El arreglo no es abrir dos ventanas seguidas —la segunda saldría del
+   * rechazo viejo y volvería a pedir el factor, que es un intento fallido
+   * contra el bloqueo de la cuenta—, sino que la que espera turno pregunte al
+   * servidor qué le falta **ahora** y abra una ventana que pida sólo eso.
+   */
+  describe("dos peticiones que necesitan cosas distintas", () => {
+    /** Un rechazo de la puerta con la carencia y el cuerpo que se le digan.
+     *  El cuerpo distingue a cada petición en lo que sale por el cable. */
+    const faltaFactor = (exigeContrasena: boolean, cuerpo: Record<string, string>) =>
+      rechazo(
+        { code: CODIGO_STEP_UP, motivo: "sin-factor-reciente", exigeContrasena, message: "x" },
+        { data: JSON.stringify(cuerpo) },
+      );
+
+    it("la que esperaba turno se reenvía en vez de reabrir, y su ventana pide sólo lo que falta", async () => {
+      const { enviados, restaurar } = capturarReenvios();
+      const pedido: { motivo: string; exigeContrasena: boolean }[] = [];
+      let abiertas = 0;
+      let aLaVez = 0;
+      registrarResolvedorStepUp(async (p) => {
+        pedido.push({ motivo: p.motivo, exigeContrasena: p.exigeContrasena });
+        abiertas += 1;
+        aLaVez = Math.max(aLaVez, abiertas);
+        await new Promise((r) => setTimeout(r, 5));
+        abiertas -= 1;
+        // La ventana del factor se resuelve probándolo, sin contraseña; la que
+        // pide contraseña la devuelve.
+        return p.motivo === "sin-factor-reciente" && !p.exigeContrasena
+          ? {}
+          : { password: "la-mia" };
+      });
+
+      // Cerrar la sesión de otro dispositivo, que se cubre probando el factor,
+      // y a la vez el cambio de nombre, que necesita además la contraseña.
+      const sesion = faltaFactor(false, { que: "sesion" });
+      const nombre = faltaFactor(true, { que: "nombre" });
+      await Promise.all([alFallar(sesion), alFallar(nombre)]);
+
+      // Nunca dos ventanas a la vez: la ventana atiende una ceremonia cada vez
+      // y la segunda que se abriera encima dejaría a las peticiones de la
+      // primera ni resueltas ni rechazadas.
+      expect(aLaVez).toBe(1);
+      // 🔴 Y **una sola en total**: la que esperaba turno no reabre nada. Si
+      // reabriera, lo haría con su rechazo viejo —que exige prueba de factor—
+      // y lo que hay delante es el mismo código de la aplicación, todavía en
+      // pantalla: teclearlo otra vez es un paso ya sellado, el servidor lo da
+      // por no válido y carga un intento de los que bloquean la cuenta.
+      expect(pedido).toEqual([{ motivo: "sin-factor-reciente", exigeContrasena: false }]);
+      // Las dos salen, y las dos **sin contraseña**: la del nombre va justamente
+      // a que el servidor le diga qué le queda por cubrir ahora.
+      //
+      // Sin fijar el orden entre ellas, que no lo decide nada de este contrato:
+      // son dos peticiones concurrentes y cuál de las dos vuelve antes depende
+      // de cuántos turnos de microtask cueste despertar a cada una.
+      const cuerpos = enviados.map((e) => JSON.parse(String(e.data)) as unknown);
+      expect(cuerpos).toHaveLength(2);
+      expect(cuerpos).toContainEqual({ que: "sesion" });
+      expect(cuerpos).toContainEqual({ que: "nombre" });
+
+      // Y eso es lo que contesta, con el factor ya fresco: sólo la contraseña.
+      //
+      // La vuelta se monta sobre el MISMO `config`, que es lo que este fichero
+      // puede hacer; el viaje de verdad —axios clona la configuración al
+      // reenviar— se mide en `statusPropagation.test.ts`. Aquí no se depende de
+      // que sobreviva nada: la ventana se abre por el motivo del rechazo nuevo.
+      await alFallar(
+        otraVuelta(nombre.config, {
+          code: CODIGO_STEP_UP,
+          motivo: "contraseña-requerida",
+          exigeContrasena: true,
+        }),
+      );
+      restaurar();
+
+      // AHORA se abre la segunda ventana, y con el motivo que hace que pida
+      // sólo la contraseña en vez de volver a pedir el factor.
+      expect(pedido[1]).toEqual({ motivo: "contraseña-requerida", exigeContrasena: true });
+      expect(JSON.parse(String(enviados[2].data))).toEqual({
+        que: "nombre",
+        stepup_password: "la-mia",
+      });
+    });
+
+    it("si la persona cancela, la que esperaba turno abre la suya", async () => {
+      // La otra mitad de la asimetría: `sin-resolver` se hereda, `cancelado`
+      // no. Cancelar no cambia nada en el servidor —el rechazo viejo sigue
+      // describiendo lo que falta, así que reenviar no enseñaría nada— y la
+      // sesión sigue en pie, o sea que sí hay sitio para la ventana siguiente.
+      const { enviados, restaurar } = capturarReenvios();
+      const pedido: { motivo: string; exigeContrasena: boolean }[] = [];
+      registrarResolvedorStepUp(async (p) => {
+        pedido.push({ motivo: p.motivo, exigeContrasena: p.exigeContrasena });
+        await new Promise((r) => setTimeout(r, 5));
+        // Se cancela la primera; la segunda se confirma.
+        return pedido.length === 1 ? null : { password: "la-mia" };
+      });
+
+      const sesion = faltaFactor(false, { que: "sesion" });
+      const nombre = faltaFactor(true, { que: "nombre" });
+      const [primera, segunda] = await Promise.allSettled([alFallar(sesion), alFallar(nombre)]);
+      restaurar();
+
+      // La cancelada no se reenvía, y se le dice que la cancelación fue suya.
+      expect(primera.status).toBe("rejected");
+      expect(explicacionDe(sesion)).toBe(MENSAJE_CANCELADO);
+      // Y la que esperaba turno abre SU ventana y sale adelante. Heredando la
+      // cancelación se quedaría sin ventana y sin operación sin que nadie lo
+      // haya decidido por ella.
+      expect(segunda.status).toBe("fulfilled");
+      expect(pedido).toEqual([
+        { motivo: "sin-factor-reciente", exigeContrasena: false },
+        { motivo: "sin-factor-reciente", exigeContrasena: true },
+      ]);
+      expect(enviados.map((e) => JSON.parse(String(e.data)) as unknown)).toEqual([
+        { que: "nombre", stepup_password: "la-mia" },
+      ]);
+    });
+
+    it("la misma carencia sigue compartiendo una sola ventana", async () => {
+      // El otro lado del mismo criterio: partir de más abre dos canjes con el
+      // mismo código, el servidor sella el paso del primero y el segundo
+      // cuenta como intento fallido.
+      const { restaurar } = capturarReenvios();
+      let abiertas = 0;
+      registrarResolvedorStepUp(async () => {
+        abiertas += 1;
+        await new Promise((r) => setTimeout(r, 5));
+        return { password: "la-mia" };
+      });
+
+      await Promise.all([
+        alFallar(faltaFactor(true, { que: "uno" })),
+        alFallar(faltaFactor(true, { que: "dos" })),
+      ]);
+      restaurar();
+
+      expect(abiertas).toBe(1);
+    });
+
+    it("con la sesión cortada, la que esperaba turno no abre ninguna ventana", async () => {
+      // La ceremonia viva acaba sin resolver porque la sesión se cayó por
+      // debajo. Abrir entonces la de quien esperaba turno la deja encima de la
+      // pantalla de login, pidiéndole algo a quien ya no tiene sesión con la
+      // que responder — y sin nadie que la resuelva, esa petición tampoco
+      // vuelve nunca.
+      //
+      // Aquí no hace falta capturar reenvíos: las dos peticiones se rechazan
+      // sin llegar a reenviarse.
+      let abiertas = 0;
+      registrarResolvedorStepUp(() => {
+        abiertas += 1;
+        return new Promise(() => undefined);
+      });
+
+      const sesion = faltaFactor(false, { que: "sesion" });
+      const nombre = faltaFactor(true, { que: "nombre" });
+      const enVuelo = [alFallar(sesion), alFallar(nombre)];
+      await Promise.resolve();
+      cancelarStepUpEnCurso();
+
+      await expect(enVuelo[0]).rejects.toBe(sesion);
+      expect(abiertas).toBe(1);
+      await expect(enVuelo[1]).rejects.toBe(nombre);
+      // Y a la que esperaba tampoco se le dice que canceló: no decidió nada.
+      expect(explicacionDe(nombre)).toBeUndefined();
+    });
+
+    it("la ceremonia que nace justo después de cortar la anterior conserva su par", async () => {
+      // 🔴 El hueco: `cancelarStepUpEnCurso` resuelve la ceremonia viva y anula
+      // el estado en el acto, pero el `finally` de esa promesa corre un
+      // microtask **después**. Si en ese hueco nace otra ceremonia, un `finally`
+      // que limpie a ciegas le borra su par — y sin par, la petición siguiente
+      // no puede saber si le vale la ventana que ya está abierta y abre otra
+      // encima, que es el fallo que todo esto viene a evitar.
+      let abiertas = 0;
+      registrarResolvedorStepUp(() => {
+        abiertas += 1;
+        return new Promise(() => undefined);
+      });
+
+      const cortada = faltaFactor(false, { que: "sesion" });
+      const enVuelo = alFallar(cortada);
+      await Promise.resolve();
+
+      // La sesión se cae y, en el mismo turno, otra petición abre la suya.
+      cancelarStepUpEnCurso();
+      const viva = alFallar(faltaFactor(true, { que: "nombre" }));
+      await expect(enVuelo).rejects.toBe(cortada);
+
+      // Con el mismo par que la viva: tiene que engancharse a ella.
+      const acompanante = alFallar(faltaFactor(true, { que: "otro" }));
+      await Promise.resolve();
+      expect(abiertas).toBe(2);
+
+      // Y se recogen las dos, que siguen esperando a una ventana que nadie va
+      // a resolver en este test.
+      cancelarStepUpEnCurso();
+      await expect(viva).rejects.toBeDefined();
+      await expect(acompanante).rejects.toBeDefined();
+    });
+  });
+
   // 🔴 La contraseña no puede salir de aquí dentro del error.
   it("borra la contraseña del error que llega a la pantalla que llamó", async () => {
     // Axios adjunta la configuración de la petición al error, y esa
@@ -522,21 +790,249 @@ describe("la ceremonia", () => {
     expect(cuerpo).toContain("name");
   });
 
-  it("se rinde después de dos reintentos en vez de girar para siempre", async () => {
+  // 🔴 El camino de éxito es el que se olvidaba: `limpiarPassword` sólo se
+  // llamaba en el `catch`, así que tras un reintento CORRECTO la contraseña
+  // se quedaba en el cuerpo que ve quien llamó.
+  it("borra la contraseña del cuerpo también cuando el reintento sale bien", async () => {
     const { enviados, restaurar } = capturarReenvios();
     registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
-    const err = rechazo(PASO);
 
+    let respuesta: { config?: { data?: unknown } } | undefined;
     try {
-      await alFallar(err);
-      await alFallar(err);
-      // El tercero, sobre la misma configuración, ya no reintenta.
-      await expect(alFallar(err)).rejects.toBe(err);
+      respuesta = (await alFallar(
+        rechazo(PASO, { data: '{"name":"x"}', contentType: "application/json" }),
+      )) as { config?: { data?: unknown } };
     } finally {
       restaurar();
     }
 
-    expect(enviados).toHaveLength(2);
+    // Primero se comprueba que salió CON la contraseña — si no, borrarla
+    // después no demuestra nada.
+    expect(JSON.parse(String(enviados[0].data))).toMatchObject({ stepup_password: "la-mia" });
+
+    const cuerpo = String(respuesta?.config?.data ?? "");
+    expect(cuerpo).not.toContain("stepup_password");
+    expect(cuerpo).not.toContain("la-mia");
+    // Y lo demás sigue ahí: limpiar no es tirar el cuerpo a la basura.
+    expect(cuerpo).toContain("name");
+  });
+
+  /**
+   * Los dos frenos de este lado, y lo que cada uno cubre.
+   *
+   * El que manda mientras venga es `intentosRestantes`: lo cuenta el servidor y
+   * lo dice en el cuerpo del 403. Cuántos deja el cliente cuando el servidor no
+   * lo dice se mide de punta a punta en `statusPropagation.test.ts`, que es
+   * donde la ceremonia gira de verdad; aquí sólo se sujeta que **para**.
+   *
+   * 🔴 Este bloque sustituye a «se rinde después de dos reintentos»: aquel
+   * número era el defecto, no la propiedad. Dos reintentos son exactamente los
+   * que gasta la ceremonia honrada en las rutas que quieren el factor y la
+   * contraseña, así que lo que aquel test dejaba fijado era que la primera
+   * equivocación matara la operación.
+   */
+  describe("los frenos", () => {
+    const peticion = () => ({ url: `${url}/api/usuario/7`, headers: new AxiosHeaders() });
+
+    it("para en seco cuando el servidor dice que no queda ningún intento", async () => {
+      const { enviados, restaurar } = capturarReenvios();
+      const resolvedor = vi.fn().mockResolvedValue({ password: "otra-mas" });
+      registrarResolvedorStepUp(resolvedor);
+      const err = rechazo({
+        code: CODIGO_STEP_UP,
+        motivo: "contraseña-incorrecta",
+        intentosRestantes: 0,
+      });
+
+      try {
+        await expect(alFallar(err)).rejects.toBe(err);
+      } finally {
+        restaurar();
+      }
+
+      // Ni siquiera se abre: el siguiente envío se lo comería el cupo del
+      // servidor con un 429 y la persona habría tecleado para nada.
+      expect(resolvedor).not.toHaveBeenCalled();
+      expect(enviados).toHaveLength(0);
+    });
+
+    it("se rinde con el mismo motivo repetido, en vez de girar para siempre", async () => {
+      const { enviados, restaurar } = capturarReenvios();
+      registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
+      const config = peticion();
+
+      try {
+        for (let i = 0; i < 30; i += 1) {
+          await alFallar(otraVuelta(config, PASO)).catch(() => undefined);
+        }
+      } finally {
+        restaurar();
+      }
+
+      // Sin `intentosRestantes` el servidor no dice nada, así que el freno es
+      // el de aquí. Lo que se mide es que existe y que la ceremonia honrada
+      // cabe por debajo, no cuál es el número.
+      expect(enviados.length).toBeGreaterThan(2);
+      expect(enviados.length).toBeLessThan(30);
+    });
+
+    it("tampoco gira para siempre cuando el servidor alterna motivos", async () => {
+      // 🔴 Cada motivo lleva su propia cuenta — es lo que impide que los viajes
+      // de la ceremonia honrada gasten el presupuesto de equivocarse — así que
+      // un servidor que alterne dos motivos no llega a agotar ninguna de las
+      // dos. El techo de la petición entera es lo único que lo para, y sin él
+      // esto son vueltas infinitas con una línea de bitácora por vuelta.
+      const { enviados, restaurar } = capturarReenvios();
+      registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
+      const config = peticion();
+      const motivos = ["sin-factor-reciente", "contraseña-requerida"];
+
+      try {
+        for (let i = 0; i < 60; i += 1) {
+          await alFallar(
+            otraVuelta(config, { code: CODIGO_STEP_UP, motivo: motivos[i % 2] }),
+          ).catch(() => undefined);
+        }
+      } finally {
+        restaurar();
+      }
+
+      expect(enviados.length).toBeLessThan(60);
+    });
+
+    it("un `motivo` que no es un nombre corriente no desactiva el freno", async () => {
+      // La clave del recuento la elige el servidor: `motivo` viaja en el cuerpo
+      // del 403 sin validar, y `__proto__` leído a pelo no devuelve un número
+      // sino lo que el objeto hereda. El prefijo de `claveDe` lo desactiva.
+      //
+      // 🔴 **Lo que este test NO cubre, y hay que saberlo para no confiarse.**
+      // `otraVuelta` reconstruye el rechazo sobre el **mismo** objeto `config`,
+      // y en producción no es el mismo: axios clona la configuración al
+      // reenviar, y ese clonado se come tres nombres de clave. Aquí no se
+      // pierde ninguna, así que este test sujeta el prefijo del lado de la
+      // **lectura** — se pone rojo si alguien lo quita de la escritura y lo
+      // deja en la lectura, o al revés. El viaje de verdad, que es donde el
+      // fallo estaba, se mide en `statusPropagation.test.ts`, que es el único
+      // fichero que monta la cadena entera.
+      const { enviados, restaurar } = capturarReenvios();
+      registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
+      const config = peticion();
+
+      try {
+        for (let i = 0; i < 30; i += 1) {
+          await alFallar(
+            otraVuelta(config, { code: CODIGO_STEP_UP, motivo: "__proto__" }),
+          ).catch(() => undefined);
+        }
+      } finally {
+        restaurar();
+      }
+
+      expect(enviados.length).toBeLessThan(30);
+    });
+
+    it("un motivo distinto no gasta el presupuesto del anterior", async () => {
+      // La ceremonia honrada: el servidor nombra una carencia por respuesta,
+      // así que pedir el factor y pedir después la contraseña son dos viajes
+      // que nadie ha hecho mal. Salían del mismo presupuesto que las
+      // equivocaciones, y por eso la primera contraseña mal tecleada mataba la
+      // operación.
+      const { enviados, restaurar } = capturarReenvios();
+      registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
+      const config = peticion();
+
+      const paso = (datos: Record<string, unknown>) =>
+        alFallar(otraVuelta(config, { code: CODIGO_STEP_UP, ...datos })).catch(() => undefined);
+
+      try {
+        await paso({ motivo: "sin-factor-reciente" });
+        await paso({ motivo: "contraseña-requerida" });
+        // Y ahora la primera equivocación, que es la que se perdía.
+        await paso({ motivo: "contraseña-incorrecta", intentosRestantes: 4 });
+      } finally {
+        restaurar();
+      }
+
+      expect(enviados).toHaveLength(3);
+    });
+  });
+
+  /**
+   * Ocho salidas y una sola frase: cancelar al crear un rol enseñaba «No se
+   * pudo crear el rol», que es lo que la pantalla dice cuando no sabe nada.
+   *
+   * La marca viaja aparte de `normalized` a propósito — ver `fallo.ts` —, así
+   * que aquí se comprueba que se pone, y en `statusPropagation.test.ts` que
+   * llega hasta la frase que lee la pantalla.
+   */
+  describe("quién dice que la ceremonia no acabó", () => {
+    it("marca la cancelación en el rechazo que devuelve", async () => {
+      registrarResolvedorStepUp(async () => null);
+      const err = rechazo(PASO);
+
+      await expect(alFallar(err)).rejects.toBe(err);
+
+      expect(explicacionDe(err)).toBe(MENSAJE_CANCELADO);
+    });
+
+    it("no acusa de cancelar a quien no canceló", async () => {
+      // 🔴 Las tres formas de acabar sin resultado no son la misma cosa, y
+      // antes lo eran: la ventana devolvía `null` para las tres. Sin ventana
+      // montada la aplicación no ha arrancado; con la sesión cortada por debajo
+      // el proveedor de sesión ya se lleva la pantalla al login. En ninguna de
+      // las dos hay nadie delante que haya decidido nada.
+      registrarResolvedorStepUp(null);
+      const sinVentana = rechazo(PASO);
+      await expect(alFallar(sinVentana)).rejects.toBe(sinVentana);
+      expect(explicacionDe(sinVentana)).toBeUndefined();
+
+      registrarResolvedorStepUp(() => new Promise(() => undefined));
+      const cortada = rechazo(PASO);
+      const enVuelo = alFallar(cortada);
+      await Promise.resolve();
+      cancelarStepUpEnCurso();
+
+      await expect(enVuelo).rejects.toBe(cortada);
+      expect(explicacionDe(cortada)).toBeUndefined();
+    });
+
+    it("dice que se acabaron los intentos cuando el servidor cuenta cero", async () => {
+      const { restaurar } = capturarReenvios();
+      registrarResolvedorStepUp(async () => ({ password: "otra-mas" }));
+      const err = rechazo({
+        code: CODIGO_STEP_UP,
+        motivo: "contraseña-incorrecta",
+        intentosRestantes: 0,
+      });
+
+      try {
+        await alFallar(err).catch(() => undefined);
+      } finally {
+        restaurar();
+      }
+
+      expect(explicacionDe(err)).toBe(MENSAJE_SIN_INTENTOS);
+    });
+
+    it("no dice nada cuando el que falló fue el reenvío", async () => {
+      // El servidor contestó de verdad y con su propio fallo: la frase que
+      // toca es la de la pantalla, que sabe qué estaba haciendo.
+      const anterior = axios.defaults.adapter;
+      axios.defaults.adapter = (config) =>
+        Promise.reject(
+          Object.assign(new Error("500"), {
+            config,
+            response: { status: 500, data: {}, headers: {}, statusText: "", config },
+            isAxiosError: true,
+          }),
+        );
+      registrarResolvedorStepUp(async () => ({ password: "la-mia" }));
+
+      const capturado = await alFallar(rechazo(PASO)).catch((e: unknown) => e);
+      axios.defaults.adapter = anterior;
+
+      expect(explicacionDe(capturado)).toBeUndefined();
+    });
   });
 });
 
@@ -659,7 +1155,13 @@ describe("la contraseña que ya venía en la petición", () => {
     const resolvedor = vi.fn().mockResolvedValue({ password: "otra" });
     registrarResolvedorStepUp(resolvedor);
     const err = rechazo(CONTRASENA_INCORRECTA, { data: JSON.stringify({ stepup_password: "mal" }) });
-    (err.config as { __stepUpIntentos?: number }).__stepUpIntentos = 1;
+    // Una petición que ya lleva un reenvío hecho. La cuenta va por `motivo`
+    // desde que el presupuesto sigue al del servidor; lo que se está montando
+    // aquí es «esta contraseña la puso el interceptor», o sea, cualquier
+    // reenvío anterior.
+    (err.config as { __stepUpIntentos?: Record<string, number> }).__stepUpIntentos = {
+      "contraseña-requerida": 1,
+    };
 
     try {
       await alFallar(err);

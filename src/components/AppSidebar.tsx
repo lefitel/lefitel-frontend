@@ -8,18 +8,18 @@ import {
   Sparkles,
   UserCircle,
 } from "lucide-react";
-import { visibleMenuItems } from "./menuItems";
+import { visibleMenuGroups } from "./menuItems";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
 } from "./ui/sidebar";
 import {
   AlertDialog,
@@ -55,7 +55,7 @@ export const AppSidebar = () => {
   const location = useLocation();
   const rol = sesion.usuario.id_rol;
 
-  const visibleItems = visibleMenuItems(rol);
+  const groups = visibleMenuGroups(rol);
 
   const [logoutOpen, setLogoutOpen] = useState(false);
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
@@ -70,7 +70,15 @@ export const AppSidebar = () => {
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            {/* Folded, the button shrinks from 48px to the 32px square, and the
+                logo rode up 8px with it, off the line of the app's header.
+                The margin gives those 16px back, so the logo stays where it
+                was — and eases with the height, or it would jump first. */}
+            <SidebarMenuButton
+              size="lg"
+              asChild
+              className="transition-[width,height,padding,margin] group-data-[collapsible=icon]:my-2"
+            >
               <Link to="/">
                 <div className="flex shrink-0 aspect-square size-8 items-center justify-center rounded-lg overflow-hidden bg-secondary p-1.5">
                   <img src={logo} alt="Osefi srl" className="h-full w-full object-contain" />
@@ -86,44 +94,75 @@ export const AppSidebar = () => {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {visibleItems.map((item) => {
-                const isActive =
-                  location.pathname === item.path ||
-                  location.pathname.startsWith(item.path + "/");
-                return (
-                  <SidebarMenuItem key={item.text}>
-                    <SidebarMenuButton asChild isActive={isActive} tooltip={item.text}>
-                      <Link to={item.path}>
-                        <item.icon />
-                        <span>{item.text}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {/*
+          One block per section, each under its title. Folded down to icons the
+          titles have no room and hide themselves, so a rule takes their place:
+          without it the blocks would run together into the flat list this
+          replaced.
+        */}
+        {groups.map((group, index) => (
+          <SidebarGroup key={group.title ?? "inicio"} className="py-1">
+            {index > 0 && (
+              <div
+                aria-hidden
+                className="mx-2 mb-2 hidden h-px bg-sidebar-border group-data-[collapsible=icon]:block"
+              />
+            )}
+            {/* Folded, the label is pulled up over the block before it and
+                made transparent — still a box, and still on top. It took the
+                clicks and the tooltip of a strip of the last icon above, so
+                folded it lets them through. */}
+            {group.title && (
+              <SidebarGroupLabel className="group-data-[collapsible=icon]:pointer-events-none">
+                {group.title}
+              </SidebarGroupLabel>
+            )}
+            <SidebarGroupContent>
+              <SidebarMenu className="gap-1" aria-label={group.title ?? undefined}>
+                {group.items.map((item) => {
+                  const isActive =
+                    location.pathname === item.path ||
+                    location.pathname.startsWith(item.path + "/");
+                  return (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={item.text}>
+                        <Link to={item.path}>
+                          <item.icon />
+                          <span>{item.text}</span>
+                        </Link>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ))}
       </SidebarContent>
 
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
             <DropdownMenu>
-              <DropdownMenuTrigger className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground transition-colors">
-                <Avatar className="h-8 w-8 rounded-lg shrink-0">
-                  <AvatarFallback className="rounded-lg font-semibold bg-secondary-foreground text-secondary uppercase">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
-                  <span className="truncate font-medium">{userName}</span>
-                  <span className="truncate text-xs text-muted-foreground">{sesion.usuario.user}</span>
-                </div>
-                <ChevronsUpDown className="ml-auto size-4 shrink-0" />
+              {/* The same button as every other entry, not one drawn by hand:
+                  folded to icons it becomes the 32px square the avatar fills,
+                  and clips the name and the chevron instead of spilling them. */}
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <Avatar className="h-8 w-8 rounded-lg shrink-0">
+                    <AvatarFallback className="rounded-lg font-semibold bg-secondary-foreground text-secondary uppercase">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left text-sm leading-tight min-w-0">
+                    <span className="truncate font-medium">{userName}</span>
+                    <span className="truncate text-xs text-muted-foreground">{sesion.usuario.user}</span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto size-4 shrink-0" />
+                </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 className="min-w-56 rounded-lg"
@@ -223,8 +262,6 @@ export const AppSidebar = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <SidebarRail />
     </Sidebar>
   );
 };

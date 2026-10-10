@@ -7,8 +7,8 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Routes, Route } from "react-router-dom";
-import { PrivateRoutes, PublicRoutes, SegundoFactorRoute } from "./App";
+import { MemoryRouter, Routes, Route, useParams } from "react-router-dom";
+import { PrivateRoutes, PublicRoutes, SegundoFactorRoute, UsuarioOldAddress } from "./App";
 import { SesionContext, type contextProps } from "./context/SesionContext";
 import { usuarioExample } from "./data/example";
 import type { EstadoSesion } from "./interfaces/interfaces";
@@ -188,3 +188,41 @@ describe("SegundoFactorRoute", () => {
     expect(screen.queryByText("pantalla-segundo-factor")).not.toBeInTheDocument();
   });
 });
+
+/**
+ * The users screen moved from `/app/seguridad` to `/app/usuarios`. Links to one
+ * account were already out there — in bookmarks, in chats — and each names a
+ * person, so the number has to survive the move.
+ */
+describe("the old address of a user", () => {
+  it("lands on the same user at the new one", () => {
+    render(
+      <MemoryRouter initialEntries={["/app/seguridad/42"]}>
+        <Routes>
+          <Route path="/app/seguridad/:id" element={<UsuarioOldAddress />} />
+          <Route path="/app/usuarios/:id" element={<UsuarioAt />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("usuario 42")).toBeInTheDocument();
+  });
+
+  it("lands on the list when the old address named no user", () => {
+    render(
+      <MemoryRouter initialEntries={["/app/seguridad"]}>
+        <Routes>
+          <Route path="/app/seguridad" element={<UsuarioOldAddress />} />
+          <Route path="/app/usuarios" element={<div>lista de usuarios</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByText("lista de usuarios")).toBeInTheDocument();
+  });
+});
+
+function UsuarioAt() {
+  const { id } = useParams<{ id: string }>();
+  return <div>usuario {id}</div>;
+}

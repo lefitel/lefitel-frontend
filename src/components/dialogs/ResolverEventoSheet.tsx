@@ -5,14 +5,10 @@ import { mensajeDeError } from "../../api/descarga";
 import { uploadImage } from "../../api/Upload.api";
 import { EventoInterface } from "../../interfaces/interfaces";
 import { DatePicker } from "../ui/date-picker";
-import { Loader2Icon } from "lucide-react";
-import { Button } from "../ui/button";
 import { Textarea } from "../ui/textarea";
 import { Label } from "../ui/label";
 import { ImageDropzone } from "../ui/image-dropzone";
-import {
-  Sheet, SheetContent, SheetHeader, SheetFooter, SheetTitle, SheetDescription,
-} from "../ui/sheet";
+import FormDialog from "./FormDialog";
 
 interface Props {
   evento: EventoInterface | null;
@@ -77,16 +73,18 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
   };
 
   return (
-    <Sheet open={open} onOpenChange={(o) => !o && handleClose()}>
-      <SheetContent side="right" className="flex flex-col gap-0 p-0">
-        <SheetHeader className="px-6 pt-6 pb-4 border-b border-border/40">
-          <SheetTitle>Resolver Evento</SheetTitle>
-          <SheetDescription>
-            Documenta cómo se solucionó este evento para cerrarlo.
-          </SheetDescription>
-        </SheetHeader>
-
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+    <FormDialog
+      open={open}
+      onClose={handleClose}
+      title="Resolver evento"
+      description="Documenta cómo se solucionó este evento para cerrarlo."
+      dirty={!!description.trim() || !!imageFile}
+      missing={description.trim() ? [] : ["Descripción de la solución"]}
+      saving={saving}
+      submitLabel="Marcar como resuelto"
+      onSubmit={() => void handleSave()}
+      bodyClassName="space-y-5"
+    >
           {evento && (
             <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 space-y-1">
               <p className="text-xs text-muted-foreground">Evento a resolver</p>
@@ -125,20 +123,6 @@ export default function ResolverEventoSheet({ evento, open, setOpen, onSuccess }
               onChange={setImageFile}
             />
           </div>
-        </div>
-
-        <SheetFooter className="px-6 py-4 border-t border-border/40">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>
-            Cancelar
-          </Button>
-          <Button
-            onClick={handleSave}
-            disabled={saving}
-          >
-            {saving ? <><Loader2Icon className="h-4 w-4 mr-1.5 animate-spin" />Guardando…</> : "Marcar como resuelto"}
-          </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+    </FormDialog>
   );
 }
