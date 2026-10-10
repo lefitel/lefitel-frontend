@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { CopyIcon, KeyRoundIcon, ShieldOffIcon, SmartphoneIcon } from "lucide-react";
+import { CopyIcon, PlusIcon, ShieldOffIcon, SmartphoneIcon } from "lucide-react";
 import FormDialog from "../../../components/dialogs/FormDialog";
 import { CampoDialogo } from "./CampoDialogo";
 import {
@@ -427,7 +427,7 @@ const TotpSection = ({
                 )}
                 {banner409 === "factor" && (
                   <p className="text-sm text-muted-foreground">
-                    Cierra esta ventana, usa «Quitar mi factor» y vuelve a intentarlo.
+                    Cierra esta ventana, usa «Quitar aplicación» y vuelve a intentarlo.
                   </p>
                 )}
               </div>
@@ -510,48 +510,33 @@ const TotpSection = ({
       abrirLabel="Gestionar aplicación de autenticación"
       dialogos={dialogos}
     >
-      <div className="space-y-5">
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Códigos de seis dígitos desde Google Authenticator, Microsoft Authenticator, Authy,
+          1Password, Bitwarden o cualquier otra aplicación compatible.
+        </p>
+
         {/*
           "Quitar" first in the markup — see this component's own docstring
           for why the order, not merely the presence, is the fix for
-          hallazgo A5.
+          hallazgo A5. Two buttons on one line and nothing else: each used to
+          sit under a heading that repeated its own label.
         */}
-        <section className="space-y-3" aria-labelledby="totp-quitar-heading">
-          <div>
-            <h3 id="totp-quitar-heading" className="text-sm font-medium flex items-center gap-2">
-              <ShieldOffIcon className="h-4 w-4 text-muted-foreground" />
-              Quitar tu factor actual
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Si perdiste el teléfono o ya no usas tu aplicación de autenticación, quítalo aquí{" "}
-              <strong>antes</strong> de intentar registrar uno nuevo. Mientras quede un factor
-              registrado, el sistema seguirá pidiéndote que lo pruebes, aunque ya no puedas hacerlo.
-            </p>
-          </div>
-
-          <Button variant="outline" size="sm" onClick={abrirBaja}>
-            Quitar mi factor
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={abrirBaja}>
+            <ShieldOffIcon className="h-4 w-4 mr-1.5" aria-hidden />
+            Quitar aplicación
           </Button>
-        </section>
-
-        <div className="border-t border-border/40" />
-
-        <section className="space-y-3" aria-labelledby="totp-anadir-heading">
-          <div>
-            <h3 id="totp-anadir-heading" className="text-sm font-medium flex items-center gap-2">
-              <KeyRoundIcon className="h-4 w-4 text-muted-foreground" />
-              Configurar un nuevo factor
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              Funciona con Google Authenticator, Microsoft Authenticator, Authy, 1Password, Bitwarden
-              o cualquier otra aplicación compatible con TOTP.
-            </p>
-          </div>
-
-          <Button size="sm" onClick={abrirAlta}>
-            Configurar un nuevo factor
+          <Button variant="outline" size="sm" onClick={abrirAlta}>
+            <PlusIcon className="h-4 w-4 mr-1.5" aria-hidden />
+            Configurar aplicación
           </Button>
-        </section>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          ¿Perdiste el teléfono o cambiaste de aplicación? Quita primero la que tienes registrada:
+          mientras siga ahí, el sistema te la seguirá pidiendo aunque ya no puedas usarla.
+        </p>
       </div>
     </SeccionFactor>
   );

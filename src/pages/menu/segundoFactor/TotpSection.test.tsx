@@ -86,12 +86,14 @@ describe("layout", () => {
   it("shows the remove-factor action before the add-factor action", () => {
     renderTotp();
 
-    const quitar = screen.getByRole("heading", { name: /quitar tu factor actual/i });
-    const anadir = screen.getByRole("heading", { name: /configurar un nuevo factor/i });
+    // The two buttons themselves: each used to sit under a heading that
+    // repeated its label, and the headings are gone.
+    const quitar = screen.getByRole("button", { name: "Quitar aplicación" });
+    const anadir = screen.getByRole("button", { name: "Configurar aplicación" });
 
     // DOCUMENT_POSITION_FOLLOWING (4) on `anadir` relative to `quitar` means
     // `quitar` comes first in the DOM — reading the tree's own order, not
-    // merely asserting both headings exist.
+    // merely asserting both buttons exist.
     expect(quitar.compareDocumentPosition(anadir) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -107,7 +109,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
     expect(toast.warning).toHaveBeenCalledWith("Debes escribir tu contraseña actual.");
@@ -118,7 +120,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
@@ -134,7 +136,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp({ ...usuarioExample, email: "isaias@osefi.net", email_verified_at: "2026-09-01T00:00:00.000Z" });
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
 
@@ -147,7 +149,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
@@ -164,7 +166,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
@@ -185,7 +187,7 @@ describe("quitar el factor", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Quitar mi factor" }));
+    await user.click(screen.getByRole("button", { name: "Quitar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Quitar factor" }));
     await user.click(screen.getByRole("button", { name: "Sí, quitar" }));
@@ -201,7 +203,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
@@ -220,7 +222,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -240,7 +242,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -258,7 +260,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -290,7 +292,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -311,7 +313,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -334,7 +336,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -361,7 +363,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
@@ -382,11 +384,11 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
 
-    expect(await screen.findByText(/cierra esta ventana, usa «quitar mi factor»/i)).toBeInTheDocument();
+    expect(await screen.findByText(/cierra esta ventana, usa «quitar aplicación»/i)).toBeInTheDocument();
   });
 
   it("cancelling the QR step discards the attempt without calling the server again", async () => {
@@ -394,7 +396,7 @@ describe("añadir un factor nuevo", () => {
     const user = userEvent.setup();
     renderTotp();
 
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);
@@ -408,7 +410,7 @@ describe("añadir un factor nuevo", () => {
     await user.click(descartar);
 
     await waitFor(() => expect(screen.queryByText(SECRETO)).not.toBeInTheDocument());
-    expect(await screen.findByRole("button", { name: "Configurar un nuevo factor" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Configurar aplicación" })).toBeInTheDocument();
     expect(confirmTotp).not.toHaveBeenCalled();
   });
 });
@@ -420,7 +422,7 @@ describe("códigos de recuperación al confirmar (Isaias, 2026-09-02)", () => {
 
   async function llegarAlPasoDeCodigo(user: ReturnType<typeof userEvent.setup>) {
     setupTotp.mockResolvedValue({ status: 200, message: null, otpauth: OTPAUTH, secreto: SECRETO });
-    await user.click(screen.getByRole("button", { name: "Configurar un nuevo factor" }));
+    await user.click(screen.getByRole("button", { name: "Configurar aplicación" }));
     await user.type(screen.getByLabelText(/contraseña actual/i), "la-mia");
     await user.click(screen.getByRole("button", { name: "Continuar" }));
     await screen.findByText(SECRETO);

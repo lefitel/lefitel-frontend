@@ -208,21 +208,21 @@ const RecoveryCodesSection = ({ fila }: { fila?: FilaDePerfil }) => {
       abrirLabel="Gestionar códigos de recuperación"
       dialogos={dialogos}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <p className="text-sm text-muted-foreground">
-          Diez códigos de un solo uso para entrar si pierdes el acceso a tu aplicación de
-          autenticación. Guárdalos impresos o en un lugar seguro — no son un factor por sí solos,
-          pero sí la única forma de recuperar el acceso sin tu aplicación.
+          Diez códigos de un solo uso para entrar si pierdes tu llave, tu teléfono o el acceso a
+          tu correo. Guárdalos impresos o en un lugar seguro.
         </p>
 
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">Códigos sin usar:</span>
-          {badge()}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Sin usar:</span>
+            {badge()}
+          </div>
+          <Button variant="outline" size="sm" onClick={abrirForm} disabled={cargando}>
+            Generar códigos nuevos
+          </Button>
         </div>
-
-        <Button variant="outline" size="sm" onClick={abrirForm} disabled={cargando}>
-          Generar códigos nuevos
-        </Button>
       </div>
     </SeccionFactor>
   );
