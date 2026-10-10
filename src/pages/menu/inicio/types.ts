@@ -30,6 +30,7 @@ export interface KpiData {
   eventosResueltosTotal: number;
   pendGlobal: number;
   postesCurr: number;
+  postesPrev: number;
   postesRevisadosCurr: number;
   postesRevisadosPrev: number;
   postesPendientesRevisadosCurr: number;

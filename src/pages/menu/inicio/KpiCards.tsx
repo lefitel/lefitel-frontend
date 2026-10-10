@@ -5,7 +5,7 @@ import { Skeleton } from "../../../components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { DateRangePicker } from "../../../components/ui/date-range-picker";
-import { AlertTriangleIcon, ClipboardCheckIcon, InfoIcon, MapPinIcon } from "lucide-react";
+import { AlertTriangleIcon, ClipboardCheckIcon, InfoIcon, MapPinIcon, MapPinPlusIcon } from "lucide-react";
 import { TrendBadge } from "./TrendBadge";
 import { KpiData, Period, PERIOD_LABELS, CustomRange } from "./types";
 import { AnimatedNumber } from "../../../components/AnimatedNumber";
@@ -189,6 +189,9 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                       <strong className="font-semibold">Postes Activos:</strong> unión única de postes creados, revisados y solucionados en el período — sin duplicados. Cada barra muestra cuántos postes de esa categoría hay respecto al total en el sistema.
                     </span>
                     <span className="block">
+                      <strong className="font-semibold">Postes Nuevos:</strong> postes cuya <strong className="font-semibold">fecha en campo</strong> cae en el período. <em>Del total</em> = nuevos sobre el total de postes. Es la misma cifra que la barra <em>Creados</em> de Postes Activos.
+                    </span>
+                    <span className="block">
                       <strong className="font-semibold">Postes Revisados:</strong> postes únicos con al menos una revisión en el período. <em>Del total</em> = revisados sobre el total de postes. <em>Pendientes</em> = cuántos de esos revisados aún tienen eventos sin resolver.
                     </span>
                     <span className="block">
@@ -218,7 +221,10 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-6">
+        {/* Four across only where there is room for four: between `sm` and
+            `xl` they sit two by two, because a quarter of a tablet row is too
+            narrow for a bar and its "n de total" caption. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 md:gap-6">
 
           {/* Postes Activos — unión de creados + revisados + solucionados en el período */}
           {(() => {
@@ -272,6 +278,49 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                   )}
                   {loading ? <Skeleton className="h-5 w-28" /> : showTrend ? (
                     <TrendBadge current={kpis?.postesActivosCurr ?? 0} prev={kpis?.postesActivosPrev ?? 0} />
+                  ) : null}
+                </CardContent>
+              </Card>
+            );
+          })()}
+
+          {/* Postes Nuevos — postes cuya fecha en campo cae en el período. La
+              misma cifra que la barra «Creados» de arriba, en tarjeta propia. */}
+          {(() => {
+            const totalPostes = kpis?.postesTotal ?? 0;
+            const nuevos = kpis?.postesCurr ?? 0;
+            const nuevosPct = totalPostes > 0
+              ? Math.min(Math.round((nuevos / totalPostes) * 100), 100)
+              : 0;
+            return (
+              <Card className="shadow-sm border-emerald-500/20 transition-all hover:shadow-md hover:border-emerald-500/40 py-0 animate-in fade-in duration-500">
+                <CardContent className="p-3 sm:p-5 space-y-2">
+                  <div className="flex items-center justify-between gap-1">
+                    {loading ? <Skeleton className="h-4 w-28" /> : (
+                      <p className="text-xs text-muted-foreground font-medium leading-tight">Postes Nuevos</p>
+                    )}
+                    <div className="p-1.5 sm:p-2 bg-emerald-500/10 rounded-full shrink-0">
+                      <MapPinPlusIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500" />
+                    </div>
+                  </div>
+                  {loading ? <Skeleton className="h-9 w-14 mt-1" /> : (
+                    <div className="text-3xl sm:text-4xl font-bold tracking-tight text-emerald-500">
+                      <AnimatedNumber value={nuevos} />
+                    </div>
+                  )}
+                  {loading ? <Skeleton className="h-3 w-full" /> : (
+                    <div>
+                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                        <AnimatedBar pct={nuevosPct} color="bg-emerald-500" />
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Del total</span>
+                        <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">{nuevos} de {totalPostes}</span>
+                      </div>
+                    </div>
+                  )}
+                  {loading ? <Skeleton className="h-5 w-28" /> : showTrend ? (
+                    <TrendBadge current={nuevos} prev={kpis?.postesPrev ?? 0} />
                   ) : null}
                 </CardContent>
               </Card>

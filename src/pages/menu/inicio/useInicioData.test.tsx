@@ -146,6 +146,35 @@ describe("useInicioData", () => {
     });
   });
 
+  // ── Postes nuevos ──────────────────────────────────────────────────────────
+  //
+  // A pole is new in a period when its `date` — «Fecha en campo» on the form —
+  // falls inside it. The card needs the same count for the window before, or
+  // its trend badge has nothing to compare against.
+  describe("postes nuevos", () => {
+    const posteDe = (id: number, date: Date): DashboardPoste => ({ ...poste(id), date: date as unknown as Date });
+
+    it("counts the poles of the period and those of the one before, each on its own", async () => {
+      getDashboard.mockResolvedValue({
+        eventos: [],
+        postes: [
+          poste(1),                               // 2024: in neither window
+          posteDe(2, new Date(2026, 2, 10)),      // inside the period
+          posteDe(3, new Date(2026, 1, 10)),      // inside the one before
+          posteDe(4, new Date(2026, 1, 20)),      // inside the one before
+        ],
+      });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      // March 2026. The window before is the same length, ending where it starts.
+      act(() => result.current.setCustomRange({ start: new Date(2026, 2, 1), end: new Date(2026, 2, 31) }));
+
+      await waitFor(() => expect(result.current.kpis!.postesCurr).toBe(1));
+      expect(result.current.kpis!.postesPrev).toBe(2);
+    });
+  });
+
   // ── El gráfico de Actividad ────────────────────────────────────────────────
   //
   // Las dos barras contaban poblaciones distintas: `pending` se agrupaba por la

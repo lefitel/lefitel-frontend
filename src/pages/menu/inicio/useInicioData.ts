@@ -151,6 +151,7 @@ export function useInicioData(): InicioData {
 
     const postesTotal = listPostes.length;
     const postesCurr = listPostes.filter((p) => inCurr(new Date(p.date))).length;
+    const postesPrev = listPostes.filter((p) => inPrev(new Date(p.date))).length;
     const postesConIncidencias = livePostes(listEventos.filter((e) => !e.state)).size;
     const postesConEventos = livePostes(listEventos).size;
     const eventosTotal = listEventos.length;
@@ -179,7 +180,7 @@ export function useInicioData(): InicioData {
     return {
       postesTotal, postesConIncidencias, postesConEventos,
       eventosTotal, eventosResueltosTotal, pendGlobal,
-      postesCurr, postesRevisadosCurr, postesRevisadosPrev,
+      postesCurr, postesPrev, postesRevisadosCurr, postesRevisadosPrev,
       postesPendientesRevisadosCurr,
       postesSolucionadosCurr, postesSolucionadosPrev,
       postesActivosCurr, postesActivosPrev,
