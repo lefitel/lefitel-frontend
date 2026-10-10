@@ -291,7 +291,7 @@ export default function PerfilAcceso({
           >
             <span className="inline-flex items-center gap-1.5 text-muted-foreground">
               <SmartphoneIcon className="h-3.5 w-3.5" />
-              Aplicación de autenticación y códigos de recuperación
+              Llaves de acceso, aplicación de autenticación y códigos de recuperación
             </span>
           </ReadRow>
 
