@@ -53,6 +53,22 @@ function renderCard(props: {
 const tabCount = (name: RegExp) =>
   screen.getByRole("tab", { name }).textContent?.replace(/\D/g, "") ?? "";
 
+// The card opens on «Obs. crítica», the second tab, at the client's request.
+// The row is what proves it: each list holds a different pole, so the selected
+// tab and the list under it cannot disagree without this failing.
+describe("UrgentEventsCard — la pestaña con la que abre", () => {
+  it("abre en las observaciones críticas, no en los urgentes", () => {
+    renderCard({
+      urgentEvents: [evento(1, [])],
+      criticalObsEvents: [evento(2, [3])],
+    });
+
+    expect(screen.getByRole("tab", { name: /Obs\. crítica/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByText("P-2")).toBeTruthy();
+    expect(screen.queryByText("P-1")).toBeNull();
+  });
+});
+
 describe("UrgentEventsCard — los contadores cuentan sus propias filas", () => {
   it("cuenta todos los eventos con observación clasificada, no solo los de nivel 1", () => {
     renderCard({

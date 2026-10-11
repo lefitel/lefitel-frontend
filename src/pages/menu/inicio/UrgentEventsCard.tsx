@@ -58,7 +58,8 @@ const TOOLTIP: Record<Tab, string> = {
 
 export function UrgentEventsCard({ urgentEvents, criticalObsEvents, loading }: UrgentEventsCardProps) {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>("urgentes");
+  // Opens on the second tab: the client reads this card for severity first.
+  const [tab, setTab] = useState<Tab>("criticos");
 
   const events = tab === "urgentes" ? urgentEvents : criticalObsEvents;
 
