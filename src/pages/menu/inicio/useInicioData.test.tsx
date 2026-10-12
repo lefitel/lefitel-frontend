@@ -312,6 +312,20 @@ describe("useInicioData", () => {
       expect(result.current.chartData.length).toBeLessThanOrEqual(60);
     });
 
+    it("con el tope alto, tres meses se cortan por día", async () => {
+      // El tope lo pone la página según lo ancho que mida el gráfico. Tres
+      // meses son 92 días como mucho: caben enteros en 120 puntos.
+      getDashboard.mockResolvedValue({ eventos: [], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(120), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("quarter"));
+
+      await waitFor(() => expect(result.current.xAxisLabel).toBe("Últimos 3 meses · por día"));
+      expect(result.current.chartData.length).toBeGreaterThanOrEqual(60);
+      expect(result.current.chartData.length).toBeLessThanOrEqual(92);
+    });
+
     it("«Todo» empieza en el primer dato, no en 2020", async () => {
       // Un poste de enero de 2024 y nada más: de ahí a hoy por meses. Empezando
       // en 2020 serían más de 60 meses y el gráfico saltaría a trimestres por

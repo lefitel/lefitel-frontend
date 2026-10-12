@@ -8,6 +8,8 @@ import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { useInicioData } from "./useInicioData";
+import { MAX_CHART_POINTS, WIDE_CHART_MIN_WIDTH, WIDE_CHART_POINTS } from "./helpers";
+import { useIsWiderThan } from "../../../hooks/useIsWiderThan";
 import { KpiCards } from "./KpiCards";
 import { ActivityChart } from "./ActivityChart";
 import { OperationsMap } from "./OperationsMap";
@@ -20,7 +22,10 @@ const InicioPage = () => {
   const { sesion } = useContext(SesionContext);
   const rol = sesion.usuario.id_rol;
   const [openAddEvento, setOpenAddEvento] = useState(false);
-  const d = useInicioData();
+  // The chart is cut into more points where it has the width for them. Its
+  // own width, not the window's: the sidebar takes 13rem from it.
+  const [chartRef, chartIsWide] = useIsWiderThan<HTMLDivElement>(WIDE_CHART_MIN_WIDTH);
+  const d = useInicioData(chartIsWide ? WIDE_CHART_POINTS : MAX_CHART_POINTS);
 
   return (
     <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
@@ -93,7 +98,9 @@ const InicioPage = () => {
 
       <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} setCustomRange={d.setCustomRange} currentDateRange={d.currentDateRange} />
 
-      <ActivityChart chartData={d.chartData} loading={d.loading} xAxisLabel={d.xAxisLabel} period={d.period} />
+      <div ref={chartRef}>
+        <ActivityChart chartData={d.chartData} loading={d.loading} xAxisLabel={d.xAxisLabel} period={d.period} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <OperationsMap

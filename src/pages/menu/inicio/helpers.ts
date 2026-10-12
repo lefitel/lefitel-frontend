@@ -57,11 +57,25 @@ export interface ChartBucket {
 }
 
 /**
- * The most points the activity chart draws. Chosen with the figures in front:
- * at 60 the six weeks the dashboard opens on stay daily, a year reads by week
- * and the whole history by month until it is five years deep.
+ * The most points the activity chart draws on a chart of ordinary width.
+ * Chosen with the figures in front: at 60 the six weeks the dashboard opens on
+ * stay daily, a year reads by week and the whole history by month until it is
+ * five years deep.
  */
 export const MAX_CHART_POINTS = 60;
+
+/**
+ * The ceiling on a chart at least `WIDE_CHART_MIN_WIDTH` pixels wide: 120
+ * points across a thousand pixels still leave each one about eight. A 1280px
+ * laptop with the sidebar open gives the chart some 1020px, so it is on the
+ * wide side of the line.
+ *
+ * Two steps, not a ceiling proportional to the width: the grain is something
+ * people read off the caption and compare across screens, and it should not
+ * shift with every few pixels of a window being dragged.
+ */
+export const WIDE_CHART_POINTS = 120;
+export const WIDE_CHART_MIN_WIDTH = 1000;
 
 const yy = (year: number) => `'${String(year).slice(2)}`;
 

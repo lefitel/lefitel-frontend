@@ -4,7 +4,7 @@ import { getDashboard, DashboardEvento, DashboardPoste } from "../../../api/dash
 import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Period, MapTab, KpiData, MapMarker, MONTH_NAMES, CustomRange } from "./types";
-import { chartBuckets, getPeriodBounds, Granularity } from "./helpers";
+import { chartBuckets, getPeriodBounds, Granularity, MAX_CHART_POINTS } from "./helpers";
 
 export interface CriticalAlert {
   events: DashboardEvento[];
@@ -75,7 +75,11 @@ const GRANULARITY_LABELS: Record<Granularity, string> = {
   year: "por año",
 };
 
-export function useInicioData(): InicioData {
+/**
+ * @param chartMaxPoints The most points the activity chart may be cut into.
+ *   The page decides it from how wide the chart is drawn; see `WIDE_CHART_POINTS`.
+ */
+export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): InicioData {
   const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
   const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
   const [loading, setLoading] = useState(true);
@@ -246,7 +250,7 @@ export function useInicioData(): InicioData {
       desde = allMs.length > 0 ? new Date(Math.min(...allMs)) : bounds.end;
     }
 
-    const { granularity, buckets } = chartBuckets(desde, bounds.end);
+    const { granularity, buckets } = chartBuckets(desde, bounds.end, chartMaxPoints);
     return {
       granularity,
       tramos: buckets.map((b) => ({
@@ -256,7 +260,7 @@ export function useInicioData(): InicioData {
         salieron: salieronEntre(b.desde, b.hasta),
       })),
     };
-  }, [listEventos, listPostes, period, bounds]);
+  }, [listEventos, listPostes, period, bounds, chartMaxPoints]);
 
   const periodoLabel =
     period === "fortnight" ? "Últimos 15 días" :

@@ -12,7 +12,7 @@
 // today has no rule against it.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { chartBuckets, daysOpen, openedAgo, MAX_CHART_POINTS } from "./helpers";
+import { chartBuckets, daysOpen, openedAgo, MAX_CHART_POINTS, WIDE_CHART_MIN_WIDTH, WIDE_CHART_POINTS } from "./helpers";
 
 const AHORA = new Date("2026-08-26T15:00:00");
 const hace = (dias: number) => new Date(AHORA.getTime() - dias * 86_400_000);
@@ -149,5 +149,24 @@ describe("chartBuckets", () => {
     const r = chartBuckets(d(2026, 10, 12), new Date(2026, 9, 12, 18, 0));
     expect(r.buckets).toHaveLength(1);
     expect(r.buckets[0].label).toBe("12/10");
+  });
+});
+
+// What limits how many points a chart can hold is its width in pixels, not a
+// fixed number: sixty points on a wide monitor leave twenty pixels each and
+// room to spare. So the ceiling doubles once the chart is wide enough.
+describe("the ceiling of a wide chart", () => {
+  it("is twice the ordinary one, from a thousand pixels on", () => {
+    expect(WIDE_CHART_POINTS).toBe(MAX_CHART_POINTS * 2);
+    expect(WIDE_CHART_MIN_WIDTH).toBe(1000);
+  });
+
+  it("is what lets three months be read by day", () => {
+    const start = new Date(2026, 7, 1), end = new Date(2026, 9, 12);
+
+    expect(chartBuckets(start, end, MAX_CHART_POINTS).granularity).toBe("week");
+    const wide = chartBuckets(start, end, WIDE_CHART_POINTS);
+    expect(wide.granularity).toBe("day");
+    expect(wide.buckets).toHaveLength(73);
   });
 });
