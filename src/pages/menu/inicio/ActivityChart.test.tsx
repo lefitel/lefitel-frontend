@@ -9,17 +9,35 @@
 // Nothing here lays a chart out, so the lines themselves cannot be asserted.
 // The legend and the view switch are what there is to read.
 
-import { describe, expect, it } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cloneElement, type ReactElement } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ActivityChart } from "./ActivityChart";
+import { chartBuckets } from "./helpers";
+
+// The one piece of layout these tests supply: a size. The chart sizes itself to
+// its container and jsdom gives every container zero, so nothing would be drawn.
+// With a size the axes are in the DOM. Their text still measures zero wide, so
+// no label is ever dropped for lack of room: what can be asserted is which
+// labels the chart asks for, not which survive on a narrow screen.
+vi.mock("recharts", async (original) => ({
+  ...(await original<typeof import("recharts")>()),
+  ResponsiveContainer: ({ children }: { children: ReactElement<{ width?: number; height?: number }> }) =>
+    cloneElement(children, { width: 900, height: 350 }),
+}));
+
+/** 29 September to 2 October 2026, by day: a month ends in the middle. */
+const { buckets } = chartBuckets(new Date(2026, 8, 29), new Date(2026, 9, 2));
+const chartData = buckets.map((b, i) => ({ label: b.label, desde: b.desde, postes: i, entraron: 5, salieron: 2 }));
 
 const pintar = () =>
   render(
     <ActivityChart
-      chartData={[{ label: "Ene", postes: 3, entraron: 5, salieron: 2 }]}
+      chartData={chartData}
+      granularity="day"
       loading={false}
-      xAxisLabel="Mes — 2026"
-      period="year"
+      xAxisLabel="29/9/2026 — 2/10/2026 · por día"
+      period="custom"
     />,
   );
 
@@ -57,4 +75,24 @@ describe("the activity chart", () => {
     expect(screen.getByText("Mejora")).toBeTruthy();
     expect(screen.queryByText("Postes nuevos")).toBeNull();
   });
+
+  // The dates under the points, on two rows. The months have an axis of their
+  // own because the library drops the labels that do not fit, and the one it
+  // drops may be the first of the month: a month hung from a day would vanish
+  // with it.
+  it("writes the day under each point, and each month once", async () => {
+    const { container } = pintar();
+    const textos = () => Array.from(container.querySelectorAll("svg text")).map((t) => t.textContent);
+
+    // The library lays its axes out a pass after the first render.
+    await waitFor(() => expect(textos()).toContain("Sep '26"));
+    const escrito = textos();
+
+    for (const dia of ["29", "30", "1"]) expect(escrito).toContain(dia);
+    expect(escrito.filter((t) => t === "Sep '26")).toHaveLength(1);
+    expect(escrito.filter((t) => t === "Oct '26")).toHaveLength(1);
+    // And not the whole date at every point, which is what did not fit.
+    expect(escrito).not.toContain("29/9");
+  });
 });
+

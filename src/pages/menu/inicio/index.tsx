@@ -99,7 +99,7 @@ const InicioPage = () => {
       <KpiCards kpis={d.kpis} loading={d.loading} period={d.period} setPeriod={d.setPeriod} showTrend={d.showTrend} setCustomRange={d.setCustomRange} currentDateRange={d.currentDateRange} />
 
       <div ref={chartRef}>
-        <ActivityChart chartData={d.chartData} loading={d.loading} xAxisLabel={d.xAxisLabel} period={d.period} />
+        <ActivityChart chartData={d.chartData} granularity={d.chartGranularity} loading={d.loading} xAxisLabel={d.xAxisLabel} period={d.period} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

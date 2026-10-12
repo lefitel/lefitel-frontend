@@ -12,7 +12,10 @@ export interface CriticalAlert {
 }
 
 export interface ChartTramo {
+  /** The bucket's date in full, for the tooltip. The axis writes it in two rows. */
   label: string;
+  /** Where the bucket begins, in ms. Unique, so it is also the chart's key. */
+  desde: number;
   postes: number;
   entraron: number;
   salieron: number;
@@ -49,6 +52,8 @@ export interface InicioData {
    * desaparecería del mes en que entró.
    */
   chartData: ChartTramo[];
+  /** The grain `chartData` was cut at; the chart's axis is written from it. */
+  chartGranularity: Granularity;
   xAxisLabel: string;
   showTrend: boolean;
   urgentEvents: DashboardEvento[];
@@ -255,6 +260,7 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
       granularity,
       tramos: buckets.map((b) => ({
         label: b.label,
+        desde: b.desde,
         postes: postesEntre(b.desde, b.hasta),
         entraron: entraronEntre(b.desde, b.hasta),
         salieron: salieronEntre(b.desde, b.hasta),
@@ -345,7 +351,7 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
     loading, error, load, period, setPeriod, customRange, setCustomRange,
     currentDateRange: { start: bounds.start, end: bounds.end },
     mapTab, setMapTab,
-    kpis, chartData: chart.tramos, xAxisLabel, showTrend,
+    kpis, chartData: chart.tramos, chartGranularity: chart.granularity, xAxisLabel, showTrend,
     urgentEvents, criticalObsEvents, topPostes, mapMarkers, criticalAlerts,
     dataPoste, setDataPoste, openEditPoste, setOpenEditPoste,
   };

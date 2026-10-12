@@ -13,6 +13,7 @@ import {
 import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "../../../components/ui/chart";
 import { Period } from "./types";
 import { ChartTramo } from "./useInicioData";
+import { axisLabels, Granularity } from "./helpers";
 
 type ChartType = "lineas" | "balance";
 
@@ -39,12 +40,14 @@ const SHORT_PERIODS: Period[] = ["fortnight", "month"];
 
 interface ActivityChartProps {
   chartData: ChartTramo[];
+  /** The grain `chartData` was cut at: it decides what the axis writes. */
+  granularity: Granularity;
   loading: boolean;
   xAxisLabel: string;
   period: Period;
 }
 
-export function ActivityChart({ chartData, loading, xAxisLabel, period }: ActivityChartProps) {
+export function ActivityChart({ chartData, granularity, loading, xAxisLabel, period }: ActivityChartProps) {
   const [chartType, setChartType] = useState<ChartType>("lineas");
   const showDots = SHORT_PERIODS.includes(period);
 
@@ -55,11 +58,50 @@ export function ActivityChart({ chartData, loading, xAxisLabel, period }: Activi
     [chartData]
   );
 
+  // The dates, on two rows: see `axisLabels`. Both axes are keyed on `desde`
+  // and not on the text they print, because that text repeats — there is a
+  // "1" in every month — and an axis keyed on it would fold those into one.
+  const { tickOf, groupOf, groupStarts } = useMemo(() => {
+    const labels = axisLabels(chartData.map((d) => d.desde), granularity);
+    const tickOf = new Map<number, string>();
+    const groupOf = new Map<number, string>();
+    chartData.forEach((d, i) => {
+      tickOf.set(d.desde, labels[i].tick);
+      const group = labels[i].group;
+      if (group) groupOf.set(d.desde, group);
+    });
+    return { tickOf, groupOf, groupStarts: [...groupOf.keys()] };
+  }, [chartData, granularity]);
+
   const commonAxisProps = {
-    xAxis:   <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} minTickGap={32} className="text-xs" />,
+    xAxis: (
+      <>
+        <XAxis dataKey="desde" tickFormatter={(ms: number) => tickOf.get(ms) ?? ""} tickLine={false} axisLine={false} tickMargin={8} minTickGap={12} height={24} className="text-xs" />
+        {/* The shared part, on an axis of its own. Hung from the row above it
+            would vanish whenever the library drops the first of a month for
+            lack of room, which is exactly when it is most needed. It drops its
+            own labels by the same rule, keeping the earliest. */}
+        {groupStarts.length > 0 && (
+          <XAxis
+            xAxisId="group"
+            dataKey="desde"
+            ticks={groupStarts}
+            tickFormatter={(ms: number) => groupOf.get(ms) ?? ""}
+            interval="preserveStart"
+            minTickGap={12}
+            tickLine={false}
+            axisLine={false}
+            tickMargin={0}
+            height={18}
+            className="text-xs font-medium [&_.recharts-cartesian-axis-tick_text]:fill-foreground"
+          />
+        )}
+      </>
+    ),
     yAxis:   <YAxis tickLine={false} axisLine={false} tickMargin={8} width={28} className="text-xs" allowDecimals={false} />,
     grid:    <CartesianGrid vertical={false} strokeDasharray="3 3" />,
-    tooltip: <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />,
+    // The axis key is a timestamp now; the tooltip keeps titling itself with the date.
+    tooltip: <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" labelFormatter={(_, payload) => payload?.[0]?.payload?.label} />} />,
   };
 
   const isBalance = chartType === "balance";

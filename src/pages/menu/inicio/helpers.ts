@@ -155,6 +155,40 @@ export function chartBuckets(start: Date, end: Date, max = MAX_CHART_POINTS): { 
   };
 }
 
+/** What the chart writes under one point: see `axisLabels`. */
+export interface AxisLabel {
+  /** The part of the date that changes at every point. */
+  tick: string;
+  /** The part the points share, on the first point that has it; `null` on the rest. */
+  group: string | null;
+}
+
+/**
+ * The dates under the chart's points, split over two rows.
+ *
+ * A whole date at every point — "12/10" — is wide, and with seventy points one
+ * in five had room. So each point keeps only what tells it from its neighbour,
+ * and what they share is written once beneath: the day over the month, the
+ * month or the quarter over the year. A year has nothing above it to share.
+ *
+ * @param starts Where each bucket begins, in the order they are drawn.
+ */
+export function axisLabels(starts: number[], granularity: Granularity): AxisLabel[] {
+  let previous: string | null = null;
+  return starts.map((ms) => {
+    const t = new Date(ms);
+    const year = String(t.getFullYear());
+    const [tick, shared] =
+      granularity === "year"    ? [year, null] :
+      granularity === "quarter" ? [`T${Math.floor(t.getMonth() / 3) + 1}`, year] :
+      granularity === "month"   ? [MONTH_NAMES[t.getMonth()], year] :
+      [String(t.getDate()), `${MONTH_NAMES[t.getMonth()]} ${yy(t.getFullYear())}`];
+    const group = shared !== previous ? shared : null;
+    previous = shared;
+    return { tick, group };
+  });
+}
+
 /**
  * Whole days since `date`, floored at zero.
  *

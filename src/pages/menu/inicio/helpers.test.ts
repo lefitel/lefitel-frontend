@@ -12,7 +12,7 @@
 // today has no rule against it.
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { chartBuckets, daysOpen, openedAgo, MAX_CHART_POINTS, WIDE_CHART_MIN_WIDTH, WIDE_CHART_POINTS } from "./helpers";
+import { axisLabels, chartBuckets, daysOpen, openedAgo, MAX_CHART_POINTS, WIDE_CHART_MIN_WIDTH, WIDE_CHART_POINTS } from "./helpers";
 
 const AHORA = new Date("2026-08-26T15:00:00");
 const hace = (dias: number) => new Date(AHORA.getTime() - dias * 86_400_000);
@@ -168,5 +168,57 @@ describe("the ceiling of a wide chart", () => {
     const wide = chartBuckets(start, end, WIDE_CHART_POINTS);
     expect(wide.granularity).toBe("day");
     expect(wide.buckets).toHaveLength(73);
+  });
+});
+
+// ── What the chart writes under its points ───────────────────────────────────
+//
+// Every point used to carry its whole date — "12/10" — and with seventy of
+// them only one in five had room to be written. The date is now split over two
+// rows: the part that changes at every point on top, short enough to fit twice
+// as often, and the part they share written once, under the first point that
+// has it. Turning the labels sideways was the other way to make room; this one
+// keeps them level and shows where a month ends.
+describe("axisLabels", () => {
+  const starts = (granularity: Parameters<typeof axisLabels>[1], from: Date, to: Date, max = 60) => {
+    const r = chartBuckets(from, to, max);
+    expect(r.granularity).toBe(granularity);
+    return axisLabels(r.buckets.map((b) => b.desde), granularity);
+  };
+
+  it("writes the day on top and each month once, where it starts", () => {
+    const labels = starts("day", new Date(2026, 8, 29), new Date(2026, 9, 2));
+
+    expect(labels.map((l) => l.tick)).toEqual(["29", "30", "1", "2"]);
+    expect(labels.map((l) => l.group)).toEqual(["Sep '26", null, "Oct '26", null]);
+  });
+
+  it("does the same by week, naming the month a week starts in", () => {
+    const labels = starts("week", new Date(2026, 7, 1), new Date(2026, 9, 12));
+
+    expect(labels.slice(0, 6).map((l) => l.tick)).toEqual(["1", "8", "15", "22", "29", "5"]);
+    expect(labels.map((l) => l.group).filter(Boolean)).toEqual(["Ago '26", "Sep '26", "Oct '26"]);
+  });
+
+  it("by month, writes the month on top and the year once", () => {
+    const labels = starts("month", new Date(2024, 10, 1), new Date(2026, 1, 28));
+
+    expect(labels.slice(0, 3).map((l) => l.tick)).toEqual(["Nov", "Dic", "Ene"]);
+    expect(labels.map((l) => l.group).filter(Boolean)).toEqual(["2024", "2025", "2026"]);
+    expect(labels[2].group).toBe("2025");
+  });
+
+  it("by quarter, writes the quarter on top and the year once", () => {
+    const labels = starts("quarter", new Date(2020, 0, 1), new Date(2026, 9, 12));
+
+    expect(labels.slice(0, 5).map((l) => l.tick)).toEqual(["T1", "T2", "T3", "T4", "T1"]);
+    expect(labels[4].group).toBe("2021");
+  });
+
+  it("by year, has nothing left to write underneath", () => {
+    const labels = starts("year", new Date(2005, 5, 1), new Date(2026, 9, 12));
+
+    expect(labels[0]).toEqual({ tick: "2005", group: null });
+    expect(labels.every((l) => l.group === null)).toBe(true);
   });
 });
