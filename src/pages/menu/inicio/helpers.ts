@@ -1,4 +1,4 @@
-import { Period } from "./types";
+import { MONTH_NAMES, Period } from "./types";
 
 export function getPeriodBounds(period: Period) {
   const now = new Date();
@@ -44,6 +44,100 @@ export function getPeriodBounds(period: Period) {
     end: now,
     prevStart: new Date(2020, 0, 1),
     prevEnd: now,
+  };
+}
+
+export type Granularity = "day" | "week" | "month" | "quarter" | "year";
+
+/** A slice of the chart's period: `[desde, hasta)` in milliseconds. */
+export interface ChartBucket {
+  label: string;
+  desde: number;
+  hasta: number;
+}
+
+/**
+ * The most points the activity chart draws. Chosen with the figures in front:
+ * at 60 the six weeks the dashboard opens on stay daily, a year reads by week
+ * and the whole history by month until it is five years deep.
+ */
+export const MAX_CHART_POINTS = 60;
+
+const yy = (year: number) => `'${String(year).slice(2)}`;
+
+/**
+ * Cuts `[start, end]` into the buckets the activity chart draws: the finest
+ * grain — day, week, month, quarter, year — that does not pass `max` points.
+ *
+ * One rule for every period, so none of them has a grain of its own to fall
+ * out of step: «3 meses» was cut by month and drew three points. The floor
+ * follows from the ceiling — a step up divides the points by seven at most —
+ * except for a range of a few days, which has no finer grain to fall to.
+ *
+ * The buckets are contiguous and cover exactly from the first midnight of
+ * `start` to the midnight after `end`, so their counts add up to the period's
+ * and nothing beyond it is drawn. Weeks are seven days from `start`, not
+ * calendar weeks: a calendar week would open the chart on a partial bucket
+ * that reads as a dip. Months, quarters and years are calendar ones, clipped
+ * at both ends.
+ *
+ * Boundaries are built from calendar fields, never by adding 24 hours: across
+ * a clock change that drifts an hour and moves an event into the wrong day.
+ */
+export function chartBuckets(start: Date, end: Date, max = MAX_CHART_POINTS): { granularity: Granularity; buckets: ChartBucket[] } {
+  const y = start.getFullYear(), m = start.getMonth(), d = start.getDate();
+  const first = new Date(y, m, d).getTime();
+  // An end before its start is a range of one day, not of none.
+  const limit = Math.max(
+    new Date(end.getFullYear(), end.getMonth(), end.getDate() + 1).getTime(),
+    new Date(y, m, d + 1).getTime(),
+  );
+  const last = new Date(limit - 1);
+
+  // `round`, because a day with a clock change in it is 23 or 25 hours long.
+  const days = Math.round((limit - first) / 86_400_000);
+  const dayLabel = (t: Date) => `${t.getDate()}/${t.getMonth() + 1}`;
+
+  /** `count` buckets whose i-th boundary is `edge(i)`, clipped to the period. */
+  const cut = (count: number, edge: (i: number) => Date, label: (from: Date) => string): ChartBucket[] =>
+    Array.from({ length: count }, (_, i) => {
+      const from = edge(i);
+      return {
+        label: label(from),
+        desde: Math.max(from.getTime(), first),
+        hasta: Math.min(edge(i + 1).getTime(), limit),
+      };
+    });
+
+  if (days <= max) {
+    return { granularity: "day", buckets: cut(days, (i) => new Date(y, m, d + i), dayLabel) };
+  }
+
+  const weeks = Math.ceil(days / 7);
+  if (weeks <= max) {
+    return { granularity: "week", buckets: cut(weeks, (i) => new Date(y, m, d + i * 7), dayLabel) };
+  }
+
+  const months = (last.getFullYear() - y) * 12 + (last.getMonth() - m) + 1;
+  if (months <= max) {
+    return {
+      granularity: "month",
+      buckets: cut(months, (i) => new Date(y, m + i, 1), (t) => `${MONTH_NAMES[t.getMonth()]} ${yy(t.getFullYear())}`),
+    };
+  }
+
+  const q = Math.floor(m / 3);
+  const quarters = (last.getFullYear() - y) * 4 + (Math.floor(last.getMonth() / 3) - q) + 1;
+  if (quarters <= max) {
+    return {
+      granularity: "quarter",
+      buckets: cut(quarters, (i) => new Date(y, (q + i) * 3, 1), (t) => `T${Math.floor(t.getMonth() / 3) + 1} ${yy(t.getFullYear())}`),
+    };
+  }
+
+  return {
+    granularity: "year",
+    buckets: cut(last.getFullYear() - y + 1, (i) => new Date(y + i, 0, 1), (t) => String(t.getFullYear())),
   };
 }
 

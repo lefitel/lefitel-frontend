@@ -212,7 +212,12 @@ describe("useInicioData", () => {
   // una en su fecha y sin mirar el estado actual del evento. Eso es lo que hace
   // que el modo Balance signifique algo.
   describe("el gráfico de actividad", () => {
-    const ESTE_ANIO = new Date().getFullYear();
+    // Un rango fijo de dos años, no «este año»: el granulado lo elige ahora
+    // `chartBuckets` según lo largo del período, así que el mismo botón corta
+    // por días en enero y por semanas en marzo. Dos años son 105 semanas, por
+    // encima del tope, y se cortan por mes: 24 tramos, enero de 2025 el primero.
+    const ESTE_ANIO = 2025;
+    const DOS_ANIOS = { start: new Date(2025, 0, 1), end: new Date(2026, 11, 31) };
 
     /** Un evento nacido en `mes`, reparado en `mesCierre` si se indica. */
     function eventoDeMes(id: number, mes: number, mesCierre?: number): DashboardEvento {
@@ -233,10 +238,10 @@ describe("useInicioData", () => {
 
       const { result } = renderHook(() => useInicioData(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.setPeriod("year"));
-      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      act(() => result.current.setCustomRange(DOS_ANIOS));
+      // 24 tramos = la vista por meses ya está montada. Con "> 0" bastaba el
       // período por defecto y el test leía otra vista.
-      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(24));
 
       expect(result.current.chartData[0].entraron).toBe(1);
     });
@@ -246,10 +251,10 @@ describe("useInicioData", () => {
 
       const { result } = renderHook(() => useInicioData(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.setPeriod("year"));
-      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      act(() => result.current.setCustomRange(DOS_ANIOS));
+      // 24 tramos = la vista por meses ya está montada. Con "> 0" bastaba el
       // período por defecto y el test leía otra vista.
-      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(24));
 
       expect(result.current.chartData[2].salieron).toBe(1);
       // Y no se cuenta como salida en el mes en que entró.
@@ -265,10 +270,10 @@ describe("useInicioData", () => {
 
       const { result } = renderHook(() => useInicioData(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.setPeriod("year"));
-      // 12 tramos = la vista anual ya está montada. Con "> 0" bastaba el
+      act(() => result.current.setCustomRange(DOS_ANIOS));
+      // 24 tramos = la vista por meses ya está montada. Con "> 0" bastaba el
       // período por defecto y el test leía otra vista.
-      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(24));
 
       expect(result.current.chartData[0].entraron).toBe(3);
       expect(result.current.chartData[2].salieron).toBe(2);
@@ -276,7 +281,7 @@ describe("useInicioData", () => {
 
     it("los postes nuevos cuentan en el tramo de su fecha en campo", async () => {
       // La tercera línea. Un poste de enero y dos de marzo; el de 2024 que trae
-      // `poste()` no cae en ningún tramo de este año.
+      // `poste()` queda fuera del rango.
       const posteDeMes = (id: number, mes: number): DashboardPoste =>
         ({ ...poste(id), date: new Date(ESTE_ANIO, mes, 10) as unknown as Date });
       getDashboard.mockResolvedValue({
@@ -286,10 +291,40 @@ describe("useInicioData", () => {
 
       const { result } = renderHook(() => useInicioData(), { wrapper });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.setPeriod("year"));
-      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+      act(() => result.current.setCustomRange(DOS_ANIOS));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(24));
 
-      expect(result.current.chartData.map((t) => t.postes)).toEqual([1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+      expect(result.current.chartData.map((t) => t.postes)).toEqual([1, 0, 2, ...Array(21).fill(0)]);
+    });
+
+    it("tres meses no son tres puntos", async () => {
+      // El defecto que motivó la regla: «3 meses» se cortaba por mes. Según el
+      // día en que se mire son entre 60 y 92 días — 60 puntos diarios como
+      // mucho, 9 semanales como poco — y el rótulo dice cuál de los dos.
+      getDashboard.mockResolvedValue({ eventos: [], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("quarter"));
+
+      await waitFor(() => expect(result.current.xAxisLabel).toMatch(/^Últimos 3 meses · por (día|semana)$/));
+      expect(result.current.chartData.length).toBeGreaterThanOrEqual(9);
+      expect(result.current.chartData.length).toBeLessThanOrEqual(60);
+    });
+
+    it("«Todo» empieza en el primer dato, no en 2020", async () => {
+      // Un poste de enero de 2024 y nada más: de ahí a hoy por meses. Empezando
+      // en 2020 serían más de 60 meses y el gráfico saltaría a trimestres por
+      // unos años en los que no hay nada.
+      getDashboard.mockResolvedValue({ eventos: [], postes: [poste(10)] });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("all"));
+
+      await waitFor(() => expect(result.current.xAxisLabel).toMatch(/^Histórico completo · /));
+      expect(result.current.chartData[0].label).toBe("Ene '24");
+      expect(result.current.chartData[0].postes).toBe(1);
     });
 
     it("cuenta igual en las vistas por día que en las vistas por mes", async () => {

@@ -4,7 +4,7 @@ import { getDashboard, DashboardEvento, DashboardPoste } from "../../../api/dash
 import { PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
 import { Period, MapTab, KpiData, MapMarker, MONTH_NAMES, CustomRange } from "./types";
-import { getPeriodBounds } from "./helpers";
+import { chartBuckets, getPeriodBounds, Granularity } from "./helpers";
 
 export interface CriticalAlert {
   events: DashboardEvento[];
@@ -67,20 +67,12 @@ const getSolDate = (e: DashboardEvento): Date | null => {
   return d ? new Date(d) : null;
 };
 
-/** Los meses naturales que van de `desde` a `hasta`, ambos incluidos. */
-const mesesEntre = (desde: Date, hasta: Date): { label: string; month: number; year: number }[] => {
-  const out: { label: string; month: number; year: number }[] = [];
-  let cursor = new Date(desde.getFullYear(), desde.getMonth(), 1);
-  const fin = new Date(hasta.getFullYear(), hasta.getMonth(), 1);
-  while (cursor <= fin) {
-    out.push({
-      label: `${MONTH_NAMES[cursor.getMonth()]} '${String(cursor.getFullYear()).slice(2)}`,
-      month: cursor.getMonth(),
-      year: cursor.getFullYear(),
-    });
-    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
-  }
-  return out;
+const GRANULARITY_LABELS: Record<Granularity, string> = {
+  day: "por día",
+  week: "por semana",
+  month: "por mes",
+  quarter: "por trimestre",
+  year: "por año",
 };
 
 export function useInicioData(): InicioData {
@@ -215,8 +207,11 @@ export function useInicioData(): InicioData {
   // salidas colgaban del `else` de esa condición y en otras se contaban aparte,
   // de modo que el mismo evento podía salir resuelto en una vista y pendiente en
   // otra. Escribirla una sola vez es lo que impide que vuelvan a separarse.
-  const chartData = useMemo((): ChartTramo[] => {
-    if (!listEventos || !listPostes) return [];
+  //
+  // Lo mismo pasaba con el granulado: cada período traía el suyo escrito a mano
+  // y «3 meses» dibujaba tres puntos. Ahora lo decide `chartBuckets` para todos.
+  const chart = useMemo((): { granularity: Granularity; tramos: ChartTramo[] } => {
+    if (!listEventos || !listPostes) return { granularity: "day", tramos: [] };
 
     /** Postes cuya fecha en campo cae en [desde, hasta) — la regla de la tarjeta «Postes Nuevos». */
     const postesEntre = (desde: number, hasta: number) =>
@@ -239,102 +234,41 @@ export function useInicioData(): InicioData {
         return !!d && d.getTime() >= desde && d.getTime() < hasta;
       }).length;
 
-    const tramo = (label: string, desde: number, hasta: number) => ({
-      label,
-      postes: postesEntre(desde, hasta),
-      entraron: entraronEntre(desde, hasta),
-      salieron: salieronEntre(desde, hasta),
-    });
+    // "Todo" empieza en la avería o el poste más antiguo que no sea anterior al
+    // sistema, no en 2020: los años vacíos de delante gastarían puntos del tope
+    // y empujarían el gráfico a un granulado más grueso sin motivo.
+    let desde = bounds.start;
+    if (period === "all") {
+      const systemStart = new Date(2020, 0, 1).getTime();
+      const allMs = [...listEventos, ...listPostes]
+        .map((x) => new Date(x.date).getTime())
+        .filter((ms) => !isNaN(ms) && ms >= systemStart);
+      desde = allMs.length > 0 ? new Date(Math.min(...allMs)) : bounds.end;
+    }
 
-    /** Un mes natural completo, de su día 1 al día 1 del siguiente. */
-    const tramoMes = (label: string, year: number, month: number) =>
-      tramo(label, new Date(year, month, 1).getTime(), new Date(year, month + 1, 1).getTime());
-
-    const tramoDia = (day: Date) => {
-      const inicio = new Date(day);
-      inicio.setHours(0, 0, 0, 0);
-      const ms = inicio.getTime();
-      return tramo(`${inicio.getDate()}/${inicio.getMonth() + 1}`, ms, ms + 86_400_000);
+    const { granularity, buckets } = chartBuckets(desde, bounds.end);
+    return {
+      granularity,
+      tramos: buckets.map((b) => ({
+        label: b.label,
+        postes: postesEntre(b.desde, b.hasta),
+        entraron: entraronEntre(b.desde, b.hasta),
+        salieron: salieronEntre(b.desde, b.hasta),
+      })),
     };
-
-    if (period === "fortnight") {
-      return Array.from({ length: 15 }, (_, i) => {
-        const day = new Date(bounds.start);
-        day.setDate(day.getDate() + i);
-        return tramoDia(day);
-      });
-    }
-
-    if (period === "month") {
-      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-      return Array.from({ length: daysInMonth }, (_, i) => {
-        const day = new Date(now.getFullYear(), now.getMonth(), i + 1);
-        const ms = day.getTime();
-        return tramo((i + 1).toString(), ms, ms + 86_400_000);
-      });
-    }
-
-    if (period === "quarter") {
-      return [0, 1, 2].map((i) => {
-        const d = new Date(now.getFullYear(), now.getMonth() - 2 + i, 1);
-        return tramoMes(MONTH_NAMES[d.getMonth()], d.getFullYear(), d.getMonth());
-      });
-    }
-
-    if (period === "year") {
-      return Array.from({ length: 12 }, (_, m) =>
-        tramoMes(MONTH_NAMES[m], now.getFullYear(), m)
-      );
-    }
-
-    if (period === "custom") {
-      const diffDays = Math.ceil((customRange.end.getTime() - customRange.start.getTime()) / 86_400_000);
-
-      if (diffDays <= 90) {
-        return Array.from({ length: diffDays + 1 }, (_, i) => {
-          const day = new Date(customRange.start);
-          day.setDate(day.getDate() + i);
-          return tramoDia(day);
-        });
-      }
-
-      if (diffDays <= 365) {
-        // Semanal — siempre ≥ 13 puntos para rangos de más de 90 días.
-        const weeks = Math.ceil((diffDays + 1) / 7);
-        return Array.from({ length: weeks }, (_, i) => {
-          const weekStart = new Date(customRange.start);
-          weekStart.setDate(weekStart.getDate() + i * 7);
-          weekStart.setHours(0, 0, 0, 0);
-          const ws = weekStart.getTime();
-          const we = Math.min(ws + 7 * 86_400_000, customRange.end.getTime() + 86_400_000);
-          return tramo(`${weekStart.getDate()}/${weekStart.getMonth() + 1}`, ws, we);
-        });
-      }
-
-      return mesesEntre(customRange.start, customRange.end).map(({ label, month, year }) =>
-        tramoMes(label, year, month)
-      );
-    }
-
-    // "all" — desde la avería o el poste más antiguo que no sea anterior al
-    // sistema. Los postes cuentan: el primero es anterior a la primera avería.
-    const systemStart = new Date(2020, 0, 1).getTime();
-    const allMs = [...listEventos, ...listPostes].map((x) => new Date(x.date).getTime()).filter((ms) => !isNaN(ms) && ms >= systemStart);
-    const earliest = allMs.length > 0 ? new Date(Math.min(...allMs)) : new Date(2020, 0, 1);
-    return mesesEntre(earliest, bounds.end).map(({ label, month, year }) =>
-      tramoMes(label, year, month)
-    );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [listEventos, listPostes, period, bounds]);
 
-  const xAxisLabel =
-    period === "fortnight" ? "Día — últimos 15 días" :
-    period === "month"   ? `Día — ${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` :
-    period === "quarter" ? "Últimos 3 meses" :
-    period === "year"    ? `Mes — ${now.getFullYear()}` :
+  const periodoLabel =
+    period === "fortnight" ? "Últimos 15 días" :
+    period === "month"     ? `${MONTH_NAMES[now.getMonth()]} ${now.getFullYear()}` :
+    period === "quarter"   ? "Últimos 3 meses" :
+    period === "year"      ? `${now.getFullYear()}` :
     period === "custom"
       ? `${customRange.start.getDate()}/${customRange.start.getMonth() + 1}/${customRange.start.getFullYear()} — ${customRange.end.getDate()}/${customRange.end.getMonth() + 1}/${customRange.end.getFullYear()}` :
-    "Histórico completo (por mes)";
+    "Histórico completo";
+  // The grain is the chart's own choice now, so the caption has to say it:
+  // the same button draws days in January and weeks in March.
+  const xAxisLabel = `${periodoLabel} · ${GRANULARITY_LABELS[chart.granularity]}`;
 
   const showTrend = period !== "all";
 
@@ -407,7 +341,7 @@ export function useInicioData(): InicioData {
     loading, error, load, period, setPeriod, customRange, setCustomRange,
     currentDateRange: { start: bounds.start, end: bounds.end },
     mapTab, setMapTab,
-    kpis, chartData, xAxisLabel, showTrend,
+    kpis, chartData: chart.tramos, xAxisLabel, showTrend,
     urgentEvents, criticalObsEvents, topPostes, mapMarkers, criticalAlerts,
     dataPoste, setDataPoste, openEditPoste, setOpenEditPoste,
   };
