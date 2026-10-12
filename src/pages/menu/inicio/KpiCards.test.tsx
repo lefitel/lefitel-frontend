@@ -27,45 +27,45 @@ const pintar = () =>
     />,
   );
 
-// «Postes Nuevos» repeats a number the «Creados» bar of Postes Activos already
-// prints, so every assertion below is scoped to its own card: found anywhere on
-// the page, "34 de 1686" would pass without the card existing.
+// One fixture for both cards. Each assertion is scoped to its own card: «Postes
+// Nuevos» repeats a number the «Creados» bar of Postes Activos already prints,
+// so found anywhere on the page "34 de 1686" would pass without the card existing.
+const kpis: KpiData = {
+  postesTotal: 1686,
+  postesConIncidencias: 0,
+  eventosTotal: 1376,
+  eventosResueltosTotal: 0,
+  pendGlobal: 0,
+  postesCurr: 34,
+  postesPrev: 20,
+  postesRevisadosCurr: 71,
+  postesRevisadosPrev: 71,
+  postesPendientesRevisadosCurr: 0,
+  postesSolucionadosCurr: 52,
+  eventosSolucionadosCurr: 60,
+  eventosSolucionadosPrev: 40,
+  postesActivosCurr: 128,
+  postesActivosPrev: 128,
+};
+
+const tarjeta = (showTrend: boolean, titulo = "Postes Nuevos") => {
+  render(
+    <KpiCards
+      kpis={kpis}
+      loading={false}
+      period="month"
+      setPeriod={vi.fn()}
+      showTrend={showTrend}
+      setCustomRange={vi.fn()}
+      currentDateRange={{ start: new Date(2026, 8, 1), end: new Date(2026, 9, 10) }}
+    />,
+  );
+  const card = screen.getByText(titulo).closest<HTMLElement>('[data-slot="card"]');
+  expect(card).not.toBeNull();
+  return within(card!);
+};
+
 describe("the «Postes Nuevos» card", () => {
-  const kpis: KpiData = {
-    postesTotal: 1686,
-    postesConIncidencias: 0,
-    postesConEventos: 0,
-    eventosTotal: 0,
-    eventosResueltosTotal: 0,
-    pendGlobal: 0,
-    postesCurr: 34,
-    postesPrev: 20,
-    postesRevisadosCurr: 71,
-    postesRevisadosPrev: 71,
-    postesPendientesRevisadosCurr: 0,
-    postesSolucionadosCurr: 52,
-    postesSolucionadosPrev: 52,
-    postesActivosCurr: 128,
-    postesActivosPrev: 128,
-  };
-
-  const tarjeta = (showTrend: boolean) => {
-    render(
-      <KpiCards
-        kpis={kpis}
-        loading={false}
-        period="month"
-        setPeriod={vi.fn()}
-        showTrend={showTrend}
-        setCustomRange={vi.fn()}
-        currentDateRange={{ start: new Date(2026, 8, 1), end: new Date(2026, 9, 10) }}
-      />,
-    );
-    const card = screen.getByText("Postes Nuevos").closest<HTMLElement>('[data-slot="card"]');
-    expect(card).not.toBeNull();
-    return within(card!);
-  };
-
   it("says how many of all the poles are new in the period", () => {
     const card = tarjeta(false);
 
@@ -74,8 +74,8 @@ describe("the «Postes Nuevos» card", () => {
   });
 
   it("compares against the new poles of the period before, not any other count", () => {
-    // 34 against 20. Every other pair in the fixture is level, and a missing
-    // `prev` reads as 0 and prints +100%, so only the right one produces +70%.
+    // 34 against 20. No other pair in the fixture gives +70%, and a missing
+    // `prev` reads as 0 and prints +100%, so only the right one produces it.
     const card = tarjeta(true);
 
     expect(card.getByText(/\+70% vs anterior/)).toBeTruthy();
@@ -85,6 +85,24 @@ describe("the «Postes Nuevos» card", () => {
     const card = tarjeta(false);
 
     expect(card.queryByText(/vs anterior/)).toBeNull();
+  });
+});
+
+// The fourth card counts repairs, like the chart line of the same name. It
+// counted distinct poles before, under the title «Postes Solucionados».
+describe("the «Eventos Solucionados» card", () => {
+  it("counts repaired events against all events, not poles", () => {
+    const card = tarjeta(false, "Eventos Solucionados");
+
+    expect(card.getByText("60 de 1376")).toBeTruthy();
+    expect(screen.queryByText("Postes Solucionados")).toBeNull();
+  });
+
+  it("compares against the repairs of the period before", () => {
+    // 60 against 40.
+    const card = tarjeta(true, "Eventos Solucionados");
+
+    expect(card.getByText(/\+50% vs anterior/)).toBeTruthy();
   });
 });
 

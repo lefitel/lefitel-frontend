@@ -131,19 +131,6 @@ describe("useInicioData", () => {
 
       expect(result.current.kpis!.pendGlobal).toBe(3);
     });
-
-    it("does not count them as poles that ever had incidents either", async () => {
-      const postes = [10, 11].map(poste);
-      const eventos = [evento(1, 10), evento(2, 901, true)];
-      getDashboard.mockResolvedValue({ eventos, postes });
-
-      const { result } = renderHook(() => useInicioData(), { wrapper });
-      await waitFor(() => expect(result.current.kpis).not.toBeNull());
-
-      const k = result.current.kpis!;
-      expect(k.postesConEventos).toBe(1);
-      expect(k.postesConEventos).toBeLessThanOrEqual(k.postesTotal);
-    });
   });
 
   // ── Postes nuevos ──────────────────────────────────────────────────────────
@@ -172,6 +159,41 @@ describe("useInicioData", () => {
 
       await waitFor(() => expect(result.current.kpis!.postesCurr).toBe(1));
       expect(result.current.kpis!.postesPrev).toBe(2);
+    });
+  });
+
+  // ── Eventos solucionados ───────────────────────────────────────────────────
+  //
+  // The card counts repairs, not poles, and by the date of the solution — the
+  // same rule as the «Eventos solucionados» line of the chart, so the card is
+  // the sum of the line over the period. It used to count distinct poles, which
+  // made two repairs on one pole read as one.
+  describe("eventos solucionados", () => {
+    const reparado = (id: number, id_poste: number, date: Date): DashboardEvento => ({
+      ...evento(id, id_poste),
+      state: true,
+      solucions: [{ date } as unknown as never],
+    });
+
+    it("counts every repair of the period, even two on the same pole", async () => {
+      getDashboard.mockResolvedValue({
+        postes: [poste(10)],
+        eventos: [
+          reparado(1, 10, new Date(2026, 2, 5)),   // in the period
+          reparado(2, 10, new Date(2026, 2, 20)),  // in the period, same pole
+          reparado(3, 10, new Date(2026, 1, 15)),  // in the one before
+          evento(4, 10),                           // never repaired
+        ],
+      });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setCustomRange({ start: new Date(2026, 2, 1), end: new Date(2026, 2, 31) }));
+
+      await waitFor(() => expect(result.current.kpis!.eventosSolucionadosCurr).toBe(2));
+      expect(result.current.kpis!.eventosSolucionadosPrev).toBe(1);
+      // The pole count beside it, still used by Postes Activos, stays a pole count.
+      expect(result.current.kpis!.postesSolucionadosCurr).toBe(1);
     });
   });
 
@@ -250,6 +272,24 @@ describe("useInicioData", () => {
 
       expect(result.current.chartData[0].entraron).toBe(3);
       expect(result.current.chartData[2].salieron).toBe(2);
+    });
+
+    it("los postes nuevos cuentan en el tramo de su fecha en campo", async () => {
+      // La tercera línea. Un poste de enero y dos de marzo; el de 2024 que trae
+      // `poste()` no cae en ningún tramo de este año.
+      const posteDeMes = (id: number, mes: number): DashboardPoste =>
+        ({ ...poste(id), date: new Date(ESTE_ANIO, mes, 10) as unknown as Date });
+      getDashboard.mockResolvedValue({
+        eventos: [],
+        postes: [poste(10), posteDeMes(11, 0), posteDeMes(12, 2), posteDeMes(13, 2)],
+      });
+
+      const { result } = renderHook(() => useInicioData(), { wrapper });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.setPeriod("year"));
+      await waitFor(() => expect(result.current.chartData).toHaveLength(12));
+
+      expect(result.current.chartData.map((t) => t.postes)).toEqual([1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     });
 
     it("cuenta igual en las vistas por día que en las vistas por mes", async () => {

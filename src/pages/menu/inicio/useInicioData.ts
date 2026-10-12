@@ -11,6 +11,13 @@ export interface CriticalAlert {
   thresholdDays: number;
 }
 
+export interface ChartTramo {
+  label: string;
+  postes: number;
+  entraron: number;
+  salieron: number;
+}
+
 export interface InicioData {
   loading: boolean;
   /**
@@ -35,12 +42,13 @@ export interface InicioData {
   setMapTab: (t: MapTab) => void;
   kpis: KpiData | null;
   /**
-   * Dos flujos por tramo de tiempo: cuántas averías ENTRARON, por su propia
-   * fecha, y cuántas se repararon (SALIERON), por la fecha de su solución.
-   * Ninguna de las dos mira el estado actual del evento: si lo hicieran,
-   * uno cerrado desaparecería del mes en que entró.
+   * Tres cuentas por tramo de tiempo, cada una por su propia fecha: cuántos
+   * POSTES se dieron de alta en campo, cuántas averías ENTRARON y cuántas se
+   * repararon (SALIERON), por la fecha de su solución. Las dos de eventos no
+   * miran el estado actual del evento: si lo hicieran, uno cerrado
+   * desaparecería del mes en que entró.
    */
-  chartData: { label: string; entraron: number; salieron: number }[];
+  chartData: ChartTramo[];
   xAxisLabel: string;
   showTrend: boolean;
   urgentEvents: DashboardEvento[];
@@ -153,7 +161,6 @@ export function useInicioData(): InicioData {
     const postesCurr = listPostes.filter((p) => inCurr(new Date(p.date))).length;
     const postesPrev = listPostes.filter((p) => inPrev(new Date(p.date))).length;
     const postesConIncidencias = livePostes(listEventos.filter((e) => !e.state)).size;
-    const postesConEventos = livePostes(listEventos).size;
     const eventosTotal = listEventos.length;
     const eventosResueltosTotal = listEventos.filter((e) => e.state).length;
     const pendGlobal = listEventos.filter((e) => !e.state).length;
@@ -167,7 +174,16 @@ export function useInicioData(): InicioData {
 
     const postesSolucionadosIdsCurr = livePostes(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inCurr(d); }));
     const postesSolucionadosCurr = postesSolucionadosIdsCurr.size;
-    const postesSolucionadosPrev = livePostes(listEventos.filter((e) => { const d = getSolDate(e); return e.state && !!d && inPrev(d); })).size;
+    // Repairs, not poles, and by the solution's date alone — the rule the
+    // chart's «Eventos solucionados» line uses, so the card is that line summed
+    // over the period. No pole filter either: a repair on a pole archived since
+    // is still a repair that was made.
+    const reparadoEn = (enVentana: (d: Date) => boolean) => (e: DashboardEvento) => {
+      const d = getSolDate(e);
+      return !!d && enVentana(d);
+    };
+    const eventosSolucionadosCurr = listEventos.filter(reparadoEn(inCurr)).length;
+    const eventosSolucionadosPrev = listEventos.filter(reparadoEn(inPrev)).length;
 
     const creadosIds = new Set(listPostes.filter((p) => inCurr(new Date(p.date))).map((p) => p.id));
     const postesActivosCurr = new Set([...creadosIds, ...revisadosIds, ...postesSolucionadosIdsCurr]).size;
@@ -178,17 +194,18 @@ export function useInicioData(): InicioData {
     ]).size;
 
     return {
-      postesTotal, postesConIncidencias, postesConEventos,
+      postesTotal, postesConIncidencias,
       eventosTotal, eventosResueltosTotal, pendGlobal,
       postesCurr, postesPrev, postesRevisadosCurr, postesRevisadosPrev,
       postesPendientesRevisadosCurr,
-      postesSolucionadosCurr, postesSolucionadosPrev,
+      postesSolucionadosCurr, eventosSolucionadosCurr, eventosSolucionadosPrev,
       postesActivosCurr, postesActivosPrev,
     };
   }, [listEventos, listPostes, bounds, period]);
 
-  // ── Actividad: dos flujos, una sola regla ──────────────────────────────────
+  // ── Actividad: tres cuentas, una sola regla cada una ───────────────────────
   //
+  // POSTES se cuenta por su fecha en campo. De los eventos salen dos flujos:
   // ENTRARON se cuenta por `evento.date` y SALIERON por la fecha de la solución,
   // y ninguna de las dos mira `state`. Antes las entradas se contaban dentro de
   // un `if (!e.state)`, así que un evento cerrado desaparecía del tramo en que
@@ -198,8 +215,15 @@ export function useInicioData(): InicioData {
   // salidas colgaban del `else` de esa condición y en otras se contaban aparte,
   // de modo que el mismo evento podía salir resuelto en una vista y pendiente en
   // otra. Escribirla una sola vez es lo que impide que vuelvan a separarse.
-  const chartData = useMemo(() => {
-    if (!listEventos) return [];
+  const chartData = useMemo((): ChartTramo[] => {
+    if (!listEventos || !listPostes) return [];
+
+    /** Postes cuya fecha en campo cae en [desde, hasta) — la regla de la tarjeta «Postes Nuevos». */
+    const postesEntre = (desde: number, hasta: number) =>
+      listPostes.filter((p) => {
+        const t = new Date(p.date).getTime();
+        return !isNaN(t) && t >= desde && t < hasta;
+      }).length;
 
     /** Averías nacidas en [desde, hasta). Su estado de hoy no cambia cuándo entró. */
     const entraronEntre = (desde: number, hasta: number) =>
@@ -217,6 +241,7 @@ export function useInicioData(): InicioData {
 
     const tramo = (label: string, desde: number, hasta: number) => ({
       label,
+      postes: postesEntre(desde, hasta),
       entraron: entraronEntre(desde, hasta),
       salieron: salieronEntre(desde, hasta),
     });
@@ -291,15 +316,16 @@ export function useInicioData(): InicioData {
       );
     }
 
-    // "all" — desde la avería más antigua que no sea anterior al sistema.
+    // "all" — desde la avería o el poste más antiguo que no sea anterior al
+    // sistema. Los postes cuentan: el primero es anterior a la primera avería.
     const systemStart = new Date(2020, 0, 1).getTime();
-    const allMs = listEventos.map((e) => new Date(e.date).getTime()).filter((ms) => !isNaN(ms) && ms >= systemStart);
+    const allMs = [...listEventos, ...listPostes].map((x) => new Date(x.date).getTime()).filter((ms) => !isNaN(ms) && ms >= systemStart);
     const earliest = allMs.length > 0 ? new Date(Math.min(...allMs)) : new Date(2020, 0, 1);
     return mesesEntre(earliest, bounds.end).map(({ label, month, year }) =>
       tramoMes(label, year, month)
     );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listEventos, period, bounds]);
+  }, [listEventos, listPostes, period, bounds]);
 
   const xAxisLabel =
     period === "fortnight" ? "Día — últimos 15 días" :

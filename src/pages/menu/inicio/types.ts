@@ -25,7 +25,6 @@ export const MONTH_NAMES = [
 export interface KpiData {
   postesTotal: number;
   postesConIncidencias: number;
-  postesConEventos: number;
   eventosTotal: number;
   eventosResueltosTotal: number;
   pendGlobal: number;
@@ -34,8 +33,11 @@ export interface KpiData {
   postesRevisadosCurr: number;
   postesRevisadosPrev: number;
   postesPendientesRevisadosCurr: number;
+  /** Distinct poles with a repair in the period. Feeds Postes Activos only. */
   postesSolucionadosCurr: number;
-  postesSolucionadosPrev: number;
+  /** Repairs in the period, by the date of the solution — the chart's rule. */
+  eventosSolucionadosCurr: number;
+  eventosSolucionadosPrev: number;
   postesActivosCurr: number;
   postesActivosPrev: number;
 }

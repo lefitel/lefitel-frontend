@@ -195,7 +195,7 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                       <strong className="font-semibold">Postes Revisados:</strong> postes únicos con al menos una revisión en el período. <em>Del total</em> = revisados sobre el total de postes. <em>Pendientes</em> = cuántos de esos revisados aún tienen eventos sin resolver.
                     </span>
                     <span className="block">
-                      <strong className="font-semibold">Postes Solucionados:</strong> postes únicos con al menos un evento cuya <strong className="font-semibold">fecha de resolución</strong> cae en el período. <em>Del total</em> = solucionados sobre el total de postes. <em>Con incidencias</em> = solucionados sobre el total de postes que alguna vez tuvieron eventos.
+                      <strong className="font-semibold">Eventos Solucionados:</strong> eventos cuya <strong className="font-semibold">fecha de resolución</strong> cae en el período. Cuenta eventos, no postes: dos reparaciones en el mismo poste son dos. <em>Del total</em> = solucionados sobre todos los eventos del sistema.
                     </span>
                   </span>
                 </TooltipContent>
@@ -385,23 +385,21 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
             );
           })()}
 
-          {/* Postes Solucionados — postes únicos con al menos un evento resuelto en el período */}
+          {/* Eventos Solucionados — reparaciones hechas en el período, por la
+              fecha de la solución. Cuenta eventos, no postes: es la línea
+              «Eventos solucionados» del gráfico, sumada sobre el período. */}
           {(() => {
-            const totalPostes = kpis?.postesTotal ?? 0;
-            const postesConEventos = kpis?.postesConEventos ?? 0;
-            const solucionados = kpis?.postesSolucionadosCurr ?? 0;
-            const solPct = totalPostes > 0
-              ? Math.min(Math.round((solucionados / totalPostes) * 100), 100)
-              : 0;
-            const coberturaPct = postesConEventos > 0
-              ? Math.min(Math.round((solucionados / postesConEventos) * 100), 100)
+            const eventosTotal = kpis?.eventosTotal ?? 0;
+            const solucionados = kpis?.eventosSolucionadosCurr ?? 0;
+            const solPct = eventosTotal > 0
+              ? Math.min(Math.round((solucionados / eventosTotal) * 100), 100)
               : 0;
             return (
               <Card className="shadow-sm border-blue-500/20 transition-all hover:shadow-md hover:border-blue-500/40 py-0 animate-in fade-in duration-500">
                 <CardContent className="p-3 sm:p-5 space-y-2">
                   <div className="flex items-center justify-between gap-1">
                     {loading ? <Skeleton className="h-4 w-28" /> : (
-                      <p className="text-xs text-muted-foreground font-medium leading-tight">Postes Solucionados</p>
+                      <p className="text-xs text-muted-foreground font-medium leading-tight">Eventos Solucionados</p>
                     )}
                     <div className="p-1.5 sm:p-2 bg-blue-500/10 rounded-full shrink-0">
                       <ClipboardCheckIcon className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-blue-500" />
@@ -412,31 +410,19 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
                       <AnimatedNumber value={solucionados} />
                     </div>
                   )}
-                  {loading ? (
-                    <div className="space-y-1.5">
-                      <Skeleton className="h-3 w-full" />
-                      <Skeleton className="h-3 w-full" />
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {[
-                        { label: "Del total",       pct: solPct,       numerator: solucionados, denominator: totalPostes,      color: "bg-blue-500"    },
-                        { label: "Con incidencias", pct: coberturaPct, numerator: solucionados, denominator: postesConEventos, color: "bg-emerald-500" },
-                      ].map(({ label, pct, numerator, denominator, color }) => (
-                        <div key={label}>
-                          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
-                            <AnimatedBar pct={pct} color={color} />
-                          </div>
-                          <div className="flex justify-between mt-0.5">
-                            <span className="text-[10px] text-muted-foreground whitespace-nowrap">{label}</span>
-                            <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">{numerator} de {denominator}</span>
-                          </div>
-                        </div>
-                      ))}
+                  {loading ? <Skeleton className="h-3 w-full" /> : (
+                    <div>
+                      <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                        <AnimatedBar pct={solPct} color="bg-blue-500" />
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap">Del total</span>
+                        <span className="text-[10px] font-medium text-muted-foreground whitespace-nowrap">{solucionados} de {eventosTotal}</span>
+                      </div>
                     </div>
                   )}
                   {loading ? <Skeleton className="h-5 w-28" /> : showTrend ? (
-                    <TrendBadge current={solucionados} prev={kpis?.postesSolucionadosPrev ?? 0} />
+                    <TrendBadge current={solucionados} prev={kpis?.eventosSolucionadosPrev ?? 0} />
                   ) : null}
                 </CardContent>
               </Card>
