@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import { useContext, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import type { Col } from "../../../components/table/tableFeatures";
 import { toast } from "sonner";
@@ -10,16 +10,13 @@ import {
 } from "../../../api/Usuario.api";
 import { passwordLengthError } from "../../../lib/password";
 import { can } from "../../../lib/permissions";
-import { imageUrl } from "../../../lib/imageUrl";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
-import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
+import UsuarioDetallePanel, { type VistaUsuario } from "./UsuarioDetallePanel";
+import PanelRail, { type PanelRailItem } from "../../../components/PanelRail";
+import { Card } from "../../../components/ui/card";
 import { Badge } from "../../../components/ui/badge";
-import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { Skeleton } from "../../../components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
-import { ImageLightbox } from "../../../components/ui/image-viewer";
 import FormDialog from "../../../components/dialogs/FormDialog";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -27,42 +24,13 @@ import {
 } from "../../../components/ui/alert-dialog";
 import DataTable from "../../../components/table/DataTable";
 import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
-import { nombreDeRol } from "../../../lib/roles";
-import {
-  CalendarIcon, PhoneIcon, UserIcon, ShieldIcon, MailIcon,
-  PencilIcon, RefreshCwIcon, ActivityIcon, CheckCircle2Icon,
-  ClockIcon, ZapIcon, KeyRoundIcon, AtSignIcon,
-  TrendingUpIcon, AlertCircleIcon, LogInIcon, Trash2Icon,
-  WrenchIcon, MapPinIcon, UserPlusIcon, MoreVerticalIcon,
-  ShieldOffIcon, LockOpenIcon,
-} from "lucide-react";
+import { HistoryIcon, LayoutListIcon, MoreVerticalIcon } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "../../../components/ui/dropdown-menu";
-import { BitacoraInterface } from "../../../interfaces/interfaces";
-import { enlaceDeFila, nombreDeEntidad } from "../../../constants/bitacora";
 
-// ─── Bitácora config ───────────────────────────────────────────────────────────
-const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
-  LOGIN:            { icon: <LogInIcon className="h-3.5 w-3.5 text-primary" />,          bg: "bg-primary/10" },
-  CREATE_EVENTO:    { icon: <ZapIcon className="h-3.5 w-3.5 text-amber-600" />,          bg: "bg-amber-500/10" },
-  RESOLVE_EVENTO:   { icon: <CheckCircle2Icon className="h-3.5 w-3.5 text-green-600" />, bg: "bg-green-500/10" },
-  UPDATE_EVENTO:    { icon: <PencilIcon className="h-3.5 w-3.5 text-blue-500" />,        bg: "bg-blue-500/10" },
-  DELETE_EVENTO:    { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,     bg: "bg-destructive/10" },
-  ADD_REVISION:     { icon: <ClockIcon className="h-3.5 w-3.5 text-violet-600" />,       bg: "bg-violet-500/10" },
-  CREATE_SOLUCION:  { icon: <WrenchIcon className="h-3.5 w-3.5 text-primary" />,         bg: "bg-primary/10" },
-  CREATE_POSTE:     { icon: <MapPinIcon className="h-3.5 w-3.5 text-emerald-600" />,     bg: "bg-emerald-500/10" },
-  DELETE_POSTE:     { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,     bg: "bg-destructive/10" },
-  CREATE_USUARIO:   { icon: <UserPlusIcon className="h-3.5 w-3.5 text-primary" />,       bg: "bg-primary/10" },
-  DELETE_USUARIO:   { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,     bg: "bg-destructive/10" },
-  CHANGE_USERNAME:  { icon: <AtSignIcon className="h-3.5 w-3.5 text-blue-500" />,        bg: "bg-blue-500/10" },
-  CHANGE_PASSWORD:  { icon: <KeyRoundIcon className="h-3.5 w-3.5 text-orange-500" />,    bg: "bg-orange-500/10" },
-  DEFAULT:          { icon: <ActivityIcon className="h-3.5 w-3.5 text-muted-foreground" />, bg: "bg-muted" },
-};
-
-function calcEdad(birthday: Date | string): number {
-  return Math.floor((Date.now() - new Date(birthday).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-}
+const VISTA_PANEL_ID = "usuario-vista-panel";
+const vistaTabId = (vista: VistaUsuario) => `usuario-vista-tab-${vista}`;
 
 export default function UsuarioDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -71,15 +39,27 @@ export default function UsuarioDetallePage() {
   // The same rule the server applies to `/usuario/:id/bitacora`: your own
   // activity always, somebody else's with `bitacora.ver`. Read from the address
   // and not from the loaded account, because the hook needs it before anything
-  // has loaded. Without it the sheet does not ask for the log and does not draw
-  // the block.
+  // has loaded. Without it the sheet does not ask for the log and does not offer
+  // the view.
   const verBitacora =
     sesion.usuario.id === Number(id) || can(sesion.usuario.id_rol, "bitacora", "ver");
-  const d = useUsuarioDetalleData(Number(id), { verBitacora });
+  const d = useUsuarioDetalleData(Number(id), {
+    verBitacora,
+    // What others did to the account comes from the general log, which makes no
+    // exception for your own record.
+    verBitacoraCuenta: can(sesion.usuario.id_rol, "bitacora", "ver"),
+  });
+
+  const [vista, setVista] = useState<VistaUsuario>("resumen");
+
+  const vistas: PanelRailItem<VistaUsuario>[] = [
+    { value: "resumen", label: "Resumen", icon: <LayoutListIcon /> },
+    ...(verBitacora
+      ? [{ value: "bitacora" as const, label: "Bitácora", icon: <HistoryIcon /> }]
+      : []),
+  ];
 
   const [openEdit, setOpenEdit]         = useState(false);
-  const [lightboxSrc, setLightboxSrc]   = useState<string | null>(null);
-  const [avatarLoaded, setAvatarLoaded] = useState(false);
   const [openUsername, setOpenUsername] = useState(false);
   const [openPassword, setOpenPassword] = useState(false);
   const [openUnlock, setOpenUnlock] = useState(false);
@@ -96,18 +76,6 @@ export default function UsuarioDetallePage() {
   const [newPass, setNewPass]   = useState("");
   const [newPass2, setNewPass2] = useState("");
   const [savingPass, setSavingPass] = useState(false);
-
-  const pendientes   = d.eventos.filter((e) => !e.state);
-  const resueltos    = d.eventos.filter((e) => e.state);
-  const altaPrioridad = d.eventos.filter((e) => e.priority);
-  const pctResolucion = d.eventos.length > 0
-    ? Math.round((resueltos.length / d.eventos.length) * 100)
-    : 0;
-  const ultimoEvento = d.eventos.length > 0 ? d.eventos[0].date : null;
-
-  const initials = d.usuario
-    ? `${d.usuario.name[0] ?? ""}${d.usuario.lastname[0] ?? ""}`.toUpperCase()
-    : "??";
 
   /**
    * Whose account this page is showing, and the only question either credential
@@ -374,237 +342,62 @@ export default function UsuarioDetallePage() {
   ], [navigate]);
 
   return (
-    <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
+    // The same shape as the pole's, the incident's and the city's sheets. Two
+    // columns and a rail from `lg` up: the page takes exactly the height the
+    // shell leaves it, the events table fills its column, and the panel beside
+    // it scrolls on its own. What the panel holds is chosen on the rail. Below
+    // `lg` they stack, the person first and what they attended after.
+    <div className="w-full p-page grid grid-cols-1 gap-page lg:flex-1 lg:min-h-0 lg:grid-cols-[minmax(0,1fr)_24rem_auto] lg:grid-rows-[minmax(0,1fr)] animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          {d.loading ? (
-            <>
-              <Skeleton className="h-16 w-16 rounded-full" />
-              <div className="space-y-2">
-                <Skeleton className="h-6 w-44" />
-                <Skeleton className="h-4 w-28" />
-              </div>
-            </>
-          ) : (
-            <>
-              <Avatar
-                className={`h-16 w-16 border-2 border-border shadow${avatarLoaded ? " cursor-zoom-in" : ""}`}
-                onClick={avatarLoaded ? () => setLightboxSrc(imageUrl(d.usuario!.image)) : undefined}
-              >
-                {d.usuario?.image && (
-                  <AvatarImage
-                    src={imageUrl(d.usuario.image) ?? undefined}
-                    onLoad={() => setAvatarLoaded(true)}
-                    onError={() => setAvatarLoaded(false)}
-                  />
-                )}
-                <AvatarFallback className="text-lg font-bold">{initials}</AvatarFallback>
-              </Avatar>
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {d.usuario?.name} {d.usuario?.lastname}
-                </h1>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <span className="text-sm text-muted-foreground">@{d.usuario?.user}</span>
-                  {d.usuario?.rol?.name && (
-                    <Badge variant="outline" className="text-xs">{d.usuario.rol.name}</Badge>
-                  )}
-                  {isOwnProfile && (
-                    <Badge className="text-xs bg-primary/10 text-primary border-primary/20 shadow-none">Tú</Badge>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+      <Card className="order-3 lg:order-1 shadow-sm border-muted/60 py-0 gap-0 block min-h-0 min-w-0 lg:overflow-y-auto">
+        <div className="p-3 space-y-3">
+          <div>
+            <h2 className="text-base font-semibold">Eventos atendidos</h2>
+            <p className="text-sm text-muted-foreground">Ordenados por prioridad y fecha descendente.</p>
+          </div>
+          <DataTable
+            data={d.loading ? null : d.eventos}
+            loading={d.loading}
+            columns={columns}
+            actions={<></>}
+          />
         </div>
-        <div className="flex flex-wrap gap-2 self-start sm:self-auto">
-          {puedeGestionar && (
-            <Button variant="outline" className="gap-1.5"
-              disabled={d.loading || !d.usuario}
-              onClick={() => { setNewUser(d.usuario?.user ?? ""); setOpenUsername(true); }}>
-              <AtSignIcon className="h-3.5 w-3.5" />
-              Cambiar usuario
-            </Button>
-          )}
-          {puedeGestionar && (
-            <Button variant="outline" className="gap-1.5"
-              disabled={d.loading || !d.usuario}
-              onClick={() => setOpenPassword(true)}>
-              <KeyRoundIcon className="h-3.5 w-3.5" />
-              Contraseña
-            </Button>
-          )}
-          {can(rol, "seguridad", "editar") && (
-            <Button variant="outline" className="gap-1.5"
-              disabled={d.loading || !d.usuario}
-              onClick={() => setOpenUnlock(true)}>
-              <LockOpenIcon className="h-3.5 w-3.5" />
-              Desbloquear cuenta
-            </Button>
-          )}
-          {/* Never on your own profile: resetting your own second factor is
-              refused by the server (see `resetMfaUsuario`), and a button that
-              exists only to draw a 403 is a promise this screen does not make. */}
-          {can(rol, "seguridad", "editar") && !isOwnProfile && (
-            <Button variant="outline" className="gap-1.5 text-destructive hover:text-destructive"
-              disabled={d.loading || !d.usuario}
-              onClick={() => setOpenResetMfa(true)}>
-              <ShieldOffIcon className="h-3.5 w-3.5" />
-              Restablecer 2FA
-            </Button>
-          )}
-          {puedeGestionar && (
-            <Button variant="outline" size="icon" className="h-8 w-8"
-              aria-label="Editar datos" title="Editar datos"
-              disabled={d.loading || !d.usuario}
-              onClick={() => setOpenEdit(true)}>
-              <PencilIcon className="h-4 w-4" />
-            </Button>
-          )}
-          <Button variant="outline" size="icon" className="h-8 w-8"
-            aria-label="Refrescar" title="Refrescar"
-            disabled={d.loading} onClick={d.load}>
-            <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <KpiCard loading={d.loading} label="Total eventos" value={d.eventos.length}
-          icon={<ActivityIcon className="h-3.5 w-3.5 text-muted-foreground" />} />
-        <KpiCard loading={d.loading} label="Pendientes" value={pendientes.length}
-          icon={<ClockIcon className="h-3.5 w-3.5 text-amber-600" />}
-          valueClass={pendientes.length > 0 ? "text-amber-600" : undefined} />
-        <KpiCard loading={d.loading} label="Resueltos" value={resueltos.length}
-          icon={<CheckCircle2Icon className="h-3.5 w-3.5 text-primary" />} accent />
-        <KpiCard loading={d.loading} label="% Resolución" value={`${pctResolucion}%`}
-          icon={<TrendingUpIcon className="h-3.5 w-3.5 text-muted-foreground" />} small />
-        <KpiCard loading={d.loading} label="Alta prioridad" value={altaPrioridad.length}
-          icon={<AlertCircleIcon className="h-3.5 w-3.5 text-red-500" />}
-          valueClass={altaPrioridad.length > 0 ? "text-red-500" : undefined} />
-        <KpiCard loading={d.loading} label="Miembro desde"
-          value={d.usuario?.createdAt ? new Date(d.usuario.createdAt).toLocaleDateString("es-ES") : "—"}
-          icon={<ZapIcon className="h-3.5 w-3.5 text-muted-foreground" />} small />
-      </div>
-
-      {/* Perfil */}
-      <Card className="shadow-sm border-muted/60">
-        <CardHeader className="border-b border-border/40 pb-4">
-          <CardTitle className="text-base">Perfil</CardTitle>
-        </CardHeader>
-        <CardContent className="p-5">
-          {d.loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-8 w-8 rounded-full" />
-                  <div className="space-y-1.5">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-4 w-32" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <InfoRow icon={<UserIcon className="h-4 w-4 text-primary" />} bg="bg-primary/10"
-                label="Nombre completo" value={`${d.usuario?.name} ${d.usuario?.lastname}`} />
-              <InfoRow icon={<AtSignIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Nombre de usuario" value={d.usuario?.user ?? "—"} />
-              <InfoRow icon={<ShieldIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Rol" value={d.usuario?.rol ? nombreDeRol(d.usuario.rol) : "—"} />
-              <InfoRow icon={<PhoneIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Teléfono" value={d.usuario?.phone || "—"} />
-              {/*
-                Read-only, unlike every field beside it: `email` is not on
-                `usuario.controller.ts`'s `EDITABLE_FIELDS` whitelist, so this
-                admin screen has no way to set it even if a box were added —
-                the only write path is the account's own owner, from
-                `PerfilPage.tsx`, with their current password. Shown here
-                because the API already sends it back (only `pass` is
-                excluded from this response) and an administrator looking at
-                somebody's account benefits from seeing whether their way
-                back in is actually usable — a saved-but-unverified address
-                is not, `/password/forgot` ignores it.
-              */}
-              <InfoRow icon={<MailIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Correo de recuperación"
-                value={
-                  !d.usuario?.email
-                    ? "Sin configurar"
-                    : d.usuario.email_verified_at
-                      ? `${d.usuario.email} (verificado)`
-                      : `${d.usuario.email} (sin verificar)`
-                } />
-              <InfoRow icon={<CalendarIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Fecha de nacimiento"
-                value={d.usuario?.birthday
-                  ? `${new Date(d.usuario.birthday).toLocaleDateString("es-ES")} (${calcEdad(d.usuario.birthday)} años)`
-                  : "—"} />
-              <InfoRow icon={<ActivityIcon className="h-4 w-4 text-muted-foreground" />} bg="bg-muted"
-                label="Último evento"
-                value={ultimoEvento ? new Date(ultimoEvento).toLocaleDateString("es-ES") : "Sin actividad"} />
-            </div>
-          )}
-        </CardContent>
       </Card>
 
-      {/* Eventos */}
-      <div className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold">Eventos atendidos</h2>
-          <p className="text-sm text-muted-foreground">Ordenados por prioridad y fecha descendente.</p>
-        </div>
-        <DataTable
-          data={d.loading ? null : d.eventos}
-          loading={d.loading}
-          columns={columns}
-          actions={<></>}
+      {/* One card for the whole panel, and nothing lifted inside it. `block`
+          rather than the card's own column: a flex column of a fixed height
+          would squeeze its parts instead of letting the panel scroll. */}
+      <Card
+        id={VISTA_PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={vistaTabId(vista)}
+        className="order-2 shadow-sm border-muted/60 py-0 gap-0 block min-h-0 lg:overflow-y-auto"
+      >
+        <UsuarioDetallePanel
+          vista={vista}
+          d={d}
+          isOwnProfile={isOwnProfile}
+          puedeGestionar={puedeGestionar}
+          puedeRescatar={can(rol, "seguridad", "editar")}
+          onEditar={() => setOpenEdit(true)}
+          onRenombrar={() => { setNewUser(d.usuario?.user ?? ""); setOpenUsername(true); }}
+          onPassword={() => setOpenPassword(true)}
+          onDesbloquear={() => setOpenUnlock(true)}
+          onRestablecerMfa={() => setOpenResetMfa(true)}
+        />
+      </Card>
+
+      <div className="order-1 lg:order-3 min-w-0">
+        <PanelRail
+          label="Vistas del usuario"
+          items={vistas}
+          value={vista}
+          onChange={setVista}
+          panelId={VISTA_PANEL_ID}
+          tabId={vistaTabId}
         />
       </div>
 
-      {/* Bitácora */}
-      {verBitacora && (
-      <div className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold">Actividad reciente</h2>
-          <p className="text-sm text-muted-foreground">Últimas 50 acciones registradas del usuario.</p>
-        </div>
-        <Card className="shadow-sm border-muted/60 py-0">
-          <CardContent className="p-5">
-            {d.loading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex gap-4">
-                    <Skeleton className="h-7 w-7 rounded-full shrink-0" />
-                    <div className="flex-1 space-y-1.5 pt-0.5">
-                      <Skeleton className="h-4 w-56" />
-                      <Skeleton className="h-3 w-28" />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : d.bitacora.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-6 text-center">Sin actividad registrada</p>
-            ) : (
-              <div className="relative">
-                <div className="absolute left-3.5 top-3 bottom-3 w-px bg-border" />
-                <div className="space-y-4">
-                  {d.bitacora.map((entry, i) => (
-                    <BitacoraRow key={entry.id ?? i} entry={entry} enlace={enlaceDeFila(sesion.usuario, entry)} navigate={navigate} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-      )}
-
-      <ImageLightbox src={lightboxSrc ?? ""} open={!!lightboxSrc} onClose={() => setLightboxSrc(null)} />
 
       {/* Sheet: editar datos generales */}
       <UsuarioSheet usuario={d.usuario} open={openEdit} setOpen={setOpenEdit} onSuccess={d.load} />
@@ -714,64 +507,5 @@ export default function UsuarioDetallePage() {
       </AlertDialog>
 
     </div>
-  );
-}
-
-function BitacoraRow({ entry, enlace, navigate }: { entry: BitacoraInterface; enlace: string | null; navigate: (path: string) => void }) {
-  const config = ACTION_CONFIG[entry.action] ?? ACTION_CONFIG.DEFAULT;
-  return (
-    <div className="flex gap-4 relative">
-      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 z-10 ${config.bg}`}>
-        {config.icon}
-      </div>
-      <div className="flex-1 py-0.5">
-        <div className="flex items-center gap-2 flex-wrap">
-          <p className="text-sm">{entry.detail}</p>
-          {enlace && (
-            <button
-              className="text-xs text-primary hover:underline font-medium"
-              onClick={() => navigate(enlace)}
-            >
-              {nombreDeEntidad(entry)}{entry.entity_id ? ` #${entry.entity_id}` : ""}
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          {entry.createdAt ? new Date(entry.createdAt).toLocaleString("es-ES") : "—"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function InfoRow({ icon, bg, label, value }: { icon: React.ReactNode; bg: string; label: string; value: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className={`p-2 ${bg} rounded-full shrink-0`}>{icon}</div>
-      <div>
-        <p className="text-xs text-muted-foreground">{label}</p>
-        <p className="text-sm font-medium">{value}</p>
-      </div>
-    </div>
-  );
-}
-
-function KpiCard({ loading, label, value, icon, accent, small, valueClass }: {
-  loading: boolean; label: string; value: number | string;
-  icon: React.ReactNode; accent?: boolean; small?: boolean; valueClass?: string;
-}) {
-  return (
-    <Card className={`shadow-sm py-0 ${accent ? "border-primary/20" : "border-muted/60"}`}>
-      <CardContent className="p-5 space-y-2">
-        <div className="flex items-center justify-between">
-          {loading ? <Skeleton className="h-4 w-24" /> : <p className="text-xs text-muted-foreground font-medium">{label}</p>}
-          <div className={`p-2 rounded-full shrink-0 ${accent ? "bg-primary/10" : "bg-muted"}`}>{icon}</div>
-        </div>
-        {loading
-          ? <Skeleton className="h-10 w-14" />
-          : <div className={`${small ? "text-2xl" : "text-4xl"} font-bold tracking-tight ${accent ? "text-primary" : ""} ${valueClass ?? ""}`}>{value}</div>
-        }
-      </CardContent>
-    </Card>
   );
 }

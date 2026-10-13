@@ -18,7 +18,7 @@ export interface AccionVisual {
 /**
  * What a bitácora line looks like, decided by rule instead of by list.
  *
- * **Why this is not a lookup table.** `UsuarioDetallePage` carries one, with
+ * **Why this is not a lookup table.** `UsuarioDetallePage` carried one, with
  * thirteen entries. The API writes seventy-seven distinct actions. So sixty-four
  * of them — every parameter edited, every report exported, every account locked,
  * every session revoked — came out as the same grey dot, and the table had no

@@ -26,11 +26,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import UsuarioDetallePage from "./UsuarioDetallePage";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
 import { PASSWORD_MIN_LENGTH } from "../../../lib/password";
-import type { SesionInterface, UsuarioInterface } from "../../../interfaces/interfaces";
+import type { BitacoraInterface, EventoInterface, SesionInterface, UsuarioInterface } from "../../../interfaces/interfaces";
 
 const YO = 7;
 const OTRA_PERSONA = 99;
@@ -55,6 +55,11 @@ const searchUsuario_user = vi.fn();
 const resetMfaUsuario = vi.fn();
 const desbloquearUsuario = vi.fn();
 const load = vi.fn();
+/** What the account attended. Empty unless a test is about the figures. */
+let eventos: EventoInterface[] = [];
+/** Its log, already merged by the hook. */
+let bitacora: BitacoraInterface[] = [];
+let bitacoraIncompleta = false;
 
 /**
  * `can` defaults to yes, and controllable per test through `canMock`.
@@ -111,8 +116,9 @@ vi.mock("sonner", () => ({
 vi.mock("./useUsuarioDetalleData", () => ({
   useUsuarioDetalleData: () => ({
     usuario,
-    eventos: [],
-    bitacora: [],
+    eventos,
+    bitacora,
+    bitacoraIncompleta,
     loading: false,
     load,
   }),
@@ -130,8 +136,12 @@ function Harness({ quien = YO }: { quien?: number }) {
   const value: contextProps = { sesion, setSesion: vi.fn(), loading: false, logout: vi.fn() };
   return (
     <SesionContext.Provider value={value}>
-      <MemoryRouter>
-        <UsuarioDetallePage />
+      {/* On the account's own address: whether the activity may be read is
+          decided from the `:id` in it, before anything has loaded. */}
+      <MemoryRouter initialEntries={[`/app/usuarios/${usuario.id}`]}>
+        <Routes>
+          <Route path="/app/usuarios/:id" element={<UsuarioDetallePage />} />
+        </Routes>
       </MemoryRouter>
     </SesionContext.Provider>
   );
@@ -182,6 +192,9 @@ const enviadoPass = () => editUserPass.mock.calls[0][0] as UsuarioInterface & { 
 
 beforeEach(() => {
   vi.clearAllMocks();
+  eventos = [];
+  bitacora = [];
+  bitacoraIncompleta = false;
   // `vi.clearAllMocks()` clears calls, not the implementation set on
   // `canMock` above — it is not a `vi.fn()` created fresh each test, so its
   // default return value survives. Restated here anyway rather than relied on,
@@ -616,8 +629,10 @@ describe("the buttons that change an account", () => {
     render(<Harness quien={OTRA_PERSONA} />);
 
     expect(botones()).toEqual({ renombrar: null, password: null, editar: null });
-    // What is left is the one thing they may do: read it again.
-    expect(screen.getByRole("button", { name: "Refrescar" })).toBeInTheDocument();
+    // And no heading over an empty block: nothing under "Acceso" is theirs.
+    expect(screen.queryByRole("heading", { name: "Acceso" })).not.toBeInTheDocument();
+    // What is left is the one thing they may do: read it.
+    expect(screen.getByRole("heading", { name: "Isaias Salas" })).toBeInTheDocument();
   });
 
   it("are offered on somebody else's account with seguridad.editar", () => {
@@ -639,5 +654,113 @@ describe("the buttons that change an account", () => {
     expect(renombrar).toBeInTheDocument();
     expect(password).toBeInTheDocument();
     expect(editar).toBeInTheDocument();
+  });
+});
+
+/**
+ * The card beside the table shows one thing at a time, chosen on the rail: the
+ * account, or its log. The log is this person's own doing plus what others did
+ * to the account, as one list — they were two views once, and most of their
+ * lines were the same ones.
+ */
+describe("the views of the panel", () => {
+  const pestana = (name: string) => screen.queryByRole("tab", { name });
+
+  it("opens on the account, and the rail moves it to the log", async () => {
+    const user = userEvent.setup();
+    bitacora = [
+      { id: 2, action: "ACCOUNT_UNLOCKED", detail: "Desbloqueó la cuenta", entity: "Usuario", id_usuario: OTRA_PERSONA,
+        usuario: { ...usuario, id: OTRA_PERSONA, name: "Ana", lastname: "Paz" } },
+      { id: 1, action: "LOGIN", detail: "Inició sesión", entity: "Usuario", id_usuario: YO, usuario },
+    ];
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    expect(pestana("Resumen")).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: "Isaias Salas" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "Bitácora" }));
+    expect(screen.queryByRole("heading", { name: "Isaias Salas" })).not.toBeInTheDocument();
+    expect(screen.getByText("Inició sesión")).toBeInTheDocument();
+    // Who did it is said only where it was not the person whose sheet this is.
+    expect(screen.getByText("Desbloqueó la cuenta").closest("div.flex-1")).toHaveTextContent("Ana Paz");
+    expect(screen.getByText("Inició sesión").closest("div.flex-1")).not.toHaveTextContent("Isaias Salas");
+  });
+
+  it("names who ran a rescue, which the server writes against the rescued account", async () => {
+    // `id_usuario` is the account's own here, by design: the console has no
+    // account to sign with. Read as the author, the person reset their own
+    // second factor.
+    const user = userEvent.setup();
+    bitacora = [
+      { id: 3, action: "RESCUE_MFA_RESET", detail: "Se borraron sus llaves", entity: "Usuario", id_usuario: YO,
+        usuario, metadata: { actor: "endpoint: @admin (id 1)", resultado: "ok" } },
+    ];
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("tab", { name: "Bitácora" }));
+    expect(screen.getByText("Se borraron sus llaves").closest("div.flex-1")).toHaveTextContent("endpoint: @admin (id 1)");
+  });
+
+  it("offers one log and no second view called Actividad", () => {
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    expect(screen.getAllByRole("tab").map((t) => t.getAttribute("aria-label"))).toEqual(["Resumen", "Bitácora"]);
+  });
+
+  it("offers your own log without bitacora.ver", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={YO} />);
+
+    expect(pestana("Bitácora")).toBeInTheDocument();
+  });
+
+  it("does not offer somebody else's log without bitacora.ver", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    expect(pestana("Resumen")).toBeInTheDocument();
+    expect(pestana("Bitácora")).not.toBeInTheDocument();
+  });
+
+  it("says so when the half about the account did not arrive", async () => {
+    const user = userEvent.setup();
+    bitacoraIncompleta = true;
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(screen.getByRole("tab", { name: "Bitácora" }));
+    expect(screen.getByText(/no se pudo cargar lo que otros hicieron/i)).toBeInTheDocument();
+  });
+});
+
+describe("the figures of the account", () => {
+  const evento = (over: Partial<EventoInterface>) =>
+    ({ id: 1, description: "", state: false, priority: false, date: new Date("2026-01-01"), ...over }) as EventoInterface;
+  const celda = (label: string) => screen.getByText(label).parentElement;
+  const fila = (label: string) => screen.getByText(label).parentElement;
+
+  it("counts what was attended, and dates the last one by date and not by position", () => {
+    // In the order the hook hands them over: high priority first, then newest.
+    // The last event used to be read off the top of that list, so one urgent
+    // incident from January hid everything attended since.
+    eventos = [
+      evento({ id: 1, priority: true, date: new Date("2026-01-10T12:00:00") }),
+      evento({ id: 2, state: true, date: new Date("2026-03-20T12:00:00") }),
+      evento({ id: 3, date: new Date("2026-02-05T12:00:00") }),
+    ];
+    render(<Harness />);
+
+    expect(celda("Total eventos")).toHaveTextContent(/3$/);
+    expect(celda("Pendientes")).toHaveTextContent(/2$/);
+    expect(celda("Resueltos")).toHaveTextContent(/1$/);
+    expect(celda("% Resolución")).toHaveTextContent(/33%$/);
+    expect(celda("Alta prioridad")).toHaveTextContent(/1$/);
+    expect(fila("Último evento")).toHaveTextContent("20/3/2026");
+  });
+
+  it("says so when the account has attended nothing", () => {
+    render(<Harness />);
+
+    expect(celda("% Resolución")).toHaveTextContent(/0%$/);
+    expect(fila("Último evento")).toHaveTextContent("Sin actividad");
   });
 });
