@@ -27,10 +27,10 @@ import type {
  * these apply only before a catalog has arrived, and in tests.
  */
 export const MAX_COLUMNS = 60;
-export const MAX_CONDITIONS = 100;
+const MAX_CONDITIONS = 100;
 export const MAX_SORTS = 10;
-export const MAX_FILTER_VALUE = 200;
-export const DEFAULT_LIMIT = 100;
+const MAX_FILTER_VALUE = 200;
+const DEFAULT_LIMIT = 100;
 
 /**
  * The page sizes the footer offers.
@@ -66,7 +66,7 @@ export interface Limits {
 export const maxColumns = (limits?: Limits) => limits?.maxColumns ?? MAX_COLUMNS;
 export const maxConditions = (limits?: Limits) => limits?.maxConditions ?? MAX_CONDITIONS;
 export const maxSorts = (limits?: Limits) => limits?.maxSorts ?? MAX_SORTS;
-export const maxFilterValue = (limits?: Limits) => limits?.maxFilterValue ?? MAX_FILTER_VALUE;
+const maxFilterValue = (limits?: Limits) => limits?.maxFilterValue ?? MAX_FILTER_VALUE;
 
 export const emptyConfig = (root: string): ReportConfig => ({
   root,
@@ -93,7 +93,7 @@ export const findField = (root: CatalogRoot | undefined, path: string): CatalogF
  * the difference as a prefix: an aggregate-only path with a relation in front
  * of it was reached through that relation.
  */
-export const isForeignTotal = (root: CatalogRoot | undefined, path: string): boolean =>
+const isForeignTotal = (root: CatalogRoot | undefined, path: string): boolean =>
   (root?.aggregateOnly ?? []).some(
     (a) => a.path.includes(".") && (a.path === path || path.startsWith(`${a.path}.`)),
   );
@@ -187,7 +187,7 @@ export const columnLimitReached = (config: ReportConfig, limits?: Limits): boole
  * and the server counts the tree. Two caps that disagree mean the warning never
  * fires and the refusal arrives from the far side instead.
  */
-export const countConditions = (node: unknown): number => {
+const countConditions = (node: unknown): number => {
   if (!node || typeof node !== "object") return 1;
   if (isFilterGroup(node)) {
     return node.conditions.reduce((total, child) => total + countConditions(child), 0);
@@ -970,7 +970,7 @@ export function validateConfig(
  * the screen, the PDF and the Excel telling the same date. Formatting in the
  * browser's zone showed the previous day for anything stored near midnight.
  */
-export const REPORT_TIME_ZONE = "America/La_Paz";
+const REPORT_TIME_ZONE = "America/La_Paz";
 
 const dateFormatter = new Intl.DateTimeFormat("es-BO", {
   day: "2-digit",

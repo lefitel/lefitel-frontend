@@ -44,12 +44,27 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** A tramo as every response carries it. */
+const TRAMO = {
+  id: 14,
+  nombre: "Tacna – Arica",
+  ciudades: [
+    { id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 },
+    { id: 3, name: "Arica", lat: -18.4783, lng: -70.3126 },
+  ],
+  id_departamento: 5,
+  departamento: { id: 5, name: "Tacna" },
+  archivado: false,
+};
+
 /** What `/api/poste/options` really answers, shapes included. */
 const POSTE = {
   adss: [{ id: 3, name: "Preformado" }],
   material: [{ id: 7, name: "Madera" }],
   propietario: [{ id: 2, name: "Osefi" }],
   ciudad: [{ id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 }],
+  tramos: [TRAMO],
+  departamento: [{ id: 5, name: "Tacna" }],
 };
 
 const EVENTO = {
@@ -63,7 +78,7 @@ const REPORTE = {
   material: [{ id: 7, name: "Madera" }],
   propietario: [{ id: 2, name: "Osefi" }],
   obs: [{ id: 5, name: "Poste inclinado" }],
-  tramos: [{ id_ciudadA: 3, id_ciudadB: 11 }],
+  tramos: [TRAMO],
 };
 
 describe("getOpcionesPoste", () => {
@@ -81,24 +96,13 @@ describe("getOpcionesPoste", () => {
     expect(get.mock.calls[0][1]).toBeUndefined();
   });
 
-  it("hands back the four blocks under their own names", async () => {
+  it("hands back the six blocks under their own names", async () => {
     vi.spyOn(axios, "get").mockResolvedValue({ data: POSTE });
 
     const o = await getOpcionesPoste();
 
-    expect(Object.keys(o).sort()).toEqual(["adss", "ciudad", "material", "propietario"]);
-  });
-
-  it("keeps the coordinates the pole sheet draws its map with", async () => {
-    vi.spyOn(axios, "get").mockResolvedValue({ data: POSTE });
-
-    const o = await getOpcionesPoste();
-
-    // By value. `PosteSheet` guards with `if (!a?.lat || !a?.lng …) return`, so
-    // a city list that lost the two columns produces a sheet with a map, no
-    // stretch line, no neighbouring poles and no error of any kind.
-    expect(o.ciudad[0].lat).toBe(-18.0146);
-    expect(o.ciudad[0].lng).toBe(-70.2536);
+    expect(Object.keys(o).sort())
+      .toEqual(["adss", "ciudad", "departamento", "material", "propietario", "tramos"]);
   });
 
   it("lets a refusal through instead of answering an empty catalogue", async () => {
@@ -156,11 +160,10 @@ describe("getOpcionesReporte", () => {
 
     expect(Object.keys(o).sort())
       .toEqual(["adss", "ciudad", "material", "obs", "propietario", "tramos"]);
-    // A pair, not a row: `{id, name}` here would mean the stretch comboboxes
-    // offer nothing, on all three report screens, silently.
-    expect(o.tramos[0].id_ciudadA).toBe(3);
-    expect(o.tramos[0].id_ciudadB).toBe(11);
-    expect(o.ciudad[0].lat).toBe(-18.0146);
+    // A whole tramo, named by the server: `{id, name}` here would mean the
+    // stretch comboboxes offer nothing, on every report screen, silently.
+    expect(o.tramos[0].nombre).toBe("Tacna – Arica");
+    expect(o.tramos[0].ciudades.map((c) => c.id)).toEqual([11, 3]);
   });
 
   it("lets a refusal through", async () => {
@@ -267,7 +270,7 @@ describe("the blocks the server actually sends", () => {
     const fuente = readFileSync(CONTROLADOR, "utf8");
 
     expect(bloquesDe(fuente, "getOpcionesPoste"))
-      .toEqual(["adss", "ciudad", "material", "propietario"]);
+      .toEqual(["adss", "ciudad", "departamento", "material", "propietario", "tramos"]);
     expect(bloquesDe(fuente, "getOpcionesEvento"))
       .toEqual(["obs", "tipoObs"]);
     expect(bloquesDe(fuente, "getOpcionesReporte"))

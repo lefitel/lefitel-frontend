@@ -4,17 +4,19 @@ import { toast } from "sonner";
 import { mensajeDeError } from "../../../api/descarga";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { InfoIcon } from "lucide-react";
+import { nombreDelTramo } from "../../../lib/tramo";
 import BaseMap from "../../../components/map/BaseMap";
 import MapPointsLayer from "../../../components/map/MapPointsLayer";
 import { hasCoords } from "../../../components/map/mapGeo";
+import { FitView } from "../../../components/map/useFitCoords";
 import { Card, CardContent } from "../../../components/ui/card";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
-import { PosteInterface, EventoInterface } from "../../../interfaces/interfaces";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
+import InfoPopover from "../../../components/InfoPopover";
+import { Departamento, PosteInterface, EventoInterface } from "../../../interfaces/interfaces";
 import { DashboardEvento } from "../../../api/dashboard.api";
 import { latExample, lngExample } from "../../../data/example";
-import { MapMarker, MapTab } from "./types";
+import { MapDepartamento, MapMarker, MapTab } from "./types";
 import { searchPoste } from "../../../api/Poste.api";
 import { MAP_RADIUS, MAP_WEIGHT, SUBJECT_PAINT } from "../../../components/map/mapConstants";
 import { useTheme } from "../../../components/theme-provider";
@@ -29,11 +31,24 @@ interface OperationsMapProps {
   load: () => void;
   setOpenEditPoste: (v: boolean) => void;
   setDataPoste: (p: PosteInterface) => void;
+  /** The department the markers are already narrowed to; see `useInicioData`. */
+  departamento: MapDepartamento;
+  setDepartamento: (d: MapDepartamento) => void;
+  /** The departments there is something to show for. */
+  departamentos: Departamento[];
+  /** Whether any pole has no department, and so needs an option of its own. */
+  sinDepartamento: boolean;
 }
+
+/** The whole country, which is what the map shows while nothing narrows it. */
+const PAIS = { center: { lat: latExample, lng: lngExample }, zoom: 5 };
+/** Close enough to read the streets around a single pole. */
+const ZOOM_UN_PUNTO = 12;
 
 export function OperationsMap({
   mapMarkers, mapTab, setMapTab, load,
   setOpenEditPoste, setDataPoste,
+  departamento, setDepartamento, departamentos, sinDepartamento,
 }: OperationsMapProps) {
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
@@ -53,9 +68,9 @@ export function OperationsMap({
           </span>
           <div>
             <p style={{ margin: 0, fontSize: 13, fontWeight: 700, lineHeight: 1.2, color: "var(--foreground)" }}>{m.label}</p>
-            {m.item.ciudadA?.name && m.item.ciudadB?.name && (
+            {nombreDelTramo(m.item) && (
               <p style={{ margin: 0, fontSize: 10, color: "var(--muted-foreground)", marginTop: 1 }}>
-                {m.item.ciudadA.name} → {m.item.ciudadB.name}
+                {nombreDelTramo(m.item)}
               </p>
             )}
           </div>
@@ -206,31 +221,50 @@ export function OperationsMap({
   // actually drawn. Count what is actually drawn instead.
   const visibleMarkers = useMemo(() => mapPoints.filter(hasCoords).length, [mapPoints]);
 
+  // Choosing a department is asking to see it, so the map goes there: it fits
+  // what is left, or centres on it when a single point is left and there is
+  // no box to fit. With every department shown, or none of the chosen one's
+  // points in this tab, it shows the country.
+  const drawnCoords = useMemo(
+    () => mapPoints.filter(hasCoords).map(({ lat, lng }) => ({ lat, lng })),
+    [mapPoints],
+  );
+  const filtrado = departamento !== "all";
+  const unico = filtrado && drawnCoords.length === 1 ? drawnCoords[0] : null;
+
   return (
-    <Card className="shadow-sm border-muted/60 py-0 h-80 sm:h-105">
+    // Named here because nothing drawn on the card names it any more.
+    <Card role="region" aria-label="Mapa de Operaciones" className="shadow-sm border-muted/60 py-0 h-80 sm:h-105">
       <CardContent className="p-0 h-full overflow-hidden rounded-xl">
         <div className="isolate h-full relative">
 
-          <div className="absolute top-3 left-3 z-1000 bg-background/90 supports-backdrop-filter:backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm border border-border/60">
-            <div className="flex items-center gap-1.5">
-              <p className="text-sm font-semibold leading-none tracking-tight">Mapa de Operaciones</p>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="Información sobre el mapa" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                      <InfoIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <span className="block text-left leading-relaxed normal-case space-y-1.5">
-                      <span className="block"><strong className="font-semibold">Revisados:</strong> postes con al menos una revisión registrada en el período seleccionado.</span>
-                      <span className="block"><strong className="font-semibold">Pendientes:</strong> eventos sin resolver que tienen revisión en el período. Rojo = alta prioridad.</span>
-                      <span className="block"><strong className="font-semibold">Solucionados:</strong> eventos cuya fecha de resolución cae dentro del período seleccionado.</span>
-                    </span>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            </div>
+          {/* Alone in its corner: the title that floated here said what the map
+              is to somebody already looking at it. On the left and not beside
+              the tabs, which on a phone already take the row. Hidden when
+              there is nothing to choose between — only when there are no
+              poles at all.
+
+              On a phone the tabs are the whole width of the card and were
+              drawn over it, so there it drops to a row of its own below them. */}
+          <div className="absolute top-3 left-3 z-1000 max-sm:top-14">
+          {(departamentos.length > 0 || sinDepartamento) && (
+            <Select
+              // The control deals in strings; a department is its id.
+              value={String(departamento)}
+              onValueChange={(v) => setDepartamento(v === "all" || v === "none" ? v : Number(v))}
+            >
+              <SelectTrigger aria-label="Departamento" className="h-8 w-auto max-w-52 gap-2 text-xs shadow-sm border border-border/60 bg-background/90 supports-backdrop-filter:backdrop-blur-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos los departamentos</SelectItem>
+                {departamentos.map((d) => (
+                  <SelectItem key={d.id} value={String(d.id)}>{d.name}</SelectItem>
+                ))}
+                {sinDepartamento && <SelectItem value="none">Sin departamento</SelectItem>}
+              </SelectContent>
+            </Select>
+          )}
           </div>
 
           <SegmentedControl
@@ -272,11 +306,26 @@ export function OperationsMap({
             )}
           </div>
 
-          <div className="absolute bottom-3 right-3 z-1000 bg-background/90 supports-backdrop-filter:backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm border border-border/60 text-xs text-muted-foreground">
+          <div className="absolute bottom-3 right-3 z-1000 bg-background/90 supports-backdrop-filter:backdrop-blur-sm rounded-md px-2.5 py-1.5 shadow-sm border border-border/60 text-xs text-muted-foreground flex items-center gap-1.5">
             {visibleMarkers} {visibleMarkers === 1 ? "marcador" : "marcadores"}
+            {/* What the three tabs count, beside the count of what is drawn. */}
+            <InfoPopover label="Información sobre el mapa" side="top" align="end" className="w-80 max-w-[calc(100vw-2rem)]">
+              <span className="block text-left leading-relaxed normal-case space-y-1.5">
+                <span className="block"><strong className="font-semibold">Revisados:</strong> postes con al menos una revisión registrada en el período seleccionado.</span>
+                <span className="block"><strong className="font-semibold">Pendientes:</strong> eventos sin resolver que tienen revisión en el período. Rojo = alta prioridad.</span>
+                <span className="block"><strong className="font-semibold">Solucionados:</strong> eventos cuya fecha de resolución cae dentro del período seleccionado.</span>
+              </span>
+            </InfoPopover>
           </div>
 
-          <BaseMap center={{ lat: latExample, lng: lngExample }} zoom={5} className="h-full">
+          <BaseMap center={PAIS.center} zoom={PAIS.zoom} className="h-full">
+            <FitView
+              coords={drawnCoords}
+              fit={filtrado}
+              center={unico ?? PAIS.center}
+              zoom={unico ? ZOOM_UN_PUNTO : PAIS.zoom}
+              duration={600}
+            />
             <MapPointsLayer
               id="operations"
               points={mapPoints}

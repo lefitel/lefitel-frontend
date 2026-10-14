@@ -8,7 +8,10 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <!-- The manifest is generated and injected by vite-plugin-pwa; it is
          configured in vite.config.ts, not in a file of its own. -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- interactive-widget: on Android the on-screen keyboard shrinks the page
+         instead of covering it, so a full-screen dialog keeps its save button
+         above the keys. Browsers that do not know it ignore it. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
     <!-- Kept in step with the chosen theme by ThemeProvider. The value here
          is the light one, so the first paint is right before React runs. -->
     <meta name="theme-color" content="#f1f5fa" />

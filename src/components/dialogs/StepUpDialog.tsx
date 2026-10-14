@@ -265,5 +265,3 @@ export const StepUpDialog = () => {
     </AlertDialog>
   );
 };
-
-export default StepUpDialog;

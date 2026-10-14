@@ -16,10 +16,18 @@ import { chooserTrigger } from "../../../components/ui/control-surface";
 import { cn } from "../../../lib/utils";
 import { toast } from "sonner";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
+import TramoCombobox from "../../../components/TramoCombobox";
+import type { Tramo } from "../../../interfaces/interfaces";
+import { avisoDeTramos, useTramosDelReporte } from "./useTramosDelReporte";
 
 const ReportObsFrecuenciaSec = () => {
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
+  /** The tramo the selector shows now; `null` is "Todos los tramos". */
+  const [tramoId, setTramoId]         = useState<number | null>(null);
+  const { tramos, estado: estadoOpciones } = useTramosDelReporte();
+  /** The tramo the rows below were generated for: the selector can move afterwards. */
+  const [tramoAplicado, setTramoAplicado] = useState<Tramo | null>(null);
   const [rows, setRows]               = useState<ObsFrecuenciaRow[]>([]);
   const [loading, setLoading]         = useState(false);
   const [generated, setGenerated]     = useState(false);
@@ -30,11 +38,17 @@ const ReportObsFrecuenciaSec = () => {
     if (fechaInicio > fechaFin) return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
     const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
     const fin    = new Date(fechaFin);    fin.setHours(23, 59, 59, 0);
+    const elegido = tramos.find((t) => t.id === tramoId) ?? null;
     setLoading(true);
     setTipoFiltro("all");
     try {
-      const data = await getObsFrecuencia({ fechaInicial: inicio, fechaFinal: fin });
+      // The server narrows by the tramo; the key is left out when none is
+      // chosen (`tramo=` is a 400).
+      const data = await getObsFrecuencia({
+        fechaInicial: inicio, fechaFinal: fin, ...(tramoId !== null ? { tramo: tramoId } : {}),
+      });
       setRows(data);
+      setTramoAplicado(elegido);
       setGenerated(true);
       if (data.length === 0) toast.warning("Sin observaciones registradas en el período");
       else toast.success(`${data.length} tipos de observación encontrados`);
@@ -80,7 +94,14 @@ const ReportObsFrecuenciaSec = () => {
               <Label>Fecha de fin</Label>
               <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
+            <div className="space-y-1.5 min-w-56">
+              <Label>Tramo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <TramoCombobox tramos={tramos} value={tramoId} onChange={setTramoId} permitirTodos />
+            </div>
           </div>
+          {avisoDeTramos(estadoOpciones) && (
+            <p className="text-sm text-destructive mt-3">{avisoDeTramos(estadoOpciones)}</p>
+          )}
           <div className="flex gap-2 mt-3 justify-end">
             <Button onClick={handleGenerar} disabled={loading}>
               {loading && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
@@ -99,6 +120,7 @@ const ReportObsFrecuenciaSec = () => {
               <div className="flex items-center justify-between flex-wrap gap-3">
                 <div className="flex gap-2 flex-wrap items-center">
                   <CardTitle>Resultados</CardTitle>
+                  <Badge variant="outline">Tramo: {tramoAplicado?.nombre ?? "Todos los tramos"}</Badge>
                   <Badge variant="outline">{rowsFiltradas.length} observaciones</Badge>
                   <Badge variant="outline">{totalObs} ocurrencias</Badge>
                 </div>

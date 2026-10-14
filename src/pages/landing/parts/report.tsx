@@ -10,7 +10,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { Counter, Cursor, Panel } from "../chrome";
-import { EXPO } from "../tokens";
+import { EXPO, asText } from "../tokens";
 import { useTargetBox } from "../targets";
 import { COLUMNS_SCRIPT, EXPORT_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
@@ -235,7 +235,7 @@ export function ExportPart() {
               className="rounded-md border px-2 py-1 text-[10.5px] font-medium whitespace-nowrap"
               style={{
                 borderColor: CATASTROFICO.color,
-                color: CATASTROFICO.color,
+                color: asText(CATASTROFICO.color),
                 background: `color-mix(in oklch, ${CATASTROFICO.color} 12%, transparent)`,
               }}
             >
@@ -313,7 +313,7 @@ export function ExportPart() {
                 <span className="text-[var(--scr-faint)] tabular-nums">{row.date}</span>
                 <span
                   className="flex items-center gap-1.5 truncate"
-                  style={{ color: CATASTROFICO.color }}
+                  style={{ color: asText(CATASTROFICO.color) }}
                 >
                   <span
                     className="h-[6px] w-[6px] shrink-0 rounded-full"

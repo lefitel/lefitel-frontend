@@ -2,6 +2,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangleIcon, CheckIcon, MinusIcon } from "lucide-react";
 import type { BitacoraInterface, UsuarioInterface } from "../../../interfaces/interfaces";
+import { touchTarget } from "@/components/ui/touch-target";
 
 /** At or under this many unspent codes the panel says so — the same threshold
  *  `RecoveryCodesSection` turns its badge amber at. */
@@ -183,8 +184,8 @@ export default function PerfilPanel({
                     type="button"
                     onClick={onGenerarCodigos}
                     aria-label="Generar códigos de recuperación desde el resumen"
-                    className="ml-auto text-xs font-medium text-primary hover:underline
-                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                    className={`${touchTarget} ml-auto text-xs font-medium text-primary hover:underline
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded`}
                   >
                     Generar
                   </button>

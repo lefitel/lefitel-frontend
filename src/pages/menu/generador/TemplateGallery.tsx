@@ -2,7 +2,7 @@
 //
 // They live in the "Plantillas" tab of the configuration panel, and only there.
 // They were also listed in the empty results panel for a while, which put the
-// same six on screen twice and read as the page repeating itself rather than as
+// same templates on screen twice and read as the page repeating itself rather than as
 // two ways in.
 //
 // Built as a divided list rather than a grid of cards on purpose: the tab
@@ -30,7 +30,7 @@ const TemplateGallery = ({ templates, roots, onPick }: Props) => (
       {templates.map((template) => {
         // What one row of that report means, taken from the catalog rather than
         // written again here. It is also the quietest way to teach the level of
-        // detail: six examples, and the ones that count things say so.
+        // detail: a handful of examples, and the ones that count things say so.
         const meaning = roots.find((r) => r.key === template.config.root)?.rowMeaning;
 
         return (
@@ -43,11 +43,11 @@ const TemplateGallery = ({ templates, roots, onPick }: Props) => (
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium">{template.name}</span>
                 {/*
-                  The description is the whole point of the row: six names on
-                  their own are six guesses, and this is what somebody chooses
+                  The description is the whole point of the row: a list of names on
+                  their own is a list of guesses, and this is what somebody chooses
                   between them by. It was dropped for a while when this list sat
-                  stacked under the saved reports, where three lines times six
-                  was a wall — inside a tab it replaces that list instead of
+                  stacked under the saved reports, where three lines times the number of
+                  templates was a wall — inside a tab it replaces that list instead of
                   adding to it, so the height is no longer borrowed from anyone.
                 */}
                 <span className="block text-xs text-muted-foreground">{template.description}</span>

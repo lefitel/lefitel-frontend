@@ -21,11 +21,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 /** The three code tabs. The passkey is a button above them, not a tab. */
 type Modo = "totp" | "correo" | "recuperacion";
 
-/** Every code tab, in the order they are drawn, with the name the server gives each. */
-const PESTANAS: { modo: Modo; metodo: string; titulo: string }[] = [
-  { modo: "totp", metodo: "totp", titulo: "Código de la app" },
-  { modo: "correo", metodo: "correo", titulo: "Código por correo" },
-  { modo: "recuperacion", metodo: "codigo", titulo: "Código de recuperación" },
+/**
+ * Every code tab, in the order they are drawn, with the name the server gives
+ * each. `corto` is what a phone shows: three full titles side by side are some
+ * 400px, and a phone has 300.
+ */
+const PESTANAS: { modo: Modo; metodo: string; titulo: string; corto: string }[] = [
+  { modo: "totp", metodo: "totp", titulo: "Código de la app", corto: "App" },
+  { modo: "correo", metodo: "correo", titulo: "Código por correo", corto: "Correo" },
+  { modo: "recuperacion", metodo: "codigo", titulo: "Código de recuperación", corto: "Recuperación" },
 ];
 
 /**
@@ -392,7 +396,12 @@ const SegundoFactorPage = () => {
           {pestanas.length > 1 && (
             <TabsList className="w-full mb-5">
               {pestanas.map((p) => (
-                <TabsTrigger key={p.modo} value={p.modo} className="flex-1">{p.titulo}</TabsTrigger>
+                <TabsTrigger key={p.modo} value={p.modo} className="flex-1">
+                  {/* The full title stays the tab's name on a phone too, read
+                      out but not drawn; the short word is only drawn. */}
+                  <span aria-hidden className="sm:hidden">{p.corto}</span>
+                  <span className="max-sm:sr-only">{p.titulo}</span>
+                </TabsTrigger>
               ))}
             </TabsList>
           )}

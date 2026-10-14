@@ -21,7 +21,7 @@ const AQUI = dirname(fileURLToPath(import.meta.url));
 
 /** Every entity the server writes or has written. */
 const ENTIDADES = [
-  "Poste", "Evento", "Revisión", "Solución", "Ciudad",
+  "Poste", "Evento", "Revisión", "Solución", "Ciudad", "Tramo",
   "Material", "Propietario", "Adss", "TipoObs", "Obs",
   "ReporteVista", "File", "Usuario", "Rol",
   "Sesion", "FactorTotp", "credencial_webauthn", "CodigoRecuperacion",
@@ -76,6 +76,7 @@ describe("who is offered a link", () => {
       Poste: "postes",
       Evento: "eventos", "Revisión": "eventos", "Solución": "eventos",
       Ciudad: "ciudades",
+      Tramo: "tramos",
       Material: "parametros", Propietario: "parametros", Adss: "parametros",
       TipoObs: "parametros", Obs: "parametros",
       ReporteVista: "generador",
@@ -93,6 +94,9 @@ describe("who is offered a link", () => {
     expect(destinoDeEntidad("Usuario", undefined)).toBeNull();
     expect(destinoDeEntidad("File", null)?.path).toBe("/app/archivos");
     expect(destinoDeEntidad("ReporteVista", null)?.path).toBe("/app/generador");
+    // A tramo has no sheet of its own: the network map opens on it; without an id, the screen.
+    expect(destinoDeEntidad("Tramo", 14)).toEqual({ modulo: "tramos", path: "/app/tramos/14" });
+    expect(destinoDeEntidad("Tramo", null)).toEqual({ modulo: "tramos", path: "/app/tramos" });
     expect(destinoDeEntidad("Rol", 7)?.path).toBe("/app/roles?rol=7");
     expect(destinoDeEntidad("Adss", 5)?.path).toBe("/app/parametros?tab=adss&id=5");
   });
@@ -153,7 +157,10 @@ describe("every destination is an address the application serves", () => {
     // Read from `App.tsx`, so a screen that moves takes its links with it or
     // fails here.
     const app = readFileSync(resolve(AQUI, "../App.tsx"), "utf8");
-    const rutas = Array.from(app.matchAll(/<Route path="([a-z-]+(?:\/:id)?)"/g), (m) => m[1]);
+    // `tramos/:id?` is one route that serves two addresses — the map, and a
+    // tramo's card on it — so it is read as both.
+    const rutas = Array.from(app.matchAll(/<Route path="([a-z-]+(?:\/:id\??)?)"/g), (m) => m[1])
+      .flatMap((ruta) => (ruta.endsWith("/:id?") ? [ruta.slice(0, -"/:id?".length), ruta.slice(0, -1)] : [ruta]));
     expect(rutas.length, "no se leyó la tabla de rutas").toBeGreaterThan(10);
 
     let comprobadas = 0;
@@ -165,7 +172,7 @@ describe("every destination is an address the application serves", () => {
       expect(rutas, `${entidad} → ${camino}`).toContain(camino.slice("/app/".length).replace(/\/7$/, "/:id"));
       comprobadas += 1;
     }
-    expect(comprobadas).toBe(14);
+    expect(comprobadas).toBe(15);
   });
 
   it("no screen keeps a table of addresses of its own", () => {

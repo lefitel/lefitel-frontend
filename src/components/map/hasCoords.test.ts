@@ -75,18 +75,18 @@ describe("the screens that draw poles", () => {
   // own copy of the sort. The filtering and the order now live together in
   // `ordenarTramo` — whose tests cover a pole with no place — so what a screen
   // must do is go through it rather than build the waypoints by hand.
-  it("the four that ask for a road route order the stretch first, which filters", () => {
+  it("the five that ask for a road route order the stretch first, which filters", () => {
     const routed = sources(SRC).filter((file) => {
       const text = readFileSync(file, "utf8");
       return /fetchOrsRoute\(/.test(text) && !file.endsWith("orsRoute.ts");
     });
 
-    // If this stops being four, a screen was added or removed: look at it.
-    expect(routed).toHaveLength(4);
+    // If this stops being five, a screen was added or removed: look at it.
+    expect(routed).toHaveLength(5);
     for (const file of routed) {
       const text = readFileSync(file, "utf8");
       expect(text, path.relative(SRC, file)).toMatch(/ordenarTramo\(/);
-      expect(text, path.relative(SRC, file)).toMatch(/fetchOrsRoute\(tramo\.waypoints\)/);
+      expect(text, path.relative(SRC, file)).toMatch(/fetchOrsRoute\(\w+\.waypoints\)/);
     }
   });
 });

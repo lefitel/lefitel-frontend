@@ -47,6 +47,8 @@ vi.mock("./pages/menu/usuario/UsuarioDetallePage", async () => {
   };
   return { default: Ficha };
 });
+vi.mock("./pages/menu/tramo/red/RedPage", () => ({ default: () => <div>MAPA DE TRAMOS</div> }));
+vi.mock("./pages/menu/tramo/TramosArchivadosPage", () => ({ default: () => <div>TRAMOS ARCHIVADOS</div> }));
 vi.mock("./pages/menu/inicio", () => ({ default: () => <div>PANEL</div> }));
 vi.mock("./pages/menu/SinAccesoPage", () => ({ default: () => <div>SIN ACCESO</div> }));
 vi.mock("./components/dialogs/StepUpDialog", () => ({ StepUpDialog: () => null }));
@@ -154,5 +156,44 @@ describe("the addresses the users screen used to have", () => {
 
     expect(await screen.findByText("SIN ACCESO")).toBeInTheDocument();
     expect(screen.queryByText(/FICHA DEL USUARIO/)).toBeNull();
+  });
+});
+
+describe("the tramos screen, live on the map and archived in a list", () => {
+  it("opens the map at /app/tramos", async () => {
+    abrirEn("/app/tramos", "tramos");
+
+    expect(await screen.findByText("MAPA DE TRAMOS")).toBeInTheDocument();
+    expect(screen.queryByText("TRAMOS ARCHIVADOS")).toBeNull();
+  });
+
+  it("keeps what follows the address when it opens the map", async () => {
+    abrirEn("/app/tramos?tramo=5", "tramos");
+
+    expect(await screen.findByText("MAPA DE TRAMOS")).toBeInTheDocument();
+    expect(direccion()).toBe("/app/tramos?tramo=5");
+  });
+
+  it("opens the map at a tramo's own address too: its card is drawn on that same screen", async () => {
+    abrirEn("/app/tramos/52", "tramos");
+
+    expect(await screen.findByText("MAPA DE TRAMOS")).toBeInTheDocument();
+    expect(direccion()).toBe("/app/tramos/52");
+  });
+
+  it("opens the archived list at /app/tramos/archivados", async () => {
+    // Not read as the card of a tramo called "archivados".
+    abrirEn("/app/tramos/archivados", "tramos");
+
+    expect(await screen.findByText("TRAMOS ARCHIVADOS")).toBeInTheDocument();
+    expect(screen.queryByText("MAPA DE TRAMOS")).toBeNull();
+  });
+
+  it("is behind the tramos permission in both", async () => {
+    abrirEn("/app/tramos/archivados");
+
+    expect(await screen.findByText("SIN ACCESO")).toBeInTheDocument();
+    expect(screen.queryByText("TRAMOS ARCHIVADOS")).toBeNull();
+    expect(screen.queryByText("MAPA DE TRAMOS")).toBeNull();
   });
 });

@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { CiudadInterface, EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
+import { toast } from "sonner";
+import type { CiudadDeTramo, CiudadInterface, EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
+import { searchCiudad } from "../../../../api/Ciudad.api";
+import { mensajeDeError } from "../../../../api/descarga";
+import { ETIQUETA_EXTREMO, extremosDibujables, nombreDelTramo } from "../../../../lib/tramo";
 import { Card, CardContent } from "../../../../components/ui/card";
 import { Skeleton } from "../../../../components/ui/skeleton";
 import { Button } from "../../../../components/ui/button";
@@ -21,6 +25,7 @@ interface Props {
   routePath: [number, number][];
   boundsCoords: [number, number][];
   onVerCiudad: (id: number) => void;
+  /** Gets the whole city, fetched here: the pole only carries `id`, `name`, `lat`, `lng` of each end. */
   onEditarCiudad: (ciudad: CiudadInterface) => void;
   onVerPoste: (id: number) => void;
   onEditarOtroPoste: (posteId: number) => void;
@@ -54,6 +59,56 @@ export default function PosteDetalleMap({
     ? { lat: poste!.lat, lng: poste!.lng }
     : { lat: latExample, lng: lngExample };
   const [fitTramo, setFitTramo] = useState(false);
+  // The city whose dialog is on its way. One at a time: while it is, every
+  // "Editar" of the map waits, so two answers cannot race to open the dialog.
+  const [cargandoCiudad, setCargandoCiudad] = useState<number | null>(null);
+
+  // Where each end is drawn; the cities themselves give the names and ids. An
+  // end with no coordinates has no point, so it has no marker, and the other
+  // end is drawn all the same.
+  const extremos = extremosDibujables(poste?.tramo);
+  const ciudades = poste?.tramo?.ciudades;
+
+  const editarCiudad = async (id: number) => {
+    if (cargandoCiudad !== null) return;
+    setCargandoCiudad(id);
+    try {
+      onEditarCiudad(await searchCiudad(id));
+    } catch (error) {
+      // A role without `ciudades.ver` gets the server's own sentence; the
+      // dialog stays shut, because there is no city to put in it.
+      toast.error(mensajeDeError(error, "No se pudo cargar la ciudad."));
+    } finally {
+      setCargandoCiudad(null);
+    }
+  };
+
+  const marcadorDeExtremo = (i: 0 | 1) => {
+    const ciudad = ciudades?.[i];
+    const punto = extremos[i];
+    if (!ciudad || !punto) return null;
+    return (
+      <MapPoint
+        center={punto}
+        radius={MAP_RADIUS.endpoint}
+        strokeColor={MAP_DOT.endpoint}
+        fillColor={MAP_DOT.endpoint}
+        fillOpacity={1}
+        strokeWidth={MAP_WEIGHT.secondary}
+        popupMinWidth={220}
+      >
+        <CiudadPopup
+          ciudad={ciudad}
+          role={ETIQUETA_EXTREMO}
+          canEdit={canEditCiudades}
+          cargando={cargandoCiudad === ciudad.id}
+          bloqueado={cargandoCiudad !== null}
+          onVer={() => onVerCiudad(ciudad.id)}
+          onEditar={() => { void editarCiudad(ciudad.id); }}
+        />
+      </MapPoint>
+    );
+  };
 
   const health = useMemo(() => computeHealth(eventos), [eventos]);
   const healthCfg = HEALTH_COLOR[health];
@@ -104,47 +159,9 @@ export default function PosteDetalleMap({
                 duration={700}
               />
 
-              {/* Ciudad A */}
-              {poste?.ciudadA?.lat && poste.ciudadA.lng && (
-                <MapPoint
-                  center={{ lat: poste.ciudadA.lat, lng: poste.ciudadA.lng }}
-                  radius={MAP_RADIUS.endpoint}
-                  strokeColor={MAP_DOT.endpoint}
-                  fillColor={MAP_DOT.endpoint}
-                  fillOpacity={1}
-                  strokeWidth={MAP_WEIGHT.secondary}
-                  popupMinWidth={220}
-                >
-                  <CiudadPopup
-                    ciudad={poste.ciudadA}
-                    role="Inicio del tramo"
-                    canEdit={canEditCiudades}
-                    onVer={() => onVerCiudad(poste.id_ciudadA)}
-                    onEditar={() => onEditarCiudad(poste.ciudadA!)}
-                  />
-                </MapPoint>
-              )}
-
-              {/* Ciudad B */}
-              {poste?.ciudadB?.lat && poste.ciudadB.lng && (
-                <MapPoint
-                  center={{ lat: poste.ciudadB.lat, lng: poste.ciudadB.lng }}
-                  radius={MAP_RADIUS.endpoint}
-                  strokeColor={MAP_DOT.endpoint}
-                  fillColor={MAP_DOT.endpoint}
-                  fillOpacity={1}
-                  strokeWidth={MAP_WEIGHT.secondary}
-                  popupMinWidth={220}
-                >
-                  <CiudadPopup
-                    ciudad={poste.ciudadB}
-                    role="Fin del tramo"
-                    canEdit={canEditCiudades}
-                    onVer={() => onVerCiudad(poste.id_ciudadB)}
-                    onEditar={() => onEditarCiudad(poste.ciudadB!)}
-                  />
-                </MapPoint>
-              )}
+              {/* The two cities of the tramo */}
+              {marcadorDeExtremo(0)}
+              {marcadorDeExtremo(1)}
 
               {/* Otros postes del tramo */}
               {tramoPosotes
@@ -218,11 +235,15 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 // ─── Popups (componentes con clases Tailwind, ya no inline styles) ────────────
 
 function CiudadPopup({
-  ciudad, role, canEdit, onVer, onEditar,
+  ciudad, role, canEdit, cargando, bloqueado, onVer, onEditar,
 }: {
-  ciudad: CiudadInterface;
+  ciudad: CiudadDeTramo;
   role: string;
   canEdit: boolean;
+  /** This city's dialog is on its way. */
+  cargando: boolean;
+  /** Some city's is: nobody asks for a second one. */
+  bloqueado: boolean;
   onVer: () => void;
   onEditar: () => void;
 }) {
@@ -231,7 +252,7 @@ function CiudadPopup({
       <div className="flex items-start gap-2 mb-2">
         <span className="mt-0.5 h-2 w-2 rounded-full bg-foreground inline-block shrink-0" />
         <div className="min-w-0">
-          <p className="text-sm font-bold text-foreground leading-tight">{ciudad.name}</p>
+          <p className="text-sm font-bold text-foreground leading-tight">{ciudad.name ?? "—"}</p>
           <p className="text-[10px] text-primary font-medium mt-0.5">{role}</p>
         </div>
       </div>
@@ -244,8 +265,8 @@ function CiudadPopup({
           Ver ciudad
         </Button>
         {canEdit && (
-          <Button size="sm" className="flex-1 h-7 text-xs" onClick={onEditar}>
-            Editar
+          <Button size="sm" className="flex-1 h-7 text-xs" onClick={onEditar} disabled={bloqueado}>
+            {cargando ? "Cargando…" : "Editar"}
           </Button>
         )}
       </div>
@@ -288,9 +309,9 @@ function PostePopup({
               </span>
             )}
           </div>
-          {poste.ciudadA?.name && poste.ciudadB?.name && (
+          {nombreDelTramo(poste) && (
             <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-              {poste.ciudadA.name} → {poste.ciudadB.name}
+              {nombreDelTramo(poste)}
             </p>
           )}
         </div>

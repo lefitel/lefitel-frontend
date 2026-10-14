@@ -3,7 +3,9 @@
 // with it. Pure, so the form's behaviour is tested without rendering one.
 
 import type {
+  Ejecucion,
   EstadoDeEjecucion,
+  ResultadoDeEntrega,
   FormatoProgramado,
   Frecuencia,
   Programacion,
@@ -103,6 +105,47 @@ export const ESTADO_DE_EJECUCION: Record<EstadoDeEjecucion, { etiqueta: string; 
   omitido: { etiqueta: "Omitido", tono: "neutro" },
   en_curso: { etiqueta: "Enviando…", tono: "neutro" },
 };
+
+/** What became of one recipient of one run: the word on the list and the colour of it. */
+export const ENTREGA_DE_EJECUCION: Record<ResultadoDeEntrega, { etiqueta: string; tono: Tono }> = {
+  entregado: { etiqueta: "Entregado", tono: "bien" },
+  rechazado: { etiqueta: "Rechazado", tono: "mal" },
+  no_enviado: { etiqueta: "No enviado", tono: "mal" },
+  sin_cupo: { etiqueta: "Sin cupo", tono: "aviso" },
+};
+
+/** "Excel" · "PDF": how the schedules table and the history name a schedule's format. */
+export const etiquetaDeFormato = (formato: FormatoProgramado): string => (formato === "excel" ? "Excel" : "PDF");
+
+// ─── Reading a run ───────────────────────────────────────────────────────────
+//
+// The dialog's history of one schedule and the screen's history of all of them
+// show a run the same way. These are the parts of that which are not drawing.
+
+/** An instant as the screen writes them, in Bolivia's time and 24 hours, day first: 5/10, 07:00. */
+export const fechaYHora = (iso: string): string =>
+  new Intl.DateTimeFormat("es-BO", {
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
+    hour12: false, timeZone: "America/La_Paz",
+  }).format(new Date(iso));
+
+/** A file's weight: KB below a megabyte, MB above. `null` when there was no file. */
+export const pesoDeArchivo = (bytes: number | null): string | null =>
+  bytes === null ? null : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+
+/**
+ * The line under a run's result: the server's own sentence when it wrote one,
+ * otherwise how big a sent run was, or that an empty report still sent a
+ * notice. `null` when there is nothing to add.
+ */
+export const detalleDeEjecucion = (e: Pick<Ejecucion, "estado" | "detalle" | "filas" | "bytes">): string | null =>
+  e.detalle
+  ?? (e.estado === "enviado" ? [e.filas !== null ? `${e.filas.toLocaleString("es-BO")} filas` : null, pesoDeArchivo(e.bytes)].filter(Boolean).join(" · ") : null)
+  ?? (e.estado === "vacio" ? "Se envió un aviso" : null);
+
+/** "2 de 3": recipients reached out of those tried. A dash for a run that was skipped, which tried none. */
+export const entregadosDe = (e: Pick<Ejecucion, "estado" | "enviados" | "no_enviados">): string =>
+  e.estado === "omitido" ? "—" : `${e.enviados} de ${e.enviados + e.no_enviados}`;
 
 // ─── The form ────────────────────────────────────────────────────────────────
 

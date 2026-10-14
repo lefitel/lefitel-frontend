@@ -54,7 +54,7 @@ export interface CatalogField {
   path: string;
   label: string;
   kind: FieldKind;
-  /** Where the field comes from, e.g. "Evento › Poste › Ciudad A". */
+  /** Where the field comes from, e.g. "Evento › Poste › Tramo". */
   group: string;
   operators: Operator[];
   aggregates: AggFn[];

@@ -27,7 +27,7 @@ export const nombreDeEntidad = (fila: Pick<Fila, "entity" | "entity_label">): st
   fila.entity_label || fila.entity;
 
 /** The tab of the Parámetros screen each catalogue lives in. */
-export const PARAMETRO_TAB = {
+const PARAMETRO_TAB = {
   Material: "material",
   Propietario: "propietario",
   Adss: "adss",
@@ -57,6 +57,8 @@ export const destinoDeEntidad = (entity: string, id: number | null | undefined):
   switch (entity) {
     case "Poste":   return id ? { modulo: "postes",    path: `/app/postes/${id}` } : null;
     case "Ciudad":  return id ? { modulo: "ciudades",  path: `/app/ciudades/${id}` } : null;
+    // A tramo's sheet is its card on the network map, which has an address of its own.
+    case "Tramo":   return { modulo: "tramos",    path: id ? `/app/tramos/${id}` : "/app/tramos" };
     case "Usuario": return id ? { modulo: "seguridad", path: `/app/usuarios/${id}` } : null;
     // A revision and a solution are written with the id of their incident.
     case "Evento":

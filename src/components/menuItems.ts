@@ -8,6 +8,7 @@ import {
   KeyRound,
   FolderOpen,
   MapPin,
+  Route as RouteIcon,
   ClipboardList,
   TableProperties,
   MailCheck,
@@ -43,7 +44,7 @@ export interface MenuItem {
 }
 
 /** The blocks of the menu, in the order they are drawn. */
-export const MENU_SECTIONS = ["Operación", "Reportes", "Administración"] as const;
+const MENU_SECTIONS = ["Operación", "Reportes", "Administración"] as const;
 export type MenuSection = (typeof MENU_SECTIONS)[number];
 
 /**
@@ -63,6 +64,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { text: "Postes", path: "/app/postes", icon: CableCar, modulo: "postes", seccion: "Operación" },
   { text: "Eventos", path: "/app/eventos", icon: WifiOff, modulo: "eventos", seccion: "Operación" },
   { text: "Ciudades", path: "/app/ciudades", icon: MapPin, modulo: "ciudades", seccion: "Operación" },
+  { text: "Tramos", path: "/app/tramos", icon: RouteIcon, modulo: "tramos", seccion: "Operación" },
   { text: "Informes", path: "/app/reportes", icon: BarChart2, modulo: "reportes", seccion: "Reportes" },
   { text: "Generador", path: "/app/generador", icon: TableProperties, modulo: "generador", seccion: "Reportes" },
   { text: "Envíos programados", path: "/app/envios", icon: MailCheck, modulo: "generador", accion: "programar", seccion: "Reportes" },

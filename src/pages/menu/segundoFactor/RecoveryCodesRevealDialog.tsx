@@ -154,5 +154,3 @@ export const RecoveryCodesRevealDialog = ({ codigos, onAcknowledge, contexto }: 
     </AlertDialog>
   );
 };
-
-export default RecoveryCodesRevealDialog;

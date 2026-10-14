@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Marker, Popup } from "@vis.gl/react-maplibre";
 import { MAP_RADIUS, MAP_WEIGHT } from "./mapConstants";
+import { SonarRipple } from "./SonarRipple";
 
 interface SonarMarkerProps {
   /** Latitude first, the way the screens already write it. */
@@ -33,7 +34,6 @@ export function SonarMarker({
 }: SonarMarkerProps) {
   const [open, setOpen] = useState(false);
   const dotPx = dotRadius * 2;
-  const areaPx = dotPx + 80;
 
   return (
     <>
@@ -53,20 +53,7 @@ export function SonarMarker({
           if (children) setOpen(true);
         }}
       >
-        <div
-          className="sonar-root"
-          style={{
-            width: areaPx,
-            height: areaPx,
-            ["--dot" as string]: `${dotPx}px`,
-            ["--rgb" as string]: rgb,
-            pointerEvents: "none",
-          }}
-        >
-          <span className="sonar-ring sonar-ring-1" />
-          <span className="sonar-ring sonar-ring-2" />
-          <span className="sonar-ring sonar-ring-1 sonar-b" />
-          <span className="sonar-ring sonar-ring-2 sonar-b" />
+        <SonarRipple dotPx={dotPx} rgb={rgb}>
           <span
             className="sonar-dot"
             style={{
@@ -83,7 +70,7 @@ export function SonarMarker({
               cursor: children ? "pointer" : "default",
             }}
           />
-        </div>
+        </SonarRipple>
       </Marker>
 
       {open && children && (

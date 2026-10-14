@@ -57,7 +57,11 @@ function DynamicColumnFilter<TData extends RowData>({ table, placeholder }: Dyna
                             <button
                                 type="button"
                                 onClick={() => col.setFilterValue("")}
-                                className="ml-0.5 hover:text-primary/60 transition-colors"
+                                aria-label={`Quitar el filtro de ${getColumnLabel(col)}`}
+                                // The padding is taken back by the margin: the
+                                // chip keeps its size, and the cross gets a
+                                // target bigger than its 12px.
+                                className="-my-1 -mr-1.5 ml-0 rounded p-1 hover:text-primary/60 transition-colors"
                             >
                                 <XIcon className="h-3 w-3" />
                             </button>

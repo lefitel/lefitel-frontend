@@ -39,6 +39,21 @@ import DynamicColumnFilter from "./DataTableFilter";
 
 type RowSize = "sm" | "md" | "lg";
 
+/**
+ * The column a list keeps its ⋮ in, by the id every list gives it.
+ *
+ * On a phone a table is wider than the screen and scrolls sideways, and the ⋮
+ * — the only way to edit or archive a row — sat past the right edge, behind a
+ * scroll nobody knew to make. Below `md` it stays pinned to the right instead,
+ * over the columns that scroll under it, with a background so they do not show
+ * through. From `md` up the table fits, and a pinned cell would only paint over
+ * the row's hover colour.
+ */
+const ACTIONS = "actions";
+// The page's background, or the card's when the table sits in one — a ficha's.
+const STICKY_ACTIONS_CELL = "max-md:sticky max-md:right-0 max-md:z-[1] max-md:bg-background max-md:in-data-[slot=card]:bg-card";
+const STICKY_ACTIONS_HEAD = "max-md:sticky max-md:right-0 max-md:z-[1] max-md:bg-muted";
+
 const ROW_SIZE_CLASS: Record<RowSize, string> = {
     sm: "py-1",
     md: "py-2",
@@ -66,6 +81,8 @@ interface Props<T extends IGeneral> {
     loading?: boolean;
     onRetry?: () => void;
     onRowClick?: (row: T) => void;
+    /** Rows `onRowClick` does not apply to: they are not drawn as clickable and a click on one does nothing. */
+    isRowClickable?: (row: T) => boolean;
     getRowClassName?: (row: T) => string;
     initialColumnVisibility?: ColumnVisibilityState;
     initialSorting?: SortingState;
@@ -80,6 +97,18 @@ interface Props<T extends IGeneral> {
      * page that was left.
      */
     initialPage?: number;
+    /**
+     * What the empty body says. "Sin datos." fits a table with nothing to
+     * narrow; a screen whose filters can empty it, or that has a better word
+     * for "nothing yet", says so here.
+     */
+    emptyMessage?: string;
+    /**
+     * The inline "filter by column" bar, on by default. A screen that filters
+     * through controls of its own (a result, a schedule) and has no column worth
+     * typing into turns it off, rather than showing a picker with nothing in it.
+     */
+    hasColumnFilter?: boolean;
 }
 
 const DataTable = <T extends IGeneral>({
@@ -91,6 +120,7 @@ const DataTable = <T extends IGeneral>({
     loading = false,
     onRetry,
     onRowClick,
+    isRowClickable,
     getRowClassName,
     initialColumnVisibility = {},
     initialSorting = [],
@@ -99,6 +129,8 @@ const DataTable = <T extends IGeneral>({
     serverSide,
     initialPageSize = 15,
     initialPage = 1,
+    emptyMessage = "Sin datos.",
+    hasColumnFilter = true,
 }: Props<T>) => {
     const [filterOpen, setFilterOpen] = useState(false);
     const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
@@ -230,31 +262,37 @@ const DataTable = <T extends IGeneral>({
                     <div className="flex flex-col gap-2">
                         <div className="flex items-center justify-between gap-1">
                             {/* Mobile: botón lupa */}
-                            <button
-                                className={cn(
-                                    "relative sm:hidden",
-                                    buttonVariants({ variant: "outlineGray" }),
-                                    "border-muted h-8 w-8 rounded-[min(var(--radius-md),12px)] p-0 flex items-center justify-center"
-                                )}
-                                onClick={() => setFilterOpen((v) => !v)}
-                                aria-label="Filtrar"
-                            >
-                                <SearchIcon className="h-3.5 w-3.5" />
-                                {hasActiveFilter && (
-                                    <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
-                                )}
-                            </button>
+                            {hasColumnFilter && (
+                                <button
+                                    className={cn(
+                                        "relative shrink-0 sm:hidden",
+                                        buttonVariants({ variant: "outlineGray" }),
+                                        "border-muted h-8 w-8 rounded-[min(var(--radius-md),12px)] p-0 flex items-center justify-center"
+                                    )}
+                                    onClick={() => setFilterOpen((v) => !v)}
+                                    aria-label="Filtrar"
+                                >
+                                    <SearchIcon className="h-3.5 w-3.5" />
+                                    {hasActiveFilter && (
+                                        <span className="absolute top-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" />
+                                    )}
+                                </button>
+                            )}
                             {/* Desktop: filtro inline */}
                             <div className="hidden sm:flex flex-1">
-                                <DynamicColumnFilter table={table} />
+                                {hasColumnFilter && <DynamicColumnFilter table={table} />}
                             </div>
-                            <div className="flex gap-1">
+                            {/* Wraps, to the right, when a screen's filters
+                                are wider than a phone: Envíos hangs two
+                                selects and a button here, some 470px, and in
+                                one row they ran past the edge. */}
+                            <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-1">
                                 {columnsDropdown}
                                 {actions}
                             </div>
                         </div>
                         {/* Mobile: panel de filtro colapsable */}
-                        {filterOpen && (
+                        {filterOpen && hasColumnFilter && (
                             <div className="sm:hidden">
                                 <DynamicColumnFilter table={table} />
                             </div>
@@ -278,7 +316,7 @@ const DataTable = <T extends IGeneral>({
                                     return (
                                         <TableHead
                                             key={header.id}
-                                            className="text-left capitalize text-sm font-medium text-muted-foreground"
+                                            className={`text-left capitalize text-sm font-medium text-muted-foreground ${header.column.id === ACTIONS ? STICKY_ACTIONS_HEAD : ""}`}
                                         >
                                             {header.isPlaceholder ? null : (
                                                 <div
@@ -313,13 +351,13 @@ const DataTable = <T extends IGeneral>({
                             table.getRowModel().rows.map((row) => (
                                 <TableRow
                                     key={row.id}
-                                    onClick={() => onRowClick?.(row.original)}
-                                    className={`${onRowClick ? "cursor-pointer hover:bg-muted/50" : ""} ${getRowClassName?.(row.original) ?? ""}`}
+                                    onClick={() => { if (isRowClickable?.(row.original) ?? true) onRowClick?.(row.original); }}
+                                    className={`${onRowClick && (isRowClickable?.(row.original) ?? true) ? "cursor-pointer hover:bg-muted/50" : ""} ${getRowClassName?.(row.original) ?? ""}`}
                                     data-state={row.getIsSelected() && "selected"}
                                 >
                                     {row.getVisibleCells().map((cell) => {
                                         return (
-                                            <TableCell key={cell.id} className={`${ROW_SIZE_CLASS[rowSize]} m-0`}>
+                                            <TableCell key={cell.id} className={`${ROW_SIZE_CLASS[rowSize]} m-0 ${cell.column.id === ACTIONS ? STICKY_ACTIONS_CELL : ""}`}>
                                                 {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                             </TableCell>
                                         );
@@ -329,7 +367,7 @@ const DataTable = <T extends IGeneral>({
                         ) : (
                             <TableRow>
                                 <TableCell colSpan={columns.length} className="text-center text-muted-foreground text-sm py-8">
-                                    Sin datos.
+                                    {emptyMessage}
                                 </TableCell>
                             </TableRow>
                         )}

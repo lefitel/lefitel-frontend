@@ -80,7 +80,7 @@ describe("a pole, for a role that may not see incidents", () => {
 
 describe("a city, for a role that may not see poles", () => {
   it("loads the city and never asks for its poles", async () => {
-    const { result } = renderHook(() => useCiudadDetalleData(11, { verPostes: false }));
+    const { result } = renderHook(() => useCiudadDetalleData(11, { verPostes: false, verTramos: false }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.ciudad).toMatchObject({ id: 11 });
@@ -91,7 +91,7 @@ describe("a city, for a role that may not see poles", () => {
 
   it("still asks when the role may see them", async () => {
     getPosteByCiudad.mockResolvedValue([{ id: 40 }]);
-    const { result } = renderHook(() => useCiudadDetalleData(11, { verPostes: true }));
+    const { result } = renderHook(() => useCiudadDetalleData(11, { verPostes: true, verTramos: false }));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.postes).toEqual([{ id: 40 }]);

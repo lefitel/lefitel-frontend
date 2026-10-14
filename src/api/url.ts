@@ -12,6 +12,7 @@ export const urlObs = "obs/";
 export const urlPropietario = "propietario/";
 export const urlTipoObs = "tipo-obs/";
 export const urlCiudad = "ciudad/";
+export const urlTramo = "tramo/";
 export const urlPoste = "poste/";
 export const urlUsuario = "usuario/";
 export const urlRol = "rol/";

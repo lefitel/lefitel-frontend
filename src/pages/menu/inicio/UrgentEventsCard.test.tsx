@@ -12,6 +12,7 @@
 // severity and the badge on each row carries the colour.
 
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, it, expect } from "vitest";
 
@@ -99,5 +100,21 @@ describe("UrgentEventsCard — los contadores cuentan sus propias filas", () => 
     });
 
     expect(tabCount(/Urgentes/)).toBe("2");
+  });
+});
+
+// The ⓘ beside the title was a tooltip, which a finger cannot open. It opens
+// on a click and explains the tab that is showing.
+describe("UrgentEventsCard — la explicación", () => {
+  it("se abre con un clic y explica la pestaña activa", async () => {
+    const user = userEvent.setup();
+    renderCard({ criticalObsEvents: [evento(1, [3])] });
+
+    await user.click(screen.getByRole("button", { name: "¿Qué eventos aparecen aquí?" }));
+
+    const frase = screen.getByText(/los más críticos \(nivel 1\) primero/);
+    expect(frase.closest('[data-slot="popover-content"]')).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "¿Qué eventos aparecen aquí?" }));
+    expect(screen.queryByText(/los más críticos \(nivel 1\) primero/)).toBeNull();
   });
 });

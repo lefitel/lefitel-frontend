@@ -21,6 +21,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import ReportTramoSec from "./ReportTramoSec";
+import { elegirTramo } from "./elegirTramo";
 
 const getOpcionesReporte = vi.fn();
 const getReporteTramo = vi.fn();
@@ -75,6 +76,29 @@ vi.mock("../../../components/ui/date-picker", () => ({
   ),
 }));
 
+const TRAMO_1 = {
+  id: 1,
+  nombre: "Tacna – Ilo",
+  ciudades: [
+    { id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 },
+    { id: 12, name: "Ilo", lat: -17.6394, lng: -71.3375 },
+  ],
+  id_departamento: null,
+  departamento: null,
+  archivado: false,
+};
+const TRAMO_14 = {
+  id: 14,
+  nombre: "Ilo – Moquegua",
+  ciudades: [
+    { id: 12, name: "Ilo", lat: -17.6394, lng: -71.3375 },
+    { id: 13, name: "Moquegua", lat: -17.1956, lng: -70.9356 },
+  ],
+  id_departamento: null,
+  departamento: null,
+  archivado: false,
+};
+
 const OPCIONES = {
   ciudad: [
     { id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 },
@@ -84,7 +108,7 @@ const OPCIONES = {
   material: [{ id: 7, name: "Madera" }],
   propietario: [{ id: 2, name: "Osefi" }],
   obs: [{ id: 5, name: "Poste inclinado" }],
-  tramos: [{ id_ciudadA: 11, id_ciudadB: 12 }],
+  tramos: [TRAMO_1, TRAMO_14],
 };
 
 beforeEach(() => {
@@ -188,8 +212,8 @@ describe("when the catalogues did not arrive", () => {
 /**
  * The file's header is the rows' filter — B3, the client half.
  *
- * `handleExport` used to read the two date pickers and the two stretch
- * comboboxes, and all four can be moved without pressing Generar. Rare while
+ * `handleExport` used to read the two date pickers and the stretch
+ * comboboxes, and all of them can be moved without pressing Generar. Rare while
  * Generar always answered; routine once it can answer 429 "espere un momento"
  * (B3: thirty heavy queries a minute, shared with the generator), because "it
  * failed, export what I have" is what a person does. B3's own post-audit found
@@ -199,60 +223,147 @@ describe("when the catalogues did not arrive", () => {
  * inside it saying so. The export now reads what the rows were generated with,
  * dates and stretch alike, and this is what pins it.
  */
-const FILA = {
-  id: 1, description: "Poste inclinado", date: "2026-01-10T12:00:00.000Z",
+const filaDe = (id: number, description: string, tramo: typeof TRAMO_1) => ({
+  id, description, date: "2026-01-10T12:00:00.000Z",
   state: false, priority: false, image: null,
   poste: {
-    id: 5, name: "P-5", lat: -18.01, lng: -70.25, id_ciudadA: 11, id_ciudadB: 12,
-    ciudadA: { id: 11, name: "Tacna" }, ciudadB: { id: 12, name: "Ilo" },
+    id: 5, name: "P-5", lat: -18.01, lng: -70.25, id_tramo: tramo.id, tramo,
     material: { id: 7, name: "Madera" }, propietario: { id: 2, name: "Osefi" }, adsspostes: [],
   },
   eventoObs: [], revisions: [], solucions: [],
-};
+});
+const FILA = filaDe(1, "Poste inclinado", TRAMO_1);
 
 const fechar = (etiqueta: string, iso: string) =>
   fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: iso } });
 
-describe("the file's header is the rows' filter", () => {
-  it("exports with the dates and the stretch the rows were generated for, not the pickers", async () => {
+/** January typed in and Generar pressed; the rows are on screen after it. */
+const generarEnero = async (user: ReturnType<typeof userEvent.setup>) => {
+  fechar("Inicio", "2026-01-01");
+  fechar("Fin", "2026-01-31");
+  await user.click(botonGenerar());
+  expect(await screen.findByText("Resultados")).toBeTruthy();
+};
+
+describe("the tramo is asked of the server", () => {
+  it("asks the server for the chosen tramo by its id", async () => {
     getReporteTramo.mockResolvedValue([FILA]);
     const user = userEvent.setup();
     pintar();
     await waitFor(() => expect(botonGenerar().disabled).toBe(false));
 
-    // January, whole network.
-    fechar("Inicio", "2026-01-01");
-    fechar("Fin", "2026-01-31");
-    await user.click(botonGenerar());
-    expect(await screen.findByText("Resultados")).toBeTruthy();
+    await elegirTramo(user, /Ilo – Moquegua/);
+    await generarEnero(user);
 
-    // Moved, and Generar not pressed again: February, and a stretch.
+    const [filtro] = getReporteTramo.mock.calls[0] as [Record<string, unknown>];
+    expect(filtro.tramo).toBe(14);
+    expect("TramoInicial" in filtro).toBe(false);
+    expect("TramoFinal" in filtro).toBe(false);
+  });
+
+  it("leaves the key out when no tramo is chosen, rather than sending it empty", async () => {
+    getReporteTramo.mockResolvedValue([FILA]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    await generarEnero(user);
+
+    const [filtro] = getReporteTramo.mock.calls[0] as [Record<string, unknown>];
+    expect("tramo" in filtro).toBe(false);
+    expect("TramoInicial" in filtro).toBe(false);
+    expect("TramoFinal" in filtro).toBe(false);
+  });
+
+  it("goes back to the whole network when 'Todos los tramos' is picked again", async () => {
+    getReporteTramo.mockResolvedValue([FILA]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    await elegirTramo(user, /Ilo – Moquegua/);
+    await elegirTramo(user, /Todos los tramos/);
+    await generarEnero(user);
+
+    const [filtro] = getReporteTramo.mock.calls[0] as [Record<string, unknown>];
+    expect("tramo" in filtro).toBe(false);
+  });
+
+  it("shows the rows it was given without filtering them again in the browser", async () => {
+    // Rows of two different tramos come back while one is chosen. The server
+    // already narrowed; the old client-side filter compared the pole's two
+    // cities against the two the person had picked and would have hidden one.
+    getReporteTramo.mockResolvedValue([
+      filaDe(1, "Poste inclinado", TRAMO_1),
+      filaDe(2, "Cable roto", TRAMO_14),
+    ]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    await elegirTramo(user, /Ilo – Moquegua/);
+    await generarEnero(user);
+
+    expect(screen.getByText("2 eventos")).toBeTruthy();
+  });
+});
+
+describe("the file's header is the rows' filter", () => {
+  it("exports with the dates and the tramo the rows were generated for, not the pickers", async () => {
+    getReporteTramo.mockResolvedValue([FILA]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    // January, one tramo.
+    await elegirTramo(user, /Ilo – Moquegua/);
+    await generarEnero(user);
+
+    // Moved, and Generar not pressed again: February, and another tramo.
     fechar("Inicio", "2026-02-01");
     fechar("Fin", "2026-02-28");
-    const [desde] = await screen.findAllByText("Todas las ciudades");
-    await user.click(desde);
-    await user.click(await screen.findByText("Tacna"));
+    await elegirTramo(user, /Tacna – Ilo/);
 
     await user.click(screen.getByRole("button", { name: /Exportar/i }));
     await user.click(await screen.findByRole("menuitem", { name: /Excel/i }));
     await waitFor(() => expect(exportExcelTramo).toHaveBeenCalledTimes(1));
     const [excel] = exportExcelTramo.mock.calls[0] as [{
-      fechaInicio: Date; fechaFin: Date; tramoInicial: number | null; tramoFinal: number | null;
+      fechaInicio: Date; fechaFin: Date; tramo: { id: number; nombre: string } | null;
     }];
     // As the file prints them: "Fecha:" and "Tramo:" in its header.
     expect(excel.fechaInicio.toLocaleDateString("es-ES")).toBe("1/1/2026");
     expect(excel.fechaFin.toLocaleDateString("es-ES")).toBe("31/1/2026");
-    expect(excel.tramoInicial).toBeNull();
-    expect(excel.tramoFinal).toBeNull();
+    expect(excel.tramo?.id).toBe(14);
+    expect(excel.tramo?.nombre).toBe("Ilo – Moquegua");
 
-    // The PDF takes the same four positionally, which is where a swap hides.
+    // The PDF takes the same three positionally, which is where a swap hides.
     await user.click(screen.getByRole("button", { name: /Exportar/i }));
     await user.click(await screen.findByRole("menuitem", { name: /PDF/i }));
     await waitFor(() => expect(exportPdfTramo).toHaveBeenCalledTimes(1));
     const pdf = exportPdfTramo.mock.calls[0] as unknown[];
     expect((pdf[5] as Date).toLocaleDateString("es-ES")).toBe("1/1/2026");
     expect((pdf[6] as Date).toLocaleDateString("es-ES")).toBe("31/1/2026");
-    expect(pdf[7]).toBeNull();
-    expect(pdf[8]).toBeNull();
+    expect((pdf[7] as { id: number }).id).toBe(14);
+    expect(pdf).toHaveLength(8);
+  });
+
+  it("exports 'the whole network' when the rows were generated without a tramo, even if one is picked after", async () => {
+    getReporteTramo.mockResolvedValue([FILA]);
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(botonGenerar().disabled).toBe(false));
+
+    await generarEnero(user);
+    await elegirTramo(user, /Tacna – Ilo/);
+
+    await user.click(screen.getByRole("button", { name: /Exportar/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /Excel/i }));
+    await waitFor(() => expect(exportExcelTramo).toHaveBeenCalledTimes(1));
+    expect((exportExcelTramo.mock.calls[0] as [{ tramo: unknown }])[0].tramo).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: /Exportar/i }));
+    await user.click(await screen.findByRole("menuitem", { name: /PDF/i }));
+    await waitFor(() => expect(exportPdfTramo).toHaveBeenCalledTimes(1));
+    expect((exportPdfTramo.mock.calls[0] as unknown[])[7]).toBeNull();
   });
 });

@@ -66,9 +66,10 @@ export async function fetchOrsRoute(
     );
     return data.coordenadas ?? null;
   } catch {
-    // Never throws. The four screens each carry their own `.catch` today, but a
-    // fifth written without one would leave the map undrawn rather than drawn
-    // straight — and "no route" is not an error worth interrupting anybody for.
+    // Never throws, so a caller needs no `.catch` of its own: some screens carry
+    // one from before this, and the network map's hook carries none. A caller
+    // that did forget would leave the map undrawn rather than drawn straight,
+    // and "no route" is not an error worth interrupting anybody for.
     return null;
   }
 }

@@ -9,6 +9,7 @@ import { useSearchParams } from "react-router-dom";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { cn } from "../../../lib/utils";
+import { useLatest } from "../../../hooks/useLatest";
 import {
   actualizarReporte, contarReporte, crearReporte, duplicarReporte, eliminarReporte,
   exportarReporte, getCatalogo, getReportesGuardados, getReporteGuardado, mensajeDeError, mensajeDeErrorAsync,
@@ -56,6 +57,7 @@ import ColumnList from "./ColumnList";
 import FieldPicker from "./FieldPicker";
 import FilterBuilder from "./FilterBuilder";
 import PageHelp from "./PageHelp";
+import { HeaderSlot } from "../../../components/HeaderSlot";
 import PreviewTable from "./PreviewTable";
 import ReportPicker from "./ReportPicker";
 import ShapePreview from "./ShapePreview";
@@ -179,9 +181,10 @@ const GeneradorPage = () => {
    */
   const [loadingSaved, setLoadingSaved] = useState(true);
   // Read by `loadSaved` to know where the next page starts, so the loader stays
-  // identity-stable and does not re-run on every append.
-  const savedRef = useRef<SavedReport[]>(saved);
-  savedRef.current = saved;
+  // identity-stable and does not re-run on every append. `useLatest` updates it
+  // when a render commits; `loadSaved` only reads it from an effect or a click,
+  // both of which run after that.
+  const savedRef = useLatest(saved);
   const [current, setCurrent] = useState<SavedReport | null>(null);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
   const [running, setRunning] = useState(false);
@@ -210,9 +213,10 @@ const GeneradorPage = () => {
    * or filter value — the half-second-per-keypress the memo was added to
    * remove. The handlers below are built once; when one needs to look at the
    * configuration before deciding, it reads it here instead of closing over it.
+   * Updated when a render commits (`useLatest`), so it is never read while
+   * rendering — only from handlers and effects, which run after the commit.
    */
-  const configRef = useRef(config);
-  configRef.current = config;
+  const configRef = useLatest(config);
 
   /**
    * Fields the open report uses and the picker does not list.
@@ -258,8 +262,7 @@ const GeneradorPage = () => {
   // Read by the identity-stable callbacks below, for the same reason
   // `configRef` exists: a value closed over at first render is the value from
   // before the catalog arrived, which is no value at all.
-  const limitsRef = useRef(limits);
-  limitsRef.current = limits;
+  const limitsRef = useLatest(limits);
 
   /**
    * A string that changes exactly when the *rows* would change.
@@ -275,10 +278,8 @@ const GeneradorPage = () => {
    * The configuration on screen and the current signature, readable from the
    * handlers that never change — same reason as `configRef`.
    */
-  const resultConfigRef = useRef(resultConfig);
-  resultConfigRef.current = resultConfig;
-  const signatureRef = useRef(signature);
-  signatureRef.current = signature;
+  const resultConfigRef = useLatest(resultConfig);
+  const signatureRef = useLatest(signature);
 
   /**
    * Disarms a refresh that has not gone out yet, and stops it re-arming.
@@ -296,11 +297,10 @@ const GeneradorPage = () => {
     autoTimer.current = null;
     autoDone.current = signatureRef.current;
     setAutoPending(false);
-  }, []);
+  }, [signatureRef]);
   const problems = useMemo(() => validateConfig(config, root, limits), [config, root, limits]);
   /** Read by the ordering handlers, which never change identity. */
-  const problemsRef = useRef(problems);
-  problemsRef.current = problems;
+  const problemsRef = useLatest(problems);
   const chosen = useMemo(() => new Set(config.columns.map((c) => c.path)), [config.columns]);
   // The fields that already carry a filter, for the same tick the column picker
   // gives a column already added. Only the conditions the panel lists by field
@@ -462,7 +462,7 @@ const GeneradorPage = () => {
       // request it belongs to is a panel that waits forever, and it would hide
       // the very error state below that says the list could not be read.
       .finally(() => setLoadingSaved(false));
-  }, []);
+  }, [savedRef]);
 
   const refreshSaved = useCallback(() => loadSaved(false), [loadSaved]);
 
@@ -621,7 +621,7 @@ const GeneradorPage = () => {
       }
       setAutoPending(false);
     };
-  }, [auto, result, problems.length, signature, resultConfig, run]);
+  }, [auto, result, problems.length, signature, resultConfig, run, configRef]);
 
   /**
    * How many rows the current configuration would return, while it is still
@@ -661,7 +661,7 @@ const GeneradorPage = () => {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [signature, problems.length]);
+  }, [signature, problems.length, configRef]);
 
   /** Paging must run the configuration that produced the current page. */
   const handlePage = (offset: number) => {
@@ -759,7 +759,7 @@ const GeneradorPage = () => {
     // the timer would otherwise arm behind this run and fire before it landed.
     autoDone.current = signatureOf(next);
     void run({ ...next, offset: 0 }, true);
-  }, [cancelAutoRefresh, run]);
+  }, [cancelAutoRefresh, run, problemsRef, resultConfigRef]);
 
   /*
    * The other three ordering controls, in the strip under the column list.
@@ -776,17 +776,17 @@ const GeneradorPage = () => {
     const next = moveSortByKey(configRef.current, from, to);
     setConfig(next);
     runOrderNow(next);
-  }, [runOrderNow]);
+  }, [runOrderNow, configRef]);
   const handleSortFlip = useCallback((key: string) => {
     const next = flipSort(configRef.current, key);
     setConfig(next);
     runOrderNow(next);
-  }, [runOrderNow]);
+  }, [runOrderNow, configRef]);
   const handleSortRemove = useCallback((key: string) => {
     const next = removeSort(configRef.current, key);
     setConfig(next);
     runOrderNow(next);
-  }, [runOrderNow]);
+  }, [runOrderNow, configRef]);
 
   const handleRemoveColumn = useCallback((index: number) => {
     setConfig((c) => removeColumn(c, index));
@@ -802,7 +802,7 @@ const GeneradorPage = () => {
       return toast.warning("Ya hay una columna igual con ese resumen.");
     }
     setConfig(next);
-  }, []);
+  }, [configRef]);
 
   const handleToggleGroup = useCallback((index: number) => {
     const before = configRef.current;
@@ -818,7 +818,7 @@ const GeneradorPage = () => {
       );
     }
     setConfig(next);
-  }, []);
+  }, [configRef]);
 
   const handleToggleSort = useCallback((path: string, agg?: AggFn) => {
     const current = configRef.current;
@@ -832,7 +832,7 @@ const GeneradorPage = () => {
     const next = toggleSort(current, path, agg, limitsRef.current);
     setConfig(next);
     runOrderNow(next);
-  }, [runOrderNow]);
+  }, [runOrderNow, configRef, limitsRef]);
 
   const handleUpdateFilter = useCallback((
     index: number, patch: Partial<FilterCondition>, listed?: boolean,
@@ -1044,8 +1044,8 @@ const GeneradorPage = () => {
   const [parametros, setParametros] = useSearchParams();
   const vistaPedida = Number(parametros.get("vista")) || null;
   const vistaAtendida = useRef(false);
-  const algoQuePerder = useRef(somethingToDiscard);
-  algoQuePerder.current = somethingToDiscard;
+  // Read when the answer arrives, from a promise callback: after a commit.
+  const algoQuePerder = useLatest(somethingToDiscard);
   const montado = useRef(true);
   useEffect(() => {
     montado.current = true;
@@ -1268,365 +1268,277 @@ const GeneradorPage = () => {
   }
 
   return (
-    <div className="@container/card w-full space-y-page p-page animate-in fade-in duration-500">
+    // A column that takes all the height the app's scrolling area has, so the
+    // result card at the bottom of it can take whatever the rest leaves over.
+    <div className="@container/card flex w-full flex-1 flex-col space-y-page p-page animate-in fade-in duration-500">
       {/*
-        One header, which is what every other page in this application has: a
-        heading, one line under it, and the page's own controls on the right of
-        that same row.
+        No title above the page's controls: the trail in the app's header says
+        which screen this is, and what used to sit beside the title is drawn up
+        there with it (see `HeaderSlot`).
 
-        This page had two. The heading with its paragraph, and then a bordered
-        strip under it — two bands of chrome before anything anybody came here
-        to do. The strip's border, its tint and the gap above it were sixty
-        pixels spent saying "these controls belong together", which is already
-        said by their sitting together.
+        What goes up is what speaks for the whole page: which report is open,
+        whose it is, and the verbs that act on it as a thing that is kept. The
+        picker names itself — "Reporte abierto: …" — so it gives up the label
+        and the help it had over it, which the header's one 32px row has no
+        height for; the help panel beside it still explains it.
 
-        The level of detail leads because it is the decision the rest are made
-        under: changing it discards columns and filters. Then the way into a
-        report that already exists, then the way to abandon one.
+        The level of detail is not up there. It is the decision the rest are
+        made under — changing it discards columns and filters — so it stays in
+        the page, in the heading of Columnas, beside the button whose fields it
+        decides.
+
+        This page once had a heading, a paragraph and then a bordered strip —
+        bands of chrome before anything anybody came here to do. The strip's
+        border, its tint and the gap above it were sixty pixels spent saying
+        "these controls belong together", which is already said by their
+        sitting together.
       */}
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
-            <PageHelp />
-          </div>
-          {/* One line, like every other page's. It was three sentences saying
-              what the help panel says at length two centimetres to the left. */}
-          <p className="mt-1 text-sm text-muted-foreground">
-            Arme la tabla que necesite, guárdela y expórtela.
-          </p>
+      <h1 className="sr-only">Generador de reportes</h1>
+      <HeaderSlot>
+        {/*
+          The report being worked on, which the page never used to name. Opening
+          one from the list changed everything on screen except any statement of
+          what had been opened: the only clue was the save button turning into
+          "Actualizar". On somebody else's report that mattered more than a
+          label — saving makes a copy, and that was explained inside the save
+          popover, after it had been opened.
+        */}
+        <div className="flex min-w-0 items-center gap-2">
+          <ReportPicker
+            reports={saved}
+            total={savedTotal}
+            onLoadMore={() => loadSaved(true)}
+            templates={catalog.templates ?? []}
+            roots={catalog.roots}
+            current={current}
+            currentUserId={currentUserId}
+            // Opening and running are `ver`, which this page already required
+            // to load at all. The three below are not.
+            onOpen={handleOpen}
+            onPickTemplate={handlePickTemplate}
+            loading={loadingSaved}
+            failed={savedFailed}
+            onRetry={refreshSaved}
+          />
+
+          {current && (
+            <div className="flex shrink-0 items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  {current.visibility === "shared"
+                    ? <UsersIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                    : <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
+                </TooltipTrigger>
+                <TooltipContent>
+                  {current.visibility === "shared" ? "Compartido con el equipo" : "Privado"}
+                </TooltipContent>
+              </Tooltip>
+
+              {/*
+                Whose it is, said before anything is pressed rather than after.
+                Saving somebody else's report creates a copy of it, and until
+                now that was stated inside the save popover.
+              */}
+              {!isMine && author && (
+                <span className="ml-1 truncate text-xs text-muted-foreground">
+                  De {author}
+                </span>
+              )}
+
+              {/* The same three the list rows carried, behind the same three
+                  permissions — and now usable on the report while it is open,
+                  which the list could never do. */}
+              {isMine && mayEdit && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7"
+                      aria-label={current.favorite
+                        ? `Quitar ${current.name} de favoritos`
+                        : `Marcar ${current.name} como favorito`}
+                      aria-pressed={current.favorite}
+                      onClick={() => handleToggleFavorite(current)}
+                    >
+                      <StarIcon className={cn(
+                        "h-3.5 w-3.5",
+                        current.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
+                      )} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {current.favorite ? "Quitar de favoritos" : "Marcar como favorito"}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+
+              {mayCreate && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
+                      aria-label={`Duplicar ${current.name}`}
+                      onClick={() => handleDuplicate(current)}
+                    >
+                      <CopyIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Duplicar</TooltipContent>
+                </Tooltip>
+              )}
+
+              {isMine && mayArchive && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="ghost" size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      aria-label={`Archivar ${current.name}`}
+                    >
+                      <ArchiveIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Archivar «{current.name}»?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        El reporte dejará de estar disponible para usted y para el resto del
+                        equipo, y no podrá recuperarlo desde el sistema. Los datos que consulta no
+                        se tocan: sólo se archiva este reporte guardado.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleDelete(current)}>
+                        Archivar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+            </div>
+          )}
         </div>
 
         {/*
-          `items-end` so the controls sit on one line however tall their labels
-          are, and "Nuevo" — which has no label of its own — lines up with them
-          instead of floating in the middle of the row.
+          The two verbs that act on the report as a thing that is kept, next
+          to the report itself and to the three buttons that already act on
+          it. Saving stores the configuration, never the rows — a saved report
+          is generated again when it is opened — so it belongs with the report
+          and not with the table it produced.
         */}
-        <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              {/* Above its control, not beside it: at the size a header gives
-                  them, a label to the left of one box and another to the left
-                  of the next read as one long line of words with boxes in it,
-                  and neither label looked attached to anything. */}
-              <span className="text-xs font-medium text-muted-foreground">Nivel de detalle</span>
-              <CardHelp label="el nivel de detalle">
-                <p>
-                  Define qué representa cada fila del reporte, y es la decisión que manda sobre
-                  todas las demás: los mismos datos dan tablas distintas según sea una fila por
-                  evento o una por revisión.
-                </p>
-                <p className="mt-2">
-                  Cambiarlo descarta lo que no exista en el nivel nuevo, y le avisa antes de
-                  hacerlo.
-                </p>
-              </CardHelp>
-            </div>
-
-            <Select
-              value={config.root}
-              onValueChange={(value) => {
-                const next = catalog.roots.find((r) => r.key === value);
-                if (!next || next.key === config.root) return;
-                // Outside the updater. A state updater must be pure — React
-                // calls it twice in development on purpose — so every one of
-                // these warnings appeared twice, and in concurrent rendering
-                // the double call is not a development-only courtesy.
-                const cleaned = changeRoot(config, next);
-                const lost = elementCount(config) - elementCount(cleaned);
-                // Asked, not announced. This is the most destructive control
-                // on the page dressed as a preference: it throws away columns
-                // and filters, and it used to say so afterwards in a message
-                // that disappears on its own. Somebody who wanted to look at
-                // the other level of detail for a second lost twenty minutes
-                // of work and was told about it by a toast.
-                if (lost > 0) {
-                  setPendingRoot({ root: next, cleaned, lost });
-                  return;
-                }
-                applyRoot(cleaned);
-              }}
-            >
-              {/*
-                A pill rather than a boxed select. What it holds is a statement
-                about the report — "una fila por evento" — and not a field being
-                filled in, and the header it now sits in reads better for the
-                difference: two bordered boxes side by side looked like a form
-                somebody had left half filled.
-
-                The borderless fill that made that work is every select's now,
-                so only what is particular to this one is left here: it is round
-                rather than square, and it hugs its text instead of holding a
-                fixed width, so the pill is as long as what it says.
-              */}
-              <SelectTrigger
-                className="h-8 w-auto rounded-full px-3 text-sm font-medium"
-                aria-label="Nivel de detalle"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {catalog.roots.map((r) => (
-                  <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/*
-            The report being worked on, which the page never used to name. Opening
-            one from the list changed everything on screen except any statement of
-            what had been opened: the only clue was the save button turning into
-            "Actualizar". On somebody else's report that mattered more than a
-            label — saving makes a copy, and that was explained inside the save
-            popover, after it had been opened.
-          */}
-          <div className="flex min-w-0 flex-col gap-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-medium text-muted-foreground">Reporte</span>
-              <CardHelp label="abrir un reporte">
-                <p>
-                  <strong className="font-medium text-foreground">Guardados</strong> son los suyos
-                  y los que el equipo ha compartido. <strong className="font-medium text-foreground">Plantillas</strong> son
-                  seis reportes ya armados: se abren, se tocan y se generan.
-                </p>
-                <p className="mt-2">
-                  Abrir una plantilla no toca ningún reporte guardado — se guarda como uno nuevo
-                  cuando usted quiera.
-                </p>
-              </CardHelp>
-            </div>
-
-            <div className="flex min-w-0 items-center gap-2">
-              <ReportPicker
-                reports={saved}
-                total={savedTotal}
-                onLoadMore={() => loadSaved(true)}
-                templates={catalog.templates ?? []}
-                roots={catalog.roots}
-                current={current}
-                currentUserId={currentUserId}
-                // Opening and running are `ver`, which this page already required
-                // to load at all. The three below are not.
-                onOpen={handleOpen}
-                onPickTemplate={handlePickTemplate}
-                loading={loadingSaved}
-                failed={savedFailed}
-                onRetry={refreshSaved}
-              />
-
-              {current && (
-                <div className="flex shrink-0 items-center gap-0.5">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      {current.visibility === "shared"
-                        ? <UsersIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                        : <LockIcon className="h-3.5 w-3.5 text-muted-foreground" />}
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      {current.visibility === "shared" ? "Compartido con el equipo" : "Privado"}
-                    </TooltipContent>
-                  </Tooltip>
-
-                  {/*
-                    Whose it is, said before anything is pressed rather than after.
-                    Saving somebody else's report creates a copy of it, and until
-                    now that was stated inside the save popover.
-                  */}
-                  {!isMine && author && (
-                    <span className="ml-1 truncate text-xs text-muted-foreground">
-                      De {author}
-                    </span>
-                  )}
-
-                  {/* The same three the list rows carried, behind the same three
-                      permissions — and now usable on the report while it is open,
-                      which the list could never do. */}
-                  {isMine && mayEdit && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7"
-                          aria-label={current.favorite
-                            ? `Quitar ${current.name} de favoritos`
-                            : `Marcar ${current.name} como favorito`}
-                          aria-pressed={current.favorite}
-                          onClick={() => handleToggleFavorite(current)}
-                        >
-                          <StarIcon className={cn(
-                            "h-3.5 w-3.5",
-                            current.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
-                          )} />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        {current.favorite ? "Quitar de favoritos" : "Marcar como favorito"}
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-
-                  {mayCreate && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground"
-                          aria-label={`Duplicar ${current.name}`}
-                          onClick={() => handleDuplicate(current)}
-                        >
-                          <CopyIcon className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Duplicar</TooltipContent>
-                    </Tooltip>
-                  )}
-
-                  {isMine && mayArchive && (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button
-                          variant="ghost" size="icon"
-                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                          aria-label={`Archivar ${current.name}`}
-                        >
-                          <ArchiveIcon className="h-3.5 w-3.5" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Archivar «{current.name}»?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            El reporte dejará de estar disponible para usted y para el resto del
-                            equipo, y no podrá recuperarlo desde el sistema. Los datos que consulta no
-                            se tocan: sólo se archiva este reporte guardado.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => handleDelete(current)}>
-                            Archivar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/*
-            The two verbs that act on the report as a thing that is kept, next
-            to the report itself and to the three buttons that already act on
-            it. Saving stores the configuration, never the rows — a saved report
-            is generated again when it is opened — so it belongs with what
-            builds that configuration and not with the table it produced. It sat
-            in the results heading, which had seven controls and now has six,
-            each of them about the table.
-          */}
-          <div className="flex items-center gap-2">
-            {/* Updating your own report needs `editar` and everything
-                else creates a row and needs `crear` — but holding only
-                `crear` must not lose the button the moment one of your
-                own reports is open: `handleSave` already falls back to
-                creating a copy, and the alternative was telling someone
-                to press Nuevo and rebuild what they wanted to keep. */}
-            {(mayCreate || (current !== null && isMine && mayEdit)) && (
-            <Popover open={saveOpen} onOpenChange={setSaveOpen}>
-              <Tooltip>
-                {/*
-                  A span between the tooltip and the button, because a disabled
-                  button receives no pointer events — and the tooltip here is
-                  the only place the reason for being disabled is written.
-                */}
-                <TooltipTrigger asChild>
-                  <span className="inline-flex">
-                    <PopoverTrigger asChild>
-                      {/*
-                        Off while the configuration cannot be saved at all. The
-                        form behind this asks for a name, a description and a
-                        decision about sharing, and then refused the whole thing
-                        with "el reporte necesita al menos una columna" — work
-                        asked for before saying it was impossible.
-                      */}
-                      <Button variant="outline" size="sm" disabled={problems.length > 0}>
-                        <SaveIcon className="mr-1.5 h-4 w-4" />
-                        {current && isMine && mayEdit ? "Actualizar" : "Guardar"}
-                      </Button>
-                    </PopoverTrigger>
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {problems.length > 0 ? problems[0]
-                    : current && isMine && mayEdit
-                      ? `Sobrescribe «${current.name}», también para el equipo si está compartido`
-                      : "Guarda la configuración, no los datos: al abrirlo se vuelve a generar"}
-                </TooltipContent>
-              </Tooltip>
-              <PopoverContent align="end" className="w-80 space-y-3">
-                {current && isMine && mayEdit && (
-                  <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
-                    Se sobrescribirá «{current.name}».
-                  </p>
-                )}
-                {current && (!isMine || !mayEdit) && (
-                  <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
-                    «{current.name}» se guardará como una copia suya.
-                  </p>
-                )}
-                <div className="space-y-1.5">
-                  <Label htmlFor="rep-nombre">Nombre</Label>
-                  <Input
-                    id="rep-nombre"
-                    value={saveName}
-                    onChange={(e) => setSaveName(e.target.value)}
-                    placeholder="Eventos pendientes por tramo"
-                    maxLength={120}
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="rep-desc">Descripción <span className="text-xs text-muted-foreground">(opcional)</span></Label>
-                  <Textarea
-                    id="rep-desc"
-                    value={saveDescription}
-                    onChange={(e) => setSaveDescription(e.target.value)}
-                    rows={2}
-                    maxLength={500}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="rep-shared" className="cursor-pointer">Compartir con el equipo</Label>
-                  <Switch id="rep-shared" checked={saveShared} onCheckedChange={setSaveShared} />
-                </div>
-                <Button className="w-full" onClick={handleSave} disabled={saving}>
-                  {saving && <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />}
-                  {current && isMine && mayEdit ? "Actualizar reporte" : "Guardar reporte"}
-                </Button>
-              </PopoverContent>
-            </Popover>
-            )}
+        <div className="flex items-center gap-2">
+          {/* Updating your own report needs `editar` and everything
+              else creates a row and needs `crear` — but holding only
+              `crear` must not lose the button the moment one of your
+              own reports is open: `handleSave` already falls back to
+              creating a copy, and the alternative was telling someone
+              to press Nuevo and rebuild what they wanted to keep. */}
+          {(mayCreate || (current !== null && isMine && mayEdit)) && (
+          <Popover open={saveOpen} onOpenChange={setSaveOpen}>
             <Tooltip>
+              {/*
+                A span between the tooltip and the button, because a disabled
+                button receives no pointer events — and the tooltip here is
+                the only place the reason for being disabled is written.
+              */}
               <TooltipTrigger asChild>
                 <span className="inline-flex">
-                  <Button
-                    variant="outline" size="sm"
-                    onClick={handleNew}
-                    disabled={!somethingToDiscard}
-                  >
-                    <FilePlus2Icon className="mr-1.5 h-4 w-4" />
-                    Nuevo
-                  </Button>
+                  <PopoverTrigger asChild>
+                    {/*
+                      Off while the configuration cannot be saved at all. The
+                      form behind this asks for a name, a description and a
+                      decision about sharing, and then refused the whole thing
+                      with "el reporte necesita al menos una columna" — work
+                      asked for before saying it was impossible.
+                    */}
+                    {/* The word only from `sm` up, here and on «Nuevo»: on a
+                        phone the header holds the picker, three icons and
+                        these two, and with their words it ran past the edge.
+                        The word is still the name. */}
+                    <Button
+                      variant="outline" size="sm" disabled={problems.length > 0}
+                      aria-label={current && isMine && mayEdit ? "Actualizar" : "Guardar"}
+                      className="max-sm:px-2"
+                    >
+                      <SaveIcon className="h-4 w-4 sm:mr-1.5" />
+                      <span className="max-sm:hidden">{current && isMine && mayEdit ? "Actualizar" : "Guardar"}</span>
+                    </Button>
+                  </PopoverTrigger>
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                {somethingToDiscard
-                  ? "Vacía la configuración y cierra el reporte abierto"
-                  : "Ya está en blanco"}
+                {problems.length > 0 ? problems[0]
+                  : current && isMine && mayEdit
+                    ? `Sobrescribe «${current.name}», también para el equipo si está compartido`
+                    : "Guarda la configuración, no los datos: al abrirlo se vuelve a generar"}
               </TooltipContent>
             </Tooltip>
-          </div>
+            <PopoverContent align="end" className="w-80 space-y-3">
+              {current && isMine && mayEdit && (
+                <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                  Se sobrescribirá «{current.name}».
+                </p>
+              )}
+              {current && (!isMine || !mayEdit) && (
+                <p className="rounded-md bg-muted px-2 py-1.5 text-xs text-muted-foreground">
+                  «{current.name}» se guardará como una copia suya.
+                </p>
+              )}
+              <div className="space-y-1.5">
+                <Label htmlFor="rep-nombre">Nombre</Label>
+                <Input
+                  id="rep-nombre"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  placeholder="Eventos pendientes por tramo"
+                  maxLength={120}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="rep-desc">Descripción <span className="text-xs text-muted-foreground">(opcional)</span></Label>
+                <Textarea
+                  id="rep-desc"
+                  value={saveDescription}
+                  onChange={(e) => setSaveDescription(e.target.value)}
+                  rows={2}
+                  maxLength={500}
+                />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="rep-shared" className="cursor-pointer">Compartir con el equipo</Label>
+                <Switch id="rep-shared" checked={saveShared} onCheckedChange={setSaveShared} />
+              </div>
+              <Button className="w-full" onClick={handleSave} disabled={saving}>
+                {saving && <Loader2Icon className="mr-1.5 h-4 w-4 animate-spin" />}
+                {current && isMine && mayEdit ? "Actualizar reporte" : "Guardar reporte"}
+              </Button>
+            </PopoverContent>
+          </Popover>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="inline-flex">
+                <Button
+                  variant="outline" size="sm"
+                  onClick={handleNew}
+                  disabled={!somethingToDiscard}
+                  aria-label="Nuevo"
+                  className="max-sm:px-2"
+                >
+                  <FilePlus2Icon className="h-4 w-4 sm:mr-1.5" />
+                  <span className="max-sm:hidden">Nuevo</span>
+                </Button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              {somethingToDiscard
+                ? "Vacía la configuración y cierra el reporte abierto"
+                : "Ya está en blanco"}
+            </TooltipContent>
+          </Tooltip>
         </div>
-      </div>
-
+        <PageHelp />
+      </HeaderSlot>
       {/*
         The configuration sits above the table, not beside it.
 
@@ -1654,7 +1566,7 @@ const GeneradorPage = () => {
         <>
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <CardTitle className="text-base">Columnas</CardTitle>
                   <CardHelp label="las columnas">
@@ -1666,41 +1578,118 @@ const GeneradorPage = () => {
                       Puede renombrar la cabecera escribiendo encima. Los campos que empiezan por
                       «Contar» no son un dato guardado: se cuentan al generar.
                     </p>
+                    <p className="mt-2">
+                      El selector de la derecha es el <strong className="font-medium text-foreground">nivel
+                      de detalle</strong>: define qué representa cada fila del reporte, y es la
+                      decisión que manda sobre todas las demás. Los mismos datos dan tablas distintas
+                      según sea una fila por evento o una por revisión.
+                    </p>
+                    <p className="mt-2">
+                      Cambiarlo descarta lo que no exista en el nivel nuevo — columnas y también
+                      filtros — y le avisa antes de hacerlo.
+                    </p>
                   </CardHelp>
                 </div>
-                <FieldPicker
-                  root={menuRoot}
-                  chosen={chosen}
-                  onPick={(field: CatalogField) => {
-                    // Both refusals used to return the same object, and the
-                    // caller had only identity to go on: at sixty columns,
-                    // picking a field never added before answered "ya está en
-                    // el reporte", which is not true and does not tell anyone
-                    // to remove a column.
-                    if (columnLimitReached(config, limits)) {
-                      return toast.warning(
-                        `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
-                      );
-                    }
-                    const next = addColumn(config, field.path, undefined, limits);
-                    if (next === config) {
-                      return toast.warning(`"${field.label}" ya está en el reporte.`);
-                    }
-                    setConfig(next);
-                  }}
-                  onPickAggregate={(path, label) => {
-                    if (columnLimitReached(config, limits)) {
-                      return toast.warning(
-                        `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
-                      );
-                    }
-                    const next = addColumn(config, path, "count" as AggFn, limits);
-                    if (next === config) {
-                      return toast.warning(`"${label ?? path}" ya está en el reporte.`);
-                    }
-                    setConfig(next);
-                  }}
-                />
+                {/*
+                  The level of detail, immediately before the button it governs:
+                  it decides what a row is, and with that which fields the
+                  button offers. It had a row to itself above the two panels,
+                  the last thing on the page outside a card.
+
+                  It still reaches further than this card — changing it
+                  discards filters as well as columns — which is why it asks
+                  before doing so, and why the help of this card says it.
+                */}
+                <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                  <Select
+                    value={config.root}
+                    onValueChange={(value) => {
+                      const next = catalog.roots.find((r) => r.key === value);
+                      if (!next || next.key === config.root) return;
+                      // Outside the updater. A state updater must be pure — React
+                      // calls it twice in development on purpose — so every one of
+                      // these warnings appeared twice, and in concurrent rendering
+                      // the double call is not a development-only courtesy.
+                      const cleaned = changeRoot(config, next);
+                      const lost = elementCount(config) - elementCount(cleaned);
+                      // Asked, not announced. This is the most destructive control
+                      // on the page dressed as a preference: it throws away columns
+                      // and filters, and it used to say so afterwards in a message
+                      // that disappears on its own. Somebody who wanted to look at
+                      // the other level of detail for a second lost twenty minutes
+                      // of work and was told about it by a toast.
+                      if (lost > 0) {
+                        setPendingRoot({ root: next, cleaned, lost });
+                        return;
+                      }
+                      applyRoot(cleaned);
+                    }}
+                  >
+                    {/*
+                      A pill rather than a boxed select. What it holds is a statement
+                      about the report — "una fila por evento" — and not a field being
+                      filled in, and the header it now sits in reads better for the
+                      difference: two bordered boxes side by side looked like a form
+                      somebody had left half filled.
+
+                      The borderless fill that made that work is every select's now,
+                      so only what is particular to this one is left here: it is round
+                      rather than square, and it hugs its text instead of holding a
+                      fixed width, so the pill is as long as what it says.
+                    */}
+                    {/* Its name, for whoever is looking: the label that stood over it
+                        had no place in a card heading. */}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <SelectTrigger
+                          className="h-8 w-auto rounded-full px-3 text-sm font-medium"
+                          aria-label="Nivel de detalle"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                      </TooltipTrigger>
+                      <TooltipContent>Nivel de detalle: qué es cada fila del reporte</TooltipContent>
+                    </Tooltip>
+                    <SelectContent>
+                      {catalog.roots.map((r) => (
+                        <SelectItem key={r.key} value={r.key}>{r.rowMeaning}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldPicker
+                    root={menuRoot}
+                    chosen={chosen}
+                    onPick={(field: CatalogField) => {
+                      // Both refusals used to return the same object, and the
+                      // caller had only identity to go on: at sixty columns,
+                      // picking a field never added before answered "ya está en
+                      // el reporte", which is not true and does not tell anyone
+                      // to remove a column.
+                      if (columnLimitReached(config, limits)) {
+                        return toast.warning(
+                          `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
+                        );
+                      }
+                      const next = addColumn(config, field.path, undefined, limits);
+                      if (next === config) {
+                        return toast.warning(`"${field.label}" ya está en el reporte.`);
+                      }
+                      setConfig(next);
+                    }}
+                    onPickAggregate={(path, label) => {
+                      if (columnLimitReached(config, limits)) {
+                        return toast.warning(
+                          `El reporte ya tiene el máximo de ${maxColumns(limits)} columnas. Quite alguna para añadir otra.`,
+                        );
+                      }
+                      const next = addColumn(config, path, "count" as AggFn, limits);
+                      if (next === config) {
+                        return toast.warning(`"${label ?? path}" ya está en el reporte.`);
+                      }
+                      setConfig(next);
+                    }}
+                  />
+                </div>
               </div>
             </CardHeader>
             <CardContent className="max-h-112 overflow-y-auto space-y-3">
@@ -1749,7 +1738,9 @@ const GeneradorPage = () => {
 
           <Card size="sm" className="min-w-0 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
-              <div className="flex items-center justify-between gap-2">
+              {/* Wraps: the title, «Quitar todos» and «Añadir filtro» are about
+                  as wide as a phone, and in one row the last was cut off. */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <CardTitle className="text-base">Filtros</CardTitle>
                   <CardHelp label="los filtros">
@@ -1820,9 +1811,17 @@ const GeneradorPage = () => {
         its width comes from its containing block and the table's own
         `overflow-x-auto` is finally the thing that decides. The floor only ever
         mattered while this was a grid item.
+
+        It reaches the bottom of the screen. As tall as what it held, an empty
+        or a five-row report ended the page halfway down. `flex-1` on each link
+        — this wrapper, the card, its body — hands it the height the page has
+        left; it is a floor, so a longer table still grows the card and the page
+        scrolls as it always did. Being a flex item changes nothing about its
+        width: across a column, an item is stretched to the container, not
+        sized by its content.
       */}
-      <div>
-          <Card className="border-muted/60 shadow-sm">
+      <div className="flex flex-1 flex-col">
+          <Card className="flex-1 border-muted/60 shadow-sm">
             <CardHeader className="border-b border-border/40 pb-3">
               {/*
                 Two groups, by what they are for. On the left, making the table:
@@ -2006,7 +2005,7 @@ const GeneradorPage = () => {
               </div>
             </CardHeader>
 
-            <CardContent>
+            <CardContent className="flex flex-1 flex-col">
               {problems.length > 0 && (
                 <div
                   role="alert"
@@ -2089,12 +2088,14 @@ const GeneradorPage = () => {
               ) : (
                 /*
                   The templates used to be listed here as well, and on an empty
-                  page that put the same six on screen twice — once in the panel
+                  page that put the same templates on screen twice — once in the panel
                   and once here — which reads as the page repeating itself. They
                   live in the picker on the strip, and this says where rather
                   than showing them again.
                 */
-                <p className="py-16 text-center text-sm text-muted-foreground">
+                // `my-auto`: in the middle of the space the card now has, not at
+                // the top of it with the screen empty underneath.
+                <p className="my-auto py-16 text-center text-sm text-muted-foreground">
                   Añada columnas arriba, en «Columnas», para ir viendo aquí cómo queda el reporte
                   {(catalog.templates?.length ?? 0) > 0
                     ? ", o abra una de las plantillas desde «Reporte», arriba."

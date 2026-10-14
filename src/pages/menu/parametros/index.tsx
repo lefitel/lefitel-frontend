@@ -8,6 +8,7 @@ import ObsSec from "./ObsSec";
 import PropietarioSec from "./PropiedadSec";
 import TipoObsSec from "./TipoObsSec";
 import type { RegistroEnlazado } from "./useRegistroEnlazado";
+import { HeaderSlot } from "../../../components/HeaderSlot";
 
 type Tab = "material" | "propietario" | "adss" | "tipoobs" | "obs";
 export type InnerTab = "activos" | "archivados";
@@ -75,12 +76,12 @@ const ParametrosPage = () => {
 
   return (
     <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Parámetros</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gestión de catálogos del sistema</p>
-      </div>
+      <h1 className="sr-only">Parámetros</h1>
 
       <Tabs value={tab} onValueChange={handleTabChange}>
+        {/* Which catalog stays in the page: five tabs do not fit beside the
+            trail in the header. Activos/Archivados goes up, where every other
+            screen has it. */}
         <div className="flex items-center justify-between gap-4">
 
           {/* Mobile: select */}
@@ -104,12 +105,14 @@ const ParametrosPage = () => {
             ))}
           </TabsList>
 
-          <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
-            <TabsList>
-              <TabsTrigger value="activos">Activos</TabsTrigger>
-              <TabsTrigger value="archivados">Archivados</TabsTrigger>
-            </TabsList>
-          </Tabs>
+          <HeaderSlot>
+            <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)} className="shrink-0">
+              <TabsList size="sm">
+                <TabsTrigger value="activos">Activos</TabsTrigger>
+                <TabsTrigger value="archivados">Archivados</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </HeaderSlot>
         </div>
 
         <TabsContent value="material">    <MaterialSec innerTab={innerTab} enlace={enlaceDe("material")} /></TabsContent>

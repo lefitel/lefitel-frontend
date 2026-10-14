@@ -5,6 +5,7 @@ import { type DateRange } from "react-day-picker"
 import { Calendar } from "@/components/ui/calendar"
 import { chooserTrigger } from "@/components/ui/control-surface"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { cn } from "@/lib/utils"
 
 interface DateRangePickerProps {
@@ -25,6 +26,10 @@ export function DateRangePicker({ value, onChange, placeholder = "Seleccionar ra
   const label = !value?.from
     ? placeholder
     : value.to ? `${day(value.from)} — ${day(value.to)}` : day(value.from)
+  // One month on a phone. Two are drawn one over the other there, and at a
+  // finger's cell size that is taller than the screen, with the second month
+  // below its edge; the arrows reach the next month just as well.
+  const isMobile = useIsMobile()
 
   return (
     <Popover>
@@ -71,7 +76,7 @@ export function DateRangePicker({ value, onChange, placeholder = "Seleccionar ra
           defaultMonth={value?.from}
           selected={value}
           onSelect={onChange}
-          numberOfMonths={2}
+          numberOfMonths={isMobile ? 1 : 2}
           locale={es}
         />
       </PopoverContent>

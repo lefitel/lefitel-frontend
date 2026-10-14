@@ -7,8 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import { DashboardEvento } from "../../../api/dashboard.api";
 import { daysOpen } from "./helpers";
 import { useNavigate } from "react-router-dom";
-import { InfoIcon } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import InfoPopover from "../../../components/InfoPopover";
 import { getCriticalityMeta } from "../../../lib/criticality";
 
 type Tab = "urgentes" | "criticos";
@@ -66,24 +65,17 @@ export function UrgentEventsCard({ urgentEvents, criticalObsEvents, loading }: U
   return (
     <Card className="shadow-sm border-muted/60 flex flex-col h-80 sm:h-105">
       <CardHeader className="border-b border-border/40 pb-4">
-        <div className="flex items-start justify-between gap-2">
-          <div>
+        {/* The tabs drop below the title on a phone: beside them the
+            description had some 100px, a word or two to a line. */}
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0 flex-1 basis-48">
             <div className="flex items-center gap-1.5">
               <CardTitle>Alertas</CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="¿Qué eventos aparecen aquí?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                      <InfoIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <span className="block text-left leading-relaxed normal-case">
-                      {TOOLTIP[tab]}
-                    </span>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <InfoPopover label="¿Qué eventos aparecen aquí?" side="bottom" className="w-80 max-w-[calc(100vw-2rem)]">
+                <span className="block text-left leading-relaxed normal-case">
+                  {TOOLTIP[tab]}
+                </span>
+              </InfoPopover>
             </div>
             <CardDescription>{DESCRIPTIONS[tab]}</CardDescription>
           </div>

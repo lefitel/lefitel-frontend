@@ -1,5 +1,4 @@
 import { EventoInterface, PosteInterface } from "../../../../interfaces/interfaces";
-import { Card } from "../../../../components/ui/card";
 import PosteDetalleEventosResueltos from "./PosteDetalleEventosResueltos";
 import PosteDetalleVecinos from "./PosteDetalleVecinos";
 import BitacoraPanel from "../../../../components/BitacoraPanel";
@@ -35,7 +34,8 @@ export default function PosteDetalleHistorial({
     0;
 
   return (
-    <Card className="py-0 gap-0 shadow-sm border-border/60">
+    // Straight on the panel, which is the card.
+    <div>
       <h2 className="px-3 py-2.5 text-sm font-semibold">
         {TITULO[vista]}
         {count > 0 && <span className="text-muted-foreground font-normal tabular-nums"> · {count}</span>}
@@ -54,6 +54,6 @@ export default function PosteDetalleHistorial({
         )}
         {vista === "bitacora" && <BitacoraPanel entity="Poste" entityId={poste?.id} />}
       </div>
-    </Card>
+    </div>
   );
 }

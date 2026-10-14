@@ -3,6 +3,12 @@ import { DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
 export type Period = "fortnight" | "month" | "quarter" | "year" | "all" | "custom";
 export type MapTab = "postes" | "pendientes" | "solucionados";
 
+/**
+ * Which department the map is narrowed to: every one, a department by id, or
+ * the poles that have none — a tramo may not have been given one yet.
+ */
+export type MapDepartamento = "all" | "none" | number;
+
 export const PERIOD_LABELS: Record<Period, string> = {
   fortnight: "15 días",
   month: "Este mes",

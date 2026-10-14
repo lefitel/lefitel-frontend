@@ -40,17 +40,17 @@ import {
   AlertTriangleIcon,
   HardDriveIcon,
   ZoomInIcon,
-  MoreVerticalIcon,
   LinkIcon,
   ImageOffIcon,
   ImageIcon as ImageCheckIcon,
 } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "../../components/ui/dropdown-menu";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "../../components/ui/dropdown-menu";
 import DataTable from "../../components/table/DataTable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../components/ui/select";
+import { HeaderSlot } from "../../components/HeaderSlot";
+import { RowActionsTrigger } from "../../components/table/RowActionsTrigger";
 
 const TYPE_STYLES: Record<string, string> = {
   "Poste": "bg-blue-500/10 text-blue-600 border-blue-500/20",
@@ -134,7 +134,6 @@ const FilesPage = () => {
   useEffect(() => {
     load();
     loadStats();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Both of these awaited a call that propagates its failure and had no
@@ -270,9 +269,7 @@ const FilesPage = () => {
       cell: ({ row }) => !can(rol, "archivos", "archivar") ? null : (
         <div className="flex justify-end pr-2">
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-              <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
+            <RowActionsTrigger />
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem
                 className="text-destructive focus:text-destructive"
@@ -330,13 +327,9 @@ const FilesPage = () => {
   return (
     <Tabs defaultValue="archivos" className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Gestor de Archivos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Administre el almacenamiento, depure huérfanos y revise la cobertura de imágenes.</p>
-        </div>
-        <TabsList>
+      <h1 className="sr-only">Gestor de Archivos</h1>
+      <HeaderSlot>
+        <TabsList size="sm">
           <TabsTrigger value="archivos">Archivos</TabsTrigger>
           <TabsTrigger value="cobertura" className="relative">
             Cobertura
@@ -347,7 +340,7 @@ const FilesPage = () => {
             )}
           </TabsTrigger>
         </TabsList>
-      </div>
+      </HeaderSlot>
 
       {/* ── Tab Archivos ── */}
       <TabsContent value="archivos" className="space-y-6">
@@ -401,7 +394,11 @@ const FilesPage = () => {
                 <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               </Button>
               {orphans.length > 0 && can(rol, "archivos", "archivar") && (
-                <Button variant="destructive" disabled={deletingOrphans} onClick={() => setOrphansDialogOpen(true)} className="gap-2 h-8">
+                <Button
+                  variant="destructive" disabled={deletingOrphans} onClick={() => setOrphansDialogOpen(true)} className="gap-2 h-8"
+                  // Its words are hidden on a phone; this is its name there.
+                  aria-label={`Purgar ${orphans.length} huérfano${orphans.length > 1 ? "s" : ""}`}
+                >
                   {deletingOrphans ? <RefreshCwIcon className="h-4 w-4 animate-spin" /> : <Trash2Icon className="h-4 w-4" />}
                   <span className="hidden sm:inline">Purgar {orphans.length} huérfano{orphans.length > 1 ? "s" : ""}</span>
                 </Button>

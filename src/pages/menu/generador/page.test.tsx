@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import { rechazoDelServidor } from "../../../test/fallos";
 import { TooltipProvider } from "../../../components/ui/tooltip";
+import { HeaderSlotProvider } from "../../../components/headerSlotContext";
 import { SesionContext } from "../../../context/SesionContext";
 import type { Catalog, ReportConfig, ReportResult, SavedReport } from "../../../api/generador.api";
 import { usuarioExample } from "../../../data/example";
@@ -175,6 +176,14 @@ const sesion = {
   logout: vi.fn(),
 };
 
+/**
+ * The report picker, whatever it is saying.
+ *
+ * It names the open report — "Reporte abierto: …" — and with none open it says
+ * what to do instead, which is not a report and is not announced as one.
+ */
+const PICKER = /^(Reporte abierto: .+|Seleccione un reporte|Empiece por una plantilla)$/;
+
 /** Prints the address, so a test can see what the page did to it. */
 const Direccion = () => {
   const { pathname, search } = useLocation();
@@ -215,7 +224,7 @@ const ready = async () => {
  * whatever report is open, so its accessible name is written separately.
  */
 const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
-  await user.click(screen.getByRole("button", { name: /^Reporte abierto:/ }));
+  await user.click(screen.getByRole("button", { name: PICKER }));
 };
 /**
  * A row of that list. Matched on a prefix because the row's accessible name is
@@ -1176,25 +1185,6 @@ describe("changing the detail level", () => {
     await ready();
     expect(screen.getByLabelText("Nivel de detalle")).toHaveTextContent("Una fila por evento");
   });
-
-  it("sits above the panels instead of being one of them", async () => {
-    // It used to be a card of its own holding a single select, which spent a
-    // quarter of the band on one control touched once per report. On a strip
-    // it costs about a third of that, and it lands where it belongs: the
-    // decision the three panels below are made under rather than one of them.
-    //
-    // Structure, not geometry — this environment measures nothing. Outside the
-    // band and ahead of it in the document is the whole of the claim.
-    renderPage();
-    await ready();
-
-    const control = screen.getByLabelText("Nivel de detalle");
-    const band = document.querySelector('[class*="md:grid-cols-"]');
-    expect(band).not.toBeNull();
-    expect(band).not.toContainElement(control as HTMLElement);
-    expect(control.compareDocumentPosition(band!) & Node.DOCUMENT_POSITION_FOLLOWING)
-      .toBeTruthy();
-  });
 });
 
 describe("the order the report is sorted in", () => {
@@ -1640,10 +1630,13 @@ describe("what the screen shows while it waits", () => {
     api.getCatalogo.mockReturnValue(pending());
     renderPage();
 
-    // The heading and the four card titles are written into this page, not
-    // fetched, so they are already readable while the fields travel.
+    // The heading and the card titles are written into this page, not
+    // fetched, so they are already readable while the fields travel. «Reporte»
+    // and «Nivel de detalle» are no longer among them: the picker one named
+    // went up to the app's header and the control the other named went into
+    // the Columnas heading, and neither place has room for a label.
     expect(await screen.findByRole("heading", { name: "Generador de reportes" })).toBeInTheDocument();
-    for (const title of ["Nivel de detalle", "Reporte", "Columnas", "Filtros", "Resultado"]) {
+    for (const title of ["Columnas", "Filtros", "Resultado"]) {
       expect(screen.getByText(title)).toBeInTheDocument();
     }
     // And it is announced as busy, not just drawn as busy.
@@ -1780,7 +1773,7 @@ describe("the report taking shape while it is built", () => {
     renderPage();
     await ready();
 
-    expect(await screen.findByRole("button", { name: "Reporte abierto: Empiece por una plantilla" }))
+    expect(await screen.findByRole("button", { name: "Empiece por una plantilla" }))
       .toBeInTheDocument();
   });
 
@@ -1981,7 +1974,7 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    const control = screen.getByRole("button", { name: /^Reporte abierto:/ });
+    const control = screen.getByRole("button", { name: PICKER });
     expect(document.querySelector('[class*="md:grid-cols-"]')).not.toContainElement(control);
 
     await openPicker(user);
@@ -2005,8 +1998,12 @@ describe("something to start from", () => {
     renderPage();
     await ready();
 
-    expect(screen.getByRole("button", { name: "Reporte abierto: Ningún reporte abierto" }))
-      .toBeInTheDocument();
+    // An invitation, not a report: with reports saved and none open the control
+    // used to read "Ningún reporte abierto", a statement with nothing to do in
+    // it, and to announce itself as "Reporte abierto: Ningún reporte abierto".
+    expect(screen.getByRole("button", { name: "Seleccione un reporte" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Reporte abierto:/ })).toBeNull();
+    expect(screen.queryByText("Ningún reporte abierto")).toBeNull();
 
     await openPicker(user);
     await user.click(await screen.findByText("Revisiones de agosto"));
@@ -2824,3 +2821,169 @@ describe("the filter picker", () => {
     expect(screen.getAllByRole("button", { name: /Quitar filtro sobre Descripción/ })).toHaveLength(2);
   });
 });
+
+// The screens lost their title row, and what used to sit beside the title is
+// drawn in the app's header instead. Here that is the report being worked on —
+// which one is open, and the verbs that act on it as a thing that is kept —
+// because that is a statement about the whole page. The level of detail stays
+// in the page: it is the control that throws columns and filters away, and it
+// keeps its name and its help, which the header's one 32px row has no room for.
+//
+// Every other test in this file mounts the page on its own, where `HeaderSlot`
+// draws its children in place. This one gives it a header to draw into, which
+// is the only way to see what goes where.
+describe("what the generator hangs in the app's header", () => {
+  const renderInShell = () => {
+    const header = document.body.appendChild(document.createElement("div"));
+    const { container, unmount } = render(
+      <MemoryRouter initialEntries={["/app/generador"]}>
+        <SesionContext.Provider value={sesion as never}>
+          <TooltipProvider>
+            <HeaderSlotProvider value={{ start: null, end: header }}>
+              <GeneradorPage />
+            </HeaderSlotProvider>
+          </TooltipProvider>
+        </SesionContext.Provider>
+      </MemoryRouter>,
+    );
+    return { header: within(header), page: within(container), cerrar: () => { unmount(); header.remove(); } };
+  };
+
+  it("draws the open report and its two verbs up there", async () => {
+    const { header, page, cerrar } = renderInShell();
+
+    expect(await header.findByRole("button", { name: PICKER })).toBeInTheDocument();
+    expect(header.getByRole("button", { name: /Guardar/ })).toBeInTheDocument();
+    expect(header.getByRole("button", { name: "Nuevo" })).toBeInTheDocument();
+    // And not a second time down in the page.
+    expect(page.queryByRole("button", { name: PICKER })).toBeNull();
+    expect(page.queryByRole("button", { name: "Nuevo" })).toBeNull();
+    cerrar();
+  });
+
+  it("keeps the level of detail in the page", async () => {
+    const { header, page, cerrar } = renderInShell();
+    await header.findByRole("button", { name: PICKER });
+
+    expect(page.getByLabelText("Nivel de detalle")).toBeInTheDocument();
+    expect(header.queryByLabelText("Nivel de detalle")).toBeNull();
+    cerrar();
+  });
+
+  it("no longer writes «Reporte» over the picker", async () => {
+    // The picker names itself — "Reporte abierto: …" — and that is what is left.
+    const { header, page, cerrar } = renderInShell();
+    await header.findByRole("button", { name: PICKER });
+
+    expect(page.queryByText("Reporte")).toBeNull();
+    expect(header.queryByText("Reporte")).toBeNull();
+    cerrar();
+  });
+});
+
+// The result card reaches the bottom of the screen.
+//
+// It was as tall as what it held, so with nothing generated yet — or a report
+// of five rows — the page ended halfway down and the rest of the screen was
+// background. Height has to be handed down a chain for a card to fill what is
+// left: the page takes what the app's scrolling area has, the card's wrapper
+// takes what the page has left over, the card takes its wrapper, and its body
+// takes the card. It is a floor and not a size: a longer table still grows the
+// card and scrolls the page, as before.
+//
+// Nothing here lays a page out, so "does it reach the bottom" cannot be asked.
+// Each link of the chain can: break one and the card goes back to its content.
+describe("the result card fills what is left of the screen", () => {
+  const clases = (el: Element | null | undefined) => (el?.className ?? "").split(/\s+/);
+  const tarjeta = () => screen.getByText("Resultado").closest('[data-slot="card"]') as HTMLElement;
+
+  it("hands the height down from the page to the card's body", async () => {
+    renderPage();
+    await screen.findByRole("button", { name: /Generar/ });
+
+    const card = tarjeta();
+    const envoltorio = card.parentElement;
+    const pagina = envoltorio?.parentElement;
+    const cuerpo = card.querySelector('[data-slot="card-content"]');
+
+    for (const eslabon of [pagina, envoltorio]) {
+      expect(clases(eslabon)).toEqual(expect.arrayContaining(["flex", "flex-1", "flex-col"]));
+    }
+    expect(clases(card)).toContain("flex-1");
+    expect(clases(cuerpo)).toEqual(expect.arrayContaining(["flex", "flex-1", "flex-col"]));
+  });
+
+  it("centres the invitation in the space, rather than leaving it at the top of it", async () => {
+    api.getCatalogo.mockResolvedValue({ ...catalog, templates: undefined });
+    renderPage();
+    await screen.findByRole("button", { name: /Generar/ });
+
+    expect(clases(screen.getByText(/Añada columnas arriba/))).toContain("my-auto");
+  });
+
+  it("is already that tall while the catalog loads, so nothing jumps when it lands", async () => {
+    // Never answers: the page stays on its skeleton.
+    api.getCatalogo.mockReturnValue(new Promise(() => {}));
+    renderPage();
+    await screen.findByRole("status");
+
+    const card = tarjeta();
+    expect(clases(card)).toContain("flex-1");
+    expect(clases(card.parentElement)).toEqual(expect.arrayContaining(["flex", "flex-1", "flex-col"]));
+    expect(clases(card.parentElement?.parentElement)).toEqual(expect.arrayContaining(["flex", "flex-1", "flex-col"]));
+  });
+});
+
+// The level of detail lives in the heading of Columnas, beside the button that
+// adds a column.
+//
+// It had a row of its own above the two panels, the last thing left on the page
+// outside a card. It decides what a row is, and which fields that button then
+// offers, so it sits immediately before it. What it gave up for the place is
+// its written label and its own help button: a card heading has no room for
+// either. The name survives as the control's accessible name and the
+// explanation moved into the help of the card it now belongs to.
+//
+// This is the third place it has had. First a card of its own, a quarter of the
+// band spent on one select touched once per report. Then a strip above the
+// panels, pinned there by a test that read "the decision the three panels are
+// made under rather than one of them" — still true of what it does, since it
+// discards filters as well as columns. It went inside Columnas anyway, by
+// decision: one row less on the page, and the confirmation it asks for before
+// discarding anything is what says how far it reaches.
+describe("the level of detail in the Columnas heading", () => {
+  const cabecera = () =>
+    screen.getByText("Columnas").closest('[data-slot="card-header"]') as HTMLElement;
+
+  it("sits in that heading, just before the button that adds a column", async () => {
+    renderPage();
+    await ready();
+
+    const nivel = within(cabecera()).getByLabelText("Nivel de detalle");
+    const añadir = within(cabecera()).getByRole("button", { name: /Añadir columna/ });
+
+    expect(nivel.parentElement).toBe(añadir.parentElement);
+    expect(nivel.nextElementSibling).toBe(añadir);
+  });
+
+  it("is the only one: nothing is left of the row it had", async () => {
+    renderPage();
+    await ready();
+
+    expect(screen.getAllByLabelText("Nivel de detalle")).toHaveLength(1);
+    expect(screen.queryByText("Nivel de detalle")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Qué es el nivel de detalle" })).toBeNull();
+  });
+
+  it("is explained in the help of the card it moved into", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await ready();
+
+    await user.click(screen.getByRole("button", { name: "Qué es las columnas" }));
+
+    expect(await screen.findByText(/qué representa cada fila/)).toBeInTheDocument();
+    expect(screen.getByText(/descarta lo que no exista en el nivel nuevo/)).toBeInTheDocument();
+  });
+});
+

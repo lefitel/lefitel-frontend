@@ -1,5 +1,5 @@
 // The way into a report that already exists: the ones somebody saved, and the
-// six that come with the page.
+// templates that come with the page.
 //
 // It was a panel in the configuration band, and the band is above the table
 // now — so a third of that width went, on every screen and permanently, to a
@@ -69,14 +69,17 @@ const ReportPicker = ({
     [templates, q],
   );
 
-  // Somebody who has saved nothing yet is told where to start rather than what
-  // they do not have. The panel this replaced said it in a whole empty state;
-  // here it has to fit in the control itself, because the control is all there
-  // is until it is opened.
+  // With no report open the control says what to do with it, not what is
+  // missing. Somebody who has saved nothing yet is told where to start; the
+  // panel this replaced said it in a whole empty state, and here it has to fit
+  // in the control itself, because the control is all there is until it is
+  // opened. Everybody else is asked to pick one — it read "Ningún reporte
+  // abierto", a statement with nothing to do in it, which mattered more once
+  // the control moved to the app's header and lost the label over it.
   const label = current?.name
     ?? (reports.length === 0 && templates.length > 0
       ? "Empiece por una plantilla"
-      : "Ningún reporte abierto");
+      : "Seleccione un reporte");
 
   const nothingMatched = q !== "" && shownReports.length === 0 && shownTemplates.length === 0;
 
@@ -91,11 +94,13 @@ const ReportPicker = ({
       }}
     >
       <PopoverTrigger
-        // The name of the report is the text, so the accessible name would
-        // change every time one is opened and no test or screen reader could
-        // refer to the control itself. The label names the control and carries
-        // the state after it.
-        aria-label={`Reporte abierto: ${label}`}
+        // The name of the report is the text, so on its own the accessible
+        // name would be whatever was opened last and nothing could refer to
+        // the control itself. With a report open the label names the control
+        // and carries the report after it. With none open the text is an
+        // instruction, and it is announced as that: "Reporte abierto:
+        // Seleccione un reporte" would name a report that does not exist.
+        aria-label={current ? `Reporte abierto: ${label}` : label}
         // A pill, like the level of detail beside it. Neither is a field being
         // filled in: one states what a row of the report is, the other names
         // the report. Capped rather than sized, because a report's name is
@@ -116,7 +121,7 @@ const ReportPicker = ({
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Buscar un reporte"
             placeholder="Buscar entre sus reportes y las plantillas"
-            className="h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="h-9 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
           />
         </div>
 

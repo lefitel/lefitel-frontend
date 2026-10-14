@@ -27,6 +27,7 @@
 
 import axios from "axios";
 import { urlApi, urlEvento, urlPoste, urlReporte } from "./url";
+import type { Departamento, Tramo } from "../interfaces/interfaces";
 
 /** A dropdown entry: what every list here has, and all that most of them need. */
 export interface OpcionSimple {
@@ -35,13 +36,12 @@ export interface OpcionSimple {
 }
 
 /**
- * A city the caller is going to draw.
+ * A city as the options block lists it.
  *
  * `lat`/`lng` are `allowNull: false` on the model and always projected, so this
- * cannot arrive half-filled. They matter more than they look: `PosteSheet`
- * guards its map with `if (!a?.lat …) return` and `ReportRecorrido` wraps its
- * whole route calculation in `if (a?.lat && a?.lng …)`. Lose the two columns and
- * both screens render with no error at all and nothing drawn.
+ * cannot arrive half-filled. Nothing draws from this block: the only reader of
+ * `opciones.ciudad` is `PosteSheet`, which hands the names to `TramoSheet`; the
+ * maps draw from `tramo.ciudades`, whose coordinates can be null.
  */
 export interface OpcionCiudad extends OpcionSimple {
   lat: number;
@@ -61,17 +61,14 @@ export interface OpcionObs extends OpcionSimple {
   id_tipoObs: number;
 }
 
-/** The two cities a stretch of line runs between. Not a row: a pair. */
-export interface TramoPair {
-  id_ciudadA: number;
-  id_ciudadB: number;
-}
-
 export interface OpcionesPoste {
   adss: OpcionSimple[];
   material: OpcionSimple[];
   propietario: OpcionSimple[];
   ciudad: OpcionCiudad[];
+  /** Every live tramo, named and ordered by the server. */
+  tramos: Tramo[];
+  departamento: Departamento[];
 }
 
 export interface OpcionesEvento {
@@ -85,11 +82,11 @@ export interface OpcionesReporte {
   material: OpcionSimple[];
   propietario: OpcionSimple[];
   obs: OpcionSimple[];
-  tramos: TramoPair[];
+  tramos: Tramo[];
 }
 
 /**
- * The pole form's four lists, under `postes.ver`.
+ * The pole form's lists, under `postes.ver`.
  *
  * Replaces `getAdss()`, `getCiudad()`, `getMaterial()` and `getPropietario()`.
  * None of those four carried a permission, so a role holding `postes.editar`
@@ -103,7 +100,7 @@ export const getOpcionesPoste = (): Promise<OpcionesPoste> =>
 export const getOpcionesEvento = (): Promise<OpcionesEvento> =>
   axios.get(urlApi + urlEvento + "options").then((r) => r.data as OpcionesEvento);
 
-/** The three report screens' six lists, under `reportes.ver`. */
+/** The report screens' lists, under `reportes.ver`. */
 export const getOpcionesReporte = (): Promise<OpcionesReporte> =>
   axios.get(urlApi + urlReporte + "options").then((r) => r.data as OpcionesReporte);
 

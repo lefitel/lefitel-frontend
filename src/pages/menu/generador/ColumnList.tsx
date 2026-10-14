@@ -127,6 +127,11 @@ const ColumnChip = memo(function ColumnChip({
         // right side was on two, which put the remove button against the
         // border.
         "flex w-full items-center gap-1 rounded-lg border py-2 pr-1 pl-2",
+        // On a phone the controls take a line of their own, under the name.
+        // In one row they are some 300px wide on their own — the summary
+        // select, the order, «Agrupar», the cross — and the name, the one
+        // thing in the pill that says which column it is, got nothing.
+        "max-sm:flex-wrap max-sm:gap-y-2",
         // A grouped column is a different kind of thing — it defines the rows
         // rather than describing them — and that shows on the pill itself, not
         // only on the button that set it.
@@ -168,7 +173,7 @@ const ColumnChip = memo(function ColumnChip({
 
       {/* `gap-1`: with the two stacked and nothing between them the origin
           read as part of the box below it rather than as a label over it. */}
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
+      <div className="flex min-w-0 flex-1 flex-col gap-1 max-sm:basis-[calc(100%-2rem)]">
         {/*
           Where the field comes from, above the header rather than beside it.
           It is the only thing in the pill that is not a control, and in the
@@ -187,102 +192,104 @@ const ColumnChip = memo(function ColumnChip({
         />
       </div>
 
-      {available.length > 0 && !isGrouped && (
-        <Select
-          value={column.agg ?? "none"}
-          onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
-        >
-          <SelectTrigger
-            className="h-7 w-28 shrink-0 rounded-md text-xs"
-            aria-label={`Resumen de ${label}`}
+      <div className="flex shrink-0 items-center gap-1 max-sm:ml-auto">
+        {available.length > 0 && !isGrouped && (
+          <Select
+            value={column.agg ?? "none"}
+            onValueChange={(v) => onSetAgg(index, v === "none" ? undefined : (v as AggFn))}
           >
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
-            {available.map((agg) => (
-              <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
+            <SelectTrigger
+              className="h-7 w-28 shrink-0 rounded-md text-xs"
+              aria-label={`Resumen de ${label}`}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {!isAggregateOnly && <SelectItem value="none">Sin resumen</SelectItem>}
+              {available.map((agg) => (
+                <SelectItem key={agg} value={agg}>{AGG_LABEL[agg]}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
 
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            variant={sortDir ? "secondary" : "ghost"}
-            size="sm"
-            // `min-w-7` and not `w-7`: the rank widens it by a digit when there
-            // is one, and a fixed square would crop it.
-            className="h-7 min-w-7 shrink-0 gap-0.5 rounded-md px-1 text-xs"
-            aria-label={sortLabel}
-            // The aggregate travels with the path. Without it the server
-            // refuses every sort in a grouped report — a column that is not
-            // grouped has to say how it is summarised — and two pills of the
-            // same field could not be sorted apart.
-            onClick={() => onToggleSort(column.path, column.agg)}
-          >
-            {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
-              : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
-              : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
-            {/*
-              The number stays when the word goes: it is the report's
-              tie-breaking order, it only appears when there is more than one
-              criterion to rank, and it decided the result from the first day
-              while being written down nowhere. The strip below says the same
-              thing at more length; this is the half you can see without
-              looking away from the column.
-
-              It is not a label — the arrow already says "order", and the state
-              is in the arrow's direction and the button's fill. Losing the word
-              costs the person who read the arrow as a filter, which is why
-              every one of these carries a tooltip and an accessible name that
-              spell the whole thing out.
-            */}
-            {sortRank && <span className="tabular-nums">{sortRank}</span>}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{sortLabel}</TooltipContent>
-      </Tooltip>
-
-      {canGroup && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
-              variant={isGrouped ? "default" : "ghost"}
+              variant={sortDir ? "secondary" : "ghost"}
               size="sm"
-              className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
-              aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
-              aria-pressed={isGrouped}
-              onClick={() => onToggleGroup(index)}
+              // `min-w-7` and not `w-7`: the rank widens it by a digit when there
+              // is one, and a fixed square would crop it.
+              className="h-7 min-w-7 shrink-0 gap-0.5 rounded-md px-1 text-xs"
+              aria-label={sortLabel}
+              // The aggregate travels with the path. Without it the server
+              // refuses every sort in a grouped report — a column that is not
+              // grouped has to say how it is summarised — and two pills of the
+              // same field could not be sorted apart.
+              onClick={() => onToggleSort(column.path, column.agg)}
             >
-              <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
-              Agrupar
+              {sortDir === "asc" ? <ArrowUpNarrowWideIcon className="h-3.5 w-3.5" />
+                : sortDir === "desc" ? <ArrowDownNarrowWideIcon className="h-3.5 w-3.5" />
+                : <ArrowUpDownIcon className="h-3.5 w-3.5" />}
+              {/*
+                The number stays when the word goes: it is the report's
+                tie-breaking order, it only appears when there is more than one
+                criterion to rank, and it decided the result from the first day
+                while being written down nowhere. The strip below says the same
+                thing at more length; this is the half you can see without
+                looking away from the column.
+
+                It is not a label — the arrow already says "order", and the state
+                is in the arrow's direction and the button's fill. Losing the word
+                costs the person who read the arrow as a filter, which is why
+                every one of these carries a tooltip and an accessible name that
+                spell the whole thing out.
+              */}
+              {sortRank && <span className="tabular-nums">{sortRank}</span>}
             </Button>
           </TooltipTrigger>
-          <TooltipContent>
-            {/*
-              One string for both, like the sort button in this same pill. The
-              tooltip used to state a status ("Agrupando por esta columna")
-              while the accessible name offered the inverse action ("Dejar de
-              agrupar por X"): in the pressed state the two said opposite
-              things, and a sighted person and a screen-reader user could not
-              talk about the same control.
-            */}
-            {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
-          </TooltipContent>
+          <TooltipContent>{sortLabel}</TooltipContent>
         </Tooltip>
-      )}
 
-      <Button
-        variant="ghost"
-        size="icon"
-        className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
-        aria-label={`Quitar ${label}`}
-        onClick={() => onRemove(index)}
-      >
-        <XIcon className="h-3.5 w-3.5" />
-      </Button>
+        {canGroup && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={isGrouped ? "default" : "ghost"}
+                size="sm"
+                className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs"
+                aria-label={isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
+                aria-pressed={isGrouped}
+                onClick={() => onToggleGroup(index)}
+              >
+                <LayersIcon className={cn("h-3.5 w-3.5", isGrouped && "text-primary-foreground")} />
+                Agrupar
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {/*
+                One string for both, like the sort button in this same pill. The
+                tooltip used to state a status ("Agrupando por esta columna")
+                while the accessible name offered the inverse action ("Dejar de
+                agrupar por X"): in the pressed state the two said opposite
+                things, and a sighted person and a screen-reader user could not
+                talk about the same control.
+              */}
+              {isGrouped ? `Dejar de agrupar por ${label}` : `Agrupar por ${label}`}
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0 rounded-md text-muted-foreground hover:text-destructive"
+          aria-label={`Quitar ${label}`}
+          onClick={() => onRemove(index)}
+        >
+          <XIcon className="h-3.5 w-3.5" />
+        </Button>
+      </div>
     </li>
   );
 });

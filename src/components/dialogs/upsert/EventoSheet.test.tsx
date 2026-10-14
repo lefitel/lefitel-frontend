@@ -69,10 +69,19 @@ const OPCIONES = {
   ],
 };
 
+const TRAMO = {
+  id: 14, nombre: "Potosí – Sucre", id_departamento: null, departamento: null, archivado: false,
+  ciudades: [
+    { id: 11, name: "Potosí", lat: -19.58, lng: -65.75 },
+    { id: 12, name: "Sucre", lat: -19.03, lng: -65.26 },
+  ],
+};
+
 const POSTES = [{
   id: 40, name: "P-001", image: "", date: new Date("2026-01-05"),
   lat: -18.0, lng: -70.2, id_adss: 3, id_material: 7, id_propietario: 2,
-  id_ciudadA: 11, id_ciudadB: 12, id_usuario: 1,
+  id_tramo: 14, id_usuario: 1,
+  tramo: TRAMO,
 }];
 
 const EVENTO = {
@@ -188,6 +197,26 @@ describe("choosing the observations", () => {
     pintar(null);
     await userEvent.type(await screen.findByRole("searchbox", { name: "Buscar observación" }), "zzz");
     expect(screen.getByText(/Ninguna observación coincide/)).toBeTruthy();
+  });
+});
+
+describe("the tramo of the pole", () => {
+  it("is the server's name for the pole chosen in the register, with no two cities joined here", async () => {
+    pintar(null, null);
+    await waitFor(() => expect(todosLosPostes).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole("button", { name: /Buscar poste/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "P-001" }));
+
+    const linea = await screen.findByText("Potosí – Sucre");
+    expect(linea.textContent).not.toMatch(/ > | → | — /);
+  });
+
+  it("is the one in the dialog's description when an incident is opened", async () => {
+    searchEvento.mockResolvedValue({ ...EVENTO, poste: POSTES[0] });
+    pintar(77);
+
+    expect(await screen.findByText("Tramo Potosí – Sucre")).toBeTruthy();
   });
 });
 

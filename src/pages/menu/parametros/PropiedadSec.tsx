@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
-import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { createPropietario, deletePropietario, desarchivarPropietario, editPropietario, getPropietario, getPropietarioStats, PropietarioStats } from "../../../api/Propietario.api";
@@ -18,13 +18,13 @@ import {
 } from "../../../components/ui/alert-dialog";
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-    DropdownMenuSeparator, DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+    DropdownMenuSeparator } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { InnerTab } from "./index";
 import { useRegistroEnlazado, type RegistroEnlazado } from "./useRegistroEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { mensajeDeError } from "../../../api/descarga";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
 
 interface Props {
     innerTab: InnerTab;
@@ -181,9 +181,7 @@ const PropietarioSec = ({ innerTab, enlace }: Props) => {
             cell: ({ row }) => !can(rol, "parametros", "editar") ? null : (
                 <div className="flex justify-end pr-2">
                     <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                        </DropdownMenuTrigger>
+                        <RowActionsTrigger />
                         <DropdownMenuContent align="end" className="w-36">
                             <DropdownMenuItem onClick={() => openEdit(row.original)}>Editar</DropdownMenuItem>
                             {can(rol, "parametros", "archivar") && (
@@ -272,7 +270,7 @@ const PropietarioSec = ({ innerTab, enlace }: Props) => {
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
                         {can(rol, "parametros", "crear") && (
-                            <Button className="gap-2" onClick={openAdd}>
+                            <Button className="gap-2" aria-label="Nuevo" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo</span>
                             </Button>

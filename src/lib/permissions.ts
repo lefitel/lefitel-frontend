@@ -49,6 +49,7 @@ export const PERMISOS = {
   postes: ["ver", "crear", "editar", "archivar"],
   eventos: ["ver", "crear", "editar", "archivar"],
   ciudades: ["ver", "crear", "editar", "archivar"],
+  tramos: ["ver", "crear", "editar", "archivar"],
   parametros: ["ver", "crear", "editar", "archivar"],
   reportes: ["ver"],
   // `programar`: may schedule a saved report to be mailed. The generator's
@@ -74,7 +75,7 @@ export type Accion = (typeof ACCIONES)[number];
 export type Permisos = Record<Modulo, Partial<Record<Accion, boolean>>>;
 
 /** The actions this module has. */
-export const accionesDe = (modulo: Modulo): readonly Accion[] =>
+const accionesDe = (modulo: Modulo): readonly Accion[] =>
   PERMISOS[modulo] as readonly Accion[];
 
 /** Every cell denied. What an unknown role, or no session, is allowed. */

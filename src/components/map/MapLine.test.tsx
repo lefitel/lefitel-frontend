@@ -46,6 +46,16 @@ describe("MapLine", () => {
     expect(layerProps.mock.calls[0][0].type).toBe("line");
   });
 
+  it("hands the layer the one it must sit under, and leaves it unset by default", () => {
+    layerProps.mockClear();
+    render(<MapLine id="a" positions={[{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]} beforeId="postes-circles" />);
+    expect(layerProps.mock.calls[0][0].beforeId).toBe("postes-circles");
+
+    layerProps.mockClear();
+    render(<MapLine id="b" positions={[{ lat: 1, lng: 2 }, { lat: 3, lng: 4 }]} />);
+    expect(layerProps.mock.calls[0][0].beforeId).toBeUndefined();
+  });
+
   describe("how the route is drawn on each base map", () => {
     const paintFor = (resolvedTheme: string, props: Record<string, unknown> = {}) => {
       theme.resolvedTheme = resolvedTheme;

@@ -141,7 +141,7 @@ export function TramoPlan({ start = 0.35 }: { start?: number }) {
         cy={FLAGGED.top - 6}
         r="9"
         fill="none"
-        stroke="var(--pp-or)"
+        stroke="var(--pp-fault)"
         strokeWidth="2"
         style={{ transformBox: "fill-box", transformOrigin: "center" }}
         initial={{ scale: 0.4, opacity: 0 }}
@@ -152,7 +152,7 @@ export function TramoPlan({ start = 0.35 }: { start?: number }) {
         cx={FLAGGED.x}
         cy={FLAGGED.top - 6}
         r="7"
-        fill="var(--pp-or)"
+        fill="var(--pp-fault)"
         style={{ transformBox: "fill-box", transformOrigin: "center" }}
         initial={{ scale: 0 }}
         animate={{ scale: 1 }}
@@ -161,7 +161,7 @@ export function TramoPlan({ start = 0.35 }: { start?: number }) {
       <motion.polyline
         points={`${FLAGGED.x + 9},${FLAGGED.top - 12} ${box.x - 22},34 ${box.x - 2},34`}
         fill="none"
-        stroke="var(--pp-or)"
+        stroke="var(--pp-fault)"
         strokeWidth="1.2"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}
@@ -172,8 +172,8 @@ export function TramoPlan({ start = 0.35 }: { start?: number }) {
         animate={{ opacity: 1 }}
         transition={t(markAt + 0.4, 0.45, "easeOut")}
       >
-        <rect x={box.x} y="16" width={box.w} height={box.h} fill="var(--pp-paper)" stroke="var(--pp-or)" strokeWidth="1.2" />
-        <text x={box.x + 10} y={narrow ? 35 : 32} fontSize={small} fontWeight="500" fill="var(--pp-or-ink)">
+        <rect x={box.x} y="16" width={box.w} height={box.h} fill="var(--pp-paper)" stroke="var(--pp-fault)" strokeWidth="1.2" />
+        <text x={box.x + 10} y={narrow ? 35 : 32} fontSize={small} fontWeight="500" fill="var(--pp-fault-ink)">
           P472 · CRITICIDAD 2
         </text>
         <text x={box.x + 10} y={narrow ? 53 : 47} fontSize={small} fill="var(--pp-ink)">

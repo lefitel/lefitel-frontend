@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col } from "../../components/table/tableFeatures";
-import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon, MailCheckIcon, MailWarningIcon } from "lucide-react";
+import { FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, PlusIcon, RefreshCwIcon, MailCheckIcon, MailWarningIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { saveAs } from "file-saver";
 import { SesionContext } from "../../context/SesionContext";
@@ -29,6 +29,8 @@ import { ImageLightbox } from "../../components/ui/image-viewer";
 import { maskEmail } from "../../lib/email";
 import { nombreDeRol } from "../../lib/roles";
 import { rowNumberColumn } from "../../components/table/rowNumberColumn";
+import { HeaderSlot } from "../../components/HeaderSlot";
+import { RowActionsTrigger } from "../../components/table/RowActionsTrigger";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -249,9 +251,7 @@ const SeguridadPage = () => {
             cell: ({ row }) => (
                 <div className="flex justify-end pr-2">
                     <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                        </DropdownMenuTrigger>
+                        <RowActionsTrigger />
                         <DropdownMenuContent align="end" className="w-36">
                             <DropdownMenuItem onClick={() => navigate(`/app/usuarios/${row.original.id}`)}>
                                 Ver detalle
@@ -358,18 +358,15 @@ const SeguridadPage = () => {
 
     return (
         <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Usuarios</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Gestión de usuarios del sistema</p>
-                </div>
-                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
-                    <TabsList>
+            <h1 className="sr-only">Usuarios</h1>
+            <HeaderSlot>
+                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)} className="shrink-0">
+                    <TabsList size="sm">
                         <TabsTrigger value="activos">Activos</TabsTrigger>
                         <TabsTrigger value="archivados">Archivados</TabsTrigger>
                     </TabsList>
                 </Tabs>
-            </div>
+            </HeaderSlot>
 
             {innerTab === "activos" && (
                 <DataTable

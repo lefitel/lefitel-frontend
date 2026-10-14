@@ -41,6 +41,20 @@ export const getEvento_usuario = (id_usuario: number): Promise<EventoInterface[]
  * cannot read, that is `undefined > 0`, which is false, and the pole would be
  * archived with its incidents still hanging off it.
  */
+/**
+ * The incidents still open on one tramo's live poles: what that tramo's card
+ * lists, and the rows its `pendientes` figure counted.
+ *
+ * `tramo` is a parameter of its own on the server — the scope of the question
+ * — and "pending" is the list's ordinary state filter, so the two agree with
+ * the Eventos screen about what pending means.
+ */
+export const getEventosPendientesDelTramo = (idTramo: number): Promise<EventoInterface[]> =>
+  todasLasFilas<EventoInterface>(urlApi + urlEvento, {
+    ...comoParametros({ filters: [{ column: "state", value: "pending" }] }),
+    tramo: idTramo,
+  });
+
 export const getEvento_poste = (id_poste: number): Promise<EventoInterface[]> =>
   todasLasFilas<EventoInterface>(`${urlApi}${urlPoste}${id_poste}/eventos`);
 

@@ -80,7 +80,14 @@ const OPCIONES = {
 const FILA = {
   id: 40, name: "P-001", image: "", date: new Date("2026-01-05"),
   lat: -18.0, lng: -70.2, id_adss: 3, id_material: 7, id_propietario: 2,
-  id_ciudadA: 11, id_ciudadB: 12, id_usuario: 1,
+  id_tramo: 14, id_usuario: 1,
+  tramo: {
+    id: 14, nombre: "Potosí – Sucre", id_departamento: null, departamento: null, archivado: false,
+    ciudades: [
+      { id: 11, name: "Potosí", lat: -19.58, lng: -65.75 },
+      { id: 12, name: "Sucre", lat: -19.03, lng: -65.26 },
+    ],
+  },
   material: { id: 7, name: "Madera" },
   propietario: { id: 2, name: "Osefi" },
 };
@@ -153,6 +160,25 @@ describe("where the two inline lists come from", () => {
     await waitFor(() => expect(screen.getByTitle("Click para cambiar material").textContent)
       .toContain("Concreto"));
     expect(editPoste).toHaveBeenCalled();
+  });
+});
+
+describe("the Tramo column", () => {
+  it("shows the name the server built, and does not put two city names together itself", async () => {
+    pintar();
+
+    // The whole cell, not only the span in it: an icon or a second name beside
+    // the server's would change this text.
+    const celda = (await screen.findByRole("link", { name: "Potosí" })).closest("td");
+    expect(celda?.textContent).toBe("Potosí – Sucre");
+  });
+
+  it("links each city of the tramo to its page", async () => {
+    pintar();
+
+    const celda = (await screen.findByRole("link", { name: "Potosí" })).closest("td")!;
+    expect(within(celda).getByRole("link", { name: "Potosí" })).toHaveAttribute("href", "/app/ciudades/11");
+    expect(within(celda).getByRole("link", { name: "Sucre" })).toHaveAttribute("href", "/app/ciudades/12");
   });
 });
 

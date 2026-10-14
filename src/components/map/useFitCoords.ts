@@ -14,13 +14,20 @@ interface FitOptions {
    * first placement always jumps: a map should not open mid-flight.
    */
   duration?: number;
+  /**
+   * Fit or centre again even though nothing the effect reads has changed. The
+   * view is placed when the box (or the centre and zoom) changes; a caller that
+   * wants the same place shown again (the same selection chosen a second time,
+   * with the user having panned away) bumps this number. Unset, nothing changes.
+   */
+  nonce?: number;
 }
 
 /**
  * Replaces the four near-identical helper components the screens each had for
  * this: fit the view to a set of points, or fall back to centring on one.
  */
-export function useFitCoords({ coords, fit, center, zoom, duration = 0 }: FitOptions): void {
+export function useFitCoords({ coords, fit, center, zoom, duration = 0, nonce = 0 }: FitOptions): void {
   const { current: map } = useMap();
   const placed = useRef(false);
 
@@ -52,7 +59,7 @@ export function useFitCoords({ coords, fit, center, zoom, duration = 0 }: FitOpt
   // late API response widening it) would refire this effect and fly the view
   // away from a `center` that never moved.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, fit, fit ? boundsKey : "", center.lat, center.lng, zoom]);
+  }, [map, fit, fit ? boundsKey : "", center.lat, center.lng, zoom, nonce]);
 }
 
 /**
@@ -66,6 +73,7 @@ export function FitView(props: {
   center: LatLng;
   zoom: number;
   duration?: number;
+  nonce?: number;
 }): null {
   useFitCoords(props);
   return null;

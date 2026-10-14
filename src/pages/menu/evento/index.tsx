@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
-import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon } from "lucide-react";
+import { PlusIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon } from "lucide-react";
 import { saveAs } from "file-saver";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
+import TramoEnlazado from "../../../components/TramoEnlazado";
 import { deleteEvento, desarchivarEvento, editEvento, exportarEventos, getEvento, reabrirEvento } from "../../../api/Evento.api";
 import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { EventoInterface } from "../../../interfaces/interfaces";
@@ -33,6 +34,9 @@ import ResolverEventoSheet from "../../../components/dialogs/ResolverEventoSheet
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { HeaderSlot } from "../../../components/HeaderSlot";
+import { FiltroRapido } from "./FiltroRapido";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -327,17 +331,9 @@ const EventoPage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => {
-                const a = row.original.poste?.ciudadA;
-                const b = row.original.poste?.ciudadB;
-                return (
-                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
-                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
-                    </span>
-                );
-            },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap"><TramoEnlazado tramo={row.original.poste?.tramo} vacio="—" /></span>
+            ),
         },
         {
             id: "propietario",
@@ -507,9 +503,7 @@ const EventoPage = () => {
                 return (
                     <div className="flex justify-end pr-2">
                         <DropdownMenu>
-                            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                                <MoreVerticalIcon className="h-4 w-4" />
-                            </DropdownMenuTrigger>
+                            <RowActionsTrigger />
                             <DropdownMenuContent align="end" className="w-44">
                                 <DropdownMenuItem onClick={() => navigate(`/app/eventos/${e.id}`)}>
                                     Ver detalle
@@ -565,17 +559,9 @@ const EventoPage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => {
-                const a = row.original.poste?.ciudadA;
-                const b = row.original.poste?.ciudadB;
-                return (
-                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
-                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
-                    </span>
-                );
-            },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap"><TramoEnlazado tramo={row.original.poste?.tramo} vacio="—" /></span>
+            ),
         },
         {
             accessorKey: "description",
@@ -621,30 +607,30 @@ const EventoPage = () => {
                 </div>
             ),
         },
-    ], [navigate]);
+    ], []);
 
     const hasData = !!list?.length;
 
     return (
         <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Eventos</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Registro de incidencias en la red</p>
-                </div>
-                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
-                    <TabsList>
+            <h1 className="sr-only">Eventos</h1>
+            <HeaderSlot>
+                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)} className="shrink-0">
+                    <TabsList size="sm">
                         <TabsTrigger value="activos">Activos</TabsTrigger>
                         <TabsTrigger value="archivados">Archivados</TabsTrigger>
                     </TabsList>
                 </Tabs>
-            </div>
+            </HeaderSlot>
 
             {innerTab === "activos" && (
                 <>
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Estado</span>
+                {/* The first thing on the screen now that the title lives in the
+                    app header, so each filter is a block of its own: its name on
+                    top, room between blocks. `items-end` keeps «Quitar filtros»
+                    level with the controls rather than with their names. */}
+                <div className="flex flex-wrap items-end gap-x-6 gap-y-3">
+                    <FiltroRapido label="Estado">
                         <SegmentedControl
                             size="sm"
                             ariaLabel="Filtrar por estado"
@@ -656,9 +642,8 @@ const EventoPage = () => {
                             value={quickFilters.estado}
                             onValueChange={(estado) => applyQuickFilters({ estado })}
                         />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs text-muted-foreground">Gravedad</span>
+                    </FiltroRapido>
+                    <FiltroRapido label="Gravedad">
                         <SegmentedControl
                             size="sm"
                             scrollable
@@ -667,17 +652,19 @@ const EventoPage = () => {
                             value={quickFilters.gravedad}
                             onValueChange={(gravedad) => applyQuickFilters({ gravedad })}
                         />
-                    </div>
-                    <SegmentedControl
-                        size="sm"
-                        ariaLabel="Filtrar por prioridad"
-                        options={[
-                            { value: "all", label: "Todas" },
-                            { value: "solo", label: "Solo prioritarias" },
-                        ]}
-                        value={quickFilters.prioridad}
-                        onValueChange={(prioridad) => applyQuickFilters({ prioridad })}
-                    />
+                    </FiltroRapido>
+                    <FiltroRapido label="Prioridad">
+                        <SegmentedControl
+                            size="sm"
+                            ariaLabel="Filtrar por prioridad"
+                            options={[
+                                { value: "all", label: "Todas" },
+                                { value: "solo", label: "Solo prioritarias" },
+                            ]}
+                            value={quickFilters.prioridad}
+                            onValueChange={(prioridad) => applyQuickFilters({ prioridad })}
+                        />
+                    </FiltroRapido>
                     {(quickFilters.estado !== "all" || quickFilters.gravedad !== "all" || quickFilters.prioridad !== "all") && (
                         <Button
                             variant="ghost"
@@ -745,7 +732,7 @@ const EventoPage = () => {
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
                         {canAdd && (
-                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                            <Button className="gap-2" aria-label="Nuevo Evento" onClick={() => setAddOpen(true)}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo Evento</span>
                             </Button>

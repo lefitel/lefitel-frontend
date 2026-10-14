@@ -95,4 +95,33 @@ describe("useFitCoords", () => {
 
     expect(flyTo).toHaveBeenCalledTimes(1);
   });
+
+  it("fits again for the same box when the nonce changes, and not when it stays", () => {
+    const caja = () => [{ lat: -19, lng: -65 }, { lat: -17, lng: -63 }];
+    const { rerender } = render(<Probe coords={caja()} fit center={{ lat: -18, lng: -64 }} zoom={13} nonce={1} />);
+    expect(fitBounds).toHaveBeenCalledTimes(1);
+
+    rerender(<Probe coords={caja()} fit center={{ lat: -18, lng: -64 }} zoom={13} nonce={1} />);
+    expect(fitBounds).toHaveBeenCalledTimes(1);
+
+    rerender(<Probe coords={caja()} fit center={{ lat: -18, lng: -64 }} zoom={13} nonce={2} />);
+    expect(fitBounds).toHaveBeenCalledTimes(2);
+  });
+
+  it("centres again on the same centre when the nonce changes", () => {
+    const { rerender } = render(<Probe coords={[]} fit={false} center={{ lat: -18, lng: -64 }} zoom={13} nonce={1} />);
+    expect(flyTo).toHaveBeenCalledTimes(1);
+
+    rerender(<Probe coords={[]} fit={false} center={{ lat: -18, lng: -64 }} zoom={13} nonce={2} />);
+    expect(flyTo).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not move for the same box without a nonce, as every other caller", () => {
+    const caja = () => [{ lat: -19, lng: -65 }, { lat: -17, lng: -63 }];
+    const { rerender } = render(<Probe coords={caja()} fit center={{ lat: -18, lng: -64 }} zoom={13} />);
+
+    rerender(<Probe coords={caja()} fit center={{ lat: -18, lng: -64 }} zoom={13} />);
+
+    expect(fitBounds).toHaveBeenCalledTimes(1);
+  });
 });

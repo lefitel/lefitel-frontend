@@ -13,6 +13,8 @@ import PostePage from "./pages/menu/poste";
 import PosteDetallePage from "./pages/menu/poste/PosteDetalle";
 import CiudadesPage from "./pages/menu/ciudad/CiudadesPage";
 import CiudadDetallePage from "./pages/menu/ciudad/CiudadDetallePage";
+import TramosArchivadosPage from "./pages/menu/tramo/TramosArchivadosPage";
+import RedPage from "./pages/menu/tramo/red/RedPage";
 import EventoPage from "./pages/menu/evento";
 import EventoDetallePage from "./pages/menu/evento/EventoDetallePage";
 import ParametrosPage from "./pages/menu/parametros";
@@ -241,7 +243,17 @@ const App = () => {
 
                   <Route element={<ModuleRoute modulo="ciudades" />}>
                     <Route path="ciudades"      element={<CiudadesPage />} />
-                    <Route path="ciudades/:id"  element={<CiudadDetallePageKeyed />} />
+                    {/* Not keyed by the city: moving from one city to the next on
+                        its map keeps the map and slides it there. The sheet resets
+                        what belongs to one city itself. */}
+                    <Route path="ciudades/:id"  element={<CiudadDetallePage />} />
+                  </Route>
+
+                  <Route element={<ModuleRoute modulo="tramos" />}>
+                    {/* One route for the map and for a tramo's card on it, so that
+                        opening a card does not load the network again. */}
+                    <Route path="tramos/:id?"   element={<RedPage />} />
+                    <Route path="tramos/archivados" element={<TramosArchivadosPage />} />
                   </Route>
 
                   <Route element={<ModuleRoute modulo="eventos" />}>
@@ -351,11 +363,6 @@ const App = () => {
 };
 
 export default App;
-
-function CiudadDetallePageKeyed() {
-  const { id } = useParams<{ id: string }>();
-  return <CiudadDetallePage key={id} />;
-}
 
 /**
  * `/app/seguridad` and `/app/seguridad/:id`, sent on to where they live now.

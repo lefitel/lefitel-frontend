@@ -10,7 +10,7 @@ import { imageUrl } from "../../../lib/imageUrl";
 import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
-import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { ImageLightbox } from "../../../components/ui/image-viewer";
 import {
@@ -18,8 +18,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+  } from "../../../components/ui/dropdown-menu";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,6 +34,8 @@ import DataTable from "../../../components/table/DataTable";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "../../../components/ui/tabs";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { HeaderSlot } from "../../../components/HeaderSlot";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
 
 type Tab = "activos" | "archivados";
 
@@ -279,9 +280,7 @@ export default function CiudadesPage() {
       cell: ({ row }) => (
         <div className="flex justify-end pr-2">
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-              <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
+            <RowActionsTrigger />
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem onClick={() => navigate(`/app/ciudades/${row.original.id}`)}>
                 Ver detalle
@@ -356,25 +355,17 @@ export default function CiudadesPage() {
     },
   ], []);
 
-  const ciudadesList = ciudades ?? [];
-
   return (
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}
       className="@container/card p-page w-full space-y-page animate-in fade-in duration-500"
     >
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Ciudades</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Nodos de red — {loading ? "…" : ciudadesList.length} ciudades registradas
-          </p>
-        </div>
-        <TabsList>
+      <h1 className="sr-only">Ciudades</h1>
+      <HeaderSlot>
+        <TabsList size="sm">
           <TabsTrigger value="activos">Activos</TabsTrigger>
           <TabsTrigger value="archivados">Archivados</TabsTrigger>
         </TabsList>
-      </div>
+      </HeaderSlot>
 
       {/* ── Tab Activos ── */}
       <TabsContent value="activos">
@@ -390,7 +381,7 @@ export default function CiudadesPage() {
               <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
             {can(sesion.usuario.id_rol, "ciudades", "crear") && (
-              <Button className="gap-2" onClick={() => setOpenAdd(true)}>
+              <Button className="gap-2" aria-label="Nueva Ciudad" onClick={() => setOpenAdd(true)}>
                 <PlusIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">Nueva Ciudad</span>
               </Button>

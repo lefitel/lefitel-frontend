@@ -1,9 +1,9 @@
 import { useNavigate } from "react-router-dom";
-import { AlertOctagonIcon, ArrowRightIcon, ChevronDownIcon, ChevronUpIcon, InfoIcon } from "lucide-react";
+import { AlertOctagonIcon, ArrowRightIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import InfoPopover from "../../../components/InfoPopover";
 import { CriticalAlert } from "./useInicioData";
 import { daysOpen } from "./helpers";
 
@@ -37,20 +37,11 @@ export function AlertBanner({ alerts, loading }: AlertBannerProps) {
               <p className="text-sm font-semibold text-red-600 dark:text-red-400">
                 {count} {count === 1 ? "evento prioritario" : "eventos prioritarios"} sin resolver
               </p>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="¿Qué cuenta esta alerta?" className="text-red-500/60 hover:text-red-600 transition-colors">
-                      <InfoIcon className="h-3 w-3" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-xs">
-                    <span className="block text-left leading-relaxed normal-case">
-                      Eventos marcados como <strong className="font-semibold">alta prioridad</strong>, sin resolver, y cuya fecha del incidente tiene <strong className="font-semibold">{alerts.thresholdDays} días o más</strong>. Esa fecha se elige al registrar, así que un parte antiguo cargado hoy aparece aquí de inmediato.
-                    </span>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <InfoPopover label="¿Qué cuenta esta alerta?" side="bottom" className="w-80 max-w-[calc(100vw-2rem)]" iconClassName="h-3 w-3" triggerClassName="text-red-500/60 hover:text-red-600 transition-colors">
+                <span className="block text-left leading-relaxed normal-case">
+                  Eventos marcados como <strong className="font-semibold">alta prioridad</strong>, sin resolver, y cuya fecha del incidente tiene <strong className="font-semibold">{alerts.thresholdDays} días o más</strong>. Esa fecha se elige al registrar, así que un parte antiguo cargado hoy aparece aquí de inmediato.
+                </span>
+              </InfoPopover>
             </div>
             <p className="text-xs text-muted-foreground">
               llevan {alerts.thresholdDays} días o más sin atender

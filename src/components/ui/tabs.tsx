@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 // Dark flips the pair: a well darker than any surface it sits on, and a thumb lighter than
 // the card. The hairline keeps the well visible on the page ground, which is the same colour.
 export const pillTrack = "rounded-full bg-muted dark:bg-background dark:inset-ring dark:inset-ring-border/60";
-export const pillThumb = "absolute inset-0 z-0 rounded-full bg-background shadow-sm dark:bg-accent";
+export const pillThumb = "absolute inset-0 z-0 rounded-full bg-background dark:bg-accent";
 export const pillSpring = { type: "spring", stiffness: 380, damping: 32 } as const;
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -85,7 +85,17 @@ function Tabs({
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
-function TabsList({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+interface TabsListProps extends React.HTMLAttributes<HTMLDivElement> {
+  /**
+   * `sm` is the 32px row of the app's header. Its height is set outright
+   * rather than through the `group/tabs` ancestor the default relies on: a list
+   * drawn into the header through `HeaderSlot` can leave its `<Tabs>` behind in
+   * the page, and would then have no ancestor to take a height from.
+   */
+  size?: "md" | "sm";
+}
+
+function TabsList({ className, size = "md", ...props }: TabsListProps) {
   useTabsContext("TabsList");
 
   return (
@@ -93,7 +103,8 @@ function TabsList({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
       role="tablist"
       data-slot="tabs-list"
       className={cn(
-        "group/tabs-list relative inline-flex w-fit items-center justify-center p-[2px] text-muted-foreground group-data-[orientation=horizontal]/tabs:h-9 group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
+        "group/tabs-list relative inline-flex w-fit items-center justify-center p-[2px] text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col",
+        size === "sm" ? "h-8 shrink-0" : "group-data-[orientation=horizontal]/tabs:h-9",
         pillTrack,
         className
       )}

@@ -8,15 +8,16 @@ import {
   EventoInterface,
   EventoObsInterface,
   ReporteInterface,
+  Tramo,
 } from "../../../interfaces/interfaces";
 import {
-  estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, OpcionSimple, TramoPair,
+  estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionSimple,
 } from "../../../api/opciones.api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
-import { Combobox } from "../../../components/ui/combobox";
+import TramoCombobox from "../../../components/TramoCombobox";
 import { Switch } from "../../../components/ui/switch";
 import { Badge } from "../../../components/ui/badge";
 import { Loader2Icon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, CheckIcon } from "lucide-react";
@@ -28,7 +29,6 @@ import {
 } from "../../../components/ui/dropdown-menu";
 import DataTable from "../../../components/table/DataTable";
 import { exportExcelTramo, exportCsvTramo, exportPdfTramo } from "../../../lib/exports/reportTramo";
-import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -36,22 +36,20 @@ import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 const ReportTramoSec = () => {
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
-  const [tramoInicial, setTramoInicial] = useState<number | null>(null);
-  const [tramoFinal,   setTramoFinal]   = useState<number | null>(null);
-  const [listCiudad,   setListCiudad]   = useState<OpcionCiudad[]>([]);
-  const [tramos,       setTramos]       = useState<TramoPair[]>([]);
-  const neighbors = useTramoNeighbors(tramos);
+  /** The tramo the selector shows now; `null` is "Todos los tramos". */
+  const [tramoId,      setTramoId]      = useState<number | null>(null);
+  const [tramos,       setTramos]       = useState<Tramo[]>([]);
   const [excludeOld, setExcludeOld]   = useState(false);
   const [list, setList]               = useState<EventoInterface[]>([]);
   /**
-   * The filter the rows on screen were generated with: dates, stretch and the
+   * The filter the rows on screen were generated with: dates, tramo and the
    * "solo nuevas" switch. Set with `list` and cleared with it, so everything
    * that describes the rows — the file's period and stretch headers, the
    * "nuevas · arrastradas" badge — reads this and never the live controls,
    * which can be moved without pressing Generar.
    */
   const [applied, setApplied] = useState<{
-    start: Date; end: Date; tramoInicial: number | null; tramoFinal: number | null; excludeOld: boolean;
+    start: Date; end: Date; tramo: Tramo | null; excludeOld: boolean;
   } | null>(null);
   const [loading, setLoading]         = useState(false);
   const [exporting, setExporting]     = useState(false);
@@ -61,7 +59,7 @@ const ReportTramoSec = () => {
   const [listPropietario, setListPropietario] = useState<OpcionSimple[]>([]);
   const [listObs,         setListObs]         = useState<OpcionSimple[]>([]);
   /**
-   * Why the six lists are missing, when they are — and why this screen refuses
+   * Why the five lists are missing, when they are — and why this screen refuses
    * to generate without them.
    *
    * Four of these lists used to be fetched **inside** `handleGenerar`, in the
@@ -78,7 +76,7 @@ const ReportTramoSec = () => {
    * **Four states and not "an error or nothing", which the first version of
    * this fix got wrong and its own audit caught.** With a nullable error,
    * `null` means both *not back yet* and *fine*, so the whole loading window
-   * was unguarded: pick two dates, press Generar before the six blocks land —
+   * was unguarded: pick two dates, press Generar before the lists land —
    * the report is a different request and can answer first — and the Resultados
    * card appears with the Export button inside it while the four lists are
    * still empty. The very file it was written to prevent, produced by the fix
@@ -90,7 +88,6 @@ const ReportTramoSec = () => {
   useEffect(() => {
     getOpcionesReporte()
       .then((opciones) => {
-        setListCiudad(opciones.ciudad);
         setTramos(opciones.tramos);
         setListAdss(opciones.adss);
         setListMaterial(opciones.material);
@@ -107,13 +104,6 @@ const ReportTramoSec = () => {
       });
   }, []);
 
-  useEffect(() => {
-    if (tramoInicial && tramoFinal && neighbors.size > 0) {
-      const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
-      if (!valid) setTramoFinal(null);
-    }
-  }, [tramoInicial, tramoFinal, neighbors]);
-
   const handleGenerar = async () => {
     if (estadoOpciones !== "listas") return toast.error(estadoOpciones === "denegado"
       ? "No tiene permiso para consultar los catálogos, y sin ellos el informe saldría sin columnas."
@@ -125,18 +115,20 @@ const ReportTramoSec = () => {
 
     const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
     const fin    = new Date(fechaFin);    fin.setHours(23, 59, 59, 0);
-    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null, excludeOld };
+    // The chosen tramo is resolved once, before the request, and both the
+    // request and the applied filter come from that one object: an id that is
+    // not in the list must not filter the rows while the file says "Total".
+    const elegido = tramoId === null ? null : tramos.find((t) => t.id === tramoId) ?? null;
+    if (tramoId !== null && !elegido) return toast.warning("Selecciona un tramo de la lista");
+    // The server narrows by the tramo; the key is left out, not sent empty,
+    // when none is chosen (`tramo=` is a 400).
+    const filtro: ReporteInterface = {
+      fechaInicial: inicio, fechaFinal: fin, excludeOld, ...(elegido ? { tramo: elegido.id } : {}),
+    };
 
     setLoading(true);
     try {
-      let data = await getReporteTramo(filtro);
-
-      if (tramoInicial && tramoFinal) {
-        data = data.filter((e) =>
-          (e.poste?.id_ciudadA === tramoInicial && e.poste?.id_ciudadB === tramoFinal) ||
-          (e.poste?.id_ciudadA === tramoFinal   && e.poste?.id_ciudadB === tramoInicial)
-        );
-      }
+      const data = await getReporteTramo(filtro);
 
       if (data.length === 0) {
         toast.warning("No hay datos para el rango seleccionado");
@@ -144,7 +136,7 @@ const ReportTramoSec = () => {
         setApplied(null);
       } else {
         setList(data);
-        setApplied({ start: inicio, end: fin, tramoInicial, tramoFinal, excludeOld });
+        setApplied({ start: inicio, end: fin, tramo: elegido, excludeOld });
         toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
       }
     } catch (error) {
@@ -166,8 +158,7 @@ const ReportTramoSec = () => {
     setApplied(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
-    setTramoInicial(null);
-    setTramoFinal(null);
+    setTramoId(null);
     setExcludeOld(false);
   };
 
@@ -188,8 +179,8 @@ const ReportTramoSec = () => {
     try {
       if (format === "excel") {
         await exportExcelTramo({
-          list, listPropietario, listMaterial, listAdss, listObs, listCiudad,
-          tramoInicial: applied.tramoInicial, tramoFinal: applied.tramoFinal,
+          list, listPropietario, listMaterial, listAdss, listObs,
+          tramo: applied.tramo,
           fechaInicio: applied.start, fechaFin: applied.end,
         });
       } else if (format === "csv") {
@@ -197,7 +188,7 @@ const ReportTramoSec = () => {
       } else {
         await exportPdfTramo(
           list, listAdss, listObs, listPropietario, listMaterial,
-          applied.start, applied.end, applied.tramoInicial, applied.tramoFinal, listCiudad,
+          applied.start, applied.end, applied.tramo,
         );
       }
     } catch {
@@ -314,7 +305,7 @@ const ReportTramoSec = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-2 gap-y-3 items-end">
             <div className="space-y-1.5">
               <Label>Fecha de inicio</Label>
               <DatePicker ariaLabel="Fecha de inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -324,34 +315,8 @@ const ReportTramoSec = () => {
               <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
             <div className="space-y-1.5">
-              <Label>Tramo desde <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <Combobox
-                options={listCiudad
-                  .filter((c) => {
-                    if (c.id == null || c.id === tramoFinal) return false;
-                    if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                    return neighbors.get(tramoFinal)?.has(c.id) ?? false;
-                  })
-                  .map((c) => ({ value: String(c.id), label: c.name }))}
-                value={tramoInicial ? String(tramoInicial) : ""}
-                onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
-                placeholder="Todas las ciudades"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tramo hasta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <Combobox
-                options={listCiudad
-                  .filter((c) => {
-                    if (c.id == null || c.id === tramoInicial) return false;
-                    if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                    return neighbors.get(tramoInicial)?.has(c.id) ?? false;
-                  })
-                  .map((c) => ({ value: String(c.id), label: c.name }))}
-                value={tramoFinal ? String(tramoFinal) : ""}
-                onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
-                placeholder="Todas las ciudades"
-              />
+              <Label>Tramo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <TramoCombobox tramos={tramos} value={tramoId} onChange={setTramoId} permitirTodos />
             </div>
           </div>
           <div className="mt-5">

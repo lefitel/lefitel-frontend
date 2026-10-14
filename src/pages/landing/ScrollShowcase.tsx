@@ -1,5 +1,5 @@
 import { Reveal } from "./chrome";
-import { screenVars } from "./tokens";
+import { screenClass, screenVars } from "./tokens";
 import { CardPart, FilterPart, PlanPart } from "./parts/map";
 import { FormPart, SavedPart } from "./parts/event";
 import { ChartPart, CriticalsPart, KpiPart, PeriodPart } from "./parts/dashboard";
@@ -33,9 +33,9 @@ import { ColumnsPart, ExportPart } from "./parts/report";
 function Caption({ tag, title, text }: { tag: string; title: string; text: string }) {
   return (
     <div className="max-w-xl">
-      <p className="font-[family-name:var(--pp-mono)] text-[11px] tracking-[0.14em] text-[var(--pp-or)] uppercase">{tag}</p>
-      <h3 className="mt-2.5 text-lg font-bold tracking-tight text-[var(--pp-paper)] [font-stretch:108%] sm:text-xl">{title}</h3>
-      <p className="mt-2 text-[14px] leading-relaxed text-[var(--pp-paper)]/60">{text}</p>
+      <p className="font-[family-name:var(--pp-mono)] text-[11px] tracking-[0.14em] text-[var(--pp-band-acc)] uppercase">{tag}</p>
+      <h3 className="mt-2.5 text-lg font-bold tracking-tight text-[var(--pp-band-fg)] [font-stretch:108%] sm:text-xl">{title}</h3>
+      <p className="mt-2 text-[14px] leading-relaxed text-[var(--pp-band-fg)]/60">{text}</p>
     </div>
   );
 }
@@ -107,19 +107,19 @@ export function ScrollShowcase() {
   return (
     <section
       style={screenVars}
-      className="relative bg-[var(--pp-band)] py-24 text-[var(--pp-paper)] sm:py-28"
+      className={`${screenClass} relative bg-[var(--pp-band)] py-24 text-[var(--pp-band-fg)] sm:py-28`}
       aria-label="El sistema por dentro"
     >
       <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <Reveal className="max-w-2xl">
-          <p className="flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-paper)]/55 uppercase">
-            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
+          <p className="flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-band-fg)]/55 uppercase">
+            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-band-acc)]" />
             La plataforma
           </p>
           <h2 className="mt-4 text-3xl leading-[1.05] font-extrabold tracking-[-0.015em] text-balance [font-stretch:112%] sm:text-[2.6rem]">
-            Esto es lo que verás <span className="text-[var(--pp-paper)]/45">cada mañana al entrar.</span>
+            Esto es lo que verás <span className="text-[var(--pp-band-fg)]/45">cada mañana al entrar.</span>
           </h2>
-          <p className="mt-6 max-w-[56ch] leading-relaxed text-[var(--pp-paper)]/60">
+          <p className="mt-6 max-w-[56ch] leading-relaxed text-[var(--pp-band-fg)]/60">
             Once piezas del sistema, cada una haciendo su trabajo. Todas siguen al mismo poste: el
             P472 del tramo Coroico › Coripata, con la ferretería fuera de la cruceta.
           </p>
@@ -131,7 +131,7 @@ export function ScrollShowcase() {
           className="mt-12 h-3 w-full"
           style={{
             backgroundImage:
-              "repeating-linear-gradient(to right, oklch(1 0 0 / 0.13) 0 1px, transparent 1px 14px)",
+              "repeating-linear-gradient(to right, color-mix(in oklch, var(--pp-band-fg) 18%, transparent) 0 1px, transparent 1px 14px)",
             maskImage: "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",
             WebkitMaskImage:
               "linear-gradient(to right, transparent, black 8%, black 92%, transparent)",

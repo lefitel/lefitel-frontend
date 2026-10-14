@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
-import { CheckIcon, ChevronDownIcon, MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { createObs, deleteObs, desarchivarObs, editObs, getObs, getObsStats, ObsStats } from "../../../api/Obs.api";
@@ -30,6 +30,8 @@ import { InnerTab } from "./index";
 import { useRegistroEnlazado, type RegistroEnlazado } from "./useRegistroEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { mensajeDeError } from "../../../api/descarga";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
+import { TruncatedText } from "../../../components/table/TruncatedText";
 
 interface Props {
     innerTab: InnerTab;
@@ -240,7 +242,7 @@ const ObsSec = ({ innerTab, enlace }: Props) => {
     const columns = useMemo<Col<ObsInterface>[]>(() => [
         rowNumberColumn(),
         { accessorKey: "name", header: "Nombre" },
-        { accessorKey: "description", header: "Descripción" },
+        { accessorKey: "description", header: "Descripción", cell: ({ getValue }) => <TruncatedText value={getValue()} /> },
         {
             id: "tipoObs",
             header: "Tipo",
@@ -321,9 +323,7 @@ const ObsSec = ({ innerTab, enlace }: Props) => {
             cell: ({ row }) => !can(rol, "parametros", "editar") ? null : (
                 <div className="flex justify-end pr-2">
                     <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                        </DropdownMenuTrigger>
+                        <RowActionsTrigger />
                         <DropdownMenuContent align="end" className="w-36">
                             <DropdownMenuItem onClick={() => openEdit(row.original)}>Editar</DropdownMenuItem>
                             {can(rol, "parametros", "archivar") && (
@@ -347,7 +347,7 @@ const ObsSec = ({ innerTab, enlace }: Props) => {
     const archivedColumns = useMemo<Col<ObsInterface>[]>(() => [
         rowNumberColumn(),
         { accessorKey: "name", header: "Nombre" },
-        { accessorKey: "description", header: "Descripción" },
+        { accessorKey: "description", header: "Descripción", cell: ({ getValue }) => <TruncatedText value={getValue()} /> },
         {
             id: "tipoObs",
             header: "Tipo",
@@ -423,7 +423,7 @@ const ObsSec = ({ innerTab, enlace }: Props) => {
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
                         {can(rol, "parametros", "crear") && (
-                            <Button className="gap-2" onClick={openAdd}>
+                            <Button className="gap-2" aria-label="Nueva" onClick={openAdd}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nueva</span>
                             </Button>

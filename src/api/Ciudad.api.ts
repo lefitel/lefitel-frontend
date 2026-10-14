@@ -64,7 +64,7 @@ export const editCiudad = (data: CiudadInterface): Promise<CiudadInterface> => {
     .then((response) => response.data);
 };
 
-export const deleteCiudad = (id: number): Promise<void> => {
+export const deleteCiudad =(id: number): Promise<void> => {
   return axios
     .delete(urlApi + urlCiudad + id)
     .then(() => undefined);

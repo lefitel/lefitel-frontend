@@ -7,6 +7,7 @@ import autoTable from "jspdf-autotable";
 
 import { EventoInterface, RevisionInterface } from "../../interfaces/interfaces";
 import { imageUrl } from "../imageUrl";
+import { nombreDelTramo } from "../tramo";
 import { getEventCriticality, getCriticalityMeta } from "../criticality";
 import logoUrl from "../../assets/images/logo.png";
 import tigoUrl from "../../assets/images/logo_tigo.png";
@@ -323,7 +324,7 @@ export const exportExcelGeneral = async (list: EventoInterface[], fechaInicio: D
       e.poste?.propietario?.name ?? "",
       e.poste?.lat               ?? "",
       e.poste?.lng               ?? "",
-      `${e.poste?.ciudadA?.name ?? ""} - ${e.poste?.ciudadB?.name ?? ""}`,
+      nombreDelTramo(e.poste),
       revs.length > 0 ? lastRev.toLocaleDateString("es-ES") : "",
       e.description ?? "",
       formatCriticality(e),                     // col 9 — Criticidad
@@ -403,7 +404,7 @@ export const toRowsGeneral = (list: EventoInterface[]) =>
       e.poste?.propietario?.name ?? "",
       e.poste?.lat != null ? String(e.poste.lat.toFixed(4)) : "",
       e.poste?.lng != null ? String(e.poste.lng.toFixed(4)) : "",
-      `${e.poste?.ciudadA?.name ?? ""} - ${e.poste?.ciudadB?.name ?? ""}`,
+      nombreDelTramo(e.poste),
       hasRevs ? lastRev.toLocaleDateString("es-ES") : "",
       hasRevs ? lastRev.toLocaleTimeString("es-ES") : "",
       e.description ?? "",

@@ -1,11 +1,13 @@
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Fragment, useMemo, useState } from "react";
+import { Link, Outlet, useLocation } from "react-router-dom";
+import { cn } from "@/lib/utils";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "../components/ui/sidebar";
-import { Separator } from "../components/ui/separator";
+import { pillThumb, pillTrack } from "../components/ui/tabs";
 import { AppSidebar } from "../components/AppSidebar";
+import { HeaderSlotProvider } from "../components/headerSlotContext";
+import { TrailLabelProvider, type TrailLabel } from "../components/TrailLabel";
 import { MENU_ITEMS } from "../components/menuItems";
-import { Button } from "../components/ui/button";
-import { ChevronRightIcon, MoonIcon, SunIcon } from "lucide-react";
-import { useTheme } from "../components/theme-provider";
+import { ChevronRightIcon } from "lucide-react";
 import { useScrollFade } from "../hooks/useScrollFade";
 
 const ALL_ROUTES: { path: string; text: string }[] = [
@@ -16,7 +18,24 @@ const ALL_ROUTES: { path: string; text: string }[] = [
 
 const CHILD_LABELS: Record<string, (id: string) => string> = {
   postes: (id) => `Poste #${id}`,
+  tramos: (id) => `Tramo #${id}`,
 };
+
+/**
+ * Addresses under a screen that are another view of it, not a step down.
+ * `tramos/archivados` is the archived half of the Tramos screen: the trail
+ * stays on «Tramos» for both, and the Activos/Archivados pair beside it says
+ * which.
+ */
+const SAME_STEP: Record<string, readonly string[]> = {
+  tramos: ["archivados"],
+};
+
+// One segment of the trail, link or current page alike. Full height, where
+// the tabs take a pixel off: an odd pixel cannot be split, so it all lands
+// under the pill and the trail reads as pushed against the top.
+const CRUMB =
+  "relative inline-flex h-full items-center rounded-full border border-transparent px-3 font-medium whitespace-nowrap";
 
 function buildBreadcrumbs(pathname: string): { label: string; path?: string }[] {
   // Strip the /app prefix and work with the remaining segments
@@ -26,7 +45,7 @@ function buildBreadcrumbs(pathname: string): { label: string; path?: string }[] 
   const topRoute = ALL_ROUTES.find((r) => r.path === `/app/${segments[0]}`);
   const topLabel = topRoute?.text ?? "Inicio";
 
-  if (segments.length === 1) return [{ label: topLabel }];
+  if (segments.length === 1 || SAME_STEP[segments[0]]?.includes(segments[1])) return [{ label: topLabel }];
 
   const childLabel = CHILD_LABELS[segments[0]]?.(segments[1]) ?? `#${segments[1]}`;
   return [
@@ -52,9 +71,21 @@ function buildBreadcrumbs(pathname: string): { label: string; path?: string }[] 
  */
 const HomePage = () => {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { resolvedTheme, setTheme } = useTheme();
-  const breadcrumbs = buildBreadcrumbs(location.pathname);
+  // What the open screen calls the record it is showing, when it has said so:
+  // the address only knows its number. Kept with the address it was said for,
+  // so a name is never drawn over another screen's step. See `useTrailLabel`.
+  const [nombre, setNombre] = useState<TrailLabel | null>(null);
+  const breadcrumbs = useMemo(() => {
+    const migas = buildBreadcrumbs(location.pathname);
+    // Only a step under a screen is a record with a name of its own.
+    if (migas.length < 2 || nombre?.path !== location.pathname) return migas;
+    return [...migas.slice(0, -1), { ...migas[migas.length - 1], label: nombre.text }];
+  }, [location.pathname, nombre]);
+  // State, not refs: the screens have to render again once they exist. Two
+  // places for the open screen, one on each side of the trail; see `HeaderSlot`.
+  const [slotInicio, setSlotInicio] = useState<HTMLDivElement | null>(null);
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
+  const slots = useMemo(() => ({ start: slotInicio, end: slot }), [slotInicio, slot]);
 
   // The gradient that softens the bottom edge; see the hook for why it is
   // tied to the scroll position instead of being always on.
@@ -70,40 +101,91 @@ const HomePage = () => {
             beside the card, and the margin is all the gap there is. */}
         <div className="bg-background relative overflow-hidden flex flex-col flex-1 min-h-0 sm:m-2 md:ml-0 sm:rounded-xl sm:shadow-sm sm:border">
           <header className="border-b flex shrink-0 items-center gap-2 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-            <div className="flex items-center gap-2 p-2 w-full">
+            {/* `group/header` is what lets the trail below ask about its
+                sibling, the slot. */}
+            <div className="group/header flex items-center gap-2 p-2 w-full">
               <SidebarTrigger />
-              <Separator orientation="vertical" className="h-4" />
-              <nav className="flex items-center gap-1.5 text-sm">
+              {/* The open screen's way back, when it has one: left of the
+                  trail, so it reads as part of it. Collapsed while empty, or
+                  the row's gap would be counted twice. Deliberately without
+                  `data-header-slot`: it must not make the trail give way on a
+                  phone, where it is then the only way back there is. */}
+              <div ref={setSlotInicio} className="flex shrink-0 items-center empty:hidden" />
+              {/* The app's tab skin, as on the routed tabs of Tramos: the page
+                  you are on is the raised pill, the way up is a link in the
+                  track. `h-8`, not the tabs' `h-9`: with the header's padding
+                  that is the 48px the folded header is pinned to. */}
+              <nav
+                aria-label="Miga de pan"
+                className={cn(
+                  // On a phone a sheet's name is what gives way, cut short,
+                  // instead of the trail running past the edge of the header.
+                  // There it never shares the row with the slot (below). From
+                  // `sm` up it does, and it holds its width: the slot is the
+                  // one that scrolls.
+                  "inline-flex h-8 min-w-0 shrink-0 items-center p-0.5 text-sm max-sm:shrink",
+                  // On a phone the row is some 300px once the trigger is taken
+                  // off, and the trail does not shrink: beside it not even two
+                  // tabs fit. So below `sm` it gives way whenever the open
+                  // screen has hung something in the slot, and stays when the
+                  // slot is empty — the dashboard and every detail sheet, where
+                  // it is also the way back. From `sm` up both fit and nothing
+                  // changes. A rule rather than state: the slot is filled
+                  // through a portal, and its being empty or not is something
+                  // only the document knows without being told.
+                  "max-sm:group-has-[[data-header-slot]:not(:empty)]/header:hidden",
+                  pillTrack,
+                )}
+              >
                 {breadcrumbs.map((crumb, i) => (
-                  <span key={i} className="flex items-center gap-1.5">
-                    {i > 0 && <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
+                  <Fragment key={i}>
+                    {i > 0 && (
+                      <ChevronRightIcon aria-hidden className="size-3.5 shrink-0 text-muted-foreground/60" />
+                    )}
                     {crumb.path ? (
-                      <button
-                        onClick={() => navigate(crumb.path!)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
+                      <Link
+                        to={crumb.path}
+                        className={cn(
+                          CRUMB,
+                          "shrink-0 text-foreground/60 transition-colors hover:text-foreground dark:text-muted-foreground dark:hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring",
+                        )}
                       >
                         {crumb.label}
-                      </button>
+                      </Link>
                     ) : (
-                      <span className="font-medium text-foreground">{crumb.label}</span>
+                      <span aria-current="page" className={cn(CRUMB, "min-w-0 text-foreground")}>
+                        <span className={pillThumb} />
+                        {/* A record's own name can be long; the address's number never was. */}
+                        <span className="relative z-10 min-w-0 max-w-40 truncate sm:max-w-56">{crumb.label}</span>
+                      </span>
                     )}
-                  </span>
+                  </Fragment>
                 ))}
               </nav>
-              <div className="ml-auto">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-                  className="h-8 w-8"
-                >
-                  {resolvedTheme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
-                </Button>
-              </div>
+              {/* Whatever the open screen hangs up here; see `HeaderSlot`.
+                  Narrower than its contents — a phone, mostly — it scrolls
+                  sideways rather than wrapping into a second row the header
+                  has no height for. The padding is room for focus rings,
+                  which a scrolling box would otherwise clip, and the negative
+                  margins give that room back. */}
+              {/* `data-header-slot` is what the trail's rule looks for, and the
+                  element must stay literally empty until a screen fills it:
+                  `:empty` is false for so much as a space. `ml-auto` at every
+                  width: the controls are at the right edge with the trail or
+                  without it, so they are where they were last time. */}
+              <div
+                ref={setSlot}
+                data-header-slot=""
+                className="no-scrollbar -my-1 -mr-1 ml-auto flex min-w-0 items-center gap-2 overflow-x-auto p-1"
+              />
             </div>
           </header>
           <main ref={scroller} className="flex flex-1 flex-col min-h-0 overflow-auto">
-            <Outlet />
+            <HeaderSlotProvider value={slots}>
+              <TrailLabelProvider value={setNombre}>
+                <Outlet />
+              </TrailLabelProvider>
+            </HeaderSlotProvider>
           </main>
           {/* Sits outside <main> on purpose: inside, it would scroll away
               with the content it covers. Three stops rather than two, because

@@ -66,8 +66,10 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      {/* After the children, so it is not the first thing focus lands on. */}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none">
+      {/* After the children, so it is not the first thing focus lands on.
+          `p-2` from `right-2 top-2` puts the cross where `right-4 top-4` had
+          it, inside a 32px square a finger can find instead of the 16px icon. */}
+      <DialogPrimitive.Close className="absolute right-2 top-2 rounded-sm p-2 opacity-70 transition-opacity hover:opacity-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:pointer-events-none">
         <X className="h-4 w-4" />
         <span className="sr-only">Cerrar</span>
       </DialogPrimitive.Close>

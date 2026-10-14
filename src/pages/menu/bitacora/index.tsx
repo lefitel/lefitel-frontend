@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
@@ -9,8 +9,8 @@ import { Button } from "../../../components/ui/button";
 import { Badge } from "../../../components/ui/badge";
 import { Combobox } from "../../../components/ui/combobox";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "../../../components/ui/dropdown-menu";
-import { DatePicker } from "../../../components/ui/date-picker";
-import { ChevronDownIcon, InfoIcon } from "lucide-react";
+import { DatePeriodPicker } from "../../../components/ui/date-period-picker";
+import { ChevronDownIcon, FilterXIcon, InfoIcon } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "../../../components/ui/popover";
 import DataTable from "../../../components/table/DataTable";
 import { enlaceDeFila, nombreDeAccion, nombreDeEntidad } from "../../../constants/bitacora";
@@ -18,6 +18,9 @@ import { SesionContext } from "../../../context/SesionContext";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { chooserTrigger } from "../../../components/ui/control-surface";
 import { cn } from "../../../lib/utils";
+import { touchTarget } from "../../../components/ui/touch-target";
+import { useLatest } from "../../../hooks/useLatest";
+import { HeaderSlot } from "../../../components/HeaderSlot";
 
 type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
@@ -89,7 +92,13 @@ function MetadataPopover({ metadata, ip }: { metadata: Record<string, unknown>; 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="shrink-0 inline-flex items-center text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors">
+        {/* The same as `BitacoraPanel`'s: faint where a mouse can find it,
+            plain and bigger to press on a touch screen, which has no hover. */}
+        <button
+          type="button"
+          aria-label="Detalles del registro"
+          className={cn("shrink-0 inline-flex items-center text-muted-foreground/60 mouse:text-muted-foreground/30 hover:text-muted-foreground/60 transition-colors", touchTarget)}
+        >
           <InfoIcon className="size-3.5" />
         </button>
       </PopoverTrigger>
@@ -199,16 +208,24 @@ const BitacoraPage = () => {
   // «Rol #7», looked, pressed Back, and was at the defaults again. Read once on
   // arrival, written back (below) whenever one of them changes.
   const [parametros, setParametros] = useSearchParams();
-  const [alLlegar] = useState(() => ({
-    from: fechaDe(parametros.get("desde"), false) ?? mkDate(7),
-    to: fechaDe(parametros.get("hasta"), true) ?? mkDate(0, true),
-    entity: parametros.get("entidad") ?? "all",
-    severity: parametros.get("severidad") ?? "all",
-    action: parametros.get("accion") ?? "all",
-    userId: parametros.get("usuario") ?? "all",
-    pagina: Math.max(1, Math.trunc(Number(parametros.get("pagina"))) || 1),
-    porPagina: Math.max(1, Math.trunc(Number(parametros.get("porPagina"))) || TAMANO_DE_PAGINA),
-  }));
+  const [alLlegar] = useState(() => {
+    const desde = fechaDe(parametros.get("desde"), false);
+    const hasta = fechaDe(parametros.get("hasta"), true);
+    // A period that ends before it starts is an address that makes no sense,
+    // like a page of -4: neither half is believed. Asked as it stands the
+    // server answers with nothing, under a period nobody chose.
+    const alReves = !!desde && !!hasta && desde > hasta;
+    return {
+      from: (alReves ? undefined : desde) ?? mkDate(7),
+      to: (alReves ? undefined : hasta) ?? mkDate(0, true),
+      entity: parametros.get("entidad") ?? "all",
+      severity: parametros.get("severidad") ?? "all",
+      action: parametros.get("accion") ?? "all",
+      userId: parametros.get("usuario") ?? "all",
+      pagina: Math.max(1, Math.trunc(Number(parametros.get("pagina"))) || 1),
+      porPagina: Math.max(1, Math.trunc(Number(parametros.get("porPagina"))) || TAMANO_DE_PAGINA),
+    };
+  });
 
   const [autores,   setAutores]   = useState<AutorBitacora[]>([]);
   const [familias,  setFamilias]  = useState<OpcionDeFiltro[]>([]);
@@ -251,15 +268,17 @@ const BitacoraPage = () => {
     })),
   ], [autores]);
 
-  // Refs so the stable fetch fn always reads current values
-  const fromRef     = useRef(from);     fromRef.current     = from;
-  const toRef       = useRef(to);       toRef.current       = to;
-  const entityRef   = useRef(entity);   entityRef.current   = entity;
-  const severityRef = useRef(severity); severityRef.current = severity;
-  const actionRef   = useRef(action);   actionRef.current   = action;
-  const userIdRef   = useRef(userId);   userIdRef.current   = userId;
-  const pageSizeRef = useRef(pageSize); pageSizeRef.current = pageSize;
-  const sortingRef  = useRef(sorting);  sortingRef.current  = sorting;
+  // Refs so the stable fetch fn always reads current values. `useLatest`
+  // updates them when a render commits, which is before any effect or handler
+  // that reads them runs; nothing below reads them while rendering.
+  const fromRef     = useLatest(from);
+  const toRef       = useLatest(to);
+  const entityRef   = useLatest(entity);
+  const severityRef = useLatest(severity);
+  const actionRef   = useLatest(action);
+  const userIdRef   = useLatest(userId);
+  const pageSizeRef = useLatest(pageSize);
+  const sortingRef  = useLatest(sorting);
 
   const doFetch = useCallback(async (p: number, ps: number) => {
     setLoading(true);
@@ -291,7 +310,7 @@ const BitacoraPage = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fromRef, toRef, entityRef, severityRef, actionRef, userIdRef, sortingRef]);
 
   const filtersKey = useMemo(
     () => [from?.toDateString(), to?.toDateString(), entity, severity, action, userId].join("|"),
@@ -304,18 +323,18 @@ const BitacoraPage = () => {
   // right page in the same render rather than one late.
   const [pagina, setPagina] = useState({ clave: filtersKey, n: alLlegar.pagina });
   const page = pagina.clave === filtersKey ? pagina.n : 1;
-  const pageRef = useRef(page); pageRef.current = page;
-  const filtersKeyRef = useRef(filtersKey); filtersKeyRef.current = filtersKey;
+  const pageRef = useLatest(page);
+  const filtersKeyRef = useLatest(filtersKey);
 
   useEffect(() => {
     doFetch(pageRef.current, pageSizeRef.current);
-  }, [filtersKey, doFetch]);
+  }, [filtersKey, doFetch, pageRef, pageSizeRef]);
 
   const handlePageChange = useCallback((p: number, ps: number) => {
     setPageSize(ps);
     setPagina({ clave: filtersKeyRef.current, n: p });
     doFetch(p, ps);
-  }, [doFetch]);
+  }, [doFetch, filtersKeyRef]);
 
   useEffect(() => {
     const siguiente = new URLSearchParams();
@@ -425,91 +444,102 @@ const BitacoraPage = () => {
 
   return (
     <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Bitácora</h1>
-          <p className="text-sm text-muted-foreground mt-1">Registro de acciones del sistema</p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleReset} disabled={loading} className="shrink-0">
-          Limpiar filtros
-        </Button>
-      </div>
+      <h1 className="sr-only">Bitácora</h1>
+      <HeaderSlot>
+        {/*
+          The period, up here: it frames everything the screen shows — the log
+          is always read over one, and it opens on the last seven days — where
+          the filters below narrow what happened within it.
 
-      <div className="space-y-2">
-        {/* Row 1: Desde, Hasta, Usuario */}
-        <div className="flex flex-wrap gap-2 items-end">
-          <div className="flex flex-col gap-1 flex-1 min-w-36">
-            <span className="text-xs text-muted-foreground">Desde</span>
-            <DatePicker ariaLabel="Desde" value={from} onSelect={setFrom} placeholder="Desde" className="w-full h-8" />
-          </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-36">
-            <span className="text-xs text-muted-foreground">Hasta</span>
-            <DatePicker ariaLabel="Hasta" value={to} onSelect={setTo} placeholder="Hasta" className="w-full h-8" />
-          </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-40">
-            <span className="text-xs text-muted-foreground">Usuario</span>
-            <Combobox
-              options={usuarioOptions}
-              value={userId}
-              onValueChange={setUserId}
-              placeholder="Todos"
-              searchPlaceholder="Buscar usuario..."
-              className="h-8"
-            />
-          </div>
+          One control, with a calendar for each end. As two separate fields the
+          end could be set before the start, and the only sign was an empty
+          table. As one range calendar the ends stayed in order, but its two
+          months moved together and could not jump: a period a year long was
+          out of reach. This keeps both — each end has its own month and year
+          menus, and the end's calendar does not offer a day before the start.
+          No day after today is offered either: nothing has been logged there.
+          `load` widens the end to the last second of its day, so a period of
+          one day is the whole of it.
+        */}
+        <DatePeriodPicker
+          ariaLabel="Período"
+          value={{ from, to }}
+          onChange={(periodo) => { setFrom(periodo.from); setTo(periodo.to); }}
+          max={new Date()}
+          align="end"
+          className="h-8 w-auto shrink-0"
+        />
+        {/* An icon on a phone: beside the period the words did not fit in the
+            header. Its name stays the same. */}
+        <Button variant="outline" size="sm" onClick={handleReset} disabled={loading} className="shrink-0 max-sm:px-2" aria-label="Limpiar filtros" title="Limpiar filtros">
+          <FilterXIcon className="sm:hidden" />
+          <span className="max-sm:hidden">Limpiar filtros</span>
+        </Button>
+      </HeaderSlot>
+
+      {/* One row: who, on what, doing what, how serious. There were two, the
+          first of them led by the dates. */}
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex flex-col gap-1 flex-1 min-w-40">
+          <span className="text-xs text-muted-foreground">Usuario</span>
+          <Combobox
+            options={usuarioOptions}
+            value={userId}
+            onValueChange={setUserId}
+            placeholder="Todos"
+            searchPlaceholder="Buscar usuario..."
+            className="h-8"
+          />
         </div>
-        {/* Row 2: Entidad, Acción, Severidad, Limpiar */}
-        <div className="flex flex-wrap gap-2 items-end">
-          <div className="flex flex-col gap-1 flex-1 min-w-32">
-            <span className="text-xs text-muted-foreground">Entidad</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
-                {entity === "all" ? "Todas" : entidades.find((e) => e.value === entity)?.label ?? entity}
-                <ChevronDownIcon className="size-4 opacity-50" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuRadioGroup value={entity} onValueChange={setEntity}>
-                  <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
-                  {entidades.map((e) => (
-                    <DropdownMenuRadioItem key={e.value} value={e.value}>{e.label}</DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-32">
-            <span className="text-xs text-muted-foreground">Acción</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
-                {action === "all" ? "Todas" : familias.find((f) => f.value === action)?.label ?? action}
-                <ChevronDownIcon className="size-4 opacity-50" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuRadioGroup value={action} onValueChange={setAction}>
-                  <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
-                  {familias.map((p) => (
-                    <DropdownMenuRadioItem key={p.value} value={p.value}>{p.label}</DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-          <div className="flex flex-col gap-1 flex-1 min-w-32">
-            <span className="text-xs text-muted-foreground">Severidad</span>
-            <DropdownMenu>
-              <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
-                {SEVERITY_LABELS[severity] ?? "Todas"}
-                <ChevronDownIcon className="size-4 opacity-50" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-36">
-                <DropdownMenuRadioGroup value={severity} onValueChange={setSeverity}>
-                  {Object.entries(SEVERITY_LABELS).map(([val, label]) => (
-                    <DropdownMenuRadioItem key={val} value={val}>{label}</DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+        <div className="flex flex-col gap-1 flex-1 min-w-32">
+          <span className="text-xs text-muted-foreground">Entidad</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
+              {entity === "all" ? "Todas" : entidades.find((e) => e.value === entity)?.label ?? entity}
+              <ChevronDownIcon className="size-4 opacity-50" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuRadioGroup value={entity} onValueChange={setEntity}>
+                <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
+                {entidades.map((e) => (
+                  <DropdownMenuRadioItem key={e.value} value={e.value}>{e.label}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex flex-col gap-1 flex-1 min-w-32">
+          <span className="text-xs text-muted-foreground">Acción</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
+              {action === "all" ? "Todas" : familias.find((f) => f.value === action)?.label ?? action}
+              <ChevronDownIcon className="size-4 opacity-50" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuRadioGroup value={action} onValueChange={setAction}>
+                <DropdownMenuRadioItem value="all">Todas</DropdownMenuRadioItem>
+                {familias.map((p) => (
+                  <DropdownMenuRadioItem key={p.value} value={p.value}>{p.label}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+        <div className="flex flex-col gap-1 flex-1 min-w-32">
+          <span className="text-xs text-muted-foreground">Severidad</span>
+          <DropdownMenu>
+            <DropdownMenuTrigger className={DROPDOWN_TRIGGER_CLS}>
+              {SEVERITY_LABELS[severity] ?? "Todas"}
+              <ChevronDownIcon className="size-4 opacity-50" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-36">
+              <DropdownMenuRadioGroup value={severity} onValueChange={setSeverity}>
+                {Object.entries(SEVERITY_LABELS).map(([val, label]) => (
+                  <DropdownMenuRadioItem key={val} value={val}>{label}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

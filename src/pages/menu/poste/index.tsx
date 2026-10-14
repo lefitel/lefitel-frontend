@@ -3,10 +3,11 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { SortingState } from "@tanstack/react-table";
 import type { Col } from "../../../components/table/tableFeatures";
-import { PlusIcon, MoreVerticalIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, ChevronRightIcon, CheckIcon } from "lucide-react";
+import { PlusIcon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, RefreshCwIcon, CheckIcon } from "lucide-react";
 import { saveAs } from "file-saver";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
+import TramoEnlazado from "../../../components/TramoEnlazado";
 import { deletePoste, desarchivarPoste, editPoste, exportarPostes, getPoste, searchPoste } from "../../../api/Poste.api";
 import { mensajeDeError, mensajeDeErrorAsync, type FormatoDescarga } from "../../../api/descarga";
 import { getEvento_poste } from "../../../api/Evento.api";
@@ -29,6 +30,8 @@ import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
+import { HeaderSlot } from "../../../components/HeaderSlot";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -377,17 +380,9 @@ const PostePage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => {
-                const a = row.original.ciudadA;
-                const b = row.original.ciudadB;
-                return (
-                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
-                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
-                    </span>
-                );
-            },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap"><TramoEnlazado tramo={row.original.tramo} vacio="—" /></span>
+            ),
         },
         {
             id: "coords",
@@ -576,9 +571,7 @@ const PostePage = () => {
             cell: ({ row }) => (
                 <div className="flex justify-end pr-2">
                     <DropdownMenu>
-                        <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-                            <MoreVerticalIcon className="h-4 w-4" />
-                        </DropdownMenuTrigger>
+                        <RowActionsTrigger />
                         <DropdownMenuContent align="end" className="w-44">
                             <DropdownMenuItem onClick={() => navigate(`/app/postes/${row.original.id}`)}>
                                 Ver detalle
@@ -616,17 +609,9 @@ const PostePage = () => {
         {
             id: "tramo",
             header: "Tramo",
-            cell: ({ row }) => {
-                const a = row.original.ciudadA;
-                const b = row.original.ciudadB;
-                return (
-                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground whitespace-nowrap">
-                        {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
-                        <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-                        {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
-                    </span>
-                );
-            },
+            cell: ({ row }) => (
+                <span className="text-xs text-muted-foreground whitespace-nowrap"><TramoEnlazado tramo={row.original.tramo} vacio="—" /></span>
+            ),
         },
         {
             id: "material",
@@ -664,24 +649,21 @@ const PostePage = () => {
                 </div>
             ),
         },
-    ], [navigate]);
+    ], []);
 
     const hasData = !!list?.length;
 
     return (
         <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Postes</h1>
-                    <p className="text-sm text-muted-foreground mt-1">Red de postes registrados</p>
-                </div>
-                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)}>
-                    <TabsList>
+            <h1 className="sr-only">Postes</h1>
+            <HeaderSlot>
+                <Tabs value={innerTab} onValueChange={(v) => setInnerTab(v as InnerTab)} className="shrink-0">
+                    <TabsList size="sm">
                         <TabsTrigger value="activos">Activos</TabsTrigger>
                         <TabsTrigger value="archivados">Archivados</TabsTrigger>
                     </TabsList>
                 </Tabs>
-            </div>
+            </HeaderSlot>
 
             {innerTab === "activos" && (
                 <DataTable
@@ -739,7 +721,7 @@ const PostePage = () => {
                             <RefreshCwIcon className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
                         </Button>
                         {canAdd && (
-                            <Button className="gap-2" onClick={() => setAddOpen(true)}>
+                            <Button className="gap-2" aria-label="Nuevo Poste" onClick={() => setAddOpen(true)}>
                                 <PlusIcon className="h-4 w-4" />
                                 <span className="hidden sm:inline">Nuevo Poste</span>
                             </Button>

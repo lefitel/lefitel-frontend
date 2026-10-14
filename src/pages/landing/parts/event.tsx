@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { CheckIcon, ImageIcon, LoaderCircleIcon, SearchIcon, XIcon } from "lucide-react";
 import { Cursor, Panel, Toast, Typewriter } from "../chrome";
-import { EXPO } from "../tokens";
+import { EXPO, asText } from "../tokens";
 import { useTargetBox } from "../targets";
 import { FORM_SCRIPT, SAVED_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
@@ -146,7 +146,7 @@ export function FormPart() {
             <motion.div
               className="flex h-[16px] w-[28px] items-center rounded-full px-[2px]"
               animate={{
-                backgroundColor: priority ? "oklch(0.755 0.155 62)" : "oklch(0.305 0.014 258)",
+                backgroundColor: priority ? "var(--scr-warn)" : "var(--scr-line)",
               }}
               transition={{ duration: 0.25 }}
             >
@@ -213,7 +213,7 @@ export function FormPart() {
                 >
                   <CheckIcon
                     className="h-2.5 w-2.5"
-                    style={{ color: "oklch(0.16 0.02 162)" }}
+                    style={{ color: "var(--scr-on-ok)" }}
                     strokeWidth={3.5}
                   />
                 </motion.span>
@@ -236,7 +236,7 @@ export function FormPart() {
                       background: on
                         ? `color-mix(in oklch, ${chip.color} 16%, transparent)`
                         : "transparent",
-                      color: on ? chip.color : "var(--scr-faint)",
+                      color: on ? asText(chip.color) : "var(--scr-faint)",
                     }}
                   >
                     {on && <CheckIcon className="h-2.5 w-2.5" strokeWidth={3} />}

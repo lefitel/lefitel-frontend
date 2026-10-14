@@ -230,13 +230,13 @@ const RIESGOS: { nivel: "alto" | "medio"; texto: string }[] = [
 
 const InfraestructuraPage = () => (
   <div className="flex flex-col w-full gap-page p-page animate-in fade-in duration-500">
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight text-foreground">Infraestructura</h1>
-      <p className="text-muted-foreground">
-        Cómo está montado el sistema, de punta a punta. Esta pantalla solo existe en
-        desarrollo, y el dibujo es una foto fija: hay que regenerarlo cuando cambie algo.
-      </p>
-    </div>
+    <h1 className="sr-only">Infraestructura</h1>
+    {/* Not a subtitle: the one thing somebody reading the diagram has to know
+        about it. */}
+    <p className="text-sm text-muted-foreground">
+      Esta pantalla solo existe en desarrollo, y el dibujo es una foto fija: hay que
+      regenerarlo cuando cambie algo.
+    </p>
 
     {/* A fixed height rather than `flex-1`: the page has content underneath now, so a
         frame that grew to fill the window would push the table off the bottom on every

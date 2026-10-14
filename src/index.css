@@ -326,7 +326,7 @@
     --border: oklch(0.878 0.012 255);
     --input: oklch(0.642 0.024 255);
     --ring: oklch(0.505 0.105 255);
-    --radius: 0.75rem;
+    --radius: 0.625rem;
     --sidebar: oklch(0.944 0.010 255);
     --sidebar-foreground: oklch(0.16 0.018 255);
     --sidebar-primary: oklch(0.450 0.118 255);
@@ -398,11 +398,12 @@
       inset 0 -1px 0 oklch(0 0 0 / 0.12),
       0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 100%), transparent),
       0 3px 8px -3px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 110%), transparent);
+    /* A card is flat: its hairline ring and nothing else. It had a lit top
+       edge and a shadow under it until 2026-10-13, when buttons and controls
+       went flat and Isaias chose the same for cards. On the light theme the
+       card is 1.07:1 against the page, so this ring is what draws it. */
     --shadow-surface:
-      inset 0 1px 0 color-mix(in oklab, var(--surface-up) calc(var(--edge-light) * 190%), transparent),
-      0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
-      0 1px 2px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 40%), transparent),
-      0 8px 20px -12px color-mix(in oklab, var(--shadow-color) calc(var(--shadow-strength) * 90%), transparent);
+      0 0 0 1px color-mix(in oklab, var(--foreground) 12%, transparent);
     /* Same as --shadow-surface without the hairline ring: a card is an object
        with an edge, a button is not, and the ring reads as a border. */
     --shadow-control:

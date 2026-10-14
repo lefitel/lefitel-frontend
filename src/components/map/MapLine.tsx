@@ -12,9 +12,15 @@ interface MapLineProps {
   color?: string;
   width?: number;
   opacity?: number;
+  /**
+   * The id of a layer already on the map to draw this line underneath. Unset,
+   * the line goes on top of everything, which is where a layer added later lands.
+   * The layer named must exist when this one is added, or MapLibre refuses it.
+   */
+  beforeId?: string;
 }
 
-export default function MapLine({ id, positions, color, width = 3, opacity }: MapLineProps) {
+export default function MapLine({ id, positions, color, width = 3, opacity, beforeId }: MapLineProps) {
   const { resolvedTheme } = useTheme();
   if (positions.length < 2) return null;
 
@@ -29,6 +35,7 @@ export default function MapLine({ id, positions, color, width = 3, opacity }: Ma
     <Source id={id} type="geojson" data={data}>
       <Layer
         id={`${id}-line`}
+        beforeId={beforeId}
         type="line"
         layout={{ "line-cap": "round", "line-join": "round" }}
         paint={{

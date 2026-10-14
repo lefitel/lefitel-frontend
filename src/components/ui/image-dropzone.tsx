@@ -71,11 +71,12 @@ export function ImageDropzone({ file, onChange, existingUrl, error, readOnly }: 
 
   if (readOnly) {
     if (noCarga) return aviso;
-    return existingUrl ? (
+    // The chosen file, when there is one, is what is on show; otherwise the stored photo.
+    return shown ? (
       <img
-        src={existingUrl}
+        src={shown}
         alt="Foto"
-        onError={() => setRota(existingUrl)}
+        onError={() => setRota(shown)}
         className="w-full h-auto block rounded-lg border border-border"
       />
     ) : null;

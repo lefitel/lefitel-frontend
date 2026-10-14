@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { ArrowDownIcon, ArrowUpIcon, CalendarDaysIcon, ChevronDownIcon } from "lucide-react";
 import { Counter, Cursor, Panel } from "../chrome";
-import { EXPO } from "../tokens";
+import { EXPO, asText } from "../tokens";
 import { useTargetBox } from "../targets";
 import {
   CHART_SCRIPT,
@@ -49,7 +49,7 @@ export function KpiPart() {
                 <path
                   d="M0 26 L12 22 L24 24 L36 17 L48 19 L60 12 L72 14 L84 7 L96 4"
                   fill="none"
-                  stroke="oklch(0.745 0.135 162)"
+                  stroke="var(--scr-ok)"
                   strokeWidth="1.8"
                   strokeLinecap="round"
                   strokeLinejoin="round"
@@ -129,7 +129,7 @@ export function ChartPart() {
           <p className="text-[12px] font-semibold text-[var(--scr-text)]">Actividad de eventos</p>
           <div className="flex items-center gap-3 text-[10px] text-[var(--scr-faint)]">
             <span className="flex items-center gap-1.5">
-              <span className="h-[7px] w-[7px] rounded-sm bg-[oklch(0.545_0.095_258)]" />
+              <span className="h-[7px] w-[7px] rounded-sm bg-[var(--scr-bar)]" />
               Creados
             </span>
             <span className="flex items-center gap-1.5">
@@ -152,8 +152,8 @@ export function ChartPart() {
             >
               <defs>
                 <linearGradient id="solvedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.745 0.135 162)" stopOpacity="0.28" />
-                  <stop offset="100%" stopColor="oklch(0.745 0.135 162)" stopOpacity="0" />
+                  <stop offset="0%" stopColor="var(--scr-ok)" stopOpacity="0.28" />
+                  <stop offset="100%" stopColor="var(--scr-ok)" stopOpacity="0" />
                 </linearGradient>
               </defs>
 
@@ -164,7 +164,7 @@ export function ChartPart() {
                   x2={CHART_W}
                   y1={CHART_H * (1 - f)}
                   y2={CHART_H * (1 - f)}
-                  stroke="oklch(0.262 0.013 258)"
+                  stroke="var(--scr-hair)"
                   strokeWidth="1"
                 />
               ))}
@@ -177,7 +177,7 @@ export function ChartPart() {
                   width={barW}
                   height={CHART_H - y(v)}
                   rx="2.5"
-                  fill={i === HINT && hinted ? "oklch(0.72 0.115 258)" : "oklch(0.545 0.095 258)"}
+                  fill={i === HINT && hinted ? "var(--scr-bar-hi)" : "var(--scr-bar)"}
                 />
               ))}
 
@@ -185,7 +185,7 @@ export function ChartPart() {
               <path
                 d={line}
                 fill="none"
-                stroke="oklch(0.745 0.135 162)"
+                stroke="var(--scr-ok)"
                 strokeWidth="2"
                 strokeLinejoin="round"
               />
@@ -201,7 +201,7 @@ export function ChartPart() {
           >
             <p className="text-[9.5px] text-[var(--scr-faint)]">13 ago 2026</p>
             <div className="mt-1 flex items-center gap-1.5 text-[10.5px] text-[var(--scr-text)]">
-              <span className="h-[6px] w-[6px] rounded-sm bg-[oklch(0.545_0.095_258)]" />
+              <span className="h-[6px] w-[6px] rounded-sm bg-[var(--scr-bar)]" />
               Creados <span className="ml-auto font-semibold">{hintValue}</span>
             </div>
             <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] text-[var(--scr-text)]">
@@ -315,7 +315,7 @@ export function CriticalsPart() {
           <span
             className="rounded-md px-2 py-0.5 text-[10px] font-semibold"
             style={{
-              color: CATASTROFICO.color,
+              color: asText(CATASTROFICO.color),
               background: `color-mix(in oklch, ${CATASTROFICO.color} 14%, transparent)`,
             }}
           >

@@ -1,11 +1,12 @@
 import { Link } from "react-router-dom";
 import { motion, useInView } from "motion/react";
 import { useRef } from "react";
-import { ArrowDownIcon, ArrowRightIcon, ArrowUpRightIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpRightIcon, MoonIcon, SunIcon } from "lucide-react";
+import { useTheme } from "../components/theme-provider";
 import { ScrollShowcase } from "./landing/ScrollShowcase";
 import { TramoPlan } from "./landing/TramoPlan";
 import { Reveal } from "./landing/chrome";
-import { EXPO, paperVars } from "./landing/tokens";
+import { EXPO, paperClass, paperVars } from "./landing/tokens";
 import { usePrefersReducedMotion } from "./landing/useTimeline";
 import logo from "../assets/images/logo.png";
 import tigoLogo from "../assets/images/logo_tigo.png";
@@ -99,7 +100,7 @@ function Eyebrow({ children, onDark = false }: { children: React.ReactNode; onDa
         onDark ? "text-white/55" : "text-[var(--pp-dim)]"
       }`}
     >
-      <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
+      <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-mark)]" />
       {children}
     </p>
   );
@@ -175,7 +176,7 @@ function ContactRow({
       {href && (
         <ArrowUpRightIcon
           aria-hidden="true"
-          className="h-5 w-5 text-[var(--pp-or-ink)] transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+          className="h-5 w-5 text-[var(--pp-acc)] transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
         />
       )}
     </>
@@ -187,7 +188,7 @@ function ContactRow({
   return (
     <a
       href={href}
-      className={`${row} transition-colors duration-200 hover:bg-[var(--pp-sunk)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-or-ink)]`}
+      className={`${row} transition-colors duration-200 hover:bg-[var(--pp-sunk)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-acc)]`}
       {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
     >
       {body}
@@ -196,6 +197,8 @@ function ContactRow({
 }
 
 const LandingPage = () => {
+  const { resolvedTheme, setTheme } = useTheme();
+  const dark = resolvedTheme === "dark";
   const still = usePrefersReducedMotion();
   const jump = useJump();
   const enter = (delay: number) =>
@@ -206,12 +209,12 @@ const LandingPage = () => {
     }) as const;
 
   const focusRing =
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-or-ink)]";
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-acc)]";
 
   return (
     <div
       style={paperVars}
-      className="min-h-screen overflow-x-hidden bg-[var(--pp-paper)] font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] selection:bg-[var(--pp-or)]/25"
+      className={`${paperClass} min-h-screen overflow-x-hidden bg-[var(--pp-paper)] font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] selection:bg-[var(--pp-acc)]/25`}
     >
       {/* ── NAV ──────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-40 border-b border-[var(--pp-rule)] bg-[var(--pp-paper)]">
@@ -220,7 +223,7 @@ const LandingPage = () => {
             <img src={logo} alt="" className="h-8 w-8 object-contain" />
             <span className="text-sm font-extrabold tracking-[0.06em] [font-stretch:112%]">OSEFI</span>
           </a>
-          <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-3 text-sm sm:gap-6">
             {[
               ["servicios", "Servicios"],
               ["plataforma", "Plataforma"],
@@ -235,6 +238,17 @@ const LandingPage = () => {
                 {label}
               </a>
             ))}
+            {/* The same switch as the login's, on the same stored preference:
+                whichever theme is picked here is the one the login and the
+                system open in. */}
+            <button
+              type="button"
+              onClick={() => setTheme(dark ? "light" : "dark")}
+              aria-label={dark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
+              className={`grid h-8 w-8 place-items-center rounded-md text-[var(--pp-dim)] transition-colors hover:bg-[var(--pp-sunk)] hover:text-[var(--pp-ink)] ${focusRing}`}
+            >
+              {dark ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
+            </button>
             <Link
               to="/login"
               className={`rounded-md border border-[var(--pp-ink)] px-3.5 py-1.5 font-semibold transition-colors duration-200 hover:bg-[var(--pp-ink)] hover:text-[var(--pp-paper)] ${focusRing}`}
@@ -259,7 +273,7 @@ const LandingPage = () => {
               {...enter(0.08)}
               className="mt-5 text-[2.6rem] leading-[0.98] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] sm:text-6xl lg:text-[4.1rem]"
             >
-              Sabemos cómo está <span className="text-[var(--pp-or-ink)]">cada poste</span> de tu red.
+              Sabemos cómo está <span className="text-[var(--pp-acc)]">cada poste</span> de tu red.
             </motion.h1>
             <motion.p
               {...enter(0.16)}
@@ -272,7 +286,7 @@ const LandingPage = () => {
               <a
                 href="#contacto"
                 onClick={jump("contacto")}
-                className={`group inline-flex items-center gap-2 rounded-md bg-[var(--pp-or-ink)] px-6 py-3.5 font-bold text-[var(--pp-paper)] transition-[background-color,transform] duration-200 ease-out hover:bg-[var(--pp-or-ink-hover)] active:scale-[0.97] ${focusRing}`}
+                className={`group inline-flex items-center gap-2 rounded-md bg-[var(--pp-fill)] px-6 py-3.5 font-bold text-[var(--pp-on-fill)] transition-[background-color,transform] duration-200 ease-out hover:bg-[var(--pp-fill-hover)] active:scale-[0.97] ${focusRing}`}
               >
                 Hablemos
                 <ArrowRightIcon className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
@@ -313,7 +327,7 @@ const LandingPage = () => {
               [vivaLogo, "Viva"],
               [entelLogo, "Entel"],
             ].map(([src, name]) => (
-              <img key={name} src={src} alt={name} className="h-7 object-contain opacity-75 brightness-0" />
+              <img key={name} src={src} alt={name} className="h-7 object-contain opacity-75 brightness-0 dark:invert" />
             ))}
           </div>
         </div>
@@ -349,7 +363,7 @@ const LandingPage = () => {
                 <h3 className="text-lg font-bold [font-stretch:108%] md:col-span-4">{s.title}</h3>
                 <p className="leading-relaxed text-[var(--pp-dim)] md:col-span-5">{s.text}</p>
                 <p className="mt-1 flex gap-2 font-[family-name:var(--pp-mono)] text-[13px] md:col-span-3 md:mt-0">
-                  <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-or)]" />
+                  <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-mark)]" />
                   {s.delivers}
                 </p>
               </div>
@@ -382,12 +396,12 @@ const LandingPage = () => {
           <Reveal className="lg:col-span-5">
             <Eyebrow>Contacto</Eyebrow>
             <h2 className="mt-4 text-4xl leading-[1] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] sm:text-5xl">
-              ¿Gestionas una red en Bolivia? <span className="text-[var(--pp-or-ink)]">Hablemos.</span>
+              ¿Gestionas una red en Bolivia? <span className="text-[var(--pp-acc)]">Hablemos.</span>
             </h2>
             <ul className="mt-9 space-y-3">
               {BENEFITS.map((b) => (
                 <li key={b} className="flex gap-3 leading-relaxed text-[var(--pp-dim)]">
-                  <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-or)]" />
+                  <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-mark)]" />
                   {b}
                 </li>
               ))}

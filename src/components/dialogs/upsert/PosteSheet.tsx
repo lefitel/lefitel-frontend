@@ -1,17 +1,17 @@
 import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { getPosteByTramo } from "../../../api/Poste.api";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
 import { extremosCreibles, ordenarTramo } from "../../../lib/tramoOrden";
+import { extremosDibujables, nombreDelTramo } from "../../../lib/tramo";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
-import { PosteInterface } from "../../../interfaces/interfaces";
+import type { Departamento, PosteInterface, Tramo } from "../../../interfaces/interfaces";
 import {
   estadoTrasFallo, getOpcionesPoste, EstadoOpciones, OpcionCiudad, OpcionesPoste, OpcionSimple,
 } from "../../../api/opciones.api";
 import { getAdssPoste } from "../../../api/AdssPoste.api";
 import { uploadImage } from "../../../api/Upload.api";
-import { createPoste, editPoste } from "../../../api/Poste.api";
+import { createPoste, editPoste, getPostesDelTramo } from "../../../api/Poste.api";
 import { mensajeDeError } from "../../../api/descarga";
 import { posteExample, latExample, lngExample } from "../../../data/example";
 import { imageUrl } from "../../../lib/imageUrl";
@@ -20,6 +20,8 @@ import { Label } from "../../ui/label";
 import { Input } from "../../ui/input";
 import { Combobox } from "../../ui/combobox";
 import { Skeleton } from "../../ui/skeleton";
+import TramoCombobox from "../../TramoCombobox";
+import TramoSheet from "./TramoSheet";
 import FormDialog from "../FormDialog";
 import CoordInputs from "../../map/CoordInputs";
 import BaseMap from "../../map/BaseMap";
@@ -28,7 +30,7 @@ import MapLine from "../../map/MapLine";
 import { FitView } from "../../map/useFitCoords";
 import { fromLatLngTuple, type LatLng, hasCoords } from "../../map/mapGeo";
 import MapSearch from "../../map/MapSearch";
-import { ArrowRightIcon, CheckIcon } from "lucide-react";
+import { CheckIcon } from "lucide-react";
 import { SonarMarker } from "../../map/SonarMarker";
 import { MAP_RADIUS, MAP_DOT } from "../../map/mapConstants";
 import { ImageDropzone } from "../../ui/image-dropzone";
@@ -66,7 +68,11 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   const [adssInicial, setAdssInicial] = useState<number[]>([]);
 
   const [listAdss, setListAdss] = useState<OpcionSimple[]>([]);
+  // The cities stay: the tramo dialog opened from the picker is handed them.
   const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
+  const [listTramos, setListTramos] = useState<Tramo[]>([]);
+  const [listDepartamentos, setListDepartamentos] = useState<Departamento[]>([]);
+  const [crearTramo, setCrearTramo] = useState(false);
   const [listMaterial, setListMaterial] = useState<OpcionSimple[]>([]);
   const [listPropietario, setListPropietario] = useState<OpcionSimple[]>([]);
 
@@ -111,6 +117,8 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     const setLists = (opciones: OpcionesPoste) => {
       setListAdss(opciones.adss);
       setListCiudad(opciones.ciudad);
+      setListTramos(opciones.tramos);
+      setListDepartamentos(opciones.departamento);
       setListMaterial(opciones.material);
       setListPropietario(opciones.propietario);
     };
@@ -128,6 +136,8 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
       .catch((error) => {
         setListAdss([]);
         setListCiudad([]);
+        setListTramos([]);
+        setListDepartamentos([]);
         setListMaterial([]);
         setListPropietario([]);
         setEstadoOpciones(estadoTrasFallo(error));
@@ -167,26 +177,37 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, poste?.id]);
 
+  // The tramo chosen now. One archived since the pole was registered is not in
+  // the list, so the pole's own is the answer while the id has not moved.
+  const tramo = listTramos.find((t) => t.id === data.id_tramo)
+    ?? (poste?.tramo && poste.tramo.id === data.id_tramo ? poste.tramo : null);
+  const [extremoUno, extremoDos] = extremosDibujables(tramo);
+  // The neighbours and the route belong to the CHOSEN tramo, so they are loaded
+  // again when the form is told to move the pole, and the old ones go while the
+  // new ones arrive: the ends and the line never come from two tramos. Only the
+  // edit form draws them, so a new pole does not ask.
   useEffect(() => {
-    if (!open || !isEditing || !listCiudad.length || !poste?.id_ciudadA || !poste?.id_ciudadB) return;
-    const a = listCiudad.find((c) => c.id === poste.id_ciudadA);
-    const b = listCiudad.find((c) => c.id === poste.id_ciudadB);
-    if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return;
+    if (!open || !isEditing) return;
 
     setTramoPostes([]);
     setRoutePath([]);
+    if (!data.id_tramo) return;
 
-    getPosteByTramo(poste.id_ciudadA, poste.id_ciudadB)
+    // An answer for a tramo that is no longer the chosen one is dropped.
+    let vigente = true;
+    getPostesDelTramo(data.id_tramo)
       .then((postes) => {
-        const tramo = ordenarTramo(postes, a, b);
-        setTramoPostes(tramo.postes);
-        fetchOrsRoute(tramo.waypoints)
-          .then((route) => setRoutePath(route ?? tramo.linea))
-          .catch(() => setRoutePath(tramo.linea));
+        if (!vigente) return;
+        const ordenado = ordenarTramo(postes, extremoUno, extremoDos);
+        setTramoPostes(ordenado.postes);
+        fetchOrsRoute(ordenado.waypoints)
+          .then((route) => { if (vigente) setRoutePath(route ?? ordenado.linea); })
+          .catch(() => { if (vigente) setRoutePath(ordenado.linea); });
       })
       .catch(() => { });
+    return () => { vigente = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, listCiudad, poste?.id_ciudadA, poste?.id_ciudadB]);
+  }, [open, isEditing, data.id_tramo, extremoUno?.lat, extremoUno?.lng, extremoDos?.lat, extremoDos?.lng]);
 
   const handleClose = () => {
     setImageFile(null);
@@ -204,8 +225,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
   const handleGuardar = async () => {
     const newErrors: Record<string, string> = {};
     if (!data.name.trim()) newErrors.name = "El número del poste es requerido";
-    if (!data.id_ciudadA || !data.id_ciudadB) newErrors.tramo = "Selecciona el tramo completo (inicio y fin)";
-    else if (data.id_ciudadA === data.id_ciudadB) newErrors.tramo = "El inicio y fin no pueden ser la misma ciudad";
+    if (!data.id_tramo) newErrors.tramo = "Selecciona el tramo";
     if (!data.id_material) newErrors.material = "Selecciona el material";
     if (!data.id_propietario) newErrors.propietario = "Selecciona el propietario";
     if (adssSelected.length === 0) newErrors.adss = "Selecciona al menos un ADSS";
@@ -224,7 +244,9 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
 
     setSaving(true);
     try {
-      let payload = { ...data, adss_ids: adssSelected };
+      // The tramo object is what the form was opened with; what is saved is `id_tramo`.
+      const { tramo: _tramoAbierto, ...cuerpo } = data;
+      let payload: PosteInterface = { ...cuerpo, adss_ids: adssSelected };
 
       if (imageFile) {
         const subida = await uploadImage(imageFile);
@@ -254,12 +276,10 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     }
   };
 
-  const ciudadA = listCiudad.find((c) => c.id === (poste?.id_ciudadA ?? data.id_ciudadA));
-  const ciudadB = listCiudad.find((c) => c.id === (poste?.id_ciudadB ?? data.id_ciudadB));
   const allCoords: LatLng[] = isEditing ? [
     // Only the cities that lie near the stretch: one kept at a placeholder
     // position would have the map frame half the globe.
-    ...extremosCreibles(tramoPostes, ciudadA, ciudadB),
+    ...extremosCreibles(tramoPostes, extremoUno, extremoDos),
     ...(hasCoords(data) ? [{ lat: data.lat, lng: data.lng }] : []),
     ...tramoPostes.filter(hasCoords).map((p) => ({ lat: p.lat, lng: p.lng })),
   ] : [];
@@ -273,8 +293,7 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     || new Date(data.date).getTime() !== new Date(base.date).getTime()
     || data.id_propietario !== base.id_propietario
     || data.id_material !== base.id_material
-    || data.id_ciudadA !== base.id_ciudadA
-    || data.id_ciudadB !== base.id_ciudadB
+    || data.id_tramo !== base.id_tramo
     || data.lat !== base.lat
     || data.lng !== base.lng
     || !!imageFile
@@ -284,316 +303,322 @@ export default function PosteSheet({ poste, open, setOpen, onSuccess }: Props) {
     !data.name.trim() && "Número",
     !data.id_propietario && "Propietario",
     !data.id_material && "Material",
-    (!data.id_ciudadA || !data.id_ciudadB) && "Tramo",
+    !data.id_tramo && "Tramo",
     adssSelected.length === 0 && "Ferretería",
     (!data.lat || !data.lng) && "Ubicación",
     !isEditing && !imageFile && "Foto",
   ].filter((c): c is string => !!c);
 
-  const nombreA = listCiudad.find((c) => c.id === data.id_ciudadA)?.name;
-  const nombreB = listCiudad.find((c) => c.id === data.id_ciudadB)?.name;
+  const nombreTramo = nombreDelTramo({ tramo });
+  const puedeCrearTramo = can(sesion.usuario.id_rol, "tramos", "crear");
 
   return (
-    <FormDialog
-      open={open}
-      onClose={handleClose}
-      size="wide"
-      title={isEditing ? `Editar poste ${data.name}`.trim() : "Nuevo poste"}
-      description={
-        soloLectura
-          ? "Solo lectura: tu rol puede ver los postes, no editarlos."
-          : nombreA && nombreB
-            ? `Tramo ${nombreA} — ${nombreB}`
-            : "Completa los datos para registrar un poste en la red."
-      }
-      dirty={!soloLectura && cambiado}
-      missing={faltan}
-      saving={saving}
-      submitLabel={isEditing ? "Guardar cambios" : "Crear poste"}
-      onSubmit={soloLectura ? undefined : () => void handleGuardar()}
-      submitDisabled={loadingData || estadoOpciones !== "listas"}
-      bodyClassName="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start"
-    >
-      {/* ── Left: what the pole is ── */}
-      <div className="space-y-6 min-w-0">
-        {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
-            <p className="text-sm text-destructive">
-              {estadoOpciones === "denegado"
-                ? "No tiene permiso para consultar los catálogos de postes, así que este formulario no se puede completar."
-                : "No se pudieron cargar los catálogos. Cierre y vuelva a abrir para reintentarlo."}
-            </p>
-          </div>
-        )}
-
-        <Grupo titulo="Identificación">
-          {isEditing && (
-            <p className="text-xs text-muted-foreground">
-              ID {data.id ?? "—"} · Registrado por{" "}
-              {data.usuario ? `${data.usuario.name} ${data.usuario.lastname ?? ""}`.trim() : "—"}
-            </p>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="poste-name">Número <span className="text-destructive">*</span></Label>
-              {loadingData ? <Skeleton className="h-9 w-full" /> : (
-                <Input
-                  id="poste-name"
-                  placeholder="Ej: P-001"
-                  value={data.name}
-                  onChange={(e) => { setData((d) => ({ ...d, name: e.target.value })); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
-                  disabled={soloLectura}
-                  aria-invalid={!!errors.name}
-                />
-              )}
-              {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Fecha en campo</Label>
-              {loadingData ? <Skeleton className="h-9 w-full" /> : (
-                <DatePicker
-                  value={data.date ? new Date(data.date) : undefined}
-                  onSelect={(date) => setData((d) => ({ ...d, date: date ?? new Date() }))}
-                />
-              )}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Propietario <span className="text-destructive">*</span></Label>
-              {loadingData ? <Skeleton className="h-9 w-full" /> : (
-                <Combobox
-                  placeholder="Seleccionar..."
-                  options={listPropietario.map((p) => ({ value: String(p.id), label: p.name ?? "" }))}
-                  value={data.id_propietario ? String(data.id_propietario) : ""}
-                  onValueChange={(v) => {
-                    // The nested object is cleared rather than replaced, here and
-                    // in the three below. Nothing in this form reads it, and
-                    // `updatePoste` ignores it — `TempPoste.set()` only writes
-                    // real attributes — so it was already write-only. What the
-                    // catalogue now hands back is a projection (`id`, `name`), not
-                    // a `PropietarioInterface`, and leaving the object the pole
-                    // arrived with would ship a stale name beside a new id.
-                    setData((d) => ({ ...d, id_propietario: Number(v), propietario: null }));
-                    if (errors.propietario) setErrors(p => ({ ...p, propietario: "" }));
-                  }}
-                />
-              )}
-              {errors.propietario && <p className="text-xs text-destructive mt-1">{errors.propietario}</p>}
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>Material <span className="text-destructive">*</span></Label>
-              {loadingData ? <Skeleton className="h-9 w-full" /> : (
-                <Combobox
-                  placeholder="Seleccionar..."
-                  options={listMaterial.map((m) => ({ value: String(m.id), label: m.name ?? "" }))}
-                  value={data.id_material ? String(data.id_material) : ""}
-                  onValueChange={(v) => {
-                    setData((d) => ({ ...d, id_material: Number(v), material: null }));
-                    if (errors.material) setErrors(p => ({ ...p, material: "" }));
-                  }}
-                />
-              )}
-              {errors.material && <p className="text-xs text-destructive mt-1">{errors.material}</p>}
-            </div>
-          </div>
-        </Grupo>
-
-        <Grupo titulo="Tramo">
-          {/* Read as a stretch — from, arrow, to — where it was two dropdowns
-              side by side that happened to say "Inicio" and "Fin". */}
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2">
-            {loadingData ? (
-              <><Skeleton className="h-9 w-full" /><span /><Skeleton className="h-9 w-full" /></>
-            ) : (
-              <>
-                <Combobox
-                  placeholder="Inicio"
-                  options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
-                  value={data.id_ciudadA ? String(data.id_ciudadA) : ""}
-                  onValueChange={(v) => {
-                    setData((d) => ({ ...d, id_ciudadA: Number(v), ciudadA: null }));
-                    if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
-                  }}
-                />
-                <ArrowRightIcon className="h-4 w-4 text-muted-foreground" aria-hidden />
-                <Combobox
-                  placeholder="Fin"
-                  options={listCiudad.map((c) => ({ value: String(c.id), label: c.name ?? "" }))}
-                  value={data.id_ciudadB ? String(data.id_ciudadB) : ""}
-                  onValueChange={(v) => {
-                    setData((d) => ({ ...d, id_ciudadB: Number(v), ciudadB: null }));
-                    if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
-                  }}
-                />
-              </>
-            )}
-          </div>
-          {errors.tramo && <p className="text-xs text-destructive">{errors.tramo}</p>}
-        </Grupo>
-
-        <Grupo
-          titulo="Ferretería de sujeción"
-          extra={adssSelected.length > 0
-            ? `${adssSelected.length} ${adssSelected.length === 1 ? "elegida" : "elegidas"}`
-            : undefined}
-        >
-          {loadingData ? (
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}
-            </div>
-          ) : listAdss.length === 0 ? (
-            // "Sin ADSS registradas" is a claim about the database, and until
-            // now it was printed whenever the request failed as well — the
-            // screen stating as fact something it had no answer for.
-            <p className="text-sm text-muted-foreground">
-              {estadoOpciones === "listas" ? "Sin ADSS registradas" : "Lista no disponible"}
-            </p>
-          ) : (
-            // Toggles, still announced as checkboxes: what is on is filled and
-            // ticked, so the answer reads at a glance where a column of boxes
-            // had to be scanned one by one.
-            <div className="flex flex-wrap gap-2">
-              {listAdss.map((adss) => {
-                const marcada = adss.id ? adssSelected.includes(adss.id) : false;
-                return (
-                  <button
-                    key={adss.id}
-                    type="button"
-                    role="checkbox"
-                    aria-checked={marcada}
-                    disabled={soloLectura}
-                    onClick={() => { if (adss.id) toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
-                    className={cn(
-                      "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
-                      "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60",
-                      marcada
-                        ? "border-transparent bg-primary/15 font-medium text-foreground"
-                        : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
-                    )}
-                  >
-                    {marcada && <CheckIcon className="h-3.5 w-3.5 text-primary" />}
-                    {adss.name}
-                  </button>
-                );
-              })}
+    <>
+      <FormDialog
+        open={open}
+        onClose={handleClose}
+        size="wide"
+        title={isEditing ? `Editar poste ${data.name}`.trim() : "Nuevo poste"}
+        description={
+          soloLectura
+            ? "Solo lectura: tu rol puede ver los postes, no editarlos."
+            : nombreTramo
+              ? `Tramo ${nombreTramo}`
+              : "Completa los datos para registrar un poste en la red."
+        }
+        dirty={!soloLectura && cambiado}
+        missing={faltan}
+        saving={saving}
+        submitLabel={isEditing ? "Guardar cambios" : "Crear poste"}
+        onSubmit={soloLectura ? undefined : () => void handleGuardar()}
+        submitDisabled={loadingData || estadoOpciones !== "listas"}
+        bodyClassName="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] items-start"
+      >
+        {/* ── Left: what the pole is ── */}
+        <div className="space-y-6 min-w-0">
+          {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2">
+              <p className="text-sm text-destructive">
+                {estadoOpciones === "denegado"
+                  ? "No tiene permiso para consultar los catálogos de postes, así que este formulario no se puede completar."
+                  : "No se pudieron cargar los catálogos. Cierre y vuelva a abrir para reintentarlo."}
+              </p>
             </div>
           )}
-          {errors.adss && <p className="text-xs text-destructive">{errors.adss}</p>}
-        </Grupo>
 
-        <Grupo titulo="Foto" extra={isEditing ? undefined : "obligatoria"}>
-          <ImageDropzone
-            file={imageFile}
-            onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
-            existingUrl={imageUrl(data.image) ?? undefined}
-            error={errors.image}
-            readOnly={soloLectura}
-          />
-        </Grupo>
-      </div>
-
-      {/* ── Right: where it is. Beside the fields from `lg`, so the map is in
-             view the whole time; under them on anything narrower. ── */}
-      <div className="min-w-0 lg:sticky lg:top-0">
-        <Grupo titulo="Ubicación">
-          {/* Enter in the place search looks a place up; it does not save the form. */}
-          <div data-no-submit className="relative h-72 lg:h-[26rem] rounded-lg overflow-hidden border border-border isolate">
-            <BaseMap
-              // A stored pair that is not a place opens on the example, like a
-              // pole with none: this form is where such a pole gets corrected,
-              // so it has to open.
-              center={hasCoords(data) ? { lat: data.lat, lng: data.lng } : { lat: latExample, lng: lngExample }}
-              zoom={13}
-              style={{ height: "100%" }}
-              onMapClick={!soloLectura ? (p) => {
-                setData((d) => ({ ...d, lat: p.lat, lng: p.lng }));
-                if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
-              } : undefined}
-            >
-              <MapSearch />
-              {isEditing && (
-                <FitView
-                  coords={allCoords}
-                  fit={allCoords.length >= 2}
-                  center={{ lat: poste?.lat ?? 0, lng: poste?.lng ?? 0 }}
-                  zoom={13}
-                />
-              )}
-
-              {isEditing && routePath.length >= 2 && (
-                <MapLine id="poste-route" positions={routePath.map(fromLatLngTuple)} />
-              )}
-              {isEditing && ciudadA?.lat && ciudadA?.lng && (
-                <MapPoint
-                  center={{ lat: ciudadA.lat, lng: ciudadA.lng }}
-                  radius={MAP_RADIUS.endpoint}
-                  strokeColor={MAP_DOT.endpoint}
-                  fillColor={MAP_DOT.endpoint}
-                  fillOpacity={1}
-                  strokeWidth={0}
-                />
-              )}
-              {isEditing && ciudadB?.lat && ciudadB?.lng && (
-                <MapPoint
-                  center={{ lat: ciudadB.lat, lng: ciudadB.lng }}
-                  radius={MAP_RADIUS.endpoint}
-                  strokeColor={MAP_DOT.endpoint}
-                  fillColor={MAP_DOT.endpoint}
-                  fillOpacity={1}
-                  strokeWidth={0}
-                />
-              )}
-              {isEditing && tramoPostes
-                .filter((p) => p.id !== poste?.id && hasCoords(p))
-                .map((p) => (
-                  <MapPoint
-                    key={p.id as number}
-                    center={{ lat: p.lat, lng: p.lng }}
-                    radius={MAP_RADIUS.secondary}
-                    strokeColor={MAP_DOT.pole}
-                    fillColor={MAP_DOT.poleFill}
-                    fillOpacity={1}
-                    strokeWidth={1.5}
-                  />
-                ))}
-              {hasCoords(data) && (
-                <SonarMarker
-                  center={[data.lat, data.lng]}
-                  fillColor={MAP_DOT.subject}
-                  strokeColor="#ffffff"
-                  rgb={MAP_DOT.subjectRgb}
-                  dotRadius={MAP_RADIUS.main}
-                  weight={1.5}
-                  popupMinWidth={160}
-                >
-                  {isEditing && <>Poste {data.name}</>}
-                </SonarMarker>
-              )}
-            </BaseMap>
-          </div>
-
-          <CoordInputs
-            id="poste"
-            lat={data.lat}
-            lng={data.lng}
-            disabled={soloLectura}
-            invalid={!!errors.location}
-            onChange={(lat, lng) => {
-              setData((d) => ({ ...d, lat, lng }));
-              if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
-            }}
-          />
-          {errors.location
-            ? <p className="text-xs text-destructive">{errors.location}</p>
-            : !soloLectura && (
+          <Grupo titulo="Identificación">
+            {isEditing && (
               <p className="text-xs text-muted-foreground">
-                Pulsa en el mapa para mover el poste, o escribe las coordenadas.
+                ID {data.id ?? "—"} · Registrado por{" "}
+                {data.usuario ? `${data.usuario.name} ${data.usuario.lastname ?? ""}`.trim() : "—"}
               </p>
             )}
-        </Grupo>
-      </div>
-    </FormDialog>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="poste-name">Número <span className="text-destructive">*</span></Label>
+                {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                  <Input
+                    id="poste-name"
+                    placeholder="Ej: P-001"
+                    value={data.name}
+                    onChange={(e) => { setData((d) => ({ ...d, name: e.target.value })); if (errors.name) setErrors(p => ({ ...p, name: "" })); }}
+                    disabled={soloLectura}
+                    aria-invalid={!!errors.name}
+                  />
+                )}
+                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Fecha en campo</Label>
+                {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                  <DatePicker
+                    value={data.date ? new Date(data.date) : undefined}
+                    onSelect={(date) => setData((d) => ({ ...d, date: date ?? new Date() }))}
+                  />
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Propietario <span className="text-destructive">*</span></Label>
+                {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                  <Combobox
+                    placeholder="Seleccionar..."
+                    options={listPropietario.map((p) => ({ value: String(p.id), label: p.name ?? "" }))}
+                    value={data.id_propietario ? String(data.id_propietario) : ""}
+                    onValueChange={(v) => {
+                      // The nested object is cleared rather than replaced, here and
+                      // in the two below. Nothing in this form reads it, and
+                      // `updatePoste` ignores it — `TempPoste.set()` only writes
+                      // real attributes — so it was already write-only. What the
+                      // catalogue now hands back is a projection (`id`, `name`), not
+                      // a `PropietarioInterface`, and leaving the object the pole
+                      // arrived with would ship a stale name beside a new id.
+                      setData((d) => ({ ...d, id_propietario: Number(v), propietario: null }));
+                      if (errors.propietario) setErrors(p => ({ ...p, propietario: "" }));
+                    }}
+                  />
+                )}
+                {errors.propietario && <p className="text-xs text-destructive mt-1">{errors.propietario}</p>}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Material <span className="text-destructive">*</span></Label>
+                {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                  <Combobox
+                    placeholder="Seleccionar..."
+                    options={listMaterial.map((m) => ({ value: String(m.id), label: m.name ?? "" }))}
+                    value={data.id_material ? String(data.id_material) : ""}
+                    onValueChange={(v) => {
+                      setData((d) => ({ ...d, id_material: Number(v), material: null }));
+                      if (errors.material) setErrors(p => ({ ...p, material: "" }));
+                    }}
+                  />
+                )}
+                {errors.material && <p className="text-xs text-destructive mt-1">{errors.material}</p>}
+              </div>
+            </div>
+          </Grupo>
+
+          <Grupo titulo="Tramo">
+            <div className="space-y-1.5">
+              <Label>Tramo <span className="text-destructive">*</span></Label>
+              {loadingData ? <Skeleton className="h-9 w-full" /> : (
+                <TramoCombobox
+                  tramos={listTramos}
+                  actual={tramo}
+                  value={data.id_tramo ? data.id_tramo : null}
+                  onChange={(id) => {
+                    // The object is cleared with the id, as for the two above.
+                    setData((d) => ({ ...d, id_tramo: id ?? 0, tramo: null }));
+                    if (errors.tramo) setErrors(p => ({ ...p, tramo: "" }));
+                  }}
+                  onCrear={puedeCrearTramo && !soloLectura && estadoOpciones === "listas" ? () => setCrearTramo(true) : undefined}
+                  disabled={soloLectura}
+                />
+              )}
+              {errors.tramo && <p className="text-xs text-destructive">{errors.tramo}</p>}
+            </div>
+          </Grupo>
+
+          <Grupo
+            titulo="Ferretería de sujeción"
+            extra={adssSelected.length > 0
+              ? `${adssSelected.length} ${adssSelected.length === 1 ? "elegida" : "elegidas"}`
+              : undefined}
+          >
+            {loadingData ? (
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}
+              </div>
+            ) : listAdss.length === 0 ? (
+              // "Sin ADSS registradas" is a claim about the database, and until
+              // now it was printed whenever the request failed as well — the
+              // screen stating as fact something it had no answer for.
+              <p className="text-sm text-muted-foreground">
+                {estadoOpciones === "listas" ? "Sin ADSS registradas" : "Lista no disponible"}
+              </p>
+            ) : (
+              // Toggles, still announced as checkboxes: what is on is filled and
+              // ticked, so the answer reads at a glance where a column of boxes
+              // had to be scanned one by one.
+              <div className="flex flex-wrap gap-2">
+                {listAdss.map((adss) => {
+                  const marcada = adss.id ? adssSelected.includes(adss.id) : false;
+                  return (
+                    <button
+                      key={adss.id}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={marcada}
+                      disabled={soloLectura}
+                      onClick={() => { if (adss.id) toggleAdss(adss.id); if (errors.adss) setErrors(p => ({ ...p, adss: "" })); }}
+                      className={cn(
+                        "inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-sm transition-colors",
+                        "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-60",
+                        marcada
+                          ? "border-transparent bg-primary/15 font-medium text-foreground"
+                          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+                      )}
+                    >
+                      {marcada && <CheckIcon className="h-3.5 w-3.5 text-primary" />}
+                      {adss.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {errors.adss && <p className="text-xs text-destructive">{errors.adss}</p>}
+          </Grupo>
+
+          <Grupo titulo="Foto" extra={isEditing ? undefined : "obligatoria"}>
+            <ImageDropzone
+              file={imageFile}
+              onChange={(f) => { setImageFile(f); if (errors.image) setErrors(p => ({ ...p, image: "" })); }}
+              existingUrl={imageUrl(data.image) ?? undefined}
+              error={errors.image}
+              readOnly={soloLectura}
+            />
+          </Grupo>
+        </div>
+
+        {/* ── Right: where it is. Beside the fields from `lg`, so the map is in
+               view the whole time; under them on anything narrower. ── */}
+        <div className="min-w-0 lg:sticky lg:top-0">
+          <Grupo titulo="Ubicación">
+            {/* Enter in the place search looks a place up; it does not save the form. */}
+            <div data-no-submit className="relative h-72 lg:h-[26rem] rounded-lg overflow-hidden border border-border isolate">
+              <BaseMap
+                // A stored pair that is not a place opens on the example, like a
+                // pole with none: this form is where such a pole gets corrected,
+                // so it has to open.
+                center={hasCoords(data) ? { lat: data.lat, lng: data.lng } : { lat: latExample, lng: lngExample }}
+                zoom={13}
+                style={{ height: "100%" }}
+                onMapClick={!soloLectura ? (p) => {
+                  setData((d) => ({ ...d, lat: p.lat, lng: p.lng }));
+                  if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+                } : undefined}
+              >
+                <MapSearch />
+                {isEditing && (
+                  <FitView
+                    coords={allCoords}
+                    fit={allCoords.length >= 2}
+                    center={{ lat: poste?.lat ?? 0, lng: poste?.lng ?? 0 }}
+                    zoom={13}
+                  />
+                )}
+
+                {isEditing && routePath.length >= 2 && (
+                  <MapLine id="poste-route" positions={routePath.map(fromLatLngTuple)} />
+                )}
+                {isEditing && extremoUno && (
+                  <MapPoint
+                    center={extremoUno}
+                    radius={MAP_RADIUS.endpoint}
+                    strokeColor={MAP_DOT.endpoint}
+                    fillColor={MAP_DOT.endpoint}
+                    fillOpacity={1}
+                    strokeWidth={0}
+                  />
+                )}
+                {isEditing && extremoDos && (
+                  <MapPoint
+                    center={extremoDos}
+                    radius={MAP_RADIUS.endpoint}
+                    strokeColor={MAP_DOT.endpoint}
+                    fillColor={MAP_DOT.endpoint}
+                    fillOpacity={1}
+                    strokeWidth={0}
+                  />
+                )}
+                {isEditing && tramoPostes
+                  .filter((p) => p.id !== poste?.id && hasCoords(p))
+                  .map((p) => (
+                    <MapPoint
+                      key={p.id as number}
+                      center={{ lat: p.lat, lng: p.lng }}
+                      radius={MAP_RADIUS.secondary}
+                      strokeColor={MAP_DOT.pole}
+                      fillColor={MAP_DOT.poleFill}
+                      fillOpacity={1}
+                      strokeWidth={1.5}
+                    />
+                  ))}
+                {hasCoords(data) && (
+                  <SonarMarker
+                    center={[data.lat, data.lng]}
+                    fillColor={MAP_DOT.subject}
+                    strokeColor="#ffffff"
+                    rgb={MAP_DOT.subjectRgb}
+                    dotRadius={MAP_RADIUS.main}
+                    weight={1.5}
+                    popupMinWidth={160}
+                  >
+                    {isEditing && <>Poste {data.name}</>}
+                  </SonarMarker>
+                )}
+              </BaseMap>
+            </div>
+
+            <CoordInputs
+              id="poste"
+              lat={data.lat}
+              lng={data.lng}
+              disabled={soloLectura}
+              invalid={!!errors.location}
+              onChange={(lat, lng) => {
+                setData((d) => ({ ...d, lat, lng }));
+                if (errors.location) setErrors((prev) => ({ ...prev, location: "" }));
+              }}
+            />
+            {errors.location
+              ? <p className="text-xs text-destructive">{errors.location}</p>
+              : !soloLectura && (
+                <p className="text-xs text-muted-foreground">
+                  Pulsa en el mapa para mover el poste, o escribe las coordenadas.
+                </p>
+              )}
+          </Grupo>
+        </div>
+      </FormDialog>
+
+      {/* Beside the form and not inside it: Enter in the tramo dialog must not reach the form's own submit. */}
+      {puedeCrearTramo && (
+        <TramoSheet
+          open={crearTramo}
+          setOpen={setCrearTramo}
+          ciudades={listCiudad}
+          departamentos={listDepartamentos}
+          onSuccess={(t) => {
+            // Already in the list when the pair existed: it is chosen, not added twice.
+            setListTramos((l) => (l.some((x) => x.id === t.id) ? l : [...l, t]));
+            setData((d) => ({ ...d, id_tramo: t.id, tramo: null }));
+            if (errors.tramo) setErrors((p) => ({ ...p, tramo: "" }));
+          }}
+        />
+      )}
+    </>
   );
 }

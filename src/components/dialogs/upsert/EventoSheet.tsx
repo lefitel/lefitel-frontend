@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
+import { nombreDelTramo } from "../../../lib/tramo";
 import { createEvento, editEvento, searchEvento } from "../../../api/Evento.api";
 import { todosLosPostes } from "../../../api/Poste.api";
 import { mensajeDeError } from "../../../api/descarga";
@@ -27,7 +28,7 @@ import { DatePicker } from "../../ui/date-picker";
 import FormDialog from "../FormDialog";
 import ObsPicker from "../ObsPicker";
 import { Switch } from "../../ui/switch";
-import { CalendarIcon, ChevronRightIcon, ExternalLinkIcon } from "lucide-react";
+import { CalendarIcon, ExternalLinkIcon } from "lucide-react";
 
 /** One titled block of the form: what it is about, then its fields. */
 function Grupo({ titulo, extra, children }: { titulo: string; extra?: React.ReactNode; children: React.ReactNode }) {
@@ -265,9 +266,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
 
   const posteElegido = listPoste.find((p) => p.id === selectedPosteId);
   const poste = isEditing ? evento?.poste : posteElegido;
-  const tramo = poste?.ciudadA?.name && poste?.ciudadB?.name
-    ? `${poste.ciudadA.name} — ${poste.ciudadB.name}`
-    : null;
+  const tramo = nombreDelTramo(poste) || null;
 
   /** Whether closing now would lose something typed. The frame asks before it does. */
   const cambiado = isEditing
@@ -439,7 +438,7 @@ export default function EventoSheet({ eventoId, posteId, open, setOpen, onSucces
                 </div>
                 {posteElegido && (
                   <p className="text-xs text-muted-foreground">
-                    {posteElegido.ciudadA?.name ?? "—"} <ChevronRightIcon className="inline h-3 w-3" /> {posteElegido.ciudadB?.name ?? "—"}
+                    {nombreDelTramo(posteElegido) || "—"}
                     {posteElegido.propietario?.name && <> · {posteElegido.propietario.name}</>}
                   </p>
                 )}

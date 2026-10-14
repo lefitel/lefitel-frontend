@@ -29,6 +29,7 @@ import { RecoveryCodesRevealDialog } from "./RecoveryCodesRevealDialog";
 import { SeccionFactor } from "./SeccionFactor";
 import type { FilaDePerfil } from "./filaDePerfil";
 import { enWindows } from "./portapapeles";
+import { touchTarget } from "@/components/ui/touch-target";
 
 type FaseAlta = "reposo" | "qr";
 
@@ -299,7 +300,7 @@ const TotpSection = ({
               <code className="text-sm font-mono bg-background border rounded px-2 py-1 break-all">
                 {secreto}
               </code>
-              <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={copiarSecreto} aria-label="Copiar código">
+              <Button variant="ghost" size="icon" className={`h-7 w-7 shrink-0 ${touchTarget}`} onClick={copiarSecreto} aria-label="Copiar código">
                 <CopyIcon className="h-3.5 w-3.5" />
               </Button>
             </div>

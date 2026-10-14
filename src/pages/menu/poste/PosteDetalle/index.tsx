@@ -2,15 +2,17 @@ import { hasCoords, type LatLng } from "../../../../components/map/mapGeo";
 import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTrailLabel } from "../../../../components/TrailLabel";
 import { SesionContext } from "../../../../context/SesionContext";
 import { can } from "../../../../lib/permissions";
-import { getPosteByTramo, searchPoste } from "../../../../api/Poste.api";
+import { getPostesDelTramo, searchPoste } from "../../../../api/Poste.api";
 import { CiudadInterface, PosteInterface } from "../../../../interfaces/interfaces";
 import PosteSheet from "../../../../components/dialogs/upsert/PosteSheet";
 import CiudadSheet from "../../../../components/dialogs/upsert/CiudadSheet";
 import PermissionGuard from "../../../../components/PermissionGuard";
 import { fetchOrsRoute } from "../../../../lib/orsRoute";
 import { ordenarTramo } from "../../../../lib/tramoOrden";
+import { extremosDibujables } from "../../../../lib/tramo";
 import { usePosteDetalleData } from "./usePosteDetalleData";
 import EventoSheet from "../../../../components/dialogs/upsert/EventoSheet";
 import AddRevisionSheet from "../../../../components/dialogs/AddRevisionSheet";
@@ -24,7 +26,6 @@ import { VISTA_PANEL_ID, vistaTabId, type VistaPoste } from "./posteVistas";
 import PosteDetalleEventosAbiertos, { EventoActionHandlers } from "./PosteDetalleEventosAbiertos";
 import { computeMetrics } from "./posteHealth";
 import { Card } from "../../../../components/ui/card";
-import CollapsibleSection from "../../../../components/CollapsibleSection";
 
 export default function PosteDetallePage() {
   const { id } = useParams<{ id: string }>();
@@ -34,6 +35,8 @@ export default function PosteDetallePage() {
   // does not ask for them and does not draw the two blocks made of them.
   const verEventos = can(sesion.usuario.id_rol, "eventos", "ver");
   const d = usePosteDetalleData(Number(id), { verEventos });
+  // The trail in the app's header knows this pole by its number; this is its name.
+  useTrailLabel(d.poste?.name ? `Poste ${d.poste.name}` : null);
 
   const [routePath, setRoutePath] = useState<[number, number][]>([]);
   const [tramoPosotes, setTramoPosotes] = useState<PosteInterface[]>([]);
@@ -46,25 +49,26 @@ export default function PosteDetallePage() {
   // cleared and fetched again on every pole — its poles, and the road route
   // from the routing service — so stepping to a neighbour wiped the line and
   // drew the very same one a moment later.
-  const tramoKey = d.poste ? `${d.poste.id_ciudadA}-${d.poste.id_ciudadB}` : null;
+  const tramoKey = d.poste?.id_tramo ?? null;
 
   useEffect(() => {
     setRoutePath([]);
     setTramoPosotes([]);
     setExtremos([]);
 
-    if (!d.poste) return;
-    const a = d.poste.ciudadA;
-    const b = d.poste.ciudadB;
-    if (!a?.lat || !a?.lng || !b?.lat || !b?.lng) return;
+    const idTramo = d.poste?.id_tramo;
+    if (!idTramo) return;
+    // An end with no position stays missing in its own slot: the line is then
+    // ordered and drawn from the other one alone.
+    const [uno, dos] = extremosDibujables(d.poste?.tramo);
 
     // A stretch that answers after the person has moved to another must not
     // draw itself over the one now on screen.
     let vigente = true;
-    getPosteByTramo(d.poste.id_ciudadA, d.poste.id_ciudadB)
+    getPostesDelTramo(idTramo)
       .then((postes) => {
         if (!vigente) return;
-        const tramo = ordenarTramo(postes, a, b);
+        const tramo = ordenarTramo(postes, uno, dos);
         setTramoPosotes(tramo.postes);
         setExtremos([tramo.inicio, tramo.fin].filter((c) => c !== null));
         return fetchOrsRoute(tramo.waypoints)
@@ -73,12 +77,12 @@ export default function PosteDetallePage() {
       })
       .catch(() => { if (vigente) toast.warning("No se pudo calcular la ruta del tramo."); });
     return () => { vigente = false; };
-  // Keyed by the pair of cities: the pole itself is read only for them.
+  // Keyed by the tramo: the pole itself is read only for its ends.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tramoKey]);
 
   const located = hasCoords(d.poste);
-  // The cities the line reaches, not the pole's two cities as stored: one kept
+  // The cities the line reaches, not the tramo's two cities as stored: one kept
   // at a placeholder position would stretch "Ver tramo" across half the globe.
   const boundsCoords: [number, number][] = [
     ...extremos.map((c): [number, number] => [c.lat, c.lng]),
@@ -128,49 +132,64 @@ export default function PosteDetallePage() {
         />
       </div>
 
-      {/* One card for the whole panel, and inside it a card for each thing
-          about the pole. `block` rather than the card's own column: a flex
-          column of a fixed height would squeeze them instead of letting the
-          panel scroll. Its ground is tinted so the cards inside read as lifted.
+      {/* One card for the whole panel, and nothing lifted inside it — its parts
+          were cards of their own, folding ones, in a panel with room to spare.
+          `block` rather than the card's own column: a flex column of a fixed
+          height would squeeze them instead of letting the panel scroll.
           What it holds is chosen on the rail beside it; below `lg` the rail
           comes first, as a row, because it is what says what follows. */}
       <Card
         id={VISTA_PANEL_ID}
         role="tabpanel"
         aria-labelledby={vistaTabId(vista)}
-        className="order-3 lg:order-2 shadow-sm border-muted/60 bg-muted/40 p-2 block space-y-2 min-h-0 lg:overflow-y-auto"
+        className="order-3 lg:order-2 shadow-sm border-muted/60 py-0 gap-0 block min-h-0 lg:overflow-y-auto"
       >
         {vista === "resumen" ? (
           <>
-        <Card className="py-0 gap-0 shadow-sm border-border/60 overflow-hidden">
-        <PosteDetalleFoto loading={d.loading} poste={d.poste} />
-        <PosteDetalleHeader
-          loading={d.loading}
-          poste={d.poste}
-          status={metrics?.status ?? null}
-          canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
-          canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
-          onNuevoEvento={() => d.setAddEventoOpen(true)}
-          onEditarPoste={() => d.setOpenEditPoste(true)}
-          onRefrescar={d.load}
-        />
-        </Card>
-
-        {verEventos && (
-          <CollapsibleSection title="Eventos abiertos" count={metrics?.pendientes} defaultOpen>
-            <PosteDetalleEventosAbiertos
+            <PosteDetalleFoto loading={d.loading} poste={d.poste} />
+            <PosteDetalleHeader
               loading={d.loading}
-              eventos={d.eventos}
-              canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
-              actions={eventoActions}
+              poste={d.poste}
+              status={metrics?.status ?? null}
+              canCreateEvento={can(sesion.usuario.id_rol, "eventos", "crear")}
+              canEditPoste={can(sesion.usuario.id_rol, "postes", "editar")}
+              onNuevoEvento={() => d.setAddEventoOpen(true)}
+              onEditarPoste={() => d.setOpenEditPoste(true)}
             />
-          </CollapsibleSection>
-        )}
 
-        <CollapsibleSection title="Ficha" defaultOpen>
-          <PosteDetalleInfo loading={d.loading} poste={d.poste} metrics={metrics} />
-        </CollapsibleSection>
+            {/* What the pole is, straight under its name and with no title of
+                its own. It is of a fixed length, so it goes first: the open
+                incidents are a list that grows, and nothing folds any more. */}
+            <section aria-label="Ficha" className="px-3 pb-3">
+              <PosteDetalleInfo
+                loading={d.loading}
+                poste={d.poste}
+                metrics={metrics}
+                canVerTramos={can(sesion.usuario.id_rol, "tramos", "ver")}
+              />
+            </section>
 
+            {verEventos && (
+              <>
+                {/* Inset, not from edge to edge: a rule across the whole card
+                    cut it in two. */}
+                <div role="separator" className="mx-3 h-px rounded-full bg-border/60" />
+                <section className="p-3">
+                  <h2 className="text-sm font-semibold mb-2">
+                    Eventos abiertos
+                    {!!metrics?.pendientes && (
+                      <span className="text-muted-foreground font-normal tabular-nums"> · {metrics.pendientes}</span>
+                    )}
+                  </h2>
+                  <PosteDetalleEventosAbiertos
+                    loading={d.loading}
+                    eventos={d.eventos}
+                    canEditEventos={can(sesion.usuario.id_rol, "eventos", "editar")}
+                    actions={eventoActions}
+                  />
+                </section>
+              </>
+            )}
           </>
         ) : (
           <PosteDetalleHistorial

@@ -2,7 +2,7 @@ import { useEffect, useMemo } from "react";
 import { animate, motion, useMotionValue, useTransform, type MotionValue } from "motion/react";
 import { ArrowRightIcon, LayersIcon } from "lucide-react";
 import { Counter, Cursor, Panel } from "../chrome";
-import { EXPO } from "../tokens";
+import { EXPO, asText } from "../tokens";
 import { useTargetBox } from "../targets";
 import { CARD_SCRIPT, FILTER_SCRIPT, PLAN_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
@@ -48,17 +48,18 @@ const seeded = (seed: number) => {
  * any panel shape.
  */
 const STYLE = {
-  ground: "hsl(220 14% 11%)",
-  fields: "hsl(30 10% 16%)",
-  green: "hsl(126 26% 21%)",
-  residential: "hsl(220 12% 15%)",
-  water: "hsl(203 48% 21%)",
-  building: "hsl(220 10% 18%)",
-  buildingLine: "hsl(220 10% 26%)",
-  minor: "hsl(220 8% 25%)",
-  major: "hsl(220 9% 36%)",
-  label: "hsl(220 16% 92%)",
-  halo: "hsl(220 16% 8% / 0.85)",
+  ground: "var(--map-ground)",
+  fields: "var(--map-fields)",
+  green: "var(--map-green)",
+  residential: "var(--map-residential)",
+  water: "var(--map-water)",
+  building: "var(--map-building)",
+  buildingLine: "var(--map-building-line)",
+  minor: "var(--map-minor)",
+  major: "var(--map-road)",
+  casing: "var(--map-casing)",
+  label: "var(--map-label)",
+  halo: "var(--map-halo)",
 };
 
 function Streets() {
@@ -77,6 +78,11 @@ function Streets() {
       />
       <g fill="none" strokeLinecap="round" strokeLinejoin="round">
         <path d={LAYERS.paths} stroke={STYLE.minor} strokeWidth="0.7" strokeDasharray="1.6 1.4" />
+        {/* A casing under the roads: the light style's white streets on
+            beige need an edge to be seen, and in the dark style the casing is
+            the ground colour, so it disappears. */}
+        <path d={LAYERS.minor} stroke={STYLE.casing} strokeWidth="3.6" />
+        <path d={LAYERS.major} stroke={STYLE.casing} strokeWidth="5.4" />
         <path d={LAYERS.minor} stroke={STYLE.minor} strokeWidth="2.6" />
         <path d={LAYERS.major} stroke={STYLE.major} strokeWidth="4.2" />
       </g>
@@ -183,7 +189,7 @@ const FARTHEST = Math.max(...POLES.map((p) => Math.hypot(p.x - ORIGIN.x, p.y - O
 function MapBadge({ className = "", children }: { className?: string; children: React.ReactNode }) {
   return (
     <div
-      className={`absolute flex items-center gap-1.5 rounded-md border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.9)] px-2 py-1 text-[9.5px] text-[var(--scr-faint)] tabular-nums ${className}`}
+      className={`absolute flex items-center gap-1.5 rounded-md border border-[var(--scr-hair)] bg-[color-mix(in_oklch,var(--scr-panel)_90%,transparent)] px-2 py-1 text-[9.5px] text-[var(--scr-faint)] tabular-nums ${className}`}
     >
       {children}
     </div>
@@ -245,7 +251,7 @@ export function PlanPart() {
           </svg>
         </motion.div>
 
-        <div className="absolute top-3 left-3 rounded-lg border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.92)] px-3 py-2">
+        <div className="absolute top-3 left-3 rounded-lg border border-[var(--scr-hair)] bg-[color-mix(in_oklch,var(--scr-panel)_92%,transparent)] px-3 py-2">
           {LEGEND.map((row) => (
             <div key={row.s} className="flex items-center gap-2 py-[3px] text-[10.5px]">
               <span
@@ -384,7 +390,7 @@ export function CardPart() {
             <span
               className="mt-2 inline-block rounded-md px-2 py-1 text-[9.5px] font-semibold whitespace-nowrap"
               style={{
-                color: EVENT.obs.color,
+                color: asText(EVENT.obs.color),
                 background: `color-mix(in oklch, ${EVENT.obs.color} 14%, transparent)`,
                 border: `1px solid color-mix(in oklch, ${EVENT.obs.color} 30%, transparent)`,
               }}

@@ -17,6 +17,7 @@ import {
 } from "../../../components/ui/table";
 import { columnHeader, columnKind } from "../../../lib/reportConfig";
 import PageHelp from "./PageHelp";
+import { HeaderSlot } from "../../../components/HeaderSlot";
 
 /**
  * Bar widths that look like text without looking like a pattern.
@@ -162,8 +163,8 @@ export const ResultSkeleton = ({ columns, root }: ResultSkeletonProps) => {
  * hiding text that is already in hand.
  */
 const CardSkeleton = ({
-  title, lines, tabs = false,
-}: { title: string; lines: number; tabs?: boolean }) => (
+  title, lines, tabs = false, controls = false,
+}: { title: string; lines: number; tabs?: boolean; controls?: boolean }) => (
   // `size="sm"` because the four real panels are that size, and the size is
   // what sets the padding and the gap under the heading. Without it the
   // skeleton stood four pixels wider on every side than the card that replaced
@@ -180,6 +181,15 @@ const CardSkeleton = ({
           leaving it out guesses wrong far more often than drawing it does.
         */}
         {tabs && <Skeleton className="h-7 w-36 rounded-lg" />}
+        {/* The level of detail and the button that adds a column, in their
+            shapes: the first is a pill on the real page, so its bar is round —
+            a square bar turning into a pill is a shape change on arrival. */}
+        {controls && (
+          <div className="flex items-center gap-2" aria-hidden="true">
+            <Skeleton className="h-8 w-44 rounded-full" />
+            <Skeleton className="h-8 w-36 rounded-md" />
+          </div>
+        )}
       </div>
     </CardHeader>
     <CardContent>
@@ -200,12 +210,12 @@ const CardSkeleton = ({
  * that is coming: one header, two panels in a band, and the table under them.
  * Nothing here moves once the catalog lands except the parts that were unknown.
  *
- * The heading and the introduction are not skeletons for the same reason the
- * card titles are not — they are written into this page, not fetched.
+ * The help button is not a skeleton for the same reason the card titles are
+ * not — it is written into this page, not fetched.
  */
 export const PageSkeleton = () => (
   <div
-    className="@container/card w-full space-y-page p-page"
+    className="@container/card flex w-full flex-1 flex-col space-y-page p-page"
     role="status"
     aria-live="polite"
     aria-busy="true"
@@ -213,40 +223,23 @@ export const PageSkeleton = () => (
     {/* Only for anyone listening rather than looking; the bars say it visually. */}
     <span className="sr-only">Cargando los campos disponibles…</span>
 
-    {/* One header, the same one the page has: heading and a line under it on
-        the left, the page's own controls on the right. Both labels there are
-        fixed strings that never waited on the catalog, so a grey bar over
-        either would hide text already in hand — only what the catalog fills is
-        drawn as a bar. */}
-    <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-      <div className="min-w-0">
-        {/* Real, like the heading beside it: the help panel is written into the
-            page and needs no catalog, so hiding it until one arrives would put
-            a control on screen a moment after the reader started reading. */}
-        <div className="flex items-center gap-1.5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Generador de reportes</h1>
-          <PageHelp />
-        </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Arme la tabla que necesite, guárdela y expórtela.
-        </p>
-      </div>
-
-      {/* Both controls are pills on the real page, so both bars are round:
-          a square bar turning into a pill is a shape change on arrival, which
-          is exactly what this component exists to avoid. */}
-      <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Nivel de detalle</span>
-          <Skeleton className="h-8 w-52 rounded-full" aria-hidden="true" />
-        </div>
-        <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Reporte</span>
-          <Skeleton className="h-8 w-56 rounded-full" aria-hidden="true" />
-        </div>
-        <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
-      </div>
-    </div>
+    {/* The same row the page has: its own controls, under no title. Both
+        labels there are fixed strings that never waited on the catalog, so a
+        grey bar over either would hide text already in hand — only what the
+        catalog fills is drawn as a bar. */}
+    <h1 className="sr-only">Generador de reportes</h1>
+    {/* Real, and already in the app's header: the help panel is written into
+        the page and needs no catalog, so hiding it until one arrives would put
+        a control on screen a moment after the reader started reading. */}
+    <HeaderSlot>
+      {/* Where the report picker and its two buttons will be, in their
+          shapes: a pill and two boxes. Bars and not the real things because
+          all three wait on the catalog. */}
+      <Skeleton className="h-8 w-56 rounded-full" aria-hidden="true" />
+      <Skeleton className="h-8 w-24 rounded-md" aria-hidden="true" />
+      <Skeleton className="h-8 w-20 rounded-md" aria-hidden="true" />
+      <PageHelp />
+    </HeaderSlot>
 
     {/* The same shape the page will have, down to the containment: two panels
         above a full-width table, `min-w-0` on each so a card wider than its
@@ -254,12 +247,13 @@ export const PageSkeleton = () => (
         because the skeleton has to sit in the same box the page will, or the
         layout jumps the moment the catalog lands. */}
     <div className="grid items-start gap-4 md:grid-cols-2">
-      <CardSkeleton title="Columnas" lines={3} />
+      <CardSkeleton title="Columnas" lines={3} controls />
       <CardSkeleton title="Filtros" lines={2} />
     </div>
 
-    <div>
-      <Card className="border-muted/60 shadow-sm">
+    {/* As tall as the real one will be: see the result card on the page. */}
+    <div className="flex flex-1 flex-col">
+      <Card className="flex-1 border-muted/60 shadow-sm">
         <CardHeader className="border-b border-border/40 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <CardTitle className="text-base">Resultado</CardTitle>

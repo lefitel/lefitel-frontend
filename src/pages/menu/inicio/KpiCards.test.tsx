@@ -11,6 +11,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { KpiCards } from "./KpiCards";
 import type { KpiData } from "./types";
 
@@ -127,5 +128,23 @@ describe("the period row of the dashboard", () => {
     for (const label of ["15 días", "Este mes", "3 meses", "Este año", "Todo"]) {
       expect(periods.textContent).toContain(label);
     }
+  });
+});
+
+// The two ⓘ buttons were tooltips, which a finger cannot open. They open on a
+// click, and the explanation is drawn as a popover.
+describe("the explanations of the KPI rows", () => {
+  it.each([
+    ["Información sobre el estado del sistema", /total de postes en el sistema/],
+    ["Información sobre las métricas del período", /unión única de postes creados/],
+  ])("%s opens on a click", async (nombre, frase) => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole("button", { name: nombre }));
+
+    expect(screen.getByText(frase).closest('[data-slot="popover-content"]')).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: nombre }));
+    expect(screen.queryByText(frase)).toBeNull();
   });
 });

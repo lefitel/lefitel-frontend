@@ -46,7 +46,7 @@ interface Props {
  * Field chooser.
  *
  * The catalog holds hundreds of paths across four roots, so search comes first
- * and entries are grouped by where they come from ("Evento › Poste › Ciudad A")
+ * and entries are grouped by where they come from ("Evento › Poste › Tramo")
  * rather than by table. The list is a real listbox: typing and pressing Enter
  * picks the first match, which is how anyone expects a search box to behave.
  *

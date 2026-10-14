@@ -20,7 +20,6 @@ import {
   BORRADOR_VACIO,
   DIAS_DE_LA_SEMANA,
   DIAS_DEL_MES,
-  ESTADO_DE_EJECUCION,
   FRECUENCIAS,
   MAX_DESTINATARIOS,
   borradorDe,
@@ -30,10 +29,14 @@ import {
   pedidaDe,
   problemaDe,
   totalDeDestinatarios,
+  detalleDeEjecucion,
+  entregadosDe,
+  fechaYHora,
   type Borrador,
-  type Tono,
 } from "../../../lib/envios";
 import { cn } from "../../../lib/utils";
+import { Estado } from "../../EstadoDeEjecucion";
+import { AVISO } from "../../tonos";
 import FormDialog from "../FormDialog";
 import { Button } from "../../ui/button";
 import { Checkbox } from "../../ui/checkbox";
@@ -68,36 +71,6 @@ interface Props {
   /** Something was written; the list behind should be read again. */
   onChanged: () => void;
 }
-
-// The theme has no token for "went well" or "look at this": every screen
-// writes these two by hand, and these are the pair most of them use.
-const AVISO = "text-amber-600 dark:text-amber-500";
-const TONO: Record<Tono, string> = {
-  bien: "text-emerald-600 dark:text-emerald-400",
-  aviso: AVISO,
-  mal: "text-destructive",
-  neutro: "text-muted-foreground",
-};
-
-/** A date as the screen writes them: 05/10, 07:00. */
-const fecha = (iso: string): string =>
-  new Intl.DateTimeFormat("es-BO", {
-    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit",
-    hour12: false, timeZone: "America/La_Paz",
-  }).format(new Date(iso));
-
-const peso = (bytes: number | null): string | null =>
-  bytes === null ? null : bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-
-export const Estado = ({ estado }: { estado: Ejecucion["estado"] }) => {
-  const { etiqueta, tono } = ESTADO_DE_EJECUCION[estado] ?? { etiqueta: estado, tono: "neutro" as Tono };
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap", TONO[tono])}>
-      <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
-      {etiqueta}
-    </span>
-  );
-};
 
 export default function EnvioDialog({
   open, programacion, informeInicial = null, puedeEditar, puedeEliminar, onClose, onChanged,
@@ -233,7 +206,7 @@ export default function EnvioDialog({
       size="lg"
       title={existe ? (nombreDelInforme ?? "Envío programado") : "Programar envío"}
       description={existe
-        ? `${cuandoSeEnvia(programacion)}${programacion.proxima_ejecucion ? ` · próximo envío el ${fecha(programacion.proxima_ejecucion)}` : ""}`
+        ? `${cuandoSeEnvia(programacion)}${programacion.proxima_ejecucion ? ` · próximo envío el ${fechaYHora(programacion.proxima_ejecucion)}` : ""}`
         : "Se enviará por correo con el fichero adjunto, en hora de Bolivia."}
       dirty={!soloLectura && dirty}
       missing={soloLectura || tab === "historial" ? [] : faltan(borrador)}
@@ -375,7 +348,7 @@ export default function EnvioDialog({
                   value={filtro}
                   onChange={(e) => setFiltro(e.target.value)}
                   placeholder="Buscar por nombre…"
-                  className="h-8 w-full border-b border-border bg-transparent px-3 text-sm outline-none placeholder:text-muted-foreground"
+                  className="h-8 w-full border-b border-border bg-transparent px-3 text-base outline-none placeholder:text-muted-foreground md:text-sm"
                 />
                 <ul className="max-h-36 overflow-y-auto p-1" aria-label="Usuarios destinatarios">
                   {cuentas === null && <li className="px-2 py-2 text-sm text-muted-foreground">Cargando…</li>}
@@ -497,13 +470,11 @@ export default function EnvioDialog({
                 </thead>
                 <tbody>
                   {historial.map((e) => {
-                    const detalle = e.detalle
-                      ?? (e.estado === "enviado" ? [e.filas !== null ? `${e.filas.toLocaleString("es-BO")} filas` : null, peso(e.bytes)].filter(Boolean).join(" · ") : null)
-                      ?? (e.estado === "vacio" ? "Se envió un aviso" : null);
+                    const detalle = detalleDeEjecucion(e);
                     return (
                       <tr key={e.id} className="border-b last:border-0 align-top">
                         <td className="px-3 py-2 whitespace-nowrap font-medium">
-                          {fecha(e.programada_para)}
+                          {fechaYHora(e.programada_para)}
                           {e.manual && <span className="block text-xs font-normal text-muted-foreground">Envío manual</span>}
                         </td>
                         <td className="px-3 py-2">
@@ -511,7 +482,7 @@ export default function EnvioDialog({
                           {detalle && <span className="block text-xs text-muted-foreground">{detalle}</span>}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {e.estado === "omitido" ? "—" : `${e.enviados} de ${e.enviados + e.no_enviados}`}
+                          {entregadosDe(e)}
                         </td>
                       </tr>
                     );

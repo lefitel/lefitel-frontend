@@ -7,6 +7,7 @@ import { can } from "../../../lib/permissions";
 import EventoSheet from "../../../components/dialogs/upsert/EventoSheet";
 import PosteSheet from "../../../components/dialogs/upsert/PosteSheet";
 import PermissionGuard from "../../../components/PermissionGuard";
+import { HeaderSlot } from "../../../components/HeaderSlot";
 import { useInicioData } from "./useInicioData";
 import { MAX_CHART_POINTS, WIDE_CHART_MIN_WIDTH, WIDE_CHART_POINTS } from "./helpers";
 import { useIsWiderThan } from "../../../hooks/useIsWiderThan";
@@ -30,42 +31,41 @@ const InicioPage = () => {
   return (
     <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
-          <p className="text-muted-foreground">Resumen operativo de postes y eventos en el sistema.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap self-start sm:self-auto">
-          {/* Only to somebody who may open it. Without `reportes.ver` the
-              press went to a route that sent them straight back here, and
-              nothing visible happened. */}
-          {can(rol, "reportes", "ver") && (
-            <Button variant="outline" onClick={() => navigate("/app/reportes")} className="gap-2">
-              <BarChart3Icon className="h-4 w-4" />
-              <span>Ver informes</span>
-              <ArrowUpRightIcon className="h-3 w-3 opacity-50" />
-            </Button>
-          )}
-          {can(rol, "eventos", "crear") && (
-            <Button onClick={() => setOpenAddEvento(true)} className="gap-2">
-              <PlusIcon className="h-4 w-4" />
-              <span>Registrar Evento</span>
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={d.load}
-            disabled={d.loading}
-            className="h-8 w-8"
-            title="Actualizar datos"
-            aria-label="Actualizar datos"
-          >
-            <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
+      <h1 className="sr-only">Dashboard</h1>
+      {/* On a phone each button says one word: in full the three are some
+          330px, and the header has 300 there. The full wording stays their
+          name. */}
+      <HeaderSlot>
+        {/* Only to somebody who may open it. Without `reportes.ver` the
+            press went to a route that sent them straight back here, and
+            nothing visible happened. */}
+        {can(rol, "reportes", "ver") && (
+          <Button variant="outline" size="sm" onClick={() => navigate("/app/reportes")} className="shrink-0 gap-2" aria-label="Ver informes">
+            <BarChart3Icon className="h-4 w-4" />
+            <span className="sm:hidden">Informes</span>
+            <span className="max-sm:hidden">Ver informes</span>
+            <ArrowUpRightIcon className="h-3 w-3 opacity-50 max-sm:hidden" />
           </Button>
-        </div>
-      </div>
+        )}
+        {can(rol, "eventos", "crear") && (
+          <Button size="sm" onClick={() => setOpenAddEvento(true)} className="shrink-0 gap-2" aria-label="Registrar Evento">
+            <PlusIcon className="h-4 w-4" />
+            <span className="sm:hidden">Evento</span>
+            <span className="max-sm:hidden">Registrar Evento</span>
+          </Button>
+        )}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={d.load}
+          disabled={d.loading}
+          className="h-8 w-8 shrink-0"
+          title="Actualizar datos"
+          aria-label="Actualizar datos"
+        >
+          <RefreshCwIcon className={`h-4 w-4 ${d.loading ? "animate-spin" : ""}`} />
+        </Button>
+      </HeaderSlot>
 
       {/*
         A failed load is not an empty dashboard.
@@ -110,6 +110,10 @@ const InicioPage = () => {
           load={d.load}
           setOpenEditPoste={d.setOpenEditPoste}
           setDataPoste={d.setDataPoste}
+          departamento={d.mapDepartamento}
+          setDepartamento={d.setMapDepartamento}
+          departamentos={d.mapDepartamentos}
+          sinDepartamento={d.mapSinDepartamento}
         />
         <UrgentEventsCard
           urgentEvents={d.urgentEvents}

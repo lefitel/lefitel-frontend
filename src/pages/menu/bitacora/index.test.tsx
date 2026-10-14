@@ -19,10 +19,11 @@
 // has left, and an unmarked one is indistinguishable from current staff.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import BitacoraPage from "./index";
+import { HeaderSlotProvider } from "../../../components/headerSlotContext";
 import { SesionContext, type contextProps } from "../../../context/SesionContext";
 import { olvidarPermisos, setPermisos, sinPermisos, type Modulo } from "../../../lib/permissions";
 
@@ -384,5 +385,182 @@ describe("filters and page, which have to survive a trip through a link", () => 
     expect(pedido.page).toBe(1);
     expect(pedido.limit).toBe(50);
     expect(Number.isNaN(new Date(String(pedido.from)).getTime())).toBe(false);
+  });
+});
+
+// The period is chosen in the app's header.
+//
+// The screens lost their title row, and this one was left opening on two rows
+// of six filters. The two dates are the ones that frame everything else — the
+// log is always read over a period, and it opens on the last seven days — so
+// they went up beside «Limpiar filtros», and the four that narrow what happened
+// within that period fit on a single row below.
+//
+// And they are one control now, not two. Two separate fields let the end be set
+// before the start with nothing to say so — the table just came back empty.
+// The control keeps a calendar for each end, each moved on its own, because a
+// log is read over months as often as over days; but the end's calendar does
+// not offer a day before the start, a day yet to come cannot be picked, and an
+// address that carries the pair backwards is not believed.
+//
+// Every other test in this file mounts the screen on its own, where
+// `HeaderSlot` draws its children in place. This one gives it a header to draw
+// into, which is the only way to see what goes where.
+describe("where the filters are", () => {
+  const pintarEnLaAplicacion = () => {
+    const cabecera = document.body.appendChild(document.createElement("div"));
+    const { container, unmount } = render(
+      <SesionContext.Provider value={sesion}>
+        <MemoryRouter initialEntries={["/app/bitacora"]}>
+          <HeaderSlotProvider value={{ start: null, end: cabecera }}>
+            <BitacoraPage />
+          </HeaderSlotProvider>
+        </MemoryRouter>
+      </SesionContext.Provider>,
+    );
+    return { cabecera: within(cabecera), pagina: within(container), cerrar: () => { unmount(); cabecera.remove(); } };
+  };
+
+  const PERIODO = /^Período: \d{2}\/\d{2}\/\d{4} — \d{2}\/\d{2}\/\d{4}$/;
+
+  it("puts the period in the header as one control, before «Limpiar filtros»", async () => {
+    const { cabecera, pagina, cerrar } = pintarEnLaAplicacion();
+
+    const periodo = await cabecera.findByRole("button", { name: PERIODO });
+    const limpiar = cabecera.getByRole("button", { name: "Limpiar filtros" });
+
+    expect(periodo.compareDocumentPosition(limpiar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One, not two, and not a second time down in the page.
+    expect(cabecera.queryByRole("button", { name: /^(Desde|Hasta): / })).toBeNull();
+    expect(pagina.queryByRole("button", { name: /^(Período|Desde|Hasta): / })).toBeNull();
+    cerrar();
+  });
+
+  it("keeps the other four in the page, each under its name, on one row", async () => {
+    const { cabecera, pagina, cerrar } = pintarEnLaAplicacion();
+    await cabecera.findByRole("button", { name: PERIODO });
+
+    const nombres = ["Usuario", "Entidad", "Acción", "Severidad"].map((n) => {
+      // The word alone also names a column and an entity; the filter's label
+      // is the one that is a bare <span>.
+      const etiqueta = pagina.getAllByText(n).find((el) => el.tagName === "SPAN");
+      expect(etiqueta, `falta el filtro ${n}`).toBeTruthy();
+      return etiqueta as HTMLElement;
+    });
+    const fila = nombres[0].parentElement?.parentElement;
+    for (const etiqueta of nombres) expect(etiqueta.parentElement?.parentElement).toBe(fila);
+    expect(cabecera.queryByText("Usuario")).toBeNull();
+    cerrar();
+  });
+
+  const MARZO = "/app/bitacora?desde=2026-03-10&hasta=2026-03-20";
+  /** A day's button in one of the two calendars of the open control. */
+  const botonDelDia = (cual: "Inicio" | "Fin", d: Date) => {
+    const clave = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return screen.getByRole("group", { name: cual }).querySelector<HTMLButtonElement>(`[data-day="${clave}"] button`);
+  };
+  const marzo = (dia: number) => new Date(2026, 2, dia);
+  const hace = (dias: number) => { const d = new Date(); d.setDate(d.getDate() - dias); return d; };
+  const ultimoPedido = () => {
+    const p = getAllBitacora.mock.calls.at(-1)?.[0] as { from?: string; to?: string };
+    return { from: new Date(String(p.from)), to: new Date(String(p.to)) };
+  };
+  /** Opens the control on a known period, so the days pressed are on screen whatever today is. */
+  const abrirEnMarzo = async () => {
+    pintar(MARZO);
+    await waitFor(() => expect(getAllBitacora).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: "Período: 10/03/2026 — 20/03/2026" }));
+  };
+  const pulsar = async (boton: HTMLButtonElement | null) => {
+    expect(boton).not.toBeNull();
+    const antes = getAllBitacora.mock.calls.length;
+    await userEvent.click(boton!);
+    await waitFor(() => expect(getAllBitacora.mock.calls.length).toBeGreaterThan(antes));
+  };
+
+  it("asks for whole days: from the first midnight to the last second", async () => {
+    await abrirEnMarzo();
+
+    await pulsar(botonDelDia("Fin", marzo(15)));
+
+    const { from, to } = ultimoPedido();
+    expect(from.toDateString()).toBe(marzo(10).toDateString());
+    expect(to.toDateString()).toBe(marzo(15).toDateString());
+    expect([from.getHours(), from.getMinutes()]).toEqual([0, 0]);
+    expect([to.getHours(), to.getMinutes(), to.getSeconds()]).toEqual([23, 59, 59]);
+  });
+
+  it("does not let the period end before it starts", async () => {
+    await abrirEnMarzo();
+
+    // The end cannot be taken before the start…
+    expect(botonDelDia("Fin", marzo(9))?.disabled).toBe(true);
+    // …and a start taken past the end brings the end with it.
+    await pulsar(botonDelDia("Inicio", marzo(25)));
+
+    const { from, to } = ultimoPedido();
+    expect(from.toDateString()).toBe(marzo(25).toDateString());
+    expect(to.toDateString()).toBe(marzo(25).toDateString());
+    expect(from.getTime()).toBeLessThanOrEqual(to.getTime());
+  });
+
+  it("lets each end be taken to another year on its own", async () => {
+    // What a range calendar could not do: its two months moved together, and a
+    // year back was twelve presses.
+    await abrirEnMarzo();
+    const inicio = screen.getByRole("group", { name: "Inicio" });
+
+    const [, anio] = Array.from(inicio.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]'));
+    await userEvent.click(anio);
+    await userEvent.click(within(inicio).getByRole("option", { name: "2024" }));
+    await pulsar(botonDelDia("Inicio", new Date(2024, 2, 4)));
+
+    const { from, to } = ultimoPedido();
+    expect(from.toDateString()).toBe(new Date(2024, 2, 4).toDateString());
+    expect(to.toDateString()).toBe(marzo(20).toDateString());
+    // The end's calendar never left March 2026.
+    expect(botonDelDia("Fin", marzo(20))).not.toBeNull();
+  });
+
+  it("does not offer a day that has not happened yet", async () => {
+    pintar();
+    await waitFor(() => expect(getAllBitacora).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole("button", { name: PERIODO }));
+    const fin = screen.getByRole("group", { name: "Fin" });
+
+    expect(botonDelDia("Fin", hace(0))?.disabled).toBe(false);
+    // Tomorrow is on screen unless today is the last of the month; when it is
+    // there, it cannot be pressed.
+    const maniana = botonDelDia("Fin", hace(-1));
+    if (maniana) expect(maniana.disabled).toBe(true);
+    // And there is no next year to go to.
+    const [, anio] = Array.from(fin.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="listbox"]'));
+    await userEvent.click(anio);
+    expect(within(fin).queryByRole("option", { name: String(new Date().getFullYear() + 1) })).toBeNull();
+    expect(within(fin).getByRole("option", { name: String(new Date().getFullYear()) })).toBeTruthy();
+  });
+
+  it("does not believe an address whose period ends before it starts", async () => {
+    // Typed by hand or pasted from somewhere else. Asked of the server as it
+    // stands it returns nothing, and the screen would show an empty log under
+    // a period nobody chose.
+    pintar("/app/bitacora?desde=2026-03-20&hasta=2026-03-01");
+    await waitFor(() => expect(getAllBitacora).toHaveBeenCalled());
+
+    const { from, to } = ultimoPedido();
+    expect(from.getTime()).toBeLessThanOrEqual(to.getTime());
+    // The defaults, not either half of what the address said.
+    expect(from.toDateString()).toBe(hace(7).toDateString());
+    expect(to.toDateString()).toBe(hace(0).toDateString());
+  });
+
+  it("still believes an address whose period is in order", async () => {
+    pintar("/app/bitacora?desde=2026-03-01&hasta=2026-03-20");
+    await waitFor(() => expect(getAllBitacora).toHaveBeenCalled());
+
+    const { from, to } = ultimoPedido();
+    expect(from.toDateString()).toBe(new Date(2026, 2, 1).toDateString());
+    expect(to.toDateString()).toBe(new Date(2026, 2, 20).toDateString());
+    expect(screen.getByRole("button", { name: "Período: 01/03/2026 — 20/03/2026" })).toBeTruthy();
   });
 });

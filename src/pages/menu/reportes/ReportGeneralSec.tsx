@@ -1,22 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import type { Col } from "../../../components/table/tableFeatures";
 import { getReporteGeneral } from "../../../api/reporte.api";
 import { mensajeDeError } from "../../../api/descarga";
 import {
-  estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
+  estadoTrasFallo, getOpcionesReporte, EstadoOpciones,
 } from "../../../api/opciones.api";
-import { EventoInterface, ReporteInterface } from "../../../interfaces/interfaces";
+import { EventoInterface, ReporteInterface, Tramo } from "../../../interfaces/interfaces";
 import { imageUrl } from "../../../lib/imageUrl";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button, buttonVariants } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
-import { Combobox } from "../../../components/ui/combobox";
+import TramoCombobox from "../../../components/TramoCombobox";
 import { Badge } from "../../../components/ui/badge";
 import { Switch } from "../../../components/ui/switch";
-import { Loader2Icon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { Loader2Icon, FileSpreadsheetIcon, FileTextIcon, FileIcon, ChevronDownIcon } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -34,7 +33,8 @@ import DataTable from "../../../components/table/DataTable";
 import { CriticalityBadge } from "../../../components/CriticalityBadge";
 import { getEventCriticality } from "../../../lib/criticality";
 import { exportExcelGeneral, exportCsvGeneral, exportPdfGeneral, latestRevision } from "../../../lib/exports/reportGeneral";
-import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
+import { nombreDelTramo } from "../../../lib/tramo";
+import TramoEnlazado from "../../../components/TramoEnlazado";
 import { rowNumberColumn } from "../../../components/table/rowNumberColumn";
 import { cn } from "../../../lib/utils";
 
@@ -50,16 +50,13 @@ const getRowBg = (row: EventoInterface): string => {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const ReportGeneralSec = () => {
-  const navigate = useNavigate();
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
-  const [tramoInicial, setTramoInicial] = useState<number | null>(null);
-  const [tramoFinal, setTramoFinal] = useState<number | null>(null);
-  const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
-  const [tramos, setTramos] = useState<TramoPair[]>([]);
-  /** Why the two comboboxes are empty. See `ReportTramoSec` for the long version. */
+  /** The tramo the selector shows now; `null` is "Todos los tramos". */
+  const [tramoId, setTramoId] = useState<number | null>(null);
+  const [tramos, setTramos] = useState<Tramo[]>([]);
+  /** Why the tramo list is empty. See `ReportTramoSec` for the long version. */
   const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
-  const neighbors = useTramoNeighbors(tramos);
   const [estado, setEstado] = useState<"todos" | "pendiente" | "solucionado">("todos");
   const [prioridad, setPrioridad] = useState<"todos" | "si" | "no">("todos");
   const [criticidad, setCriticidad] = useState<"todos" | "criticas" | "altas" | "medias" | "bajas" | "sin">("todos");
@@ -69,22 +66,20 @@ const ReportGeneralSec = () => {
    * The filter the rows on screen were generated with. Set with `list` and
    * cleared with it, so everything that describes the rows — the file's period
    * header, the "nuevas · arrastradas" badge — reads this and never the live
-   * controls, which can be moved without pressing Generar.
+   * controls, which can be moved without pressing Generar. The tramo is not
+   * kept: each row names its own.
    */
-  const [applied, setApplied] = useState<{ start: Date; end: Date; excludeOld: boolean } | null>(null);
+  const [applied, setApplied] = useState<{
+    start: Date; end: Date; excludeOld: boolean;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // The city list and the stretch pairs arrive together, which is why
-  // `useTramoNeighbors` no longer fetches. It used to request
-  // `/api/poste/tramos` on its own — a different address, so keeping it would
-  // have been two requests rather than one; what it must not become is a hook
-  // that asks *this* endpoint for the pairs, which would be the same request
-  // twice per mount, `GROUP BY` over the pole table included.
+  // One request for the report's lists, tramos included: the selector must
+  // not ask this endpoint a second time for them.
   useEffect(() => {
     getOpcionesReporte()
       .then((opciones) => {
-        setListCiudad(opciones.ciudad);
         setTramos(opciones.tramos);
         setEstadoOpciones("listas");
       })
@@ -97,30 +92,22 @@ const ReportGeneralSec = () => {
       });
   }, []);
 
-  useEffect(() => {
-    if (tramoInicial && tramoFinal && neighbors.size > 0) {
-      const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
-      if (!valid) setTramoFinal(null);
-    }
-  }, [tramoInicial, tramoFinal, neighbors]);
-
   const handleGenerar = async () => {
     if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
     if (fechaInicio > fechaFin) return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
 
     const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
     const fin = new Date(fechaFin); fin.setHours(23, 59, 59, 0);
-    const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: null, TramoFinal: null, excludeOld };
+    // The server narrows by the tramo; the key is left out, not sent empty,
+    // when none is chosen (`tramo=` is a 400).
+    const filtro: ReporteInterface = {
+      fechaInicial: inicio, fechaFinal: fin, excludeOld, ...(tramoId !== null ? { tramo: tramoId } : {}),
+    };
 
     setLoading(true);
     try {
       let data = await getReporteGeneral(filtro);
 
-      if (tramoInicial && tramoFinal)
-        data = data.filter((e) =>
-          (e.poste?.id_ciudadA === tramoInicial && e.poste?.id_ciudadB === tramoFinal) ||
-          (e.poste?.id_ciudadA === tramoFinal && e.poste?.id_ciudadB === tramoInicial)
-        );
       if (estado === "pendiente") data = data.filter((e) => !e.state);
       if (estado === "solucionado") data = data.filter((e) => e.state);
       if (prioridad === "si") data = data.filter((e) => e.priority);
@@ -176,8 +163,7 @@ const ReportGeneralSec = () => {
     setApplied(null);
     setFechaInicio(undefined);
     setFechaFin(undefined);
-    setTramoInicial(null);
-    setTramoFinal(null);
+    setTramoId(null);
     setEstado("todos");
     setPrioridad("todos");
     setCriticidad("todos");
@@ -242,18 +228,10 @@ const ReportGeneralSec = () => {
     {
       id: "tramo",
       header: "Tramo",
-      accessorFn: (row) => `${row.poste?.ciudadA?.name} - ${row.poste?.ciudadB?.name}`,
-      cell: ({ row }) => {
-        const a = row.original.poste?.ciudadA;
-        const b = row.original.poste?.ciudadB;
-        return (
-          <span className="flex items-center gap-0.5 text-xs whitespace-nowrap">
-            {a?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${a.id}`); }}>{a.name}</button> : (a?.name ?? "—")}
-            <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0" />
-            {b?.id ? <button className="hover:underline hover:text-foreground" onClick={(e) => { e.stopPropagation(); navigate(`/app/ciudades/${b.id}`); }}>{b.name}</button> : (b?.name ?? "—")}
-          </span>
-        );
-      },
+      accessorFn: (row) => nombreDelTramo(row.poste),
+      cell: ({ row }) => (
+        <span className="text-xs whitespace-nowrap"><TramoEnlazado tramo={row.original.poste?.tramo} vacio="—" /></span>
+      ),
     },
     {
       id: "fechaRev",
@@ -371,7 +349,7 @@ const ReportGeneralSec = () => {
         );
       },
     },
-  ], [navigate]);
+  ], []);
 
   // ─── Render ───────────────────────────────────────────────────────────────────
 
@@ -411,7 +389,7 @@ const ReportGeneralSec = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-2 gap-y-3 items-end">
             <div className="space-y-1.5">
               <Label>Fecha de inicio</Label>
               <DatePicker ariaLabel="Fecha de inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -421,34 +399,8 @@ const ReportGeneralSec = () => {
               <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
             <div className="space-y-1.5">
-              <Label>Tramo desde <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <Combobox
-                options={listCiudad
-                  .filter((c) => {
-                    if (c.id == null || c.id === tramoFinal) return false;
-                    if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                    return neighbors.get(tramoFinal)?.has(c.id) ?? false;
-                  })
-                  .map((c) => ({ value: String(c.id), label: c.name }))}
-                value={tramoInicial ? String(tramoInicial) : ""}
-                onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
-                placeholder="Todas las ciudades"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Tramo hasta <span className="text-muted-foreground text-xs">(opcional)</span></Label>
-              <Combobox
-                options={listCiudad
-                  .filter((c) => {
-                    if (c.id == null || c.id === tramoInicial) return false;
-                    if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                    return neighbors.get(tramoInicial)?.has(c.id) ?? false;
-                  })
-                  .map((c) => ({ value: String(c.id), label: c.name }))}
-                value={tramoFinal ? String(tramoFinal) : ""}
-                onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
-                placeholder="Todas las ciudades"
-              />
+              <Label>Tramo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <TramoCombobox tramos={tramos} value={tramoId} onChange={setTramoId} permitirTodos />
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-2 gap-y-3 items-end">
@@ -504,7 +456,7 @@ const ReportGeneralSec = () => {
             // Said on screen and not only in a toast: this one lasts four
             // seconds and the screen is one people leave open. Unlike Por
             // Tramo, the report itself is still worth generating without the
-            // catalogues — only the two stretch comboboxes depend on them — so
+            // catalogues — only the tramo selector depends on them — so
             // Generar stays enabled and the notice says what is missing.
             <p className="text-sm text-destructive mt-3">
               {estadoOpciones === "denegado"

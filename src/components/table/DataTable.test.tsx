@@ -112,6 +112,20 @@ describe("DataTable, reading the table a person sees", () => {
     expect(screen.getByText("Sin datos.")).toBeInTheDocument();
   });
 
+  it("says what the screen says when there is nothing to show, if the screen has words for it", () => {
+    mount({ data: [], emptyMessage: "Ningún envío con ese filtro." });
+    expect(screen.getByText("Ningún envío con ese filtro.")).toBeInTheDocument();
+    expect(screen.queryByText("Sin datos.")).not.toBeInTheDocument();
+  });
+
+  it("leaves out the bar that filters by column when the screen filters elsewhere", () => {
+    mount({ hasColumnFilter: false });
+    expect(screen.queryByText("Columna")).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/Filtrar por/)).not.toBeInTheDocument();
+    // The rest of the top bar stays: the screen's own controls live in it.
+    expect(screen.getByRole("button", { name: /Columnas/ })).toBeInTheDocument();
+  });
+
   it("tells an empty result apart from a failed one", () => {
     const onRetry = vi.fn();
     mount({ data: null, onRetry });
@@ -226,6 +240,22 @@ describe("DataTable, reading the table a person sees", () => {
 
     expect(onRowClick).toHaveBeenCalledTimes(1);
     expect(onRowClick.mock.calls[0][0]).toMatchObject({ id: 3, name: "Deseada" });
+  });
+});
+
+describe("DataTable, rows that cannot be opened", () => {
+  it("does not hand over a row the caller says is not clickable, and does not draw it as one", async () => {
+    const user = userEvent.setup();
+    const onRowClick = vi.fn();
+    mount({ onRowClick, isRowClickable: (c) => c.id !== 3 });
+
+    await user.click(screen.getByText("Deseada"));
+    expect(onRowClick).not.toHaveBeenCalled();
+    expect(screen.getByText("Deseada").closest("tr")).not.toHaveClass("cursor-pointer");
+
+    await user.click(screen.getByText("Beni"));
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Beni").closest("tr")).toHaveClass("cursor-pointer");
   });
 });
 

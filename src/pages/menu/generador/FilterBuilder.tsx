@@ -325,7 +325,7 @@ const ListPicker = ({
         <span className="truncate">{label}</span>
         <ChevronDownIcon className="h-4 w-4 shrink-0 opacity-50" />
       </PopoverTrigger>
-      <PopoverContent className="w-(--anchor-width) p-0" align="start">
+      <PopoverContent className="w-auto min-w-(--radix-popover-trigger-width) p-0" align="start">
         <div className="flex items-center border-b border-border px-3">
           <SearchIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
           <input
@@ -333,7 +333,7 @@ const ListPicker = ({
             onChange={(e) => setQ(e.target.value)}
             placeholder="Buscar…"
             aria-label={`Buscar en ${ariaLabel.toLowerCase()}`}
-            className="flex h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            className="flex h-9 w-full bg-transparent text-base outline-none placeholder:text-muted-foreground md:text-sm"
           />
         </div>
         <div className="max-h-60 overflow-y-auto p-1">

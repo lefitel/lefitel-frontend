@@ -11,10 +11,9 @@
 //   - `fechaInicial` and `fechaFinal` are `Date` objects. Serialised as anything
 //     other than an ISO string they reach the server as an invalid date, which
 //     it now refuses with a 400 — every report, every time.
-//   - `TramoInicial` and `TramoFinal` are `null` on four of the six. If `null`
-//     travelled as the text "null" the server would refuse the filter as
-//     malformed, so those four would stop working while the two that name a
-//     stretch kept going.
+//   - `tramo` is the id of the stretch to narrow by, and a screen with none
+//     chosen has to leave the key out: the server answers 400 to `tramo=`
+//     with nothing after it, and to the text "null" as well.
 //   - `excludeOld` is a boolean, and it is the dangerous one: dropped from the
 //     URL, the server falls back to its default, which today is the same value.
 //     Nothing breaks and nothing is visible — until the default changes, or
@@ -39,8 +38,6 @@ afterEach(() => {
 const FILTRO: ReporteInterface = {
   fechaInicial: new Date("2026-01-01T00:00:00.000Z"),
   fechaFinal: new Date("2026-03-31T23:59:59.000Z"),
-  TramoInicial: null,
-  TramoFinal: null,
   excludeOld: false,
 };
 
@@ -63,7 +60,7 @@ describe("the six go out as GET", () => {
     const casos: [() => Promise<unknown>, string][] = [
       [() => getReporteGeneral(FILTRO), "general"],
       [() => getReporteTramo(FILTRO), "tramo"],
-      [() => getReporteRecorrido({ ...FILTRO, TramoInicial: 3, TramoFinal: 7 }), "recorrido"],
+      [() => getReporteRecorrido({ ...FILTRO, tramo: 3 }), "recorrido"],
       [() => getEstadoRed({}), "estado-red"],
       [() => getObsFrecuencia({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "frecuencia-obs"],
       [() => getTiemposResumen({ fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal }), "resumen-tiempos"],
@@ -107,26 +104,47 @@ describe("what the filter looks like once it is a URL", () => {
     expect(url).toContain("fechaFinal=2026-03-31T23:59:59.000Z");
   });
 
-  it("drops a stretch nobody named, instead of sending the word null", async () => {
-    // Four of the six pass `TramoInicial: null`. The server refuses a stretch it
-    // cannot read, so "null" on the wire would 400 those four — and only those
-    // four, which is exactly the kind of partial breakage nobody attributes to a
-    // serialiser.
+  it("leaves the key out when no tramo was chosen, instead of sending the word null", async () => {
+    // Five of the six take `tramo` as optional. The server refuses one it
+    // cannot read (`tramo=` and `tramo=null` are both 400), so the screens omit
+    // the key and nothing about it may appear in the URL.
     const get = espia();
 
     await getReporteGeneral(FILTRO);
 
-    expect(urlEnviada(get)).not.toContain("Tramo");
+    expect(urlEnviada(get)).not.toContain("ramo");
   });
 
-  it("sends a stretch when there is one, as its id", async () => {
+  it("sends the tramo when there is one, as its id", async () => {
     const get = espia();
 
-    await getReporteRecorrido({ ...FILTRO, TramoInicial: 3, TramoFinal: 7 });
+    await getReporteRecorrido({ ...FILTRO, tramo: 14 });
 
     const url = urlEnviada(get);
-    expect(url).toContain("TramoInicial=3");
-    expect(url).toContain("TramoFinal=7");
+    expect(url).toContain("tramo=14");
+    expect(url).not.toContain("TramoInicial");
+    expect(url).not.toContain("TramoFinal");
+  });
+
+  it("passes the tramo through on the three summaries when given, and not otherwise", async () => {
+    const periodo = { fechaInicial: FILTRO.fechaInicial, fechaFinal: FILTRO.fechaFinal };
+    const resumenes: [string, (tramo?: number) => Promise<unknown>][] = [
+      ["estado-red", (tramo) => getEstadoRed({ ...periodo, ...(tramo !== undefined ? { tramo } : {}) })],
+      ["frecuencia-obs", (tramo) => getObsFrecuencia({ ...periodo, ...(tramo !== undefined ? { tramo } : {}) })],
+      ["resumen-tiempos", (tramo) => getTiemposResumen({ ...periodo, ...(tramo !== undefined ? { tramo } : {}) })],
+    ];
+
+    for (const [nombre, llamar] of resumenes) {
+      const con = espia();
+      await llamar(14);
+      expect(urlEnviada(con), nombre).toContain("tramo=14");
+      vi.restoreAllMocks();
+
+      const sin = espia();
+      await llamar();
+      expect(urlEnviada(sin), nombre).not.toContain("ramo");
+      vi.restoreAllMocks();
+    }
   });
 
   it("sends excludeOld even when it is false", async () => {

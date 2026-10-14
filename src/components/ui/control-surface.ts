@@ -1,14 +1,11 @@
 /**
  * The skin every form control in this application wears.
  *
- * Filled and lit rather than outlined: `--gradient-secondary` for the light
- * falling across it and `elevation-control` for the highlight along the top
- * edge and the shadow under the bottom one — the lighting of a `secondary`
- * button, deliberately, because these stand beside buttons far more often than
- * beside each other.
- *
- * `elevation-control` is a utility and not `shadow-[var(--x)]`: Tailwind 4
- * swallows a multi-layer shadow written inline, silently.
+ * Filled rather than outlined, and flat: `--secondary`, with no light across
+ * it and no shadow under it. It was lit until 2026-10-13 — a gradient and a
+ * raised edge, the lighting of the buttons it stands beside — and went flat
+ * the day the buttons did, on Isaias's choice from a mock-up of three
+ * options. The fill is the same grey it was; only the relief is gone.
  *
  * The border stays in the box model, transparent. The invalid state needs
  * something to paint red, and turning it on must not move anything by a pixel.
@@ -26,9 +23,10 @@
  * | light, in a Sheet (`--background`) | 3.11:1 | **1.09:1** |
  * | dark, on `--card` | 3.29:1 | **1.20:1** |
  *
- * And the inset highlight does not make up the difference: 1.08:1 in the light
- * theme (invisible) and 2.44:1 in the dark one. A disabled field, at
- * `opacity-50` over a card, reaches 1.08:1 in the light theme.
+ * Those were measured on the lit skin. Flat, the fill alone is 1.17:1 on a
+ * light card and 1.11:1 on a dark one, and the soft shadow that helped the eye
+ * find it is no longer there. A disabled field, at `opacity-50` over a card,
+ * reaches 1.08:1 in the light theme.
  *
  * That is a concrete failure of WCAG 2.1 SC 1.4.11 across roughly 125 call
  * sites, and it lands hardest on the seven Sheet panels — 28 fields for
@@ -50,8 +48,8 @@
  * select had stopped.
  */
 export const controlSurface =
-  "rounded-md border border-transparent bg-[image:var(--gradient-secondary)] " +
-  "outline-none elevation-control " +
+  "rounded-md border border-transparent bg-secondary " +
+  "outline-none " +
   "focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-ring " +
   "aria-invalid:border-destructive aria-invalid:outline-destructive " +
   "disabled:cursor-not-allowed disabled:opacity-50";
@@ -60,12 +58,10 @@ export const controlSurface =
  * The same skin, plus what a control that *opens something* also needs: the
  * row that holds a label against a chevron, and a hover.
  *
- * Hover belongs here and not in `controlSurface`. A dropdown lights up under
+ * Hover belongs here and not in `controlSurface`. A dropdown darkens under
  * the pointer because clicking it is the whole of its purpose; a text field
  * that did the same would be answering a mouse that is only passing over on
- * its way to the caret. Swapping one gradient for another rather than dropping
- * to a flat colour is what keeps the lighting from blinking off — a gradient
- * cannot interpolate.
+ * its way to the caret.
  *
  * Callers override with `cn(chooserTrigger, "h-8 flex-1", className)`; height
  * and width are the only things any of them has ever needed to change.
@@ -73,29 +69,19 @@ export const controlSurface =
 export const chooserTrigger =
   controlSurface +
   " flex h-9 w-full items-center justify-between gap-2 px-3 py-1 text-sm " +
-  "whitespace-nowrap transition-colors hover:bg-[image:var(--gradient-accent)]";
+  "whitespace-nowrap transition-colors hover:bg-accent";
 
 /**
  * How a caller takes the surface back off, for the handful of places that need
  * a field with no chrome at all: the rename box inside a column pill, the
  * search line in the field picker, the latitude and longitude over a map.
  *
- * It has to be spelled exactly like this, and that is worth knowing before
- * writing `bg-transparent` and assuming it worked:
- *
- * - **`bg-none`, not `bg-transparent`.** The fill is a `background-image`, and
- *   a `background-color` does not cancel one — it paints behind it. Nor does
- *   `cn` help: tailwind-merge files the two in different groups, sees no
- *   conflict, and keeps both. `bg-none` is the only class in the same group,
- *   so it is the only one that replaces it.
- * - **`shadow-none!`, with the bang.** `elevation-control` is a custom
- *   `@utility`, which Tailwind 4 emits *after* the built-in shadows; at equal
- *   specificity the later rule wins, so a plain `shadow-none` loses. The
- *   important flag is what settles it.
- *
- * Six call sites had `bg-transparent shadow-none border-0` on them and were
- * quietly getting a filled, shadowed box instead — including, in the same
- * commit that introduced this surface, the rename field inside a pill that had
- * just been made transparent so it would paint nothing.
+ * Through `cn`, which is what makes it work: the fill is a background colour
+ * now, so `bg-transparent` is in its group and tailwind-merge drops the fill
+ * for it. It could not while the fill was a gradient — a `background-image`,
+ * which a colour paints behind — and this was spelled `bg-none shadow-none!`
+ * then. Six call sites had `bg-transparent shadow-none border-0` written by
+ * hand and were quietly getting a filled, shadowed box; keep going through
+ * this constant, so that the next change of skin is made in one place again.
  */
-export const flatControl = "bg-none shadow-none! border-0";
+export const flatControl = "bg-transparent border-0";

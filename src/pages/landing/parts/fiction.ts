@@ -41,7 +41,7 @@ export const NETWORK = {
  * `lib/criticality.ts` that the technicians read in the field. Colours are the
  * same hues, lifted for a dark surface.
  */
-export const LEVELS = [
+const LEVELS = [
   { level: 1, label: "Catastrófico", color: "oklch(0.655 0.205 25)" },
   { level: 2, label: "Ferretería suelta", color: "oklch(0.755 0.155 62)" },
   { level: 3, label: "Sujeto a árbol", color: "oklch(0.80 0.15 85)" },

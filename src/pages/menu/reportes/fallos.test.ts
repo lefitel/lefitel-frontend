@@ -7,9 +7,10 @@
 // `ReportGeneralSec.test.tsx` drives the other half of the defect: the rows
 // that survived a failure and went into a file under the wrong dates.
 //
-// The remaining four need two calendar dates and, for Recorrido, two cities,
-// and only one test in this repository drives the calendar — through a mocked
-// picker, in the General test. So this reads the six as text, in the style
+// The remaining four need two calendar dates and, for Recorrido, a tramo,
+// and the calendar can only be driven through a mocked picker. The screens'
+// own tests do that for what they pin; the catch of Generar they leave to
+// this, which reads the six as text, in the style
 // `ReportRecorrido.test.tsx` already uses for its export. Not a substitute for
 // rendering, and said so; but the exact mutation it exists for — "drop
 // `mensajeDeError`, keep the generic toast", or "keep the stale rows" — fails
@@ -25,9 +26,9 @@ const PANTALLAS: Record<string, readonly string[]> = {
   "ReportGeneralSec.tsx": ["setList([])", "setApplied(null)"],
   "ReportTramoSec.tsx": ["setList([])", "setApplied(null)"],
   "ReportRecorrido.tsx": ["setList([])", "setApplied(null)"],
-  "ReportEstadoRedSec.tsx": ["setTramos([])", "setGenerated(false)"],
+  "ReportEstadoRedSec.tsx": ["setFilas([])", "setGenerated(false)"],
   "ReportObsFrecuenciaSec.tsx": ["setRows([])", "setGenerated(false)"],
-  "ReportTiemposSec.tsx": ["setTramos([])", "setDescartados(0)", "setGenerated(false)"],
+  "ReportTiemposSec.tsx": ["setFilas([])", "setDescartados(0)", "setGenerated(false)"],
 };
 
 /**
@@ -77,8 +78,10 @@ describe("ReportRecorrido.tsx, when a re-run it fired on its own fails", () => {
   // popup, and the popups are not reachable from jsdom — the map library is
   // mocked away in the screen's own test — so this is text, and says so.
   it("keeps the rows: both popup callbacks ask for keepOnError, and the catch honours it", () => {
-    const callbacks = fuente.match(/onSuccess=\{\(\) => void handleGenerar\(true\)\}/g) ?? [];
+    const callbacks = fuente.match(/onSuccess=\{regenerar\}/g) ?? [];
     expect(callbacks).toHaveLength(2);
+    // `regenerar` is what keeps the rows on failure, and hands over the applied filter.
+    expect(fuente).toMatch(/const regenerar = \(\) => \{ if \(applied\) void handleGenerar\(true, applied\); \};/);
     expect(fuente).not.toMatch(/onSuccess=\{handleGenerar\}/);
     expect(catchDeGenerar("ReportRecorrido.tsx", fuente))
       .toMatch(/if \(!keepOnError\) \{\s*setList\(\[\]\);\s*setApplied\(null\);/);

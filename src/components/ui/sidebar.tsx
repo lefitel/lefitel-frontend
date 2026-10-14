@@ -250,7 +250,10 @@ function SidebarTrigger({
       data-slot="sidebar-trigger"
       variant="ghost"
       size="icon"
-      className={cn("size-7", className)}
+      // 28px is small for a thumb, and on a phone this is the only way to the
+      // menu. 32px there, not more: it is the trail's height beside it, and
+      // anything taller would make the header taller than its 48px.
+      className={cn("size-7 max-md:size-8", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()

@@ -12,6 +12,7 @@
 import { cloneElement, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ActivityChart } from "./ActivityChart";
 import { chartBuckets } from "./helpers";
 
@@ -96,3 +97,29 @@ describe("the activity chart", () => {
   });
 });
 
+
+// The ⓘ beside the title was a tooltip, which a finger cannot open. It opens
+// on a click, and explains the view that is showing.
+describe("the explanation of the chart", () => {
+  it("opens on a click and explains the three lines", async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole("button", { name: "¿Qué muestra este gráfico?" }));
+
+    const frase = screen.getByText(/Tres cuentas independientes/);
+    expect(frase.closest('[data-slot="popover-content"]')).not.toBeNull();
+    await user.click(screen.getByRole("button", { name: "¿Qué muestra este gráfico?" }));
+    expect(screen.queryByText(/Tres cuentas independientes/)).toBeNull();
+  });
+
+  it("explains the balance when that is the view", async () => {
+    const user = userEvent.setup();
+    pintar();
+
+    await user.click(screen.getByRole("button", { name: "Balance" }));
+    await user.click(screen.getByRole("button", { name: "¿Qué muestra este gráfico?" }));
+
+    expect(screen.getByText(/Balance del tramo:/).closest('[data-slot="popover-content"]')).not.toBeNull();
+  });
+});

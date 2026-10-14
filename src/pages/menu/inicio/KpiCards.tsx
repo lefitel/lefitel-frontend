@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 import { type DateRange } from "react-day-picker";
 import { Card, CardContent } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import InfoPopover from "../../../components/InfoPopover";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { DateRangePicker } from "../../../components/ui/date-range-picker";
-import { AlertTriangleIcon, ClipboardCheckIcon, InfoIcon, MapPinIcon, MapPinPlusIcon } from "lucide-react";
+import { AlertTriangleIcon, ClipboardCheckIcon, MapPinIcon, MapPinPlusIcon } from "lucide-react";
 import { TrendBadge } from "./TrendBadge";
 import { KpiData, Period, PERIOD_LABELS, CustomRange } from "./types";
 import { AnimatedNumber } from "../../../components/AnimatedNumber";
@@ -52,28 +52,19 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
       <div>
         <div className="flex items-center gap-1.5 mb-3">
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Estado del sistema</p>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" aria-label="Información sobre el estado del sistema" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                  <InfoIcon className="h-3.5 w-3.5" />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right" className="max-w-sm">
-                <span className="block text-left leading-relaxed normal-case space-y-1.5">
-                  <span className="block">
-                    <strong className="font-semibold">Postes Registrados:</strong> total de postes en el sistema. La barra indica qué porcentaje tiene al menos una incidencia <strong className="font-semibold">pendiente actualmente</strong>.
-                  </span>
-                  <span className="block">
-                    <strong className="font-semibold">Pendientes Totales:</strong> eventos sin resolver acumulados en toda la historia. La barra refleja la tasa global de resolución histórica.
-                  </span>
-                  <span className="block text-muted-foreground/70">
-                    Métricas históricas — independientes del período seleccionado.
-                  </span>
-                </span>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+          <InfoPopover label="Información sobre el estado del sistema" side="right" className="w-96 max-w-[calc(100vw-2rem)]">
+            <span className="block text-left leading-relaxed normal-case space-y-1.5">
+              <span className="block">
+                <strong className="font-semibold">Postes Registrados:</strong> total de postes en el sistema. La barra indica qué porcentaje tiene al menos una incidencia <strong className="font-semibold">pendiente actualmente</strong>.
+              </span>
+              <span className="block">
+                <strong className="font-semibold">Pendientes Totales:</strong> eventos sin resolver acumulados en toda la historia. La barra refleja la tasa global de resolución histórica.
+              </span>
+              <span className="block text-muted-foreground/70">
+                Métricas históricas — independientes del período seleccionado.
+              </span>
+            </span>
+          </InfoPopover>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-6">
           {(() => {
@@ -176,33 +167,27 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
         <div className="flex flex-col gap-2 mb-3">
           <div className="flex items-center gap-1.5">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Actividad del período</p>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button type="button" aria-label="Información sobre las métricas del período" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                    <InfoIcon className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right" className="max-w-sm">
-                  <span className="block text-left leading-relaxed normal-case space-y-1.5">
-                    <span className="block">
-                      <strong className="font-semibold">Postes Activos:</strong> unión única de postes creados, revisados y solucionados en el período — sin duplicados. Cada barra muestra cuántos postes de esa categoría hay respecto al total en el sistema.
-                    </span>
-                    <span className="block">
-                      <strong className="font-semibold">Postes Nuevos:</strong> postes cuya <strong className="font-semibold">fecha en campo</strong> cae en el período. <em>Del total</em> = nuevos sobre el total de postes. Es la misma cifra que la barra <em>Creados</em> de Postes Activos.
-                    </span>
-                    <span className="block">
-                      <strong className="font-semibold">Postes Revisados:</strong> postes únicos con al menos una revisión en el período. <em>Del total</em> = revisados sobre el total de postes. <em>Pendientes</em> = cuántos de esos revisados aún tienen eventos sin resolver.
-                    </span>
-                    <span className="block">
-                      <strong className="font-semibold">Eventos Solucionados:</strong> eventos cuya <strong className="font-semibold">fecha de resolución</strong> cae en el período. Cuenta eventos, no postes: dos reparaciones en el mismo poste son dos. <em>Del total</em> = solucionados sobre todos los eventos del sistema.
-                    </span>
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <InfoPopover label="Información sobre las métricas del período" side="right" className="w-96 max-w-[calc(100vw-2rem)]">
+              <span className="block text-left leading-relaxed normal-case space-y-1.5">
+                <span className="block">
+                  <strong className="font-semibold">Postes Activos:</strong> unión única de postes creados, revisados y solucionados en el período — sin duplicados. Cada barra muestra cuántos postes de esa categoría hay respecto al total en el sistema.
+                </span>
+                <span className="block">
+                  <strong className="font-semibold">Postes Nuevos:</strong> postes cuya <strong className="font-semibold">fecha en campo</strong> cae en el período. <em>Del total</em> = nuevos sobre el total de postes. Es la misma cifra que la barra <em>Creados</em> de Postes Activos.
+                </span>
+                <span className="block">
+                  <strong className="font-semibold">Postes Revisados:</strong> postes únicos con al menos una revisión en el período. <em>Del total</em> = revisados sobre el total de postes. <em>Pendientes</em> = cuántos de esos revisados aún tienen eventos sin resolver.
+                </span>
+                <span className="block">
+                  <strong className="font-semibold">Eventos Solucionados:</strong> eventos cuya <strong className="font-semibold">fecha de resolución</strong> cae en el período. Cuenta eventos, no postes: dos reparaciones en el mismo poste son dos. <em>Del total</em> = solucionados sobre todos los eventos del sistema.
+                </span>
+              </span>
+            </InfoPopover>
           </div>
-          <div className="flex items-center justify-between gap-2">
+          {/* Wraps on a phone: the dates and the five periods side by side
+              are wider than one, and in a single row the periods scrolled,
+              with «Todo» out of sight. */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <DateRangePicker
               value={pickerValue}
               onChange={handleRangeChange}
@@ -217,6 +202,10 @@ export function KpiCards({ kpis, loading, period, setPeriod, showTrend, setCusto
               value={period}
               onValueChange={setPeriod}
               scrollable
+              // The small type on a phone: at the usual size the five are
+              // wider than one, even on a row of their own, and «Todo» was
+              // out of sight.
+              className="max-sm:[&_button]:text-xs"
               ariaLabel="Período del dashboard"
             />
           </div>

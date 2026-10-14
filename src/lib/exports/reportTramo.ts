@@ -8,6 +8,7 @@ import {
   AdssPosteInterface,
   EventoInterface,
   EventoObsInterface,
+  Tramo,
 } from "../../interfaces/interfaces";
 import logoUrl from "../../assets/images/logo.png";
 
@@ -61,6 +62,12 @@ const applyUniformBorder = (cell: ExcelJS.Cell, argb: string, style: "thin" | "m
   cell.border = { top: b, left: b, bottom: b, right: b };
 };
 
+/**
+ * What the file's "Tramo:" line says: the name the server built for the tramo
+ * the rows were generated for, or "Total" for the whole network.
+ */
+export const etiquetaDeTramo = (tramo: Tramo | null): string => tramo?.nombre ?? "Total";
+
 // ─── Excel ────────────────────────────────────────────────────────────────────
 //
 // Layout (explicit row numbers):
@@ -79,9 +86,8 @@ export interface TramoExcelParams {
   listMaterial:    FilaCatalogo[];
   listAdss:        FilaCatalogo[];
   listObs:         FilaCatalogo[];
-  listCiudad:      FilaCatalogo[];
-  tramoInicial:    number | null;
-  tramoFinal:      number | null;
+  /** The tramo the rows were generated for, or `null` for the whole network. */
+  tramo:           Tramo | null;
   fechaInicio:     Date;
   fechaFin:        Date;
 }
@@ -89,7 +95,7 @@ export interface TramoExcelParams {
 export const exportExcelTramo = async (p: TramoExcelParams) => {
   const {
     list, listPropietario, listMaterial, listAdss, listObs,
-    listCiudad, tramoInicial, tramoFinal, fechaInicio, fechaFin,
+    tramo, fechaInicio, fechaFin,
   } = p;
 
   const wb = new ExcelJS.Workbook();
@@ -149,9 +155,7 @@ export const exportExcelTramo = async (p: TramoExcelParams) => {
   ws.getRow(TITLE_ROW).height = 40;
 
   // ── Rows 2-4: Metadata ─────────────────────────────────────────────────────
-  const cA = listCiudad.find((c) => c.id === tramoInicial);
-  const cB = listCiudad.find((c) => c.id === tramoFinal);
-  const tramoLabel = cA && cB ? `${cA.name} — ${cB.name}` : "Total";
+  const tramoLabel = etiquetaDeTramo(tramo);
 
   const META_ROWS: Array<[string, string]> = [
     ["Tramo:",         tramoLabel],
@@ -407,9 +411,7 @@ export const exportPdfTramo = async (
   listMaterial:    FilaCatalogo[],
   fechaInicio:     Date,
   fechaFin:        Date,
-  tramoInicial:    number | null,
-  tramoFinal:      number | null,
-  listCiudad:      FilaCatalogo[],
+  tramo:           Tramo | null,
 ) => {
   const res  = await fetch(logoUrl);
   const blob = await res.blob();
@@ -419,9 +421,7 @@ export const exportPdfTramo = async (
     reader.readAsDataURL(blob);
   });
 
-  const cA = listCiudad.find((c) => c.id === tramoInicial);
-  const cB = listCiudad.find((c) => c.id === tramoFinal);
-  const tramoLabel = cA && cB ? `${cA.name} — ${cB.name}` : "Total";
+  const tramoLabel = etiquetaDeTramo(tramo);
   const rangeStr   = `${fechaInicio.toLocaleDateString("es-ES")} — ${fechaFin.toLocaleDateString("es-ES")}`;
 
   // ── Dynamic column metadata ─────────────────────────────────────────────────

@@ -5,17 +5,18 @@ import { hasCoords, type LatLng } from "../components/map/mapGeo";
  * where they stand.
  *
  * **This is a guess, and a stopgap.** Nothing stored says which pole follows
- * which: a pole only knows the two cities it lies between. Until that order is
- * kept in the database, every screen that draws a stretch has to rebuild it,
- * and this is the one place that does.
+ * which: a pole only knows the tramo it lies on, and a tramo only its two
+ * cities. Until that order is kept in the database, every screen that draws a
+ * stretch has to rebuild it, and this is the one place that does.
  *
  * It replaces a sort that was copied into four screens: each pole's progress
- * along the straight line from city A to city B. That had two ways to fail, and
- * the data holds both. Thirteen cities carry a placeholder position — the same
- * point for all of them — so for their stretches the line from A to B has no
- * length, every pole measures zero along it, and the poles stayed in the order
- * they were registered: the line jumped all over the stretch. And a cable that
- * follows a bending road is not ordered by a straight line at all.
+ * along the straight line from one end to the other. That had two ways to
+ * fail, and the data holds both. Thirteen cities carry a placeholder position
+ * — the same point for all of them — so for their stretches the line between
+ * the ends has no length, every pole measures zero along it, and the poles
+ * stayed in the order they were registered: the line jumped all over the
+ * stretch. And a cable that follows a bending road is not ordered by a
+ * straight line at all.
  *
  * What it does instead:
  *
@@ -77,20 +78,20 @@ function enRango(p: LatLng | null | undefined): p is LatLng {
 }
 
 /** The poles that have a position, the flat projection for this stretch, and each city if it can be trusted. */
-function situar<P extends LatLng>(todos: P[], ciudadA?: LatLng | null, ciudadB?: LatLng | null) {
+function situar<P extends LatLng>(todos: P[], extremoUno?: LatLng | null, extremoDos?: LatLng | null) {
   const conCoords = todos.filter((p) => hasCoords(p) && enRango(p));
 
   const centro: LatLng | null = conCoords.length
     ? { lat: median(conCoords.map((p) => p.lat)), lng: median(conCoords.map((p) => p.lng)) }
     : null;
-  const xy = projector(centro?.lat ?? ciudadA?.lat ?? 0);
+  const xy = projector(centro?.lat ?? extremoUno?.lat ?? 0);
 
   // The median of the poles, not their mean: one pole stored on another
   // continent must not drag the middle of the stretch towards it.
   const creible = (c: LatLng | null | undefined): c is LatLng =>
     enRango(c) && hasCoords(c) && (!centro || dist(xy(c), xy(centro)) <= CIUDAD_MAX_KM);
-  const inicio = creible(ciudadA) ? { lat: ciudadA.lat, lng: ciudadA.lng } : null;
-  const fin = creible(ciudadB) ? { lat: ciudadB.lat, lng: ciudadB.lng } : null;
+  const inicio = creible(extremoUno) ? { lat: extremoUno.lat, lng: extremoUno.lng } : null;
+  const fin = creible(extremoDos) ? { lat: extremoDos.lat, lng: extremoDos.lng } : null;
 
   return { conCoords, xy, inicio, fin };
 }
@@ -101,19 +102,19 @@ function situar<P extends LatLng>(todos: P[], ciudadA?: LatLng | null, ciudadB?:
  */
 export function extremosCreibles(
   postes: LatLng[],
-  ciudadA?: LatLng | null,
-  ciudadB?: LatLng | null,
+  extremoUno?: LatLng | null,
+  extremoDos?: LatLng | null,
 ): LatLng[] {
-  const { inicio, fin } = situar(postes, ciudadA, ciudadB);
+  const { inicio, fin } = situar(postes, extremoUno, extremoDos);
   return [inicio, fin].filter((c) => c !== null);
 }
 
 export function ordenarTramo<P extends LatLng>(
   todos: P[],
-  ciudadA?: LatLng | null,
-  ciudadB?: LatLng | null,
+  extremoUno?: LatLng | null,
+  extremoDos?: LatLng | null,
 ): TramoOrdenado<P> {
-  const { conCoords, xy, inicio, fin } = situar(todos, ciudadA, ciudadB);
+  const { conCoords, xy, inicio, fin } = situar(todos, extremoUno, extremoDos);
 
   let candidatos = conCoords;
   const descartados: P[] = [];
@@ -167,9 +168,10 @@ function encadenar<P extends LatLng>(
   if (postes.length < 2) return [...postes];
   const pts = postes.map(xy);
 
-  // Where to start: beside city A when it can be trusted; failing that at the
-  // far end from city B; failing both, at one of the two poles farthest apart —
-  // the western one, so the same stretch always reads in the same direction.
+  // Where to start: beside the first end (the first city of the tramo's name)
+  // when it can be trusted; failing that at the far end from the second;
+  // failing both, at one of the two poles farthest apart — the western one,
+  // so the same stretch always reads in the same direction.
   let start = 0;
   if (inicio) {
     const a = xy(inicio);
@@ -197,8 +199,9 @@ function encadenar<P extends LatLng>(
     path.push(left.splice(bi, 1)[0]);
   }
 
-  // The first pole stays first. City B, when trusted, is a fixed point past the
-  // last one, so the line is also judged by how it arrives there.
+  // The first pole stays first. The second end, when trusted, is a fixed
+  // point past the last one, so the line is also judged by how it arrives
+  // there.
   const end = fin ? xy(fin) : null;
   const at = (k: number): XY | null => (k < path.length ? pts[path[k]] : end);
   let improved = true;

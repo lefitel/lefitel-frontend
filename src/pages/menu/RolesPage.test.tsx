@@ -316,8 +316,6 @@ describe("somebody who may only look", () => {
   it("is offered nothing that writes", async () => {
     const user = renderPage();
     await screen.findByRole("button", { name: "Supervisor de campo" });
-    // Nor told it can change anything.
-    expect(screen.getByText("Pulsa un rol para ver lo que puede hacer")).toBeInTheDocument();
 
     expect(screen.queryByRole("button", { name: /nuevo rol/i })).toBeNull();
 

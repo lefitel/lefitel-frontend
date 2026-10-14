@@ -76,6 +76,13 @@ describe("ImageDropzone", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("keeps showing the chosen file, and offers nothing, when read-only", () => {
+    render(<ImageDropzone file={new File(["x"], "f.jpg", { type: "image/jpeg" })} onChange={vi.fn()} readOnly />);
+
+    expect(screen.getByAltText("Foto")).toHaveAttribute("src", "blob:preview");
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("says a stored photo could not be loaded, and still offers to replace it", () => {
     // It used to stay on screen as the browser's broken-image icon beside the
     // word "preview", which was the alt text.

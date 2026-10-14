@@ -41,12 +41,7 @@ const NovedadesPage = () => {
 
   return (
     <div className="@container/card p-page w-full space-y-page animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Novedades</h1>
-        <p className="text-muted-foreground">
-          Lo que ha cambiado en el sistema, versión a versión.
-        </p>
-      </div>
+      <h1 className="sr-only">Novedades</h1>
 
       {/* Full width, like every other screen. The room goes into structure
           rather than into longer lines: on a wide monitor the version and its

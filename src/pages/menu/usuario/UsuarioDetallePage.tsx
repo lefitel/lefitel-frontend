@@ -1,13 +1,15 @@
 import { useContext, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useTrailLabel } from "../../../components/TrailLabel";
 import type { Col } from "../../../components/table/tableFeatures";
 import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { EventoInterface } from "../../../interfaces/interfaces";
 import {
   editUserName, editUserPass, searchUsuario_user,
-  resetMfaUsuario, desbloquearUsuario,
+  resetMfaUsuario, desbloquearUsuario, deleteUsuario,
 } from "../../../api/Usuario.api";
+import { mensajeDeError } from "../../../api/descarga";
 import { passwordLengthError } from "../../../lib/password";
 import { can } from "../../../lib/permissions";
 import { useUsuarioDetalleData } from "./useUsuarioDetalleData";
@@ -24,10 +26,10 @@ import {
 } from "../../../components/ui/alert-dialog";
 import DataTable from "../../../components/table/DataTable";
 import UsuarioSheet from "../../../components/dialogs/upsert/UsuarioSheet";
-import { HistoryIcon, LayoutListIcon, MoreVerticalIcon } from "lucide-react";
+import { HistoryIcon, LayoutListIcon } from "lucide-react";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "../../../components/ui/dropdown-menu";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem } from "../../../components/ui/dropdown-menu";
+import { RowActionsTrigger } from "../../../components/table/RowActionsTrigger";
 
 const VISTA_PANEL_ID = "usuario-vista-panel";
 const vistaTabId = (vista: VistaUsuario) => `usuario-vista-tab-${vista}`;
@@ -49,6 +51,8 @@ export default function UsuarioDetallePage() {
     // exception for your own record.
     verBitacoraCuenta: can(sesion.usuario.id_rol, "bitacora", "ver"),
   });
+  // The trail in the app's header knows this account by its number; this is its name.
+  useTrailLabel(d.usuario ? `${d.usuario.name} ${d.usuario.lastname}` : null);
 
   const [vista, setVista] = useState<VistaUsuario>("resumen");
 
@@ -66,6 +70,8 @@ export default function UsuarioDetallePage() {
   const [unlocking, setUnlocking] = useState(false);
   const [openResetMfa, setOpenResetMfa] = useState(false);
   const [resettingMfa, setResettingMfa] = useState(false);
+  const [openArchive, setOpenArchive] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   // username form
   const [newUser, setNewUser]       = useState("");
@@ -256,6 +262,26 @@ export default function UsuarioDetallePage() {
     setUnlocking(false);
   };
 
+  /**
+   * Archiving from the sheet, as the list does it. Once it is done there is
+   * nothing left here to look at — an archived account is not served at this
+   * address — so the way out is the list it was taken from.
+   */
+  const handleArchive = async () => {
+    if (!d.usuario?.id) return;
+    setArchiving(true);
+    try {
+      await deleteUsuario(d.usuario.id);
+      toast.success("Usuario archivado");
+      setOpenArchive(false);
+      navigate("/app/usuarios");
+    } catch (error) {
+      toast.error(mensajeDeError(error, "No se pudo archivar"));
+    } finally {
+      setArchiving(false);
+    }
+  };
+
   const handleResetMfa = async () => {
     if (!d.usuario?.id) return;
     setResettingMfa(true);
@@ -327,9 +353,7 @@ export default function UsuarioDetallePage() {
       cell: ({ row }) => (
         <div className="flex justify-end pr-2">
           <DropdownMenu>
-            <DropdownMenuTrigger className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted">
-              <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
+            <RowActionsTrigger />
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem onClick={() => navigate(`/app/eventos/${row.original.id}`)}>
                 Ver detalle
@@ -384,6 +408,10 @@ export default function UsuarioDetallePage() {
           onPassword={() => setOpenPassword(true)}
           onDesbloquear={() => setOpenUnlock(true)}
           onRestablecerMfa={() => setOpenResetMfa(true)}
+          // Never your own: the server refuses it ("pídaselo a otro
+          // administrador"), and so does not offer it.
+          puedeArchivar={can(rol, "seguridad", "archivar") && !isOwnProfile}
+          onArchivar={() => setOpenArchive(true)}
         />
       </Card>
 
@@ -477,6 +505,29 @@ export default function UsuarioDetallePage() {
             <AlertDialogCancel disabled={unlocking}>Cancelar</AlertDialogCancel>
             <AlertDialogAction disabled={unlocking} onClick={handleUnlock}>
               {unlocking ? "Desbloqueando..." : "Desbloquear"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm: archivar la cuenta */}
+      <AlertDialog open={openArchive} onOpenChange={(v) => { if (!v) setOpenArchive(false); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Archivar usuario?</AlertDialogTitle>
+            <AlertDialogDescription>
+              El usuario <strong>{d.usuario?.name} {d.usuario?.lastname}</strong> quedará archivado y
+              dejará de aparecer en las listas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={archiving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive-fill hover:bg-destructive-fill/90 text-white"
+              disabled={archiving}
+              onClick={handleArchive}
+            >
+              {archiving ? "Archivando..." : "Archivar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

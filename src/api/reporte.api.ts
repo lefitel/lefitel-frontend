@@ -1,6 +1,6 @@
 import axios from "axios";
 import { urlApi, urlReporte } from "./url";
-import { EventoInterface, ReporteInterface } from "../interfaces/interfaces";
+import { EventoInterface, ReporteInterface, Tramo } from "../interfaces/interfaces";
 
 // `GET` with the filter in the URL, not `PUT` with it in a body — §3.1 of the
 // API standard. The six reports read and write nothing at all, and a `PUT` that
@@ -14,8 +14,9 @@ import { EventoInterface, ReporteInterface } from "../interfaces/interfaces";
 //   - **a `Date` is serialised as an ISO string.** The server parses it back;
 //     anything else — a locale string, `[object Object]` — is an invalid date,
 //     which it now refuses with a 400 instead of turning into a 500.
-//   - **`null` is dropped.** `TramoInicial` is `null` on four of the six, and if
-//     it travelled as the text "null" the server would refuse the whole filter.
+//   - **`null` and `undefined` are dropped.** The screens leave the `tramo` key
+//     out when none is chosen; were one to slip through as `null`, it must not
+//     travel as the text "null", which the server refuses as a whole filter.
 //   - **`false` travels as `false`, not as nothing.** `excludeOld` is the one
 //     value where the difference is invisible: dropped, the server would read
 //     its default, which happens to be the same — until the day the default
@@ -48,10 +49,7 @@ export const getReporteRecorrido = (
 // ─── Nuevos endpoints ─────────────────────────────────────────────────────────
 
 export interface EstadoRedRow {
-  ciudadAId: number;
-  ciudadBId: number;
-  ciudadAName: string;
-  ciudadBName: string;
+  tramo: Tramo;
   totalPostes: number;
   conPendientes: number;
   totalPendientes: number;
@@ -68,10 +66,7 @@ export interface ObsFrecuenciaRow {
 }
 
 export interface TiempoTramoRow {
-  ciudadAId: number | null;
-  ciudadBId: number | null;
-  ciudadAName: string;
-  ciudadBName: string;
+  tramo: Tramo;
   /** Eventos que entran en el promedio, ya sin los descartados. */
   count: number;
   avgDias: number;
@@ -91,7 +86,7 @@ export interface TiemposResumen {
 }
 
 export const getEstadoRed = (
-  filtro: { fechaInicial?: Date; fechaFinal?: Date }
+  filtro: { fechaInicial?: Date; fechaFinal?: Date; tramo?: number }
 ): Promise<EstadoRedRow[]> => {
   return axios
     .get(urlApi + urlReporte + "estado-red", { params: filtro })
@@ -99,7 +94,7 @@ export const getEstadoRed = (
 };
 
 export const getObsFrecuencia = (
-  filtro: { fechaInicial: Date; fechaFinal: Date }
+  filtro: { fechaInicial: Date; fechaFinal: Date; tramo?: number }
 ): Promise<ObsFrecuenciaRow[]> => {
   return axios
     .get(urlApi + urlReporte + "frecuencia-obs", { params: filtro })
@@ -107,7 +102,7 @@ export const getObsFrecuencia = (
 };
 
 export const getTiemposResumen = (
-  filtro: { fechaInicial: Date; fechaFinal: Date }
+  filtro: { fechaInicial: Date; fechaFinal: Date; tramo?: number }
 ): Promise<TiemposResumen> => {
   return axios
     .get(urlApi + urlReporte + "resumen-tiempos", { params: filtro })

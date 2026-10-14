@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LogOut,
   ChevronsUpDown,
+  Moon,
   Network,
   Smartphone,
   Sparkles,
@@ -42,12 +43,14 @@ import {
   Avatar,
   AvatarFallback,
 } from "./ui/avatar";
+import { Switch } from "./ui/switch";
 import { SesionContext } from "../context/SesionContext";
 import logo from "../assets/images/logo.png";
 import { APP_VERSION } from "../data/changelog";
 import { useInstallPrompt } from "../hooks/useInstallPrompt";
 import { useUnseenRelease } from "../hooks/useSeenRelease";
 import { InstallSheet } from "./InstallSheet";
+import { useTheme } from "./theme-provider";
 
 
 export const AppSidebar = () => {
@@ -61,6 +64,7 @@ export const AppSidebar = () => {
   const [installHelpOpen, setInstallHelpOpen] = useState(false);
   const { canInstall, installed, platform, install } = useInstallPrompt();
   const unseenRelease = useUnseenRelease();
+  const { resolvedTheme, setTheme } = useTheme();
 
   const userName = `${sesion.usuario.name} ${sesion.usuario.lastname}`.trim();
   const initials = (sesion.usuario.name?.[0] ?? "") + (sesion.usuario.lastname?.[0] ?? "");
@@ -216,6 +220,29 @@ export const AppSidebar = () => {
                       {APP_VERSION}
                     </span>
                   </Link>
+                </DropdownMenuItem>
+                {/* The one entry that does not close the menu: the whole
+                    screen changes under it, so the way back is the same click
+                    again rather than a trip to reopen it. The switch is only
+                    the picture of the state — hidden from assistive tech and
+                    out of the tab order — because the entry itself is the
+                    control, and says so with its role. */}
+                <DropdownMenuItem
+                  role="menuitemcheckbox"
+                  aria-checked={resolvedTheme === "dark"}
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+                  }}
+                >
+                  <Moon className="mr-2" />
+                  Tema oscuro
+                  <Switch
+                    checked={resolvedTheme === "dark"}
+                    tabIndex={-1}
+                    aria-hidden
+                    className="pointer-events-none ml-auto"
+                  />
                 </DropdownMenuItem>
                 {/* Development only. Same guard as the route in `App.tsx`,
                     and both are needed: Vite turns `import.meta.env.DEV` into

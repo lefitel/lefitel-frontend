@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { getDashboard, DashboardEvento, DashboardPoste } from "../../../api/dashboard.api";
-import { PosteInterface } from "../../../interfaces/interfaces";
+import { Departamento, PosteInterface } from "../../../interfaces/interfaces";
 import { posteExample } from "../../../data/example";
-import { Period, MapTab, KpiData, MapMarker, MONTH_NAMES, CustomRange } from "./types";
+import { Period, MapTab, MapDepartamento, KpiData, MapMarker, MONTH_NAMES, CustomRange } from "./types";
 import { chartBuckets, getPeriodBounds, Granularity, MAX_CHART_POINTS } from "./helpers";
 
 export interface CriticalAlert {
@@ -43,6 +43,13 @@ export interface InicioData {
   currentDateRange: { start: Date; end: Date };
   mapTab: MapTab;
   setMapTab: (t: MapTab) => void;
+  /** The department the map is narrowed to. Only the map: the cards and the chart count everything. */
+  mapDepartamento: MapDepartamento;
+  setMapDepartamento: (d: MapDepartamento) => void;
+  /** The departments that have at least one pole, by name. */
+  mapDepartamentos: Departamento[];
+  /** Whether any pole has no department, so the map can offer to show those. */
+  mapSinDepartamento: boolean;
   kpis: KpiData | null;
   /**
    * Tres cuentas por tramo de tiempo, cada una por su propia fecha: cuántos
@@ -87,6 +94,10 @@ const GRANULARITY_LABELS: Record<Granularity, string> = {
 export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): InicioData {
   const [listPostes, setListPostes] = useState<DashboardPoste[] | null>(null);
   const [listEventos, setListEventos] = useState<DashboardEvento[] | null>(null);
+  // When `listEventos` arrived. The clock is read here, once per load, and not
+  // while rendering: a render that reads the time is not repeatable, so the
+  // alerts would depend on when React happened to render rather than on the data.
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [period, setPeriod] = useState<Period>("custom");
@@ -95,6 +106,7 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
     return { start: new Date(n.getFullYear(), n.getMonth() - 1, 1), end: n };
   });
   const [mapTab, setMapTab] = useState<MapTab>("postes");
+  const [mapDepartamentoElegido, setMapDepartamento] = useState<MapDepartamento>("all");
   const [dataPoste, setDataPoste] = useState<PosteInterface>(posteExample);
   const [openEditPoste, setOpenEditPoste] = useState(false);
 
@@ -106,6 +118,7 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
       const data = await getDashboard();
       setListEventos(data.eventos);
       setListPostes(data.postes);
+      setLoadedAt(Date.now());
       setError(false);
     } catch {
       // Both: the toast for whoever is looking right now, the flag for whoever
@@ -300,13 +313,15 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
 
   const criticalAlerts = useMemo<CriticalAlert>(() => {
     const thresholdDays = 7;
-    if (!listEventos) return { events: [], thresholdDays };
-    const cutoff = Date.now() - thresholdDays * 86_400_000;
+    if (!listEventos || loadedAt === null) return { events: [], thresholdDays };
+    // "Older than a week" is counted from when the data was loaded, so the list
+    // is stable between renders and is recomputed with each refresh.
+    const cutoff = loadedAt - thresholdDays * 86_400_000;
     const events = listEventos
       .filter((e) => e.priority && !e.state && new Date(e.date).getTime() <= cutoff)
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     return { events, thresholdDays };
-  }, [listEventos]);
+  }, [listEventos, loadedAt]);
 
   const topPostes = useMemo(() => {
     if (!listEventos) return [];
@@ -320,7 +335,43 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
     return [...byPoste.values()].sort((a, b) => b.count - a.count).slice(0, 6);
   }, [listEventos, bounds, period]);
 
+  // ── El mapa, por departamento ──────────────────────────────────────────────
+  //
+  // El departamento es del tramo y el tramo viaja dentro de cada poste. Un
+  // evento no lo trae: el suyo es el de su poste, y se busca por `id_poste`.
+  // `null` es "no tiene": un poste sin tramo, o en un tramo al que aún no se le
+  // ha dado departamento.
+  const departamentoDePoste = useMemo(
+    () => new Map((listPostes ?? []).map((p) => [p.id, p.tramo?.departamento?.id ?? null])),
+    [listPostes],
+  );
+
+  const { mapDepartamentos, mapSinDepartamento } = useMemo(() => {
+    const porId = new Map<number, Departamento>();
+    for (const p of listPostes ?? []) {
+      const d = p.tramo?.departamento;
+      if (d) porId.set(d.id, { id: d.id, name: d.name });
+    }
+    return {
+      mapDepartamentos: [...porId.values()].sort((a, b) => a.name.localeCompare(b.name, "es")),
+      mapSinDepartamento: [...departamentoDePoste.values()].some((id) => id === null),
+    };
+  }, [listPostes, departamentoDePoste]);
+
+  // Lo elegido solo vale mientras siga en la lista. Tras recargar puede no
+  // quedar ningún poste en ese departamento, y un filtro que el selector ya no
+  // enseña dejaría el mapa vacío sin nada en pantalla que lo explique.
+  const mapDepartamento: MapDepartamento =
+    mapDepartamentoElegido === "all" ? "all"
+    : mapDepartamentoElegido === "none" ? (mapSinDepartamento ? "none" : "all")
+    : mapDepartamentos.some((d) => d.id === mapDepartamentoElegido) ? mapDepartamentoElegido : "all";
+
   const mapMarkers = useMemo((): MapMarker[] => {
+    const enDepartamento = (idPoste: number) => {
+      if (mapDepartamento === "all") return true;
+      const id = departamentoDePoste.get(idPoste) ?? null;
+      return mapDepartamento === "none" ? id === null : id === mapDepartamento;
+    };
     const inCurr = period === "all" ? () => true : (d: Date) => d >= bounds.start && d <= bounds.end;
     const hasRevisionInCurr = (e: DashboardEvento) =>
       (e.revisions ?? []).some((r) => inCurr(new Date(r.date)));
@@ -328,29 +379,30 @@ export function useInicioData(chartMaxPoints: number = MAX_CHART_POINTS): Inicio
     if (mapTab === "postes") {
       const revisedPosteIds = new Set((listEventos ?? []).filter(hasRevisionInCurr).map((e) => e.id_poste));
       return (listPostes ?? [])
-        .filter((p) => revisedPosteIds.has(p.id))
+        .filter((p) => revisedPosteIds.has(p.id) && enDepartamento(p.id))
         .map((p) => ({ lat: p.lat, lng: p.lng, label: p.name, isPoste: true as const, item: p }));
     }
     if (mapTab === "pendientes") {
       return (listEventos ?? [])
         .filter((e) => {
           const hasCoords = (e.poste?.lat ?? 0) !== 0 && (e.poste?.lng ?? 0) !== 0;
-          return !e.state && hasRevisionInCurr(e) && hasCoords;
+          return !e.state && hasRevisionInCurr(e) && hasCoords && enDepartamento(e.id_poste);
         })
         .map((e) => ({ lat: e.poste!.lat, lng: e.poste!.lng, label: e.poste?.name ?? "—", isPoste: false as const, item: e }));
     }
     return (listEventos ?? [])
       .filter((e) => {
         const hasCoords = (e.poste?.lat ?? 0) !== 0 && (e.poste?.lng ?? 0) !== 0;
-        const sd = getSolDate(e); return e.state && !!sd && inCurr(sd) && hasCoords;
+        const sd = getSolDate(e); return e.state && !!sd && inCurr(sd) && hasCoords && enDepartamento(e.id_poste);
       })
       .map((e) => ({ lat: e.poste!.lat, lng: e.poste!.lng, label: e.poste?.name ?? "—", isPoste: false as const, item: e }));
-  }, [listPostes, listEventos, mapTab, bounds, period]);
+  }, [listPostes, listEventos, mapTab, bounds, period, mapDepartamento, departamentoDePoste]);
 
   return {
     loading, error, load, period, setPeriod, customRange, setCustomRange,
     currentDateRange: { start: bounds.start, end: bounds.end },
     mapTab, setMapTab,
+    mapDepartamento, setMapDepartamento, mapDepartamentos, mapSinDepartamento,
     kpis, chartData: chart.tramos, chartGranularity: chart.granularity, xAxisLabel, showTrend,
     urgentEvents, criticalObsEvents, topPostes, mapMarkers, criticalAlerts,
     dataPoste, setDataPoste, openEditPoste, setOpenEditPoste,

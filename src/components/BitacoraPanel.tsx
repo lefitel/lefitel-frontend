@@ -9,6 +9,8 @@ import {
   Trash2Icon, UserPlusIcon, WrenchIcon, ZapIcon,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { touchTarget } from "./ui/touch-target";
+import { cn } from "@/lib/utils";
 
 const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
   LOGIN:           { icon: <LogInIcon className="h-3.5 w-3.5 text-primary" />,           bg: "bg-primary/10" },
@@ -46,6 +48,10 @@ const ACTION_CONFIG: Record<string, { icon: React.ReactNode; bg: string }> = {
   UPDATE_CIUDAD:       { icon: <PencilIcon className="h-3.5 w-3.5 text-blue-500" />,          bg: "bg-blue-500/10" },
   DELETE_CIUDAD:       { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,       bg: "bg-destructive/10" },
   RESTORE_CIUDAD:      { icon: <RotateCcwIcon className="h-3.5 w-3.5 text-teal-600" />,      bg: "bg-teal-500/10" },
+  CREATE_TRAMO:        { icon: <MapPinIcon className="h-3.5 w-3.5 text-emerald-600" />,       bg: "bg-emerald-500/10" },
+  UPDATE_TRAMO:        { icon: <PencilIcon className="h-3.5 w-3.5 text-blue-500" />,          bg: "bg-blue-500/10" },
+  DELETE_TRAMO:        { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,       bg: "bg-destructive/10" },
+  RESTORE_TRAMO:       { icon: <RotateCcwIcon className="h-3.5 w-3.5 text-teal-600" />,      bg: "bg-teal-500/10" },
   CREATE_MATERIAL:     { icon: <WrenchIcon className="h-3.5 w-3.5 text-emerald-600" />,       bg: "bg-emerald-500/10" },
   UPDATE_MATERIAL:     { icon: <PencilIcon className="h-3.5 w-3.5 text-blue-500" />,          bg: "bg-blue-500/10" },
   DELETE_MATERIAL:     { icon: <Trash2Icon className="h-3.5 w-3.5 text-destructive" />,       bg: "bg-destructive/10" },
@@ -112,7 +118,14 @@ function MetadataPopover({ metadata, ip }: { metadata: Record<string, unknown>; 
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button className="shrink-0 inline-flex items-center text-muted-foreground/25 hover:text-muted-foreground/60 transition-colors">
+        {/* Barely there where a mouse can find it by hovering the row; a finger
+            has no hover, so on a touch screen it is drawn as plainly as the
+            text beside it, and given room to be pressed. */}
+        <button
+          type="button"
+          aria-label="Detalles del registro"
+          className={cn("shrink-0 inline-flex items-center text-muted-foreground/60 mouse:text-muted-foreground/25 hover:text-muted-foreground/60 transition-colors", touchTarget)}
+        >
           <InfoIcon className="size-3.5" />
         </button>
       </PopoverTrigger>

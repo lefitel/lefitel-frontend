@@ -101,6 +101,43 @@ export interface Ejecucion {
   detalle: string | null;
 }
 
+/**
+ * One run in the history of every schedule: the run as a schedule's own history
+ * serves it, and the schedule it belongs to.
+ */
+export interface EjecucionDelHistorial extends Ejecucion {
+  /**
+   * Whether who this run was sent to was recorded. False for the runs from
+   * before that record existed, which have nothing to show.
+   */
+  con_destinatarios: boolean;
+  programacion: {
+    id: number;
+    formato: FormatoProgramado;
+    /** The schedule was removed. Its runs stay: they are what happened. */
+    eliminada: boolean;
+    /** `null` when the saved report no longer exists at all. */
+    informe: { id: number; name: string } | null;
+    /** `null` when the owner's account cannot be found. */
+    dueno: { id: number; name: string | null; lastname: string | null } | null;
+  };
+}
+
+/** What became of one recipient of one run. */
+export type ResultadoDeEntrega = "entregado" | "rechazado" | "no_enviado" | "sin_cupo";
+
+/** One recipient of one run, as it was at that moment. */
+export interface EntregaDeEjecucion {
+  id: number;
+  tipo: "usuario" | "externo";
+  /**
+   * An account's name and surname; an outside address's address. There is no
+   * separate field for an address: an account's is never sent.
+   */
+  nombre: string;
+  resultado: ResultadoDeEntrega;
+}
+
 /** An account that can be picked as a recipient. */
 export interface DestinatarioPosible {
   id: number;
@@ -143,6 +180,27 @@ export const enviarProgramacionAhora = (id: number): Promise<ResultadoDeEnvio> =
 
 export const listarEjecuciones = (id: number, page = 1): Promise<Sobre<Ejecucion>> =>
   axios.get(urlApi + urlGenerador + `schedules/${id}/runs`, { params: { page } }).then((r) => r.data);
+
+/**
+ * The runs of every schedule the caller may see, newest first. A filter that is
+ * not set is not sent at all: the server answers an empty parameter with a 400,
+ * never with "all".
+ */
+export const listarHistorial = (params: {
+  page?: number;
+  limit?: number;
+  estado?: EstadoDeEjecucion;
+  id_programacion?: number;
+}): Promise<Sobre<EjecucionDelHistorial>> =>
+  axios
+    .get(urlApi + urlGenerador + "schedules/runs", {
+      params: Object.fromEntries(Object.entries(params).filter(([, v]) => v !== undefined)),
+    })
+    .then((r) => r.data);
+
+/** Who one run was sent to, and what became of each. */
+export const listarDestinatariosDeEjecucion = (idEjecucion: number): Promise<Sobre<EntregaDeEjecucion>> =>
+  axios.get(urlApi + urlGenerador + `schedules/runs/${idEjecucion}/recipients`).then((r) => r.data);
 
 export const listarDestinatariosPosibles = (): Promise<Sobre<DestinatarioPosible>> =>
   axios.get(urlApi + urlGenerador + "schedules/recipients", { params: { limit: "all" } }).then((r) => r.data);

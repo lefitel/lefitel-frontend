@@ -24,7 +24,7 @@
 // the same either way.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import UsuarioDetallePage from "./UsuarioDetallePage";
@@ -54,6 +54,7 @@ const editUserPass = vi.fn();
 const searchUsuario_user = vi.fn();
 const resetMfaUsuario = vi.fn();
 const desbloquearUsuario = vi.fn();
+const deleteUsuario = vi.fn();
 const load = vi.fn();
 /** What the account attended. Empty unless a test is about the figures. */
 let eventos: EventoInterface[] = [];
@@ -107,6 +108,7 @@ vi.mock("../../../api/Usuario.api", () => ({
   searchUsuario_user: (...args: unknown[]) => searchUsuario_user(...args),
   resetMfaUsuario: (...args: unknown[]) => resetMfaUsuario(...args),
   desbloquearUsuario: (...args: unknown[]) => desbloquearUsuario(...args),
+  deleteUsuario: (...args: unknown[]) => deleteUsuario(...args),
 }));
 vi.mock("sonner", () => ({
   toast: { warning: vi.fn(), error: vi.fn(), success: vi.fn(), info: vi.fn() },
@@ -141,6 +143,7 @@ function Harness({ quien = YO }: { quien?: number }) {
       <MemoryRouter initialEntries={[`/app/usuarios/${usuario.id}`]}>
         <Routes>
           <Route path="/app/usuarios/:id" element={<UsuarioDetallePage />} />
+          <Route path="/app/usuarios" element={<p>la lista de usuarios</p>} />
         </Routes>
       </MemoryRouter>
     </SesionContext.Provider>
@@ -210,6 +213,7 @@ beforeEach(() => {
   // este fichero seguiría en verde con la pantalla diciendo que el rescate
   // falló sobre una cuenta ya desbloqueada.
   desbloquearUsuario.mockResolvedValue({ status: 204 });
+  deleteUsuario.mockResolvedValue(undefined);
 });
 
 describe("changing your own username", () => {
@@ -749,18 +753,96 @@ describe("the figures of the account", () => {
     ];
     render(<Harness />);
 
-    expect(celda("Total eventos")).toHaveTextContent(/3$/);
+    expect(celda("Total")).toHaveTextContent(/3$/);
     expect(celda("Pendientes")).toHaveTextContent(/2$/);
     expect(celda("Resueltos")).toHaveTextContent(/1$/);
-    expect(celda("% Resolución")).toHaveTextContent(/33%$/);
-    expect(celda("Alta prioridad")).toHaveTextContent(/1$/);
+    expect(screen.getByRole("progressbar", { name: "Resolución" })).toHaveAttribute("aria-valuenow", "33");
+    expect(screen.getByText("33% resuelto")).toBeInTheDocument();
+    expect(screen.getByText("1 de alta prioridad")).toBeInTheDocument();
     expect(fila("Último evento")).toHaveTextContent("20/3/2026");
   });
 
   it("says so when the account has attended nothing", () => {
     render(<Harness />);
 
-    expect(celda("% Resolución")).toHaveTextContent(/0%$/);
+    expect(screen.getByRole("progressbar", { name: "Resolución" })).toHaveAttribute("aria-valuenow", "0");
+    // Not a line saying zero: it is there when there is something to say.
+    expect(screen.queryByText(/de alta prioridad/)).not.toBeInTheDocument();
     expect(fila("Último evento")).toHaveTextContent("Sin actividad");
+  });
+});
+
+describe("the ways of reaching the person", () => {
+  it("makes the phone something to press, and copies it", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    render(<Harness />);
+
+    expect(screen.getByRole("link", { name: "700" })).toHaveAttribute("href", "tel:700");
+    await user.click(screen.getByRole("button", { name: "Copiar teléfono" }));
+    expect(writeText).toHaveBeenCalledWith("700");
+  });
+
+  it("says there is no recovery address, and offers nothing to copy", () => {
+    render(<Harness />);
+
+    expect(screen.getByText("Correo de recuperación").parentElement).toHaveTextContent("Sin configurar");
+    expect(screen.queryByRole("button", { name: "Copiar correo" })).not.toBeInTheDocument();
+  });
+});
+
+describe("archiving the account from its sheet", () => {
+  const boton = () => screen.queryByRole("button", { name: "Archivar" });
+
+  it("is never offered on your own account: the server refuses it", () => {
+    render(<Harness quien={YO} />);
+
+    expect(boton()).not.toBeInTheDocument();
+  });
+
+  it("is not offered without seguridad.archivar", () => {
+    canMock.mockReturnValue(false);
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    expect(boton()).not.toBeInTheDocument();
+  });
+
+  it("asks first, naming the person, and sends nothing until it is confirmed", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(boton()!);
+    expect(await screen.findByRole("alertdialog")).toHaveTextContent("Isaias Salas");
+    expect(deleteUsuario).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(deleteUsuario).not.toHaveBeenCalled();
+  });
+
+  it("archives the account being looked at and leaves for the list", async () => {
+    const user = userEvent.setup();
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(boton()!);
+    const dialogo = await screen.findByRole("alertdialog");
+    await user.click(within(dialogo).getByRole("button", { name: "Archivar" }));
+
+    await waitFor(() => expect(deleteUsuario).toHaveBeenCalledWith(YO));
+    expect(await screen.findByText("la lista de usuarios")).toBeInTheDocument();
+  });
+
+  it("stays on the sheet and says why when the server refuses", async () => {
+    const user = userEvent.setup();
+    deleteUsuario.mockRejectedValue({ response: { status: 403, data: { message: "No tiene permiso" } } });
+    render(<Harness quien={OTRA_PERSONA} />);
+
+    await user.click(boton()!);
+    const dialogo = await screen.findByRole("alertdialog");
+    await user.click(within(dialogo).getByRole("button", { name: "Archivar" }));
+
+    const { toast } = await import("sonner");
+    await waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(screen.queryByText("la lista de usuarios")).not.toBeInTheDocument();
   });
 });

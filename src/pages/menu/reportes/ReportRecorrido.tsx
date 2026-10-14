@@ -14,24 +14,23 @@ import { SesionContext } from "../../../context/SesionContext";
 import { can } from "../../../lib/permissions";
 import { getReporteRecorrido } from "../../../api/reporte.api";
 import { mensajeDeError } from "../../../api/descarga";
-import {
-    estadoTrasFallo, getOpcionesReporte, EstadoOpciones, OpcionCiudad, TramoPair,
-} from "../../../api/opciones.api";
-import { getPosteByTramo } from "../../../api/Poste.api";
-import { useTramoNeighbors } from "../../../hooks/useTramoNeighbors";
+import { estadoTrasFallo, getOpcionesReporte, EstadoOpciones } from "../../../api/opciones.api";
+import { getPostesDelTramo } from "../../../api/Poste.api";
 import { fetchOrsRoute } from "../../../lib/orsRoute";
 import { extremosCreibles, ordenarTramo } from "../../../lib/tramoOrden";
+import { ETIQUETA_EXTREMO, extremosDibujables } from "../../../lib/tramo";
 import {
     EventoInterface,
     PosteInterface,
     ReporteInterface,
+    Tramo,
 } from "../../../interfaces/interfaces";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Button } from "../../../components/ui/button";
 import { Label } from "../../../components/ui/label";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Badge } from "../../../components/ui/badge";
-import { Combobox } from "../../../components/ui/combobox";
+import TramoCombobox from "../../../components/TramoCombobox";
 import { Switch } from "../../../components/ui/switch";
 import { SegmentedControl } from "../../../components/ui/segmented-control";
 import { DownloadIcon, Loader2Icon, MapPinIcon, RouteIcon } from "lucide-react";
@@ -78,13 +77,16 @@ const getEventStatusLabel = (e: EventoInterface): string => {
     return "Pendiente";
 };
 
+/** The tramo's name as a file name: what Windows and the download attribute refuse becomes a hyphen. */
+const nombreDeArchivo = (nombre: string): string => nombre.replace(/[\\/:*?"<>|]/g, "-").trim();
+
 /**
  * Exports exactly the rows on screen. The button lives in the same header row
  * as the severity and status filters, so it was handed the unfiltered list:
  * narrowing the list to three critical events and pressing CSV downloaded all
  * four hundred, with nothing on screen saying so.
  */
-const exportCsv = (rowsOnScreen: EventoInterface[], ciudadA: string, ciudadB: string) => {
+const exportCsv = (rowsOnScreen: EventoInterface[], tramo: Tramo) => {
     const headers = ["Poste", "Descripción", "Fecha", "Criticidad", "Revisiones", "Estado", "Prioridad"];
     const rows = rowsOnScreen.map((e) => {
         const c = getEventCriticality(e);
@@ -105,7 +107,7 @@ const exportCsv = (rowsOnScreen: EventoInterface[], ciudadA: string, ciudadB: st
     a.href = url;
     const n = new Date();
     const ts = `${n.getFullYear()}${String(n.getMonth() + 1).padStart(2, "0")}${String(n.getDate()).padStart(2, "0")}_${String(n.getHours()).padStart(2, "0")}${String(n.getMinutes()).padStart(2, "0")}${String(n.getSeconds()).padStart(2, "0")}`;
-    a.download = `recorrido_${ciudadA}-${ciudadB}_${ts}.csv`;
+    a.download = `recorrido_${nombreDeArchivo(tramo.nombre)}_${ts}.csv`;
     a.click();
     URL.revokeObjectURL(url);
 };
@@ -118,29 +120,27 @@ const ReportRecorridoSec = () => {
 
     const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
     const [fechaFin, setFechaFin] = useState<Date | undefined>(undefined);
-    const [tramoInicial, setTramoInicial] = useState<number | null>(null);
-    const [tramoFinal, setTramoFinal] = useState<number | null>(null);
-    const [listCiudad, setListCiudad] = useState<OpcionCiudad[]>([]);
-    const [tramos, setTramos] = useState<TramoPair[]>([]);
+    /** The tramo the selector shows now. Required: there is no "all" entry. */
+    const [tramoId, setTramoId] = useState<number | null>(null);
+    const [tramos, setTramos] = useState<Tramo[]>([]);
     /**
-     * Why the two comboboxes are empty, when they are — and this screen is the
-     * one that most needs to say it. Without cities there is no stretch, and
-     * without a stretch `handleGenerar` refuses: the screen is simply dead, and
+     * Why the selector is empty, when it is — and this screen is the one that
+     * most needs to say it. Without tramos there is nothing to choose, and
+     * without a tramo `handleGenerar` refuses: the screen is simply dead, and
      * a four-second toast is all it used to offer as an explanation.
      */
     const [estadoOpciones, setEstadoOpciones] = useState<EstadoOpciones>("cargando");
-    const neighbors = useTramoNeighbors(tramos);
     const [excludeOld, setExcludeOld] = useState(false);
     const [list, setList] = useState<EventoInterface[]>([]);
     /**
-     * The filter the rows on screen were generated with: dates, stretch and the
+     * The filter the rows on screen were generated with: dates, tramo and the
      * "solo nuevas" switch. Set with `list` and cleared with it, so everything
      * that describes the rows — the "Tramo:" label, the CSV's filename, the
-     * two city markers, the badge — reads this and never the live comboboxes,
+     * two city markers, the badge — reads this and never the live selector,
      * which can be moved without pressing Generar.
      */
     const [applied, setApplied] = useState<{
-        start: Date; end: Date; tramoInicial: number; tramoFinal: number; excludeOld: boolean;
+        start: Date; end: Date; tramo: Tramo; excludeOld: boolean;
     } | null>(null);
     const [loading, setLoading] = useState(false);
     /** The run whose answer is still wanted; see `handleGenerar`. */
@@ -153,13 +153,11 @@ const ReportRecorridoSec = () => {
     const [resolverEvento, setResolverEvento] = useState<EventoInterface | null>(null);
     const [addRevisionEventoId, setAddRevisionEventoId] = useState<number | null>(null);
 
-    // Both blocks of the same response. `lat`/`lng` are the load-bearing part
-    // here: the whole route calculation sits behind `if (a?.lat && a?.lng …)`,
-    // so a city list without them draws this screen with no line and no error.
+    // Each tramo carries its two cities with their positions, which is what the
+    // line and the two markers are drawn from: no second list is needed.
     useEffect(() => {
         getOpcionesReporte()
             .then((opciones) => {
-                setListCiudad(opciones.ciudad);
                 setTramos(opciones.tramos);
                 setEstadoOpciones("listas");
             })
@@ -172,15 +170,10 @@ const ReportRecorridoSec = () => {
             });
     }, []);
 
-    useEffect(() => {
-        if (tramoInicial && tramoFinal && neighbors.size > 0) {
-            const valid = neighbors.get(tramoInicial)?.has(tramoFinal);
-            if (!valid) setTramoFinal(null);
-        }
-    }, [tramoInicial, tramoFinal, neighbors]);
-
     /**
-     * Runs the report for what the controls say now.
+     * Runs the report for the controls as they are now, or — when `aplicado` is
+     * given — for that filter instead (the one already applied, which is what a
+     * popup's re-run hands over).
      *
      * `keepOnError` is for the two re-runs this screen fires on its own — after
      * an incident is resolved or revised from a map popup — and means what it
@@ -198,15 +191,23 @@ const ReportRecorridoSec = () => {
      * finish last — and, before this guard, wipe the fresh rows of the one that
      * had already succeeded.
      */
-    const handleGenerar = async (keepOnError = false) => {
-        if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
-        if (fechaInicio > fechaFin) return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
-        if (!tramoInicial || !tramoFinal) return toast.warning("Selecciona el tramo inicial y final");
-        if (tramoInicial === tramoFinal) return toast.warning("El tramo inicial y final deben ser diferentes");
+    const handleGenerar = async (keepOnError = false, aplicado?: NonNullable<typeof applied>) => {
+        let filtroDeLaPantalla = aplicado;
+        if (!filtroDeLaPantalla) {
+            if (!fechaInicio || !fechaFin) return toast.warning("Selecciona un rango de fechas");
+            if (fechaInicio > fechaFin) return toast.warning("La fecha de inicio debe ser anterior a la fecha de fin");
+            const delSelector = tramos.find((t) => t.id === tramoId);
+            if (tramoId === null || !delSelector) return toast.warning("Selecciona un tramo");
 
-        const inicio = new Date(fechaInicio); inicio.setHours(0, 0, 0, 0);
-        const fin = new Date(fechaFin); fin.setHours(23, 59, 59, 0);
-        const filtro: ReporteInterface = { fechaInicial: inicio, fechaFinal: fin, TramoInicial: tramoInicial, TramoFinal: tramoFinal, excludeOld };
+            const desde = new Date(fechaInicio); desde.setHours(0, 0, 0, 0);
+            const hasta = new Date(fechaFin); hasta.setHours(23, 59, 59, 0);
+            filtroDeLaPantalla = { start: desde, end: hasta, tramo: delSelector, excludeOld };
+        }
+        const { start: inicio, end: fin, tramo: elegido } = filtroDeLaPantalla;
+        const idDelTramo = elegido.id;
+        const filtro: ReporteInterface = {
+            fechaInicial: inicio, fechaFinal: fin, tramo: idDelTramo, excludeOld: filtroDeLaPantalla.excludeOld,
+        };
 
         const seq = ++runSeq.current;
         setLoading(true);
@@ -220,18 +221,17 @@ const ReportRecorridoSec = () => {
             // down with it, with a message blaming the report.
             const [data, postesTramo] = await Promise.all([
                 getReporteRecorrido(filtro),
-                getPosteByTramo(tramoInicial, tramoFinal).catch(() => []),
+                getPostesDelTramo(idDelTramo).catch(() => []),
             ]);
             if (seq !== runSeq.current) return;
 
-            const a = listCiudad.find((c) => c.id === tramoInicial)!;
-            const b = listCiudad.find((c) => c.id === tramoFinal)!;
-            if (a?.lat && a?.lng && b?.lat && b?.lng) {
-                // El orden de los postes lo da `ordenarTramo`, la misma función
-                // que usan las otras tres pantallas que dibujan un tramo. Antes
-                // se ordenaba aquí, proyectando sobre la recta entre ciudades,
-                // y con una ciudad mal situada la línea salía enredada.
-                const tramo = ordenarTramo(postesTramo, a, b);
+            // La línea empieza por la primera ciudad del nombre del tramo.
+            // El orden de los postes lo da `ordenarTramo`, la misma función
+            // que usan las otras tres pantallas que dibujan un tramo. Un
+            // extremo sin posición se queda sin ella y la línea se ordena
+            // desde el otro, en vez de no dibujarse.
+            const tramo = ordenarTramo(postesTramo, ...extremosDibujables(elegido));
+            if (tramo.waypoints.length >= 2) {
                 const fallback = tramo.linea;
                 try {
                     // El recorte a 48 intermedios vivía aquí y solo aquí, que es
@@ -245,6 +245,8 @@ const ReportRecorridoSec = () => {
                     if (seq !== runSeq.current) return;
                     setRoutePath(fallback);
                 }
+            } else {
+                setRoutePath([]);
             }
 
             if (data.length === 0) {
@@ -253,7 +255,7 @@ const ReportRecorridoSec = () => {
                 setApplied(null);
             } else {
                 setList(data);
-                setApplied({ start: inicio, end: fin, tramoInicial, tramoFinal, excludeOld });
+                setApplied({ start: inicio, end: fin, tramo: elegido, excludeOld: filtroDeLaPantalla.excludeOld });
                 toast.success(`${data.length} ${data.length === 1 ? "evento encontrado" : "eventos encontrados"}`);
             }
         } catch (error) {
@@ -272,26 +274,32 @@ const ReportRecorridoSec = () => {
         }
     };
 
+    /**
+     * The re-run a map popup asks for after it changed an incident: the filter
+     * the rows on screen were generated with, whatever the controls say now.
+     */
+    const regenerar = () => { if (applied) void handleGenerar(true, applied); };
+
     // ─── Derived ──────────────────────────────────────────────────────────────
 
-    // The stretch the rows were generated for, not the one the comboboxes show
+    // The tramo the rows were generated for, not the one the selector shows
     // now: the label, the markers and the CSV's filename all describe the rows.
-    const ciudadA = listCiudad.find((c) => c.id === applied?.tramoInicial);
-    const ciudadB = listCiudad.find((c) => c.id === applied?.tramoFinal);
+    const tramoAplicado = applied?.tramo ?? null;
+    const [extremoUno, extremoDos] = extremosDibujables(tramoAplicado);
 
     const uniquePostes: PosteInterface[] = list.reduce((acc: PosteInterface[], e) => {
         if (e.poste && !acc.find((p) => p.id === e.poste!.id)) acc.push(e.poste as PosteInterface);
         return acc;
     }, []);
 
-    const mapCenter: [number, number] = ciudadA?.lat && ciudadA?.lng ? [ciudadA.lat, ciudadA.lng] : [-17.8, -63.2];
+    const mapCenter: [number, number] = extremoUno ? [extremoUno.lat, extremoUno.lng] : [-17.8, -63.2];
     const eventMapMarkers = list.filter((e) => (e.poste?.lat ?? 0) !== 0 && (e.poste?.lng ?? 0) !== 0);
     const posteMapMarkers = uniquePostes.filter((p) => (p.lat ?? 0) !== 0 && (p.lng ?? 0) !== 0);
 
     const boundsCoords: [number, number][] = [
         // Solo las ciudades que están cerca del tramo: una guardada con una
         // posición de relleno haría que el mapa encuadrara medio planeta.
-        ...extremosCreibles(posteMapMarkers, ciudadA, ciudadB).map((c): [number, number] => [c.lat, c.lng]),
+        ...extremosCreibles(posteMapMarkers, extremoUno, extremoDos).map((c): [number, number] => [c.lat, c.lng]),
         ...eventMapMarkers.map((e) => [e.poste!.lat, e.poste!.lng] as [number, number]),
     ];
 
@@ -313,7 +321,7 @@ const ReportRecorridoSec = () => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-2 gap-y-3 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-2 gap-y-3 items-end">
                         <div className="space-y-1.5">
                             <Label>Fecha de inicio</Label>
                             <DatePicker ariaLabel="Fecha de inicio" value={fechaInicio} onSelect={setFechaInicio} placeholder="Inicio" />
@@ -323,34 +331,8 @@ const ReportRecorridoSec = () => {
                             <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
                         </div>
                         <div className="space-y-1.5">
-                            <Label>Tramo desde</Label>
-                            <Combobox
-                                options={listCiudad
-                                    .filter((c) => {
-                                        if (c.id == null || c.id === tramoFinal) return false;
-                                        if (!tramoFinal) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                                        return neighbors.get(tramoFinal)?.has(c.id) ?? false;
-                                    })
-                                    .map((c) => ({ value: String(c.id), label: c.name }))}
-                                value={tramoInicial ? String(tramoInicial) : ""}
-                                onValueChange={(v) => setTramoInicial(v ? Number(v) : null)}
-                                placeholder="Seleccionar ciudad"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
-                            <Label>Tramo hasta</Label>
-                            <Combobox
-                                options={listCiudad
-                                    .filter((c) => {
-                                        if (c.id == null || c.id === tramoInicial) return false;
-                                        if (!tramoInicial) return (neighbors.get(c.id)?.size ?? 0) > 0;
-                                        return neighbors.get(tramoInicial)?.has(c.id) ?? false;
-                                    })
-                                    .map((c) => ({ value: String(c.id), label: c.name }))}
-                                value={tramoFinal ? String(tramoFinal) : ""}
-                                onValueChange={(v) => setTramoFinal(v ? Number(v) : null)}
-                                placeholder="Seleccionar ciudad"
-                            />
+                            <Label>Tramo</Label>
+                            <TramoCombobox tramos={tramos} value={tramoId} onChange={setTramoId} />
                         </div>
                     </div>
                     <div className="mt-5">
@@ -365,11 +347,11 @@ const ReportRecorridoSec = () => {
                         </label>
                     </div>
                     {(estadoOpciones === "denegado" || estadoOpciones === "fallo") && (
-                        // The screen that most needs this: without cities there
-                        // is no stretch, and `handleGenerar` refuses without a
-                        // stretch. All it used to offer was a toast that is
-                        // gone four seconds later, leaving a page with two
-                        // empty comboboxes and no explanation at all.
+                        // The screen that most needs this: without tramos there
+                        // is nothing to choose, and `handleGenerar` refuses
+                        // without a tramo. All it used to offer was a toast
+                        // that is gone four seconds later, leaving a page with
+                        // an empty selector and no explanation at all.
                         <p className="text-sm text-destructive mt-3">
                             {estadoOpciones === "denegado"
                                 ? "No tiene permiso para consultar los catálogos de informes, y sin ellos esta pantalla no puede ofrecerle ningún tramo."
@@ -385,7 +367,7 @@ const ReportRecorridoSec = () => {
                 </CardContent>
             </Card>
 
-            {list.length > 0 && ciudadA && ciudadB && (
+            {list.length > 0 && tramoAplicado && (
                 <>
                     {(() => {
                         const nuevas = applied
@@ -399,7 +381,7 @@ const ReportRecorridoSec = () => {
                         return (
                     <div className="flex flex-wrap items-center gap-3">
                         <span className="text-sm font-medium">
-                            Tramo: <span className="text-primary font-semibold">{ciudadA.name} — {ciudadB.name}</span>
+                            Tramo: <span className="text-primary font-semibold">{tramoAplicado.nombre}</span>
                         </span>
                         <Badge variant="outline" className="gap-1"><MapPinIcon className="h-3 w-3" />{list.length} {list.length === 1 ? "evento" : "eventos"}</Badge>
                         {!applied?.excludeOld && arrastradas > 0 && (
@@ -451,26 +433,20 @@ const ReportRecorridoSec = () => {
                                     <MapLine id="recorrido-route" positions={routePath.map(fromLatLngTuple)} />
                                 )}
 
-                                {/* Ciudad A */}
-                                {ciudadA.lat && ciudadA.lng && (
-                                    <MapPoint center={{ lat: ciudadA.lat, lng: ciudadA.lng }} radius={7} strokeColor={MAP_DOT.endpoint} fillColor={MAP_DOT.endpoint} fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
-                                        <div style={{ padding: "4px 2px 2px" }}>
-                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadA.name}</p>
-                                            <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Inicio del tramo</p>
-                                            <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadA.lat.toFixed(4)}, {ciudadA.lng.toFixed(4)}</p>
-                                        </div>
-                                    </MapPoint>
-                                )}
-                                {/* Ciudad B */}
-                                {ciudadB.lat && ciudadB.lng && (
-                                    <MapPoint center={{ lat: ciudadB.lat, lng: ciudadB.lng }} radius={7} strokeColor={MAP_DOT.endpoint} fillColor={MAP_DOT.endpoint} fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
-                                        <div style={{ padding: "4px 2px 2px" }}>
-                                            <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudadB.name}</p>
-                                            <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>Fin del tramo</p>
-                                            <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{ciudadB.lat.toFixed(4)}, {ciudadB.lng.toFixed(4)}</p>
-                                        </div>
-                                    </MapPoint>
-                                )}
+                                {/* The two cities of the tramo, in the order of its name */}
+                                {([[0, extremoUno], [1, extremoDos]] as const).map(([i, punto]) => {
+                                    const ciudad = tramoAplicado.ciudades?.[i];
+                                    if (!ciudad || !punto) return null;
+                                    return (
+                                        <MapPoint key={ciudad.id} center={punto} radius={7} strokeColor={MAP_DOT.endpoint} fillColor={MAP_DOT.endpoint} fillOpacity={1} strokeWidth={0} popupMinWidth={160}>
+                                            <div style={{ padding: "4px 2px 2px" }}>
+                                                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--foreground)" }}>{ciudad.name ?? "—"}</p>
+                                                <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--primary)", fontWeight: 500 }}>{ETIQUETA_EXTREMO}</p>
+                                                <p style={{ margin: "4px 0 0", fontSize: 10, color: "var(--muted-foreground)", fontFamily: "monospace" }}>{punto.lat.toFixed(4)}, {punto.lng.toFixed(4)}</p>
+                                            </div>
+                                        </MapPoint>
+                                    );
+                                })}
 
                                 {/* Event markers */}
                                 {mapTab === "eventos" && eventMapMarkers.map((e, i) => (
@@ -628,14 +604,22 @@ const ReportRecorridoSec = () => {
                     {/* Event list */}
                     <Card className="shadow-sm border-muted/60">
                         <CardHeader className="border-b border-border/40 pb-3">
-                            <div className="flex items-center justify-between flex-wrap gap-3">
+                            {/* `min-w-0` here and on the group below: the
+                                card's header is a grid, and without it each
+                                level is as wide as the three controls in a
+                                row — on a phone they ran out of the card
+                                instead of wrapping. */}
+                            <div className="flex min-w-0 items-center justify-between flex-wrap gap-3">
                                 <CardTitle>Eventos del Tramo</CardTitle>
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex min-w-0 items-center gap-2 flex-wrap">
                                     <SegmentedControl
                                         options={CRITICALITY_BAND_OPTIONS}
                                         value={critFilter}
                                         onValueChange={setCritFilter}
                                         size="sm"
+                                        // Wider than a phone: it scrolls
+                                        // inside itself instead of out of the card.
+                                        scrollable
                                         ariaLabel="Filtro por criticidad"
                                     />
                                     <SegmentedControl
@@ -646,6 +630,7 @@ const ReportRecorridoSec = () => {
                                         ]}
                                         value={estadoFilter}
                                         onValueChange={setEstadoFilter}
+                                        scrollable
                                         ariaLabel="Filtro de estado de eventos"
                                     />
                                     <Button
@@ -654,7 +639,7 @@ const ReportRecorridoSec = () => {
                                         className="h-8 gap-1.5 text-xs"
                                         disabled={filteredList.length === 0}
                                         title={`Descargar ${filteredList.length} ${filteredList.length === 1 ? "fila" : "filas"}`}
-                                        onClick={() => exportCsv(filteredList, ciudadA.name, ciudadB.name)}
+                                        onClick={() => exportCsv(filteredList, tramoAplicado)}
                                     >
                                         <DownloadIcon className="h-3.5 w-3.5" />
                                         CSV
@@ -668,8 +653,11 @@ const ReportRecorridoSec = () => {
                             ) : (
                                 <div className="divide-y divide-border">
                                     {filteredList.map((e) => (
-                                        <div key={e.id} className="flex items-center justify-between gap-4 py-3">
-                                            <div className="min-w-0">
+                                        // On a phone the badges go under the text: beside it they are
+                                        // some 300px that do not shrink, and the pole and the
+                                        // description were left with nothing.
+                                        <div key={e.id} className="flex items-center justify-between gap-4 py-3 max-sm:flex-col max-sm:items-start max-sm:gap-2">
+                                            <div className="min-w-0 max-sm:w-full">
                                                 <p className="text-sm font-medium truncate">{e.poste?.name ?? "—"}</p>
                                                 <p className="text-xs text-muted-foreground truncate">{e.description}</p>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -677,7 +665,7 @@ const ReportRecorridoSec = () => {
                                                     {(e.revisions?.length ?? 0) > 0 && <span className="ml-2">· {e.revisions!.length} {e.revisions!.length === 1 ? "revisión" : "revisiones"}</span>}
                                                 </p>
                                             </div>
-                                            <div className="flex items-center gap-2 shrink-0">
+                                            <div className="flex items-center gap-2 shrink-0 max-sm:flex-wrap">
                                                 <CriticalityBadge level={getEventCriticality(e)} compact />
                                                 <Badge className={`text-xs border-transparent shadow-none ${e.state ? "bg-primary/10 text-primary" : "bg-amber-500/10 text-amber-600"}`}>
                                                     {e.state ? "Solucionado" : "Pendiente"}
@@ -701,7 +689,7 @@ const ReportRecorridoSec = () => {
                     evento={resolverEvento}
                     open={!!resolverEvento}
                     setOpen={(v) => { if (!v) setResolverEvento(null); }}
-                    onSuccess={() => void handleGenerar(true)}
+                    onSuccess={regenerar}
                 />
             </PermissionGuard>
             <PermissionGuard module="eventos" action="editar" open={!!addRevisionEventoId} onOpenChange={(v) => { if (!v) setAddRevisionEventoId(null); }}>
@@ -709,7 +697,7 @@ const ReportRecorridoSec = () => {
                     eventoId={addRevisionEventoId}
                     open={!!addRevisionEventoId}
                     setOpen={(v) => { if (!v) setAddRevisionEventoId(null); }}
-                    onSuccess={() => void handleGenerar(true)}
+                    onSuccess={regenerar}
                 />
             </PermissionGuard>
         </div>

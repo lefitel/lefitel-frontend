@@ -1,5 +1,6 @@
 import axios from "axios";
 import { urlApi } from "./url";
+import type { Tramo } from "../interfaces/interfaces";
 
 export interface DashboardEvento {
   id: number;
@@ -26,8 +27,7 @@ export interface DashboardPoste {
   lat: number;
   lng: number;
   date: Date;
-  ciudadA?: { id?: number; name: string } | null;
-  ciudadB?: { id?: number; name: string } | null;
+  tramo?: Tramo | null;
   propietario?: { name: string } | null;
   material?: { name: string } | null;
 }

@@ -11,6 +11,12 @@ import { CheckIcon, ChevronDownIcon, SearchIcon } from "lucide-react"
 export interface ComboboxOption {
     value: string
     label: string
+    /**
+     * A second text on the same line, in the muted tone, at the right of the
+     * label: what tells two options with the same label apart. The search
+     * looks in it too.
+     */
+    hint?: string
 }
 
 interface ComboboxProps {
@@ -28,6 +34,14 @@ interface ComboboxProps {
      * same thing, or nothing at all, to anybody not looking at the layout.
      */
     ariaLabel?: string
+    /** Shows the chosen value and does not open: a field whose value is not yours to change. */
+    disabled?: boolean
+    /**
+     * An action that sits under the list and is not an option: it does not
+     * choose anything and the list closes when it runs. It stays when the
+     * search finds nothing, because that is when "create it" is wanted.
+     */
+    footer?: { label: string; onSelect: () => void }
 }
 
 export function Combobox({
@@ -38,7 +52,10 @@ export function Combobox({
     searchPlaceholder = "Buscar...",
     className,
     ariaLabel,
+    disabled,
+    footer,
 }: ComboboxProps) {
+    const [open, setOpen] = useState(false)
     const [search, setSearch] = useState("")
     const inputRef = useRef<HTMLInputElement>(null)
 
@@ -48,14 +65,20 @@ export function Combobox({
     // as `label: null` whatever the interface says. Reading it here threw during
     // render, and with no error boundary above that is the whole screen gone,
     // from a control whose job was to list it.
+    // The label and the hint are searched one by one, never joined: a joined
+    // text lets a query match across the boundary between them, and gives an
+    // option with no hint a trailing space that only that option had.
+    const query = search.toLowerCase()
     const filtered = options.filter((o) =>
-        String(o.label ?? "").toLowerCase().includes(search.toLowerCase())
+        (o.label ?? "").toLowerCase().includes(query) ||
+        (o.hint ?? "").toLowerCase().includes(query)
     )
 
     return (
-        <Popover onOpenChange={(open) => { if (open) { setSearch(""); setTimeout(() => inputRef.current?.focus(), 0) } }}>
+        <Popover open={open} onOpenChange={(abierto) => { setOpen(abierto); if (abierto) { setSearch(""); setTimeout(() => inputRef.current?.focus(), 0) } }}>
             <PopoverTrigger
                 aria-label={ariaLabel}
+                disabled={disabled}
                 // The same skin as the select it stands in for: this is a
                 // select with a search box, and the two sit in the same filter
                 // row. It carried its own copy of the old outlined one — see
@@ -66,10 +89,15 @@ export function Combobox({
                     className
                 )}
             >
-                <span>{selected ? selected.label : placeholder}</span>
+                <span className="min-w-0 truncate">
+                    {selected ? selected.label : placeholder}
+                    {selected?.hint && (
+                        <span data-combobox-hint className="ml-2 hidden text-muted-foreground sm:inline">{selected.hint}</span>
+                    )}
+                </span>
                 <ChevronDownIcon className="h-4 w-4 opacity-50 shrink-0" />
             </PopoverTrigger>
-            <PopoverContent className="w-(--anchor-width) p-0" align="start">
+            <PopoverContent className="w-auto min-w-(--radix-popover-trigger-width) p-0" align="start">
                 {/* Search input */}
                 <div className="flex items-center border-b border-border px-3">
                     <SearchIcon className="h-4 w-4 shrink-0 text-muted-foreground mr-2" />
@@ -78,7 +106,7 @@ export function Combobox({
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         placeholder={searchPlaceholder}
-                        className="flex h-9 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                        className="flex h-9 w-full bg-transparent text-base outline-none md:text-sm placeholder:text-muted-foreground"
                     />
                 </div>
                 {/* Options list */}
@@ -97,6 +125,9 @@ export function Combobox({
                                 )}
                             >
                                 <span className="flex-1 text-left">{option.label}</span>
+                                {option.hint && (
+                                    <span data-combobox-hint className="ml-3 shrink-0 text-muted-foreground">{option.hint}</span>
+                                )}
                                 {option.value === value && (
                                     <CheckIcon className="h-4 w-4 shrink-0 ml-2" />
                                 )}
@@ -104,6 +135,17 @@ export function Combobox({
                         ))
                     )}
                 </div>
+                {footer && (
+                    <div className="border-t border-border p-1">
+                        <button
+                            type="button"
+                            onClick={() => { setOpen(false); footer.onSelect() }}
+                            className="flex w-full cursor-default items-center rounded-md px-2 py-1.5 text-sm font-medium outline-none hover:bg-accent hover:text-accent-foreground"
+                        >
+                            {footer.label}
+                        </button>
+                    </div>
+                )}
             </PopoverContent>
         </Popover>
     )

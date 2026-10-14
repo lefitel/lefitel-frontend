@@ -7,12 +7,18 @@ import {
   borradorDe,
   correosDe,
   cuandoSeEnvia,
+  ENTREGA_DE_EJECUCION,
+  detalleDeEjecucion,
+  entregadosDe,
+  etiquetaDeFormato,
   faltan,
+  fechaYHora,
   horaComoTexto,
   leerHora,
   motivoDePausa,
   pedidaConActiva,
   pedidaDe,
+  pesoDeArchivo,
   problemaDe,
   totalDeDestinatarios,
 } from "./envios";
@@ -203,5 +209,66 @@ describe("pedidaConActiva", () => {
     const original = pedidaDe(borradorDe(programacion()));
     expect(pedidaConActiva(programacion(), false)).toEqual({ ...original, activa: false });
     expect(pedidaConActiva(programacion({ activa: false }), true)).toEqual({ ...original, activa: true });
+  });
+});
+
+describe("how a run reads, in the dialog's history and in the screen's", () => {
+  const corrida = (over: Partial<Parameters<typeof detalleDeEjecucion>[0]> = {}) => ({
+    estado: "enviado" as const, detalle: null, filas: null, bytes: null, ...over,
+  });
+
+  it("writes the instant it was due in Bolivia's time, day first, no seconds", () => {
+    expect(fechaYHora("2026-10-05T11:00:00.000Z")).toMatch(/^0?5\/10,? 07:00$/);
+    // Midnight UTC is still the evening before in La Paz.
+    expect(fechaYHora("2026-10-06T02:30:00.000Z")).toMatch(/^0?5\/10,? 22:30$/);
+  });
+
+  it("writes a file's weight in KB below a megabyte and in MB above, and nothing for no file", () => {
+    expect(pesoDeArchivo(null)).toBeNull();
+    expect(pesoDeArchivo(98304)).toBe("96 KB");
+    expect(pesoDeArchivo(10)).toBe("1 KB");
+    expect(pesoDeArchivo(3 * 1024 * 1024)).toBe("3.0 MB");
+  });
+
+  it("says the server's own sentence first", () => {
+    expect(detalleDeEjecucion(corrida({ estado: "fallido", detalle: "La consulta tardó demasiado." }))).toBe("La consulta tardó demasiado.");
+  });
+
+  it("says how big a sent run was when the server said nothing", () => {
+    expect(detalleDeEjecucion(corrida({ filas: 214, bytes: 98304 }))).toBe("214 filas · 96 KB");
+    expect(detalleDeEjecucion(corrida({ filas: 1200, bytes: null }))).toMatch(/^1[.,\s\u00a0]?200 filas$/);
+    expect(detalleDeEjecucion(corrida({ filas: null, bytes: 2048 }))).toBe("2 KB");
+  });
+
+  it("says nothing for a sent run with neither figure, nor for one that has nothing to add", () => {
+    expect(detalleDeEjecucion(corrida())).toBeFalsy();
+    expect(detalleDeEjecucion(corrida({ estado: "omitido" }))).toBeNull();
+    expect(detalleDeEjecucion(corrida({ estado: "fallido" }))).toBeNull();
+  });
+
+  it("says that an empty report still sent a notice", () => {
+    expect(detalleDeEjecucion(corrida({ estado: "vacio" }))).toBe("Se envió un aviso");
+  });
+
+  it("counts the recipients reached out of those tried, and shows a dash for a run that was skipped", () => {
+    expect(entregadosDe({ estado: "enviado", enviados: 2, no_enviados: 1 })).toBe("2 de 3");
+    expect(entregadosDe({ estado: "fallido", enviados: 0, no_enviados: 3 })).toBe("0 de 3");
+    expect(entregadosDe({ estado: "omitido", enviados: 0, no_enviados: 0 })).toBe("—");
+  });
+
+  it("names the two formats the way the schedules table does", () => {
+    expect(etiquetaDeFormato("excel")).toBe("Excel");
+    expect(etiquetaDeFormato("pdf")).toBe("PDF");
+  });
+});
+
+describe("what became of a recipient", () => {
+  it("has a word and a colour for each of the four results the server writes", () => {
+    expect(Object.keys(ENTREGA_DE_EJECUCION).sort()).toEqual(["entregado", "no_enviado", "rechazado", "sin_cupo"]);
+    expect(ENTREGA_DE_EJECUCION.entregado).toEqual({ etiqueta: "Entregado", tono: "bien" });
+    expect(ENTREGA_DE_EJECUCION.rechazado).toEqual({ etiqueta: "Rechazado", tono: "mal" });
+    expect(ENTREGA_DE_EJECUCION.no_enviado).toEqual({ etiqueta: "No enviado", tono: "mal" });
+    // Held back by the day's ceiling: nobody's fault, but not delivered either.
+    expect(ENTREGA_DE_EJECUCION.sin_cupo).toEqual({ etiqueta: "Sin cupo", tono: "aviso" });
   });
 });

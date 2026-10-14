@@ -31,6 +31,29 @@ import type { LatLng } from "./mapGeo";
  */
 setWorkerUrl(workerUrl);
 
+/**
+ * On a touch screen a map is a trap for the thumb: every map here sits inside a
+ * page that scrolls, and a one-finger drag that lands on the map pans it instead
+ * of moving the page — on a phone, where a map takes most of the screen, there
+ * is no way past it. MapLibre's cooperative gestures leave one finger to the
+ * page and take two for the map, and say so on the map when a single finger
+ * tries.
+ *
+ * Only for a coarse pointer. With a mouse the same option makes the wheel zoom
+ * only with Ctrl held, which a desktop user never asked for.
+ *
+ * Read once, when the module loads: the option is fixed when MapLibre builds the
+ * map, so reading it per render would change nothing.
+ */
+const touchFirst =
+  typeof window !== "undefined" && typeof window.matchMedia === "function" &&
+  window.matchMedia("(pointer: coarse)").matches;
+
+/** MapLibre's own hint, in the app's language. */
+const LOCALE = {
+  "CooperativeGesturesHandler.MobileHelpText": "Usa dos dedos para mover el mapa",
+};
+
 interface BaseMapProps {
   center: LatLng;
   zoom: number;
@@ -38,6 +61,8 @@ interface BaseMapProps {
   style?: React.CSSProperties;
   /** Fired with the geographic point the user clicked. */
   onMapClick?: (p: LatLng) => void;
+  /** The pointer over the map, when a screen has put it in a mode: by default the map's own hand. */
+  cursor?: string;
   children?: React.ReactNode;
 }
 
@@ -48,7 +73,7 @@ interface BaseMapProps {
  * { lat, lng }.
  */
 export default function BaseMap({
-  center, zoom, className, style, onMapClick, children,
+  center, zoom, className, style, onMapClick, cursor, children,
 }: BaseMapProps) {
   const { resolvedTheme } = useTheme();
 
@@ -61,7 +86,10 @@ export default function BaseMap({
         onClick={onMapClick
           ? (e: MapLayerMouseEvent) => onMapClick({ lat: e.lngLat.lat, lng: e.lngLat.lng })
           : undefined}
+        cursor={cursor}
         attributionControl={{ compact: false }}
+        cooperativeGestures={touchFirst}
+        locale={LOCALE}
       >
         {children}
       </Map>

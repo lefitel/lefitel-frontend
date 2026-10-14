@@ -178,7 +178,7 @@ export function Toast({ show, title, detail }: { show: boolean; title: string; d
         <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
           <path
             d="M1.6 5.2 L3.9 7.4 L8.4 2.6"
-            stroke="oklch(0.16 0.02 162)"
+            stroke="var(--scr-on-ok)"
             strokeWidth="1.8"
             strokeLinecap="round"
             strokeLinejoin="round"

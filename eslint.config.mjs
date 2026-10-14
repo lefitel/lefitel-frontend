@@ -44,17 +44,6 @@ export default [
             "react-hooks/set-state-in-effect": "off",
             "react-hooks/incompatible-library": "off",
             "react-hooks/preserve-manual-memoization": "off",
-            // Arrived with eslint-plugin-react-hooks 7.1, which reports 13
-            // pre-existing findings: refs written during render in the bitácora
-            // and generador screens, and a `Date.now()` read during render in
-            // the home page's data hook. All three are real by React's rules —
-            // the ref writes break under the compiler, and a clock read during
-            // render is not idempotent — but fixing them means unpicking the
-            // "ref mirrors state" pattern, which is a task, not a lint autofix.
-            // Warnings rather than "off" so they stay on screen, and rather
-            // than errors so a red lint does not block work on those files.
-            "react-hooks/refs": "warn",
-            "react-hooks/purity": "warn",
         },
     },
     // shadcn/ui generated files — only disable fast-refresh warning

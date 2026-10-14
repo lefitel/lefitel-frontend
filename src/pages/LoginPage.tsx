@@ -13,7 +13,7 @@ import { cancelarCeremonia, entrarSinContrasena, soportaPasskeys } from "../api/
 
 import logo from "../assets/images/logo.png";
 import { TramoPlan } from "./landing/TramoPlan";
-import { paperVars } from "./landing/tokens";
+import { paperClass, paperVars } from "./landing/tokens";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -248,12 +248,12 @@ const LoginPage = () => {
       {/* ── PANEL IZQUIERDO — Brand ──
           The same survey sheet as the public page, with the same tramo drawn
           on it, so going from the site to the login reads as one place. It
-          stays paper in both themes: it is the brand, not the application,
-          and the form beside it is what follows the theme. Nothing on it
-          loops; the drawing builds once and holds. */}
+          follows the theme like the rest of the flow, because its colours
+          are the application's (see `paperVars`). Nothing on it loops; the
+          drawing builds once and holds. */}
       <div
         style={paperVars}
-        className="relative hidden flex-col justify-between overflow-hidden bg-[var(--pp-paper)] bg-[linear-gradient(var(--pp-grid)_1px,transparent_1px),linear-gradient(90deg,var(--pp-grid)_1px,transparent_1px)] bg-[size:32px_32px] bg-[position:-1px_-1px] p-12 font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] lg:flex"
+        className={`${paperClass} relative hidden flex-col justify-between overflow-hidden bg-[var(--pp-paper)] bg-[linear-gradient(var(--pp-grid)_1px,transparent_1px),linear-gradient(90deg,var(--pp-grid)_1px,transparent_1px)] bg-[size:32px_32px] bg-[position:-1px_-1px] p-12 font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] lg:flex`}
       >
         <motion.div variants={fadeUp} initial="hidden" animate="visible" transition={{ duration: 0.6, ease }}>
           <Link to="/" className="inline-flex items-center gap-2.5">
@@ -270,7 +270,7 @@ const LoginPage = () => {
             transition={{ duration: 0.6, ease, delay: 0.08 }}
             className="flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-dim)] uppercase"
           >
-            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
+            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-mark)]" />
             Sistema interno
           </motion.p>
           <motion.h2
@@ -280,7 +280,7 @@ const LoginPage = () => {
             transition={{ duration: 0.7, ease, delay: 0.16 }}
             className="mt-5 text-5xl leading-[1] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] xl:text-6xl"
           >
-            Precisión en campo. <span className="text-[var(--pp-or-ink)]">Continuidad en red.</span>
+            Precisión en campo. <span className="text-[var(--pp-acc)]">Continuidad en red.</span>
           </motion.h2>
           <div className="mt-10">
             <TramoPlan start={0.45} />

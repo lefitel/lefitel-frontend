@@ -29,7 +29,7 @@ const STEPS: { title: string; body: string }[] = [
     title: "Abrir uno que ya existe",
     body:
       "El selector «Reporte» de la barra de arriba abre lo que usted guardó, lo que el equipo " +
-      "compartió y seis plantillas ya armadas. Escriba para buscar entre todo ello. Abrir una " +
+      "compartió y las plantillas ya armadas. Escriba para buscar entre todo ello. Abrir una " +
       "plantilla no toca ningún reporte guardado.",
   },
   {
@@ -74,13 +74,13 @@ const PageHelp = () => (
       <Button
         variant="ghost"
         size="icon"
-        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
         aria-label="Cómo funciona el generador"
       >
         <InfoIcon className="h-4 w-4" />
       </Button>
     </PopoverTrigger>
-    <PopoverContent align="start" className="max-h-[70vh] w-96 overflow-y-auto">
+    <PopoverContent align="end" className="max-h-[70vh] w-96 overflow-y-auto">
       <p className="text-sm">
         Arme la tabla que necesite y expórtela. Se construye de arriba abajo por la barra y los
         paneles de arriba, y el resultado se va viendo debajo.

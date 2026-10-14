@@ -1,7 +1,7 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { MoreVerticalIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon } from "lucide-react";
 import type { Col } from "../../components/table/tableFeatures";
 import { SesionContext } from "../../context/SesionContext";
 import { can } from "../../lib/permissions";
@@ -13,7 +13,7 @@ import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "../../components/ui/dropdown-menu";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -24,6 +24,8 @@ import DataTable from "../../components/table/DataTable";
 import { rowNumberColumn } from "../../components/table/rowNumberColumn";
 import RolDialog from "../../components/dialogs/upsert/RolDialog";
 import { nombreDeRol, resumenDePermisos } from "../../lib/roles";
+import { HeaderSlot } from "../../components/HeaderSlot";
+import { RowActionsTrigger } from "../../components/table/RowActionsTrigger";
 
 type Tab = "activos" | "archivados";
 
@@ -333,12 +335,7 @@ export default function RolesPage() {
         // open the role it is archiving.
         <div className="flex justify-end pr-2" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
-            <DropdownMenuTrigger
-              aria-label={`Acciones de ${nombreDeRol(row.original)}`}
-              className="inline-flex items-center justify-center h-7 w-7 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors data-[state=open]:bg-muted"
-            >
-              <MoreVerticalIcon className="h-4 w-4" />
-            </DropdownMenuTrigger>
+            <RowActionsTrigger aria-label={`Acciones de ${nombreDeRol(row.original)}`} />
             <DropdownMenuContent align="end" className="w-36">
               <DropdownMenuItem onClick={() => setFormulario({ rol: row.original })}>
                 {puedeEditar ? "Editar" : "Ver permisos"}
@@ -398,20 +395,13 @@ export default function RolesPage() {
     <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}
       className="@container/card p-page w-full space-y-page animate-in fade-in duration-500"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Roles y permisos</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {puedeEditar
-              ? "Pulsa un rol para ver y cambiar lo que puede hacer"
-              : "Pulsa un rol para ver lo que puede hacer"}
-          </p>
-        </div>
-        <TabsList>
+      <h1 className="sr-only">Roles y permisos</h1>
+      <HeaderSlot>
+        <TabsList size="sm">
           <TabsTrigger value="activos">Activos</TabsTrigger>
           <TabsTrigger value="archivados">Archivados</TabsTrigger>
         </TabsList>
-      </div>
+      </HeaderSlot>
 
       <TabsContent value="activos">
         <DataTable

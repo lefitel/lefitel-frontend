@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import { SesionContext, type contextProps } from "../context/SesionContext";
 import { SidebarProvider } from "./ui/sidebar";
 import { TooltipProvider } from "./ui/tooltip";
+import { ThemeProvider } from "./theme-provider";
 import { usuarioExample } from "../data/example";
 import { AppSidebar } from "./AppSidebar";
 import { markReleaseSeen, resetSeenRelease } from "../hooks/useSeenRelease";
@@ -20,16 +21,20 @@ const sesion: contextProps = {
   logout: vi.fn(),
 };
 
+const THEME_KEY = "app-sidebar-test-theme";
+
 function mount() {
   return render(
     <MemoryRouter>
-      <TooltipProvider>
-        <SidebarProvider>
-          <SesionContext.Provider value={sesion}>
-            <AppSidebar />
-          </SesionContext.Provider>
-        </SidebarProvider>
-      </TooltipProvider>
+      <ThemeProvider defaultTheme="light" storageKey={THEME_KEY}>
+        <TooltipProvider>
+          <SidebarProvider>
+            <SesionContext.Provider value={sesion}>
+              <AppSidebar />
+            </SesionContext.Provider>
+          </SidebarProvider>
+        </TooltipProvider>
+      </ThemeProvider>
     </MemoryRouter>
   );
 }
@@ -69,6 +74,52 @@ describe("user menu", () => {
     // A real destination: linkable, and the back button works.
     expect(await screen.findByRole("menuitem", { name: /Novedades/i }))
       .toHaveAttribute("href", "/app/novedades");
+  });
+});
+
+/**
+ * The theme switch lives in this menu and nowhere else in the shell. One
+ * fixed label and a switch that says whether it is on, and it leaves the menu
+ * open: the whole screen changes under it, and the way back should be the
+ * same click again.
+ */
+describe("theme entry", () => {
+  beforeEach(() => {
+    localStorage.removeItem(THEME_KEY);
+  });
+
+  it("switches the theme and stays open to switch it back", async () => {
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(screen.getByRole("button", { name: /Ada Lovelace/i }));
+    const entry = await screen.findByRole("menuitemcheckbox", { name: "Tema oscuro" });
+    expect(entry).toHaveAttribute("aria-checked", "false");
+
+    await user.click(entry);
+
+    expect(document.documentElement).toHaveClass("dark");
+    expect(localStorage.getItem(THEME_KEY)).toBe("dark");
+
+    // Still on screen, same name, now on — and the same click is the way back.
+    const on = screen.getByRole("menuitemcheckbox", { name: "Tema oscuro" });
+    expect(on).toHaveAttribute("aria-checked", "true");
+    await user.click(on);
+
+    expect(document.documentElement).toHaveClass("light");
+  });
+
+  it("is one control, not a switch nested inside a menu entry", async () => {
+    // The switch is the picture of the state; the entry is what is operated.
+    // A second focusable control inside it would be announced twice and would
+    // take the click without the menu knowing.
+    const user = userEvent.setup();
+    mount();
+
+    await user.click(screen.getByRole("button", { name: /Ada Lovelace/i }));
+    await screen.findByRole("menuitemcheckbox", { name: "Tema oscuro" });
+
+    expect(screen.queryByRole("switch")).toBeNull();
   });
 });
 
@@ -209,7 +260,7 @@ describe("the screens, block by block", () => {
 
   it("puts each screen under the title it belongs to, in order", () => {
     allow(
-      "postes", "eventos", "ciudades", "parametros", "reportes",
+      "postes", "eventos", "ciudades", "tramos", "parametros", "reportes",
       "generador", "seguridad", "roles", "archivos", "bitacora",
     );
     mount();
@@ -218,6 +269,7 @@ describe("the screens, block by block", () => {
       ["Postes", "/app/postes"],
       ["Eventos", "/app/eventos"],
       ["Ciudades", "/app/ciudades"],
+      ["Tramos", "/app/tramos"],
     ]);
     // Both make reports, so they share a block — and the ready-made ones are
     // not called «Reportes» again under a title that already says it.

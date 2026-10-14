@@ -1,7 +1,7 @@
-// The General report's city list, and what it says when it cannot have one.
+// The General report's tramo list, and what it says when it cannot have one.
 //
 // Narrower than its Por Tramo sibling on purpose, because the screen is
-// narrower: only the two stretch comboboxes depend on the catalogues here, so
+// narrower: only the tramo selector depends on the catalogues here, so
 // the report itself is still worth generating without them and Generar stays
 // enabled. There is no file-with-no-columns to prevent.
 //
@@ -11,12 +11,13 @@
 // — while leaving the task undone and the extra request in place.
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { AxiosError, AxiosHeaders } from "axios";
 import { toast } from "sonner";
 import ReportGeneralSec from "./ReportGeneralSec";
+import { elegirTramo } from "./elegirTramo";
 
 const getOpcionesReporte = vi.fn();
 const getReporteGeneral = vi.fn();
@@ -62,10 +63,33 @@ vi.mock("../../../components/ui/date-picker", () => ({
   ),
 }));
 
+const TRAMO_1 = {
+  id: 1,
+  nombre: "Tacna – Ilo",
+  ciudades: [
+    { id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 },
+    { id: 12, name: "Ilo", lat: -17.6394, lng: -71.3375 },
+  ],
+  id_departamento: null,
+  departamento: null,
+  archivado: false,
+};
+const TRAMO_14 = {
+  id: 14,
+  nombre: "Ilo – Moquegua",
+  ciudades: [
+    { id: 12, name: "Ilo", lat: -17.6394, lng: -71.3375 },
+    { id: 13, name: "Moquegua", lat: -17.1956, lng: -70.9356 },
+  ],
+  id_departamento: null,
+  departamento: null,
+  archivado: false,
+};
+
 const OPCIONES = {
   ciudad: [{ id: 11, name: "Tacna", lat: -18.0146, lng: -70.2536 }],
   adss: [], material: [], propietario: [], obs: [],
-  tramos: [{ id_ciudadA: 11, id_ciudadB: 12 }],
+  tramos: [TRAMO_1, TRAMO_14],
 };
 
 beforeEach(() => {
@@ -76,7 +100,7 @@ beforeEach(() => {
 
 const pintar = () => render(<MemoryRouter><ReportGeneralSec /></MemoryRouter>);
 
-describe("where the city list comes from", () => {
+describe("which endpoint the screen reads its lists from", () => {
   it("asks the options endpoint and never the city catalogue", async () => {
     pintar();
 
@@ -140,16 +164,16 @@ const rechazo429 = (message: string) => {
   return error;
 };
 
-const FILA = {
-  id: 1, description: "Poste inclinado", date: "2026-01-10T12:00:00.000Z",
+const filaDe = (id: number, description: string, tramo: typeof TRAMO_1) => ({
+  id, description, date: "2026-01-10T12:00:00.000Z",
   state: false, priority: false, image: null,
   poste: {
-    id: 5, name: "P-5", lat: -19.04, lng: -65.26, id_ciudadA: 11, id_ciudadB: 12,
-    ciudadA: { id: 11, name: "Tacna" }, ciudadB: { id: 12, name: "Ilo" },
+    id: 5, name: "P-5", lat: -19.04, lng: -65.26, id_tramo: tramo.id, tramo,
     propietario: { id: 2, name: "Osefi" },
   },
   eventoObs: [], revisions: [], solucions: [],
-};
+});
+const FILA = filaDe(1, "Poste inclinado", TRAMO_1);
 
 const fechar = (etiqueta: string, iso: string) =>
   fireEvent.change(screen.getByLabelText(etiqueta), { target: { value: iso } });
@@ -205,5 +229,91 @@ describe("the file's period is the rows' period", () => {
     expect(screen.queryByText("Poste inclinado")).toBeNull();
     // No rows, no Resultados card, no Exportar: there is nothing to put in a file.
     expect(screen.queryByRole("button", { name: /Exportar/i })).toBeNull();
+  });
+});
+
+describe("the tramo is asked of the server", () => {
+  const filtroEnviado = () => getReporteGeneral.mock.calls[0][0] as Record<string, unknown>;
+
+  it("asks the server for the chosen tramo by its id", async () => {
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(getOpcionesReporte).toHaveBeenCalled());
+    await elegirTramo(user, /Ilo – Moquegua/);
+
+    getReporteGeneral.mockResolvedValue([FILA]);
+    fechar("Inicio", "2026-01-01");
+    fechar("Fin", "2026-01-31");
+    await user.click(screen.getByRole("button", { name: /Generar/i }));
+
+    await waitFor(() => expect(getReporteGeneral).toHaveBeenCalledTimes(1));
+    expect(filtroEnviado().tramo).toBe(14);
+    expect("TramoInicial" in filtroEnviado()).toBe(false);
+    expect("TramoFinal" in filtroEnviado()).toBe(false);
+  });
+
+  it("leaves the key out when no tramo is chosen, rather than sending it empty", async () => {
+    await generarEnero(userEvent.setup());
+
+    expect("tramo" in filtroEnviado()).toBe(false);
+    expect("TramoInicial" in filtroEnviado()).toBe(false);
+    expect("TramoFinal" in filtroEnviado()).toBe(false);
+  });
+
+  it("shows the rows it was given without filtering them again in the browser", async () => {
+    // Rows of two different tramos come back while one is chosen: the server
+    // has narrowed already. The old filter compared the pole's two cities with
+    // the two picked and would have hidden one of them.
+    const user = userEvent.setup();
+    pintar();
+    await waitFor(() => expect(getOpcionesReporte).toHaveBeenCalled());
+    await elegirTramo(user, /Ilo – Moquegua/);
+
+    getReporteGeneral.mockResolvedValue([
+      filaDe(1, "Poste inclinado", TRAMO_1),
+      filaDe(2, "Cable roto", TRAMO_14),
+    ]);
+    fechar("Inicio", "2026-01-01");
+    fechar("Fin", "2026-01-31");
+    await user.click(screen.getByRole("button", { name: /Generar/i }));
+
+    expect(await screen.findByText("Poste inclinado")).toBeTruthy();
+    expect(screen.getByText("Cable roto")).toBeTruthy();
+  });
+
+  it("names each row's tramo with the server's name", async () => {
+    getReporteGeneral.mockResolvedValue([
+      filaDe(1, "Poste inclinado", TRAMO_1),
+      filaDe(2, "Cable roto", TRAMO_14),
+    ]);
+    pintar();
+    await waitFor(() => expect(getOpcionesReporte).toHaveBeenCalled());
+    fechar("Inicio", "2026-01-01");
+    fechar("Fin", "2026-01-31");
+    await userEvent.setup().click(screen.getByRole("button", { name: /Generar/i }));
+
+    const fila1 = (await screen.findByText("Poste inclinado")).closest("tr")!;
+    const fila2 = screen.getByText("Cable roto").closest("tr")!;
+    expect(within(fila1).getByRole("link", { name: "Tacna" }).closest("td")?.textContent).toBe("Tacna – Ilo");
+    expect(within(fila2).getByRole("link", { name: "Ilo" }).closest("td")?.textContent).toBe("Ilo – Moquegua");
+  });
+
+  it("links each city of each row's tramo to its page", async () => {
+    getReporteGeneral.mockResolvedValue([
+      filaDe(1, "Poste inclinado", TRAMO_1),
+      filaDe(2, "Cable roto", TRAMO_14),
+    ]);
+    pintar();
+    await waitFor(() => expect(getOpcionesReporte).toHaveBeenCalled());
+    fechar("Inicio", "2026-01-01");
+    fechar("Fin", "2026-01-31");
+    await userEvent.setup().click(screen.getByRole("button", { name: /Generar/i }));
+
+    const fila1 = (await screen.findByText("Poste inclinado")).closest("tr")!;
+    const fila2 = screen.getByText("Cable roto").closest("tr")!;
+    expect(within(fila1).getByRole("link", { name: "Tacna" })).toHaveAttribute("href", "/app/ciudades/11");
+    expect(within(fila1).getByRole("link", { name: "Ilo" })).toHaveAttribute("href", "/app/ciudades/12");
+    expect(within(fila2).getByRole("link", { name: "Ilo" })).toHaveAttribute("href", "/app/ciudades/12");
+    expect(within(fila2).getByRole("link", { name: "Moquegua" })).toHaveAttribute("href", "/app/ciudades/13");
   });
 });

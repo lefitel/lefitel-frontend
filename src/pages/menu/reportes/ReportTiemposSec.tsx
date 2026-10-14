@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { getTiemposResumen, TiempoTramoRow } from "../../../api/reporte.api";
 import { mensajeDeError } from "../../../api/descarga";
 import { Button } from "../../../components/ui/button";
@@ -8,29 +7,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../..
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import { DatePicker } from "../../../components/ui/date-picker";
 import { Label } from "../../../components/ui/label";
-import { ChevronRightIcon, Loader2Icon } from "lucide-react";
+import { Loader2Icon } from "lucide-react";
 import { toast } from "sonner";
-
-// Bandas fijadas por Isaias sobre la cifra real: la mediana de la red es de 31
-// días. Con las viejas (1 y 7) todo salía rojo y el color dejaba de informar.
-export const diasColor = (d: number) =>
-  d <= 15 ? "text-green-600" : d <= 45 ? "text-amber-600" : "text-red-600";
-
-/**
- * Aviso de los eventos que quedaron fuera del promedio. Un panel que descarta
- * filas en silencio miente por omisión, así que dice cuántas y por qué.
- */
-export const textoDescartados = (n: number): string | null => {
-  if (n <= 0) return null;
-  const plural = n === 1 ? "evento quedó" : "eventos quedaron";
-  return `${n} ${plural} fuera del promedio: su reparación está fechada antes que la avería, así que no se puede saber cuánto tardó.`;
-};
+import TramoCombobox from "../../../components/TramoCombobox";
+import TramoEnlazado from "../../../components/TramoEnlazado";
+import { avisoDeTramos, useTramosDelReporte } from "./useTramosDelReporte";
+import { diasColor, textoDescartados } from "./tiempos";
 
 const ReportTiemposSec = () => {
-  const navigate = useNavigate();
   const [fechaInicio, setFechaInicio] = useState<Date | undefined>(undefined);
   const [fechaFin, setFechaFin]       = useState<Date | undefined>(undefined);
-  const [tramos, setTramos]           = useState<TiempoTramoRow[]>([]);
+  /** The tramo the selector shows now; `null` is "Todos los tramos". */
+  const [tramoId, setTramoId]         = useState<number | null>(null);
+  const { tramos: opcionesTramo, estado: estadoOpciones } = useTramosDelReporte();
+  const [filas, setFilas]             = useState<TiempoTramoRow[]>([]);
   const [loading, setLoading]         = useState(false);
   const [generated, setGenerated]     = useState(false);
   const [descartados, setDescartados] = useState(0);
@@ -42,8 +32,12 @@ const ReportTiemposSec = () => {
     const fin    = new Date(fechaFin);    fin.setHours(23, 59, 59, 0);
     setLoading(true);
     try {
-      const data = await getTiemposResumen({ fechaInicial: inicio, fechaFinal: fin });
-      setTramos(data.tramos);
+      // The server narrows by the tramo; the key is left out when none is
+      // chosen (`tramo=` is a 400).
+      const data = await getTiemposResumen({
+        fechaInicial: inicio, fechaFinal: fin, ...(tramoId !== null ? { tramo: tramoId } : {}),
+      });
+      setFilas(data.tramos);
       setDescartados(data.descartados);
       setGenerated(true);
       if (data.tramos.length === 0) toast.warning("No hay eventos reparados en el período");
@@ -53,7 +47,7 @@ const ReportTiemposSec = () => {
       // minute, shared with the generator), and the previous rows go with the
       // failure — see `ReportEstadoRedSec`.
       toast.error(mensajeDeError(error, "Error al generar el reporte"));
-      setTramos([]);
+      setFilas([]);
       setDescartados(0);
       setGenerated(false);
     } finally {
@@ -61,9 +55,9 @@ const ReportTiemposSec = () => {
     }
   };
 
-  const totalEventos = tramos.reduce((s, t) => s + t.count, 0);
-  const avgGlobal = tramos.length > 0
-    ? Math.round(tramos.reduce((s, t) => s + t.avgDias * t.count, 0) / totalEventos)
+  const totalEventos = filas.reduce((s, t) => s + t.count, 0);
+  const avgGlobal = filas.length > 0
+    ? Math.round(filas.reduce((s, t) => s + t.avgDias * t.count, 0) / totalEventos)
     : null;
 
   return (
@@ -85,7 +79,14 @@ const ReportTiemposSec = () => {
               <Label>Fecha de fin</Label>
               <DatePicker ariaLabel="Fecha de fin" value={fechaFin} onSelect={setFechaFin} placeholder="Fin" />
             </div>
+            <div className="space-y-1.5 min-w-56">
+              <Label>Tramo <span className="text-muted-foreground text-xs">(opcional)</span></Label>
+              <TramoCombobox tramos={opcionesTramo} value={tramoId} onChange={setTramoId} permitirTodos />
+            </div>
           </div>
+          {avisoDeTramos(estadoOpciones) && (
+            <p className="text-sm text-destructive mt-3">{avisoDeTramos(estadoOpciones)}</p>
+          )}
           <div className="flex gap-2 mt-3 justify-end">
             <Button onClick={handleGenerar} disabled={loading}>
               {loading && <Loader2Icon className="h-4 w-4 animate-spin mr-2" />}
@@ -96,7 +97,7 @@ const ReportTiemposSec = () => {
       </Card>
 
       {generated && !loading && (
-        tramos.length === 0 ? (
+        filas.length === 0 ? (
           <div className="py-8 text-center space-y-2">
             <p className="text-sm text-muted-foreground">No hay eventos reparados en el período seleccionado</p>
             {textoDescartados(descartados) && (
@@ -135,18 +136,10 @@ const ReportTiemposSec = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {tramos.map((t) => (
-                      <TableRow key={`${t.ciudadAId}-${t.ciudadBId}`}>
+                    {filas.map((t) => (
+                      <TableRow key={t.tramo.id}>
                         <TableCell>
-                          <span className="flex items-center gap-0.5 text-sm whitespace-nowrap">
-                            {t.ciudadAId
-                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/app/ciudades/${t.ciudadAId}`)}>{t.ciudadAName}</button>
-                              : <span>{t.ciudadAName}</span>}
-                            <ChevronRightIcon className="h-3 w-3 mx-0.5 shrink-0 text-muted-foreground" />
-                            {t.ciudadBId
-                              ? <button className="hover:underline text-primary" onClick={() => navigate(`/app/ciudades/${t.ciudadBId}`)}>{t.ciudadBName}</button>
-                              : <span>{t.ciudadBName}</span>}
-                          </span>
+                          <span className="text-sm whitespace-nowrap"><TramoEnlazado tramo={t.tramo} linkClassName="hover:underline text-primary" /></span>
                         </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">{t.count}</TableCell>
                         <TableCell className="text-right">

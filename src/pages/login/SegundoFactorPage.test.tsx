@@ -329,7 +329,13 @@ describe("only the ways in this account has", () => {
   // is a verified address — the usual first one — was asked for a code it had
   // no way to produce. `/auth/me` now lists the account's factors for a
   // `parcial` session and the screen is drawn from that list.
-  const pestanas = () => screen.queryAllByRole("tab").map((t) => t.textContent);
+  // What each tab is called, not every word it draws: on a phone it also
+  // draws a short one, hidden from whoever reads the name.
+  const pestanas = () => screen.queryAllByRole("tab").map((t) => {
+    const copia = t.cloneNode(true) as HTMLElement;
+    copia.querySelectorAll("[aria-hidden]").forEach((n) => n.remove());
+    return copia.textContent;
+  });
 
   it("goes straight to the email code when that is the only factor, with no tabs to choose from", () => {
     render(<Harness onSesion={() => {}} metodos={["correo"]} />);

@@ -144,6 +144,33 @@ describe("tabla de eventos — la gravedad se ve", () => {
   });
 });
 
+describe("tabla de eventos — el tramo", () => {
+  it("es el nombre que construyó el servidor, sin unir dos ciudades aquí", async () => {
+    getEvento.mockResolvedValue({
+      data: [{
+        ...evento(3),
+        poste: {
+          id: 3, name: "P-003", id_tramo: 14,
+          tramo: {
+            id: 14, nombre: "Potosí – Sucre", id_departamento: null, departamento: null, archivado: false,
+            ciudades: [{ id: 11, name: "Potosí", lat: -19.58, lng: -65.75 }, { id: 12, name: "Sucre", lat: -19.03, lng: -65.26 }],
+          },
+        },
+      }],
+      total: 1,
+      page: 1,
+    });
+    renderPage();
+
+    // The whole cell, not only the span in it: an icon or a second name beside
+    // the server's would change this text.
+    const celda = (await screen.findByRole("link", { name: "Potosí" })).closest("td");
+    expect(celda?.textContent).toBe("Potosí – Sucre");
+    expect(within(celda!).getByRole("link", { name: "Potosí" })).toHaveAttribute("href", "/app/ciudades/11");
+    expect(within(celda!).getByRole("link", { name: "Sucre" })).toHaveAttribute("href", "/app/ciudades/12");
+  });
+});
+
 describe("tabla de eventos — los filtros rápidos", () => {
   it("pide al servidor la banda de gravedad elegida", async () => {
     renderPage();
@@ -185,6 +212,17 @@ describe("tabla de eventos — los filtros rápidos", () => {
     await pick(/gravedad/i, /^Altas$/);
     const arg = getEvento.mock.calls.at(-1)?.[0] as { page: number };
     expect(arg.page).toBe(1);
+  });
+
+  it("cada filtro lleva su nombre, también el de prioridad", async () => {
+    // Estado y Gravedad lo llevaban a su izquierda; Prioridad no llevaba ninguno
+    // y se leía como una continuación de Gravedad.
+    renderPage();
+    await waitFor(() => expect(getEvento).toHaveBeenCalled());
+
+    for (const nombre of ["Estado", "Gravedad", "Prioridad"]) {
+      expect(screen.getByRole("group", { name: nombre })).toBeTruthy();
+    }
   });
 
   it("«Quitar filtros» los quita todos de una vez", async () => {

@@ -18,8 +18,8 @@
 // misalignment is not reachable — a test for it would only restate the loop.
 
 import { describe, it, expect } from "vitest";
-import { toRowsTramo, PDF_HEADERS_TRAMO } from "./reportTramo";
-import { EventoInterface } from "../../interfaces/interfaces";
+import { toRowsTramo, PDF_HEADERS_TRAMO, etiquetaDeTramo } from "./reportTramo";
+import { EventoInterface, Tramo } from "../../interfaces/interfaces";
 
 /** As the endpoint serves them: `id DESC`, and just the two columns. */
 const ADSS = [{ id: 9, name: "Retención" }, { id: 3, name: "Preformado" }];
@@ -79,5 +79,25 @@ describe("toRowsTramo", () => {
     const [fila] = toRowsTramo([EVENTO], ADSS, OBS);
 
     expect(fila).toHaveLength(PDF_HEADERS_TRAMO.length);
+  });
+});
+
+describe("etiquetaDeTramo, the 'Tramo:' line of the file's header", () => {
+  const TRAMO: Tramo = {
+    id: 14, nombre: "Potosí – Sucre",
+    ciudades: [{ id: 11, name: "Potosí", lat: null, lng: null }, { id: 12, name: "Sucre", lat: null, lng: null }],
+    id_departamento: null, departamento: null, archivado: false,
+  };
+
+  it("is the name the server built, not two city names put together here", () => {
+    expect(etiquetaDeTramo(TRAMO)).toBe("Potosí – Sucre");
+  });
+
+  it("says 'Total' when the report was generated for the whole network", () => {
+    expect(etiquetaDeTramo(null)).toBe("Total");
+  });
+
+  it("keeps an archived tramo's name: it was what the rows were generated for", () => {
+    expect(etiquetaDeTramo({ ...TRAMO, archivado: true })).toBe("Potosí – Sucre");
   });
 });

@@ -53,26 +53,16 @@ export const todosLosPostes = (archived = false): Promise<PosteInterface[]> =>
 export const getPosteByCiudad = (ciudadId: number): Promise<PosteInterface[]> =>
   todasLasFilas<PosteInterface>(urlApi + urlPoste, { ciudadId });
 
-// `TramoPair` and `getTramos` used to live here, calling `GET /api/poste/tramos`
-// for `useTramoNeighbors`. The pairs now travel in the `tramos` block of
-// `/api/reporte/options`, which the three report screens already request, so
-// the function lost its only caller and the route lost its only client — both
-// are gone. The type moved to `opciones.api.ts`, next to the response it
-// describes.
-
 /**
- * Every pole of one stretch, in order along it.
+ * Every pole of one tramo.
  *
  * The two `as PosteInterface[]` this and its sibling above used to carry were
  * assertions, not inferences: when the response changed shape they would have
  * kept the compiler quiet and failed at runtime in five places, one of them
  * behind an empty `.catch` where nothing at all would have shown.
  */
-export const getPosteByTramo = (
-  ciudadA: number,
-  ciudadB: number
-): Promise<PosteInterface[]> =>
-  todasLasFilas<PosteInterface>(urlApi + urlPoste, { ciudadA, ciudadB });
+export const getPostesDelTramo = (idTramo: number): Promise<PosteInterface[]> =>
+  todasLasFilas<PosteInterface>(urlApi + urlPoste, { tramo: idTramo });
 
 /** Registra un poste y deja viajar el fallo. Contesta 201 desde C4. */
 export const createPoste = (data: PosteInterface): Promise<PosteInterface> => {

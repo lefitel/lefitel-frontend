@@ -9,17 +9,38 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
+        // Flat: the fill and nothing else. They were lit gradients with a
+        // raised edge, beside secondaries that are now a flat tint — two
+        // languages on one row. Still the strongest thing there, being the
+        // only one filled. Chosen by Isaias on 2026-10-13.
         default:
-          "bg-[image:var(--gradient-primary)] text-primary-foreground elevation-raised hover:brightness-[1.07] active:brightness-95",
+          "bg-primary-fill text-primary-foreground hover:brightness-[1.07] active:brightness-95",
         destructive:
-          "bg-[image:var(--gradient-destructive)] text-destructive-foreground elevation-raised hover:brightness-[1.07] active:brightness-95",
+          "bg-destructive-fill text-destructive-foreground hover:brightness-[1.07] active:brightness-95",
+        /*
+         * A tint of the button's own text colour, and no relief. It was the
+         * card's surface with a soft shadow: on a card — where most of these
+         * sit — it had the card's exact background and only the shadow drew it,
+         * so Revisión, Editar and Archivar were lost beside Resolver.
+         *
+         * `currentColor`, not `--primary`: a button that sets its own colour
+         * (`text-destructive` on Archivar, amber on Reabrir) is tinted with
+         * that colour without asking for a fill of its own.
+         *
+         * Chosen by Isaias on 2026-10-13 from four options, with this measured
+         * beside it: in the dark theme the blue text on its tint is about
+         * 3.5:1, under the 4.5:1 asked of text.
+         */
         outline:
-          "bg-[image:var(--gradient-surface)] elevation-control hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
+          "bg-[color-mix(in_oklab,currentColor_13%,var(--card))] text-primary hover:bg-[color-mix(in_oklab,currentColor_22%,var(--card))]",
         secondary:
-          "bg-[image:var(--gradient-secondary)] text-secondary-foreground elevation-control hover:bg-[image:var(--gradient-accent)] hover:text-accent-foreground",
+          "bg-secondary text-secondary-foreground hover:bg-accent hover:text-accent-foreground",
         ghost: "hover:bg-accent hover:text-accent-foreground",
         link: "text-primary underline-offset-4 hover:underline",
-        outlineGray: "bg-[image:var(--gradient-surface)] elevation-control hover:bg-none hover:bg-muted hover:text-foreground",
+        // The same tint as `outline`. What set it apart was a grey hover in
+        // place of the accent one, and neither has one now.
+        outlineGray:
+          "bg-[color-mix(in_oklab,currentColor_13%,var(--card))] text-primary hover:bg-[color-mix(in_oklab,currentColor_22%,var(--card))]",
       },
       size: {
         default: "h-9 px-4 py-2",

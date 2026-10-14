@@ -69,8 +69,8 @@ export interface SesionInterface {
   metodos?: string[];
 }
 export interface ReporteInterface {
-  TramoInicial: number | null;
-  TramoFinal: number | null;
+  /** The tramo to narrow by. Optional on five reports, required by Recorrido. */
+  tramo?: number;
   fechaInicial: Date;
   fechaFinal: Date;
   excludeOld?: boolean;
@@ -183,6 +183,35 @@ export interface PropietarioInterface {
   deletedAt?: Date | null;
 }
 
+/** One end of a tramo. Coordinates can be missing: some cities were never placed. */
+export interface CiudadDeTramo {
+  id: number;
+  name: string | null;
+  lat: number | null;
+  lng: number | null;
+}
+
+export interface Departamento {
+  id: number;
+  name: string;
+}
+
+/**
+ * A stretch of line between two cities, as every response carries it.
+ *
+ * It has no direction. `nombre` and the order of `ciudades` are decided by the
+ * server and are the same everywhere; the client shows them and never builds
+ * either.
+ */
+export interface Tramo {
+  id: number;
+  nombre: string;
+  ciudades: [CiudadDeTramo, CiudadDeTramo];
+  id_departamento: number | null;
+  departamento: Departamento | null;
+  archivado: boolean;
+}
+
 export interface PosteInterface {
   id?: number | null;
   name: string;
@@ -193,16 +222,15 @@ export interface PosteInterface {
   id_adss: number;
   id_material: number;
   id_propietario: number;
-  id_ciudadA: number;
-  id_ciudadB: number;
+  id_tramo: number;
   id_usuario: number;
   adss_ids?: number[];
 
   adss?: AdssInterface | null;
   material?: MaterialInterface | null;
   propietario?: PropietarioInterface | null;
-  ciudadA?: CiudadInterface | null;
-  ciudadB?: CiudadInterface | null;
+  /** Sent by the readers; the bare pole `POST`/`PUT` answer carries only `id_tramo`. */
+  tramo?: Tramo | null;
   adsspostes?: AdssPosteInterface | null;
   usuario?: UsuarioInterface | null;
 

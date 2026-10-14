@@ -1,5 +1,6 @@
 import React, { useContext, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { SesionContext } from "../../../context/SesionContext";
 import { BitacoraInterface } from "../../../interfaces/interfaces";
 import { imageUrl } from "../../../lib/imageUrl";
@@ -7,12 +8,17 @@ import { nombreDeRol } from "../../../lib/roles";
 import { enlaceDeFila, nombreDeEntidad } from "../../../constants/bitacora";
 import { accionVisual } from "../../../lib/bitacoraAcciones";
 import type { UsuarioDetalleData } from "./useUsuarioDetalleData";
+import Dato from "../../../components/Dato";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Skeleton } from "../../../components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "../../../components/ui/avatar";
 import { ImageLightbox } from "../../../components/ui/image-viewer";
-import { PencilIcon, KeyRoundIcon, ShieldOffIcon, LockOpenIcon } from "lucide-react";
+import {
+  PencilIcon, KeyRoundIcon, ShieldOffIcon, LockOpenIcon, PhoneIcon, MailIcon,
+  CopyIcon, AlertCircleIcon, ChevronRightIcon, ArchiveIcon, AtSignIcon, CakeIcon,
+  CalendarIcon, ActivityIcon,
+} from "lucide-react";
 
 export type VistaUsuario = "resumen" | "bitacora";
 
@@ -35,6 +41,9 @@ interface Props {
   onPassword: () => void;
   onDesbloquear: () => void;
   onRestablecerMfa: () => void;
+  /** `seguridad.archivar`, and never on your own account. */
+  puedeArchivar: boolean;
+  onArchivar: () => void;
 }
 
 /**
@@ -45,6 +54,7 @@ interface Props {
 export default function UsuarioDetallePanel({
   vista, d, isOwnProfile, puedeGestionar, puedeRescatar,
   onEditar, onRenombrar, onPassword, onDesbloquear, onRestablecerMfa,
+  puedeArchivar, onArchivar,
 }: Props) {
   const navigate = useNavigate();
   const { sesion } = useContext(SesionContext);
@@ -125,27 +135,31 @@ export default function UsuarioDetallePanel({
     ? `${d.usuario.name[0] ?? ""}${d.usuario.lastname[0] ?? ""}`.toUpperCase()
     : "??";
 
-  const correo = !d.usuario?.email
-    ? "Sin configurar"
-    : d.usuario.email_verified_at
-      ? `${d.usuario.email} (verificado)`
-      : `${d.usuario.email} (sin verificar)`;
+  const copiar = (texto: string, queEs: string) => {
+    navigator.clipboard.writeText(texto).then(
+      () => toast.success(`${queEs} copiado`),
+      () => toast.error("No se pudo copiar"),
+    );
+  };
 
   return (
     <>
-      <div className="p-3">
+      {/* The photo on the left and who they are beside it. Centred, with the
+          photo above the name, it left half the card's width empty on both
+          sides. */}
+      <div className="flex items-center gap-3 p-3">
         {cargando ? (
-          <div className="flex items-center gap-3">
-            <Skeleton className="h-14 w-14 rounded-full" />
+          <>
+            <Skeleton className="h-16 w-16 shrink-0 rounded-full" />
             <div className="space-y-2">
               <Skeleton className="h-5 w-40" />
               <Skeleton className="h-4 w-28" />
             </div>
-          </div>
+          </>
         ) : (
-          <div className="flex items-center gap-3 min-w-0">
+          <>
             <Avatar
-              className={`h-14 w-14 shrink-0 border-2 border-border shadow${avatarLoaded ? " cursor-zoom-in" : ""}`}
+              className={`h-16 w-16 shrink-0 border-2 border-border shadow${avatarLoaded ? " cursor-zoom-in" : ""}`}
               onClick={avatarLoaded ? () => setLightboxSrc(imageUrl(d.usuario!.image)) : undefined}
             >
               {d.usuario?.image && (
@@ -155,91 +169,125 @@ export default function UsuarioDetallePanel({
                   onError={() => setAvatarLoaded(false)}
                 />
               )}
-              <AvatarFallback className="text-base font-bold">{initials}</AvatarFallback>
+              <AvatarFallback className="text-lg font-bold">{initials}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              {/* The pencil shows when the pointer is on the name's row, and on
-                  focus for the keyboard; a touch screen always has it. */}
-              <div className="group/nombre flex items-center gap-1 min-w-0">
-                <h1 className="min-w-0 text-lg font-bold tracking-tight leading-tight truncate">
-                  {d.usuario?.name} {d.usuario?.lastname}
-                </h1>
-                {puedeGestionar && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 text-muted-foreground transition-opacity mouse:opacity-0 mouse:group-hover/nombre:opacity-100 mouse:focus-visible:opacity-100"
-                    aria-label="Editar datos"
-                    title="Editar datos"
-                    disabled={sinCuenta}
-                    onClick={onEditar}
-                  >
-                    <PencilIcon className="h-3.5 w-3.5" />
-                  </Button>
-                )}
-              </div>
-              <div className="flex items-center gap-2 mt-0.5 min-w-0">
+              {/* Two lines at most: a full name is often longer than what is
+                  left beside the photo. */}
+              <h1 className="text-lg font-bold tracking-tight leading-tight line-clamp-2 break-words">
+                {d.usuario?.name} {d.usuario?.lastname}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5 min-w-0">
                 <span className="text-sm text-muted-foreground truncate">@{d.usuario?.user}</span>
-                {d.usuario?.rol?.name && (
-                  <Badge variant="outline" className="text-xs shrink-0">{d.usuario.rol.name}</Badge>
+                {d.usuario?.rol && (
+                  <Badge variant="outline" className="text-xs shrink-0">{nombreDeRol(d.usuario.rol)}</Badge>
                 )}
                 {isOwnProfile && (
                   <Badge className="text-xs shrink-0 bg-primary/10 text-primary border-primary/20 shadow-none">Tú</Badge>
                 )}
               </div>
             </div>
-          </div>
+          </>
         )}
       </div>
 
-      {/* No rule above it and no title of its own: what precedes is only the
-          person's name, and these are simply the rest of the account. */}
-      <section aria-label="Ficha" className="px-3 pb-3">
+      <section aria-label="Eventos atendidos" className="px-3 pb-3">
         {cargando ? (
-          <div className="grid grid-cols-6 gap-2 mb-3">
-            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="col-span-2 h-14 rounded-lg" />)}
-            {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="col-span-3 h-14 rounded-lg" />)}
-          </div>
+          <Skeleton className="h-24 rounded-lg" />
         ) : (
-          <div className="grid grid-cols-6 gap-2 mb-3">
-            <Celda label="Total eventos" className="col-span-2" value={d.eventos.length} />
-            <Celda label="Pendientes" className="col-span-2" value={pendientes}
-              valueClass={pendientes > 0 ? "text-amber-600" : undefined} />
-            <Celda label="Resueltos" className="col-span-2" value={resueltos} valueClass="text-primary" />
-            <Celda label="% Resolución" className="col-span-3" value={`${pctResolucion}%`} />
-            <Celda label="Alta prioridad" className="col-span-3" value={altaPrioridad}
-              valueClass={altaPrioridad > 0 ? "text-red-500" : undefined} />
+          <div className="rounded-lg bg-muted/60 px-3 py-3">
+            <dl className="grid grid-cols-3 text-center">
+              <Cifra label="Total" value={d.eventos.length} />
+              <Cifra label="Pendientes" value={pendientes} valueClass={pendientes > 0 ? "text-amber-600" : undefined} />
+              <Cifra label="Resueltos" value={resueltos} valueClass="text-primary" />
+            </dl>
+            {/* A share of a whole, so it is drawn as one: as a fourth number
+                it sat beside the three it is made of. */}
+            <div className="mt-3 flex items-center gap-2.5">
+              <div
+                role="progressbar"
+                aria-label="Resolución"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={pctResolucion}
+                className="h-1.5 flex-1 overflow-hidden rounded-full bg-border"
+              >
+                <div className="h-full rounded-full bg-primary-fill" style={{ width: `${pctResolucion}%` }} />
+              </div>
+              <span className="shrink-0 text-xs font-medium tabular-nums text-muted-foreground">
+                {pctResolucion}% resuelto
+              </span>
+            </div>
+            {/* Only when there is one: on most accounts it was a cell that
+                said zero. */}
+            {altaPrioridad > 0 && (
+              <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs font-medium text-red-500">
+                <AlertCircleIcon className="h-3.5 w-3.5" />
+                {altaPrioridad} de alta prioridad
+              </p>
+            )}
           </div>
         )}
+      </section>
 
+      {/* What can be done to the account as a whole, on a row of its own:
+          under who the person is and what they have attended, and above the
+          details. Said in a word: a pencil alone, beside the name, read as
+          part of the name. Its full name is still what it is called aloud. */}
+      {(puedeGestionar || puedeArchivar) && (
+        <div className="flex gap-2 px-3 pb-4">
+          {puedeGestionar && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5"
+              aria-label="Editar datos"
+              title="Editar datos"
+              disabled={sinCuenta}
+              onClick={onEditar}
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+              Editar
+            </Button>
+          )}
+          {puedeArchivar && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 gap-1.5 text-destructive hover:text-destructive"
+              disabled={sinCuenta}
+              onClick={onArchivar}
+            >
+              <ArchiveIcon className="h-3.5 w-3.5" />
+              Archivar
+            </Button>
+          )}
+        </div>
+      )}
+
+      {/* Both blocks in the one row the incident's sheet uses: an icon, a small
+          label and the value right under it. They were two shapes side by
+          side, and in the second the label and its value sat at opposite
+          edges of the card. */}
+      <section className="px-3 pb-4">
+        <h2 className="text-sm font-semibold mb-2">Contacto</h2>
         {cargando ? (
-          <div className="space-y-3">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center justify-between">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-4 w-32" />
-              </div>
-            ))}
-          </div>
+          <FilasEnCarga n={2} />
         ) : (
           <dl className="space-y-2.5">
-            <Row label="Nombre de usuario" value={d.usuario?.user}>
-              {puedeGestionar && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="-my-1 h-7 w-7 shrink-0 text-muted-foreground"
-                  aria-label="Cambiar usuario"
-                  title="Cambiar usuario"
-                  disabled={sinCuenta}
-                  onClick={onRenombrar}
-                >
-                  <PencilIcon className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </Row>
-            <Row label="Rol" value={d.usuario?.rol ? nombreDeRol(d.usuario.rol) : undefined} />
-            <Row label="Teléfono" value={d.usuario?.phone || undefined} />
+            {/* Pressing a value uses it — the phone dials, the address opens a
+                message — and the button beside it takes it elsewhere. */}
+            <Dato
+              icon={<PhoneIcon />}
+              label="Teléfono"
+              accion={d.usuario?.phone
+                ? <Copiar label="Copiar teléfono" onClick={() => copiar(d.usuario!.phone, "Teléfono")} />
+                : undefined}
+            >
+              {d.usuario?.phone
+                ? <a href={`tel:${d.usuario.phone}`} className="hover:underline underline-offset-2">{d.usuario.phone}</a>
+                : <SinDato>Sin teléfono</SinDato>}
+            </Dato>
             {/*
               Read-only, unlike every field beside it: `email` is not on
               `usuario.controller.ts`'s `EDITABLE_FIELDS` whitelist, so this
@@ -252,15 +300,62 @@ export default function UsuarioDetallePanel({
               back in is actually usable — a saved-but-unverified address
               is not, `/password/forgot` ignores it.
             */}
-            <Row label="Correo de recuperación" value={correo} />
-            <Row
-              label="Fecha de nacimiento"
-              value={d.usuario?.birthday
-                ? `${fecha(d.usuario.birthday)} (${calcEdad(d.usuario.birthday)} años)`
+            <Dato
+              icon={<MailIcon />}
+              label="Correo de recuperación"
+              sub={d.usuario?.email
+                ? d.usuario.email_verified_at
+                  ? <span className="text-green-600">Verificado</span>
+                  : <span className="text-amber-600">Sin verificar: no sirve para recuperar la cuenta</span>
                 : undefined}
-            />
-            <Row label="Miembro desde" value={d.usuario?.createdAt ? fecha(d.usuario.createdAt) : undefined} />
-            <Row label="Último evento" value={ultimoEvento !== null ? fecha(new Date(ultimoEvento)) : "Sin actividad"} />
+              accion={d.usuario?.email
+                ? <Copiar label="Copiar correo" onClick={() => copiar(d.usuario!.email!, "Correo")} />
+                : undefined}
+            >
+              {d.usuario?.email
+                ? <a href={`mailto:${d.usuario.email}`} title={d.usuario.email} className="hover:underline underline-offset-2">{d.usuario.email}</a>
+                : <SinDato>Sin configurar</SinDato>}
+            </Dato>
+          </dl>
+        )}
+      </section>
+
+      <section className="px-3 pb-3">
+        <h2 className="text-sm font-semibold mb-2">Cuenta</h2>
+        {cargando ? (
+          <FilasEnCarga n={4} />
+        ) : (
+          <dl className="space-y-2.5">
+            <Dato
+              icon={<AtSignIcon />}
+              label="Nombre de usuario"
+              accion={puedeGestionar ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 shrink-0 text-muted-foreground"
+                  aria-label="Cambiar usuario"
+                  title="Cambiar usuario"
+                  disabled={sinCuenta}
+                  onClick={onRenombrar}
+                >
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </Button>
+              ) : undefined}
+            >
+              {d.usuario?.user}
+            </Dato>
+            <Dato icon={<CakeIcon />} label="Fecha de nacimiento">
+              {d.usuario?.birthday
+                ? `${fecha(d.usuario.birthday)} · ${calcEdad(d.usuario.birthday)} años`
+                : undefined}
+            </Dato>
+            <Dato icon={<CalendarIcon />} label="Miembro desde">
+              {d.usuario?.createdAt ? fecha(d.usuario.createdAt) : undefined}
+            </Dato>
+            <Dato icon={<ActivityIcon />} label="Último evento">
+              {ultimoEvento !== null ? fecha(new Date(ultimoEvento)) : <SinDato>Sin actividad</SinDato>}
+            </Dato>
           </dl>
         )}
       </section>
@@ -347,28 +442,47 @@ function BitacoraRow({ entry, autor, enlace, navigate }: {
   );
 }
 
-function Celda({ label, value, className, valueClass }: {
-  label: string; value: number | string; className?: string; valueClass?: string;
-}) {
+function Cifra({ label, value, valueClass }: { label: string; value: number; valueClass?: string }) {
   return (
-    <div className={`rounded-lg bg-muted/60 px-2.5 py-2 min-w-0 ${className ?? ""}`}>
-      <div className="text-[11px] text-muted-foreground font-medium leading-tight truncate" title={label}>
-        {label}
-      </div>
-      <div className={`text-xl font-semibold leading-tight tabular-nums ${valueClass ?? ""}`}>{value}</div>
+    <div className="flex min-w-0 flex-col-reverse">
+      <dt className="text-[11px] text-muted-foreground font-medium leading-tight truncate">{label}</dt>
+      <dd className={`text-2xl font-semibold leading-tight tabular-nums ${valueClass ?? ""}`}>{value}</dd>
     </div>
   );
 }
 
-/** A line of the account. `children` is what changes it, when something does. */
-function Row({ label, value, children }: { label: string; value?: string | null; children?: React.ReactNode }) {
+/** Where a value would be and is not: said, and said quietly. */
+function SinDato({ children }: { children: React.ReactNode }) {
+  return <span className="font-normal text-muted-foreground">{children}</span>;
+}
+
+function Copiar({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <div className="flex items-center justify-between gap-3 min-w-0">
-      <dt className="text-xs text-muted-foreground font-medium shrink-0">{label}</dt>
-      <dd className="flex items-center gap-1 min-w-0">
-        <span className="text-sm font-medium truncate text-right" title={value ?? undefined}>{value ?? "—"}</span>
-        {children}
-      </dd>
+    <Button
+      variant="ghost"
+      size="icon"
+      className="h-7 w-7 shrink-0 text-muted-foreground"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <CopyIcon className="h-3.5 w-3.5" />
+    </Button>
+  );
+}
+
+function FilasEnCarga({ n }: { n: number }) {
+  return (
+    <div className="space-y-2.5">
+      {Array.from({ length: n }).map((_, i) => (
+        <div key={i} className="flex items-center gap-2">
+          <Skeleton className="h-7 w-7 rounded-md" />
+          <div className="space-y-1">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -389,6 +503,7 @@ function Accion({ icon, children, onClick, disabled, destructive }: {
     >
       {icon}
       {children}
+      <ChevronRightIcon className="ml-auto text-muted-foreground/60" />
     </Button>
   );
 }

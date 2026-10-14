@@ -6,6 +6,10 @@ import type { MatrizPermisos } from "../api/Permisos.api";
 import { clavePermiso as key, type PermisosPendientes as Pending } from "../lib/roles";
 import { Checkbox } from "./ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { cn } from "@/lib/utils";
+
+/** The module's column, pinned to the left below `md`, over the actions that scroll under it. */
+const STICKY_MODULE = "max-md:sticky max-md:left-0 max-md:z-[1] max-md:bg-background";
 
 interface Props {
   /** The server's answer: which modules, which actions, who holds what. */
@@ -81,7 +85,11 @@ export default function PermisosPanel({ matriz, rolId, pending, onPendingChange,
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[240px]">Módulo</TableHead>
+              {/* On a phone the actions scroll sideways under the module's
+                  name, which stays put and narrows to two lines: at 240px it
+                  was most of the screen, and once scrolled the ticks no longer
+                  said what they belonged to. */}
+              <TableHead className={cn("w-[240px] max-md:w-32", STICKY_MODULE)}>Módulo</TableHead>
               {matriz.acciones.map((accion) => (
                 <TableHead key={accion.key} className="text-center whitespace-nowrap">
                   {accion.label}
@@ -92,7 +100,7 @@ export default function PermisosPanel({ matriz, rolId, pending, onPendingChange,
           <TableBody>
             {matriz.modulos.map((modulo) => (
               <TableRow key={modulo.key}>
-                <TableCell className="font-medium">{modulo.label}</TableCell>
+                <TableCell className={cn("font-medium max-md:whitespace-normal", STICKY_MODULE)}>{modulo.label}</TableCell>
                 {matriz.acciones.map((accion) => {
                   // A module only carries the actions it declares, so most rows
                   // have holes in them. A hole, and deliberately not a disabled

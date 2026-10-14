@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Skeleton } from "../../../components/ui/skeleton";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../../../components/ui/tooltip";
+import InfoPopover from "../../../components/InfoPopover";
 import { InfoIcon, LineChartIcon, ScaleIcon } from "lucide-react";
 import {
   CartesianGrid,
@@ -113,40 +113,31 @@ export function ActivityChart({ chartData, granularity, loading, xAxisLabel, per
           <div>
             <div className="flex items-center gap-1.5">
               <CardTitle>Actividad</CardTitle>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="¿Qué muestra este gráfico?" className="text-muted-foreground/70 hover:text-foreground transition-colors">
-                      <InfoIcon className="h-3.5 w-3.5" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-sm">
-                    {isBalance ? (
-                      <span className="block text-left leading-relaxed normal-case">
-                        <strong className="font-semibold">Balance del tramo:</strong> eventos solucionados − eventos nuevos. Los postes nuevos no cuentan aquí.
-                        <span className="block mt-1 text-emerald-500 font-medium">Verde — se reparó más de lo que entró: la cola de averías bajó.</span>
-                        <span className="block text-rose-500 font-medium">Rojo — entró más de lo que se reparó: la cola creció.</span>
-                      </span>
-                    ) : (
-                      <span className="block text-left leading-relaxed normal-case">
-                        Tres cuentas independientes, cada una en su propia fecha:
-                        <span className="block mt-1">
-                          <strong className="font-semibold">Postes nuevos</strong> — postes cuya fecha en campo cae en ese tramo.
-                        </span>
-                        <span className="block">
-                          <strong className="font-semibold">Eventos nuevos</strong> — averías registradas en ese tramo, estén hoy reparadas o no.
-                        </span>
-                        <span className="block">
-                          <strong className="font-semibold">Eventos solucionados</strong> — reparaciones hechas en ese tramo, sin importar cuándo apareció la avería.
-                        </span>
-                        <span className="block mt-1 text-muted-foreground">
-                          Una avería de enero reparada en marzo cuenta en enero como evento nuevo y en marzo como solucionado.
-                        </span>
-                      </span>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              <InfoPopover label="¿Qué muestra este gráfico?" side="bottom" className="w-96 max-w-[calc(100vw-2rem)]">
+                {isBalance ? (
+                  <span className="block text-left leading-relaxed normal-case">
+                    <strong className="font-semibold">Balance del tramo:</strong> eventos solucionados − eventos nuevos. Los postes nuevos no cuentan aquí.
+                    <span className="block mt-1 text-emerald-500 font-medium">Verde — se reparó más de lo que entró: la cola de averías bajó.</span>
+                    <span className="block text-rose-500 font-medium">Rojo — entró más de lo que se reparó: la cola creció.</span>
+                  </span>
+                ) : (
+                  <span className="block text-left leading-relaxed normal-case">
+                    Tres cuentas independientes, cada una en su propia fecha:
+                    <span className="block mt-1">
+                      <strong className="font-semibold">Postes nuevos</strong> — postes cuya fecha en campo cae en ese tramo.
+                    </span>
+                    <span className="block">
+                      <strong className="font-semibold">Eventos nuevos</strong> — averías registradas en ese tramo, estén hoy reparadas o no.
+                    </span>
+                    <span className="block">
+                      <strong className="font-semibold">Eventos solucionados</strong> — reparaciones hechas en ese tramo, sin importar cuándo apareció la avería.
+                    </span>
+                    <span className="block mt-1 text-muted-foreground">
+                      Una avería de enero reparada en marzo cuenta en enero como evento nuevo y en marzo como solucionado.
+                    </span>
+                  </span>
+                )}
+              </InfoPopover>
             </div>
             <CardDescription>{xAxisLabel}</CardDescription>
           </div>
