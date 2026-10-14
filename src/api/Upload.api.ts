@@ -2,7 +2,17 @@ import axios from "axios";
 import imageCompression from "browser-image-compression";
 import { urlApi, urlFiles } from "./url";
 
-const MAX_MB = 4;
+/**
+ * Over this, the browser shrinks the photograph before sending it; under it, the
+ * photograph leaves untouched.
+ *
+ * The server compresses every photograph once, to 2560 px and webp 85
+ * (`upload.controller.ts`), and accepts up to 10 MB (`files.routes.ts`). This
+ * used to be 4, with a shrink to 1920 px and a JPEG re-encode — so a usual phone
+ * photo was compressed twice, the first time by the browser's coarser resize,
+ * and lost detail both times. Now only what the server would refuse is touched.
+ */
+export const UMBRAL_MB = 8;
 
 /**
  * What came back from an upload attempt.
@@ -17,7 +27,7 @@ const MAX_MB = 4;
  * avatar in the application starts asking the server for a file called 500.
  *
  * And it threw away what the server said. The API now answers 413 with "la
- * imagen supera el máximo de 5 MB" where it used to answer 500 with nothing
+ * imagen supera el máximo de 10 MB" where it used to answer 500 with nothing
  * usable — but a caller that only ever sees `"500"` cannot pass that on, so a
  * technician in the field is told "no se pudo subir la imagen" for a photograph
  * they could simply have retaken smaller. The message is the whole point of the
@@ -42,10 +52,14 @@ function motivo(error: unknown): string {
 export const uploadImage = async (data: File): Promise<UploadResult> => {
   try {
     let file = data;
-    if (data.size > MAX_MB * 1024 * 1024) {
+    if (data.size > UMBRAL_MB * 1024 * 1024) {
       file = await imageCompression(data, {
-        maxSizeMB: MAX_MB,
-        maxWidthOrHeight: 1920,
+        maxSizeMB: UMBRAL_MB,
+        // Above the server's 2560, so the final resize is still the server's,
+        // and near lossless, so the server starts from detail rather than from
+        // a copy that already lost it.
+        maxWidthOrHeight: 3840,
+        initialQuality: 0.92,
         useWebWorker: true,
       });
     }
