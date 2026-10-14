@@ -1,7 +1,7 @@
 import { useContext, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { useNavigate, useLocation, Link } from "react-router-dom";
-import { KeyRoundIcon, Loader2, LogIn, SunIcon, MoonIcon } from "lucide-react";
+import { ArrowLeftIcon, KeyRoundIcon, Loader2, LogIn, SunIcon, MoonIcon } from "lucide-react";
 import { motion } from "motion/react";
 
 import { useTheme } from "../components/theme-provider";
@@ -12,6 +12,8 @@ import { loginUsuario, comprobarToken } from "../api/Login.api";
 import { cancelarCeremonia, entrarSinContrasena, soportaPasskeys } from "../api/passkeyCeremony";
 
 import logo from "../assets/images/logo.png";
+import { TramoPlan } from "./landing/TramoPlan";
+import { paperVars } from "./landing/tokens";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,11 +24,6 @@ const ease = [0.16, 1, 0.3, 1] as const;
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0 },
-};
-
-const brandStagger = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.14, delayChildren: 0.1 } },
 };
 
 const rightStagger = {
@@ -248,75 +245,69 @@ const LoginPage = () => {
         {resolvedTheme === "dark" ? <SunIcon className="h-4 w-4" /> : <MoonIcon className="h-4 w-4" />}
       </Button>
 
-      {/* ── PANEL IZQUIERDO — Brand ── */}
-      <div className="relative hidden lg:flex flex-col items-center justify-center p-16 text-white overflow-hidden">
-
-        {/* Gradient base */}
-        <div className="absolute inset-0 bg-linear-to-br from-[#0f172a] via-[#1e293b] to-[#0f172a]" />
-
-        {/* Grid animado */}
-        <div
-          className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff0d_1px,transparent_1px),linear-gradient(to_bottom,#ffffff0d_1px,transparent_1px)] bg-size-[4rem_4rem] mask-[radial-gradient(ellipse_70%_70%_at_50%_50%,#000_60%,transparent_100%)]"
-          style={{ animation: "grid-drift 22s linear infinite" }}
-        />
-
-        {/* Línea de acento superior */}
-        <div className="absolute top-0 left-0 right-0 z-30 h-px overflow-hidden">
-          <motion.div
-            className="h-full bg-linear-to-r from-transparent via-white/30 to-transparent"
-            initial={{ scaleX: 0, originX: 0 }}
-            animate={{ scaleX: 1 }}
-            transition={{ duration: 1.6, ease }}
-          />
-        </div>
-
-        {/* Contenido centrado */}
-        <motion.div
-          className="relative z-20 flex flex-col items-center text-center gap-6"
-          variants={brandStagger}
-          initial="hidden"
-          animate="visible"
-        >
-          {/* Logo */}
-          <motion.div
-            variants={{ hidden: { opacity: 0, scale: 0.85 }, visible: { opacity: 1, scale: 1 } }}
-            transition={{ duration: 0.8, ease }}
-          >
-            <img src={logo} alt="Osefi srl" className="logo-glow h-36 w-36 object-contain" />
-          </motion.div>
-
-
-          {/* Nombre */}
-          <motion.div variants={fadeUp} transition={{ duration: 0.7, ease }} className="space-y-2">
-            <h1 className="shimmer-text-light text-5xl font-bold tracking-tight">Osefi srl</h1>
-            <p className="text-white/45 text-xs font-medium tracking-[0.2em] uppercase">
-              Telecomunicaciones e Infraestructuras
-            </p>
-          </motion.div>
-
-          {/* Tagline */}
-          <motion.p
-            variants={fadeUp}
-            transition={{ duration: 0.7, ease }}
-            className="text-white/30 text-sm max-w-xs leading-relaxed"
-          >
-            Sistema de gestión interna para el control y mantenimiento de la red.
-          </motion.p>
+      {/* ── PANEL IZQUIERDO — Brand ──
+          The same survey sheet as the public page, with the same tramo drawn
+          on it, so going from the site to the login reads as one place. It
+          stays paper in both themes: it is the brand, not the application,
+          and the form beside it is what follows the theme. Nothing on it
+          loops; the drawing builds once and holds. */}
+      <div
+        style={paperVars}
+        className="relative hidden flex-col justify-between overflow-hidden bg-[var(--pp-paper)] bg-[linear-gradient(var(--pp-grid)_1px,transparent_1px),linear-gradient(90deg,var(--pp-grid)_1px,transparent_1px)] bg-[size:32px_32px] bg-[position:-1px_-1px] p-12 font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] lg:flex"
+      >
+        <motion.div variants={fadeUp} initial="hidden" animate="visible" transition={{ duration: 0.6, ease }}>
+          <Link to="/" className="inline-flex items-center gap-2.5">
+            <img src={logo} alt="" className="h-9 w-9 object-contain" />
+            <span className="text-sm font-extrabold tracking-[0.06em] [font-stretch:112%]">OSEFI</span>
+          </Link>
         </motion.div>
 
-        {/* Footer del panel */}
+        <div className="max-w-xl">
+          <motion.p
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            transition={{ duration: 0.6, ease, delay: 0.08 }}
+            className="flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-dim)] uppercase"
+          >
+            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
+            Sistema interno
+          </motion.p>
+          <motion.h2
+            variants={fadeUp}
+            initial="hidden"
+            animate="visible"
+            transition={{ duration: 0.7, ease, delay: 0.16 }}
+            className="mt-5 text-5xl leading-[1] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] xl:text-6xl"
+          >
+            Precisión en campo. <span className="text-[var(--pp-or-ink)]">Continuidad en red.</span>
+          </motion.h2>
+          <div className="mt-10">
+            <TramoPlan start={0.45} />
+          </div>
+        </div>
+
         <motion.p
-          className="absolute bottom-8 z-20 text-white/20 text-xs tracking-widest uppercase"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.2, duration: 0.8 }}
+          transition={{ delay: 0.6, duration: 0.6 }}
+          className="font-[family-name:var(--pp-mono)] text-[12px] text-[var(--pp-dim)]"
         >
-          Sistema Interno · © {new Date().getFullYear()}
+          Osefi SRL · © {new Date().getFullYear()}
         </motion.p>
       </div>
 
       {/* ── PANEL DERECHO — Formulario ── */}
       <div className="flex w-full items-center justify-center p-8 lg:p-14 relative z-10 bg-background md:bg-card md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.12)] dark:md:shadow-[-20px_0_40px_-5px_rgba(0,0,0,0.5)] dark:md:border-l dark:md:border-border">
+        {/* The way back to the public page. On a phone the brand panel, whose
+            logo also links home, is not shown, so this is the only one. */}
+        <Link
+          to="/"
+          className="absolute top-5 left-5 inline-flex items-center gap-1.5 rounded-md text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+        >
+          <ArrowLeftIcon className="h-3.5 w-3.5" />
+          Volver a la página
+        </Link>
         <motion.div
           className="mx-auto w-full max-w-105 pb-6"
           variants={rightStagger}

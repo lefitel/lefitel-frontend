@@ -1,510 +1,429 @@
 import { Link } from "react-router-dom";
-import {
-  motion,
-  useInView,
-  useScroll,
-  useTransform,
-  useMotionValue,
-  useMotionTemplate,
-  animate,
-} from "motion/react";
-import { useRef, useEffect } from "react";
-import {
-  ArrowRightIcon,
-  MapPinIcon,
-  ClipboardListIcon,
-  BellIcon,
-  BarChart3Icon,
-  CheckCircle2Icon,
-  PhoneIcon,
-  MailIcon,
-} from "lucide-react";
+import { motion, useInView } from "motion/react";
+import { useRef } from "react";
+import { ArrowDownIcon, ArrowRightIcon, ArrowUpRightIcon } from "lucide-react";
 import { ScrollShowcase } from "./landing/ScrollShowcase";
+import { TramoPlan } from "./landing/TramoPlan";
+import { Reveal } from "./landing/chrome";
+import { EXPO, paperVars } from "./landing/tokens";
+import { usePrefersReducedMotion } from "./landing/useTimeline";
 import logo from "../assets/images/logo.png";
 import tigoLogo from "../assets/images/logo_tigo.png";
 import vivaLogo from "../assets/images/logo_viva.png";
 import entelLogo from "../assets/images/logo_entel.png";
 
-const ease = [0.16, 1, 0.3, 1] as const;
+/**
+ * The public page, drawn as a survey sheet.
+ *
+ * Paper and graphite with the logo's orange, because the work is field survey
+ * and the most characteristic thing in that world is the line plan of a tramo
+ * with a fault marked on it. That plan is the hero. The product showcase sits
+ * in a dark band halfway down: those are screens, and the change of ground
+ * says so.
+ *
+ * Who the page is for decides the buttons. A client already has the login; the
+ * page exists for the operator who does not know Osefi yet, so the primary
+ * action everywhere is to get in touch, and the client access is a quiet link
+ * in the corner.
+ *
+ * Figures are rounded on purpose ("más de 1.500"). Exact counts went stale
+ * between deploys and ended up contradicting the showcase two screens below.
+ */
 
-const HERO_LINE1 = ["Precisión", "en", "campo."];
-const HERO_LINE2 = ["Continuidad", "en", "red."];
+const CONTACT = {
+  email: "osefibolivia@gmail.com",
+  phone: "+591 76846009",
+  phoneHref: "tel:+59176846009",
+  whatsapp: "https://wa.me/59176846009",
+  address: "Calle José Peña Castellón Nº 1065",
+};
 
-function AnimatedNumber({ value, duration = 1.8 }: { value: number; duration?: number }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-50px" });
-
-  useEffect(() => {
-    if (!inView || !ref.current) return;
-    const controls = animate(0, value, {
-      duration,
-      ease: [0.16, 1, 0.3, 1],
-      onUpdate(v) {
-        if (ref.current) ref.current.textContent = Math.round(v).toLocaleString("es-BO");
-      },
-    });
-    return () => controls.stop();
-  }, [inView, value, duration]);
-
-  return <span ref={ref}>0</span>;
-}
-
-function Reveal({
-  children,
-  delay = 0,
-  className = "",
-}: {
-  children: React.ReactNode;
-  delay?: number;
-  className?: string;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-80px" });
-  return (
-    <motion.div
-      ref={ref}
-      className={className}
-      initial={{ opacity: 0, y: 28 }}
-      animate={inView ? { opacity: 1, y: 0 } : {}}
-      transition={{ duration: 0.7, delay, ease }}
-    >
-      {children}
-    </motion.div>
-  );
-}
-
-const STATS = [
-  { value: 1661, label: "Postes registrados", suffix: "+" },
-  { value: 99,   label: "Ciudades cubiertas", suffix: "" },
-  { value: 1487, label: "Eventos gestionados", suffix: "+" },
-  { value: 3,    label: "Empresas clientes",   suffix: "" },
+const FACTS = [
+  { value: "+1.500", label: "postes" },
+  { value: "+85", label: "ciudades" },
+  { value: "3", label: "operadoras" },
 ];
 
+/** What a client gets from each service; the last column is the deliverable. */
 const SERVICES = [
   {
-    icon: MapPinIcon,
     title: "Inspección en campo",
-    description:
-      "Técnicos especializados recorren la red verificando el estado físico de cada poste y sus componentes con evidencia georeferenciada.",
+    text: "Cuadrillas propias recorren la red y revisan cada poste: estructura, cruceta, ferretería, vanos y cable.",
+    delivers: "Ficha por poste, con foto y coordenadas",
   },
   {
-    icon: ClipboardListIcon,
-    title: "Reporte técnico",
-    description:
-      "Reportes estructurados con fotografías, clasificación de daños y prioridades de intervención listos para la operadora.",
+    title: "Registro de incidencias",
+    text: "Cada desperfecto se registra al pie del poste, con su observación y su gravedad en una escala de nueve niveles.",
+    delivers: "Evento con criticidad del 1 al 9",
   },
   {
-    icon: BellIcon,
-    title: "Gestión de eventos",
-    description:
-      "Seguimiento de cada incidencia desde el registro hasta la resolución, con historial completo y trazabilidad garantizada.",
+    title: "Seguimiento hasta el cierre",
+    text: "La incidencia sigue abierta hasta que se resuelve, y guarda quién la abrió, quién la cerró y qué se hizo.",
+    delivers: "Historial completo por evento",
   },
   {
-    icon: BarChart3Icon,
-    title: "Análisis y monitoreo",
-    description:
-      "Paneles en tiempo real con estadísticas de estado de red, tiempos de resolución y cobertura geográfica por tramo.",
+    title: "Informes para la operadora",
+    text: "Paneles con el estado de la red y un generador de informes que la operadora arma a su medida.",
+    delivers: "Excel en su formato, también por correo programado",
   },
 ];
 
+/** A real sequence, so it is numbered. */
 const STEPS = [
   {
-    number: "01",
     title: "Inspección",
-    description:
-      "Nuestros técnicos realizan recorridos sistemáticos de la infraestructura, registrando el estado real de la red en campo.",
+    text: "Recorridos sistemáticos de la infraestructura para registrar el estado real de la red en campo.",
   },
   {
-    number: "02",
     title: "Registro",
-    description:
-      "Cada hallazgo queda documentado en el sistema con coordenadas GPS, fotografías y clasificación técnica precisa.",
+    text: "Cada hallazgo entra en el sistema con coordenadas, fotografía y clasificación técnica.",
   },
   {
-    number: "03",
     title: "Reporte",
-    description:
-      "La operadora recibe reportes detallados, limpios y listos para decisiones de mantenimiento y priorización de intervenciones.",
+    text: "La operadora recibe informes limpios, listos para priorizar el mantenimiento.",
   },
 ];
 
 const BENEFITS = [
-  "Reducción de tiempos de respuesta ante incidencias",
-  "Trazabilidad completa de cada intervención en campo",
-  "Datos georeferenciados y accesibles en tiempo real",
-  "Reportes adaptados al estándar de cada operadora",
-  "Personal técnico certificado con cobertura en Bolivia",
+  "Menos tiempo entre que algo se rompe y alguien lo sabe.",
+  "Cada intervención trazada: quién, cuándo y dónde.",
+  "Datos georreferenciados, consultables en cualquier momento.",
+  "Informes con el formato que ya usa tu equipo.",
 ];
 
-const LandingPage = () => {
-  const mouseX = useMotionValue(-500);
-  const mouseY = useMotionValue(-500);
-  const spotlight = useMotionTemplate`radial-gradient(600px circle at ${mouseX}px ${mouseY}px, rgba(249,115,22,0.09), transparent 80%)`;
+/** Small mono label above a heading. */
+function Eyebrow({ children, onDark = false }: { children: React.ReactNode; onDark?: boolean }) {
+  return (
+    <p
+      className={`flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] uppercase ${
+        onDark ? "text-white/55" : "text-[var(--pp-dim)]"
+      }`}
+    >
+      <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
+      {children}
+    </p>
+  );
+}
 
-  const { scrollY } = useScroll();
-  const heroY = useTransform(scrollY, [0, 600], [0, -70]);
-  const heroOpacity = useTransform(scrollY, [0, 500], [1, 0.15]);
+/** Jumps to a section, smoothly unless the reader asked for less motion. */
+function useJump() {
+  const still = usePrefersReducedMotion();
+  return (id: string) => (e: React.MouseEvent) => {
+    const target = document.getElementById(id);
+    if (!target) return;
+    e.preventDefault();
+    target.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+  };
+}
 
-  function onHeroMouseMove(e: React.MouseEvent<HTMLElement>) {
-    const { left, top } = e.currentTarget.getBoundingClientRect();
-    mouseX.set(e.clientX - left);
-    mouseY.set(e.clientY - top);
-  }
-
-  function onHeroMouseLeave() {
-    mouseX.set(-500);
-    mouseY.set(-500);
-  }
+/**
+ * The process line. The cable between the three steps draws across once when
+ * it scrolls into view, then the steps arrive in order along it. Only transform
+ * moves, never width.
+ */
+function Process() {
+  const ref = useRef<HTMLOListElement>(null);
+  const onScreen = useInView(ref, { once: true, margin: "0px 0px -15% 0px" });
+  const still = usePrefersReducedMotion();
+  const shown = onScreen || still;
 
   return (
-    <div className="min-h-screen bg-[#08080f] text-white overflow-x-hidden" style={{ fontFamily: "'Geist Variable', sans-serif" }}>
+    <ol ref={ref} className="relative grid gap-10 md:grid-cols-3 md:gap-8">
+      <motion.span
+        aria-hidden="true"
+        className="absolute top-[11px] right-0 left-0 hidden h-px origin-left bg-[var(--pp-ink)] md:block"
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: shown ? 1 : 0 }}
+        transition={still ? { duration: 0 } : { duration: 1.1, ease: EXPO }}
+      />
+      {STEPS.map((step, i) => (
+        <motion.li
+          key={step.title}
+          className="relative"
+          initial={{ opacity: 0, y: 14 }}
+          animate={shown ? { opacity: 1, y: 0 } : { opacity: 0, y: 14 }}
+          transition={still ? { duration: 0 } : { duration: 0.6, ease: EXPO, delay: 0.25 + i * 0.22 }}
+        >
+          <span className="relative z-10 grid h-6 w-6 place-items-center bg-[var(--pp-ink)] font-[family-name:var(--pp-mono)] text-[11px] font-medium text-[var(--pp-paper)]">
+            {i + 1}
+          </span>
+          <h3 className="mt-5 text-xl font-extrabold [font-stretch:110%]">{step.title}</h3>
+          <p className="mt-2 max-w-[34ch] leading-relaxed text-[var(--pp-dim)]">{step.text}</p>
+        </motion.li>
+      ))}
+    </ol>
+  );
+}
+
+function ContactRow({
+  label,
+  value,
+  href,
+  external = false,
+}: {
+  label: string;
+  value: string;
+  href?: string;
+  external?: boolean;
+}) {
+  const body = (
+    <>
+      <span className="col-span-2 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-dim)] uppercase sm:col-span-1">
+        {label}
+      </span>
+      <span className="min-w-0 text-lg font-bold break-words [font-stretch:105%] sm:text-xl">{value}</span>
+      {href && (
+        <ArrowUpRightIcon
+          aria-hidden="true"
+          className="h-5 w-5 text-[var(--pp-or-ink)] transition-transform duration-200 ease-out group-hover:translate-x-0.5 group-hover:-translate-y-0.5"
+        />
+      )}
+    </>
+  );
+  const row =
+    "group grid grid-cols-[minmax(0,1fr)_1.25rem] items-center gap-x-4 gap-y-1 border-t border-[var(--pp-rule)] py-5 sm:grid-cols-[6.5rem_minmax(0,1fr)_1.25rem]";
+
+  if (!href) return <div className={row}>{body}</div>;
+  return (
+    <a
+      href={href}
+      className={`${row} transition-colors duration-200 hover:bg-[var(--pp-sunk)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-or-ink)]`}
+      {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+    >
+      {body}
+    </a>
+  );
+}
+
+const LandingPage = () => {
+  const still = usePrefersReducedMotion();
+  const jump = useJump();
+  const enter = (delay: number) =>
+    ({
+      initial: { opacity: 0, y: 16 },
+      animate: { opacity: 1, y: 0 },
+      transition: still ? { duration: 0 } : { duration: 0.8, ease: EXPO, delay },
+    }) as const;
+
+  const focusRing =
+    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--pp-or-ink)]";
+
+  return (
+    <div
+      style={paperVars}
+      className="min-h-screen overflow-x-hidden bg-[var(--pp-paper)] font-[family-name:var(--pp-sans)] text-[var(--pp-ink)] selection:bg-[var(--pp-or)]/25"
+    >
+      {/* ── NAV ──────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 border-b border-[var(--pp-rule)] bg-[var(--pp-paper)]">
+        <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3.5 sm:px-8">
+          <a href="#inicio" onClick={jump("inicio")} className={`flex items-center gap-2.5 ${focusRing}`}>
+            <img src={logo} alt="" className="h-8 w-8 object-contain" />
+            <span className="text-sm font-extrabold tracking-[0.06em] [font-stretch:112%]">OSEFI</span>
+          </a>
+          <div className="flex items-center gap-6 text-sm">
+            {[
+              ["servicios", "Servicios"],
+              ["plataforma", "Plataforma"],
+              ["contacto", "Contacto"],
+            ].map(([id, label]) => (
+              <a
+                key={id}
+                href={`#${id}`}
+                onClick={jump(id)}
+                className={`hidden text-[var(--pp-dim)] transition-colors hover:text-[var(--pp-ink)] md:inline ${focusRing}`}
+              >
+                {label}
+              </a>
+            ))}
+            <Link
+              to="/login"
+              className={`rounded-md border border-[var(--pp-ink)] px-3.5 py-1.5 font-semibold transition-colors duration-200 hover:bg-[var(--pp-ink)] hover:text-[var(--pp-paper)] ${focusRing}`}
+            >
+              Acceso clientes
+            </Link>
+          </div>
+        </nav>
+      </header>
 
       {/* ── HERO ─────────────────────────────────────────────────── */}
       <section
-        className="relative min-h-screen flex flex-col"
-        onMouseMove={onHeroMouseMove}
-        onMouseLeave={onHeroMouseLeave}
+        id="inicio"
+        className="scroll-mt-16 bg-[linear-gradient(var(--pp-grid)_1px,transparent_1px),linear-gradient(90deg,var(--pp-grid)_1px,transparent_1px)] bg-[size:32px_32px] bg-[position:-1px_-1px]"
       >
-        {/* grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem]" />
-
-        {/* animated blobs */}
-        <motion.div
-          className="absolute top-0 right-0 w-[700px] h-[700px] rounded-full blur-[140px] -translate-y-1/3 translate-x-1/3 pointer-events-none bg-orange-500/7"
-          animate={{ scale: [1, 1.12, 1], opacity: [0.07, 0.12, 0.07] }}
-          transition={{ duration: 9, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          className="absolute bottom-1/4 left-0 w-[450px] h-[450px] rounded-full blur-[120px] pointer-events-none bg-orange-600/4"
-          animate={{ scale: [1, 1.08, 1], opacity: [0.04, 0.07, 0.04] }}
-          transition={{ duration: 11, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-        />
-
-        {/* mouse spotlight */}
-        <motion.div
-          className="pointer-events-none absolute inset-0 z-[1]"
-          style={{ background: spotlight }}
-        />
-
-        {/* nav */}
-        <nav className="relative z-10 flex items-center justify-between px-8 py-5 border-b border-white/6">
-          <div className="flex items-center gap-3">
-            <img src={logo} alt="Osefi SRL" className="h-8 w-8 object-contain" />
-            <span className="font-bold text-sm tracking-wide">
-              OSEFI<span className="text-orange-400"> SRL</span>
-            </span>
-          </div>
-          <Link
-            to="/login"
-            className="flex items-center gap-2 text-sm text-white/50 hover:text-white border border-white/8 hover:border-white/20 rounded-lg px-4 py-2 transition-all duration-200"
-          >
-            Acceder al sistema
-            <ArrowRightIcon className="h-3.5 w-3.5" />
-          </Link>
-        </nav>
-
-        {/* hero content — parallax on scroll */}
-        <motion.div
-          style={{ y: heroY, opacity: heroOpacity }}
-          className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-6 pb-16 pt-8"
-        >
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease }}
-            className="inline-flex items-center gap-2 bg-orange-500/8 border border-orange-500/20 rounded-full px-4 py-1.5 text-orange-400 text-xs font-medium tracking-[0.18em] uppercase mb-10"
-          >
-            <span className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-pulse" />
-            Telecomunicaciones · Infraestructuras · Bolivia
-          </motion.div>
-
-          {/* word-by-word headline */}
-          <h1 className="text-5xl sm:text-6xl lg:text-[5.5rem] font-extrabold tracking-tight leading-[1.08] max-w-4xl">
-            <span className="block">
-              {HERO_LINE1.map((word, i) => (
-                <motion.span
-                  key={i}
-                  className="inline-block"
-                  initial={{ opacity: 0, y: 44, filter: "blur(12px)" }}
-                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                  transition={{ duration: 0.85, delay: 0.1 + i * 0.11, ease }}
-                >
-                  {word}{i < HERO_LINE1.length - 1 && " "}
-                </motion.span>
-              ))}
-            </span>
-            <span className="shimmer-orange block">
-              {HERO_LINE2.map((word, i) => (
-                <motion.span
-                  key={i}
-                  className="inline-block"
-                  initial={{ opacity: 0, y: 44, filter: "blur(12px)" }}
-                  animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                  transition={{ duration: 0.85, delay: 0.48 + i * 0.11, ease }}
-                >
-                  {word}{i < HERO_LINE2.length - 1 && " "}
-                </motion.span>
-              ))}
-            </span>
-          </h1>
-
-          <motion.p
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 0.88, ease }}
-            className="mt-7 text-white/45 text-lg sm:text-xl max-w-2xl leading-relaxed"
-          >
-            Somos la empresa terciarizada de field services que inspecciona, documenta
-            y reporta el estado de tu red de infraestructura en Bolivia.
-          </motion.p>
-
-          <motion.div
-            initial={{ opacity: 0, y: 28 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 1.05, ease }}
-            className="mt-10"
-          >
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2.5 bg-orange-500 hover:bg-orange-400 text-white font-semibold px-9 py-4 rounded-xl transition-all duration-200 shadow-xl shadow-orange-500/20 group text-base"
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-5 pt-12 pb-16 sm:px-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:pt-20 lg:pb-24">
+          <div>
+            <motion.div {...enter(0)}>
+              <Eyebrow>Servicios de campo · Telecomunicaciones · Bolivia</Eyebrow>
+            </motion.div>
+            <motion.h1
+              {...enter(0.08)}
+              className="mt-5 text-[2.6rem] leading-[0.98] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] sm:text-6xl lg:text-[4.1rem]"
             >
-              Acceder al sistema
-              <ArrowRightIcon className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
-          </motion.div>
-        </motion.div>
-
-        {/* scroll indicator */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 1.6 }}
-          className="relative z-10 flex justify-center pb-10"
-        >
-          <motion.div
-            animate={{ y: [0, 6, 0] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-            className="w-6 h-10 border border-white/10 rounded-full flex items-start justify-center pt-2"
-          >
-            <div className="w-1 h-2 bg-orange-400/70 rounded-full" />
-          </motion.div>
-        </motion.div>
+              Sabemos cómo está <span className="text-[var(--pp-or-ink)]">cada poste</span> de tu red.
+            </motion.h1>
+            <motion.p
+              {...enter(0.16)}
+              className="mt-6 max-w-[46ch] text-lg leading-relaxed text-[var(--pp-dim)]"
+            >
+              Inspeccionamos, documentamos y reportamos la infraestructura de las operadoras de
+              telecomunicaciones. Cada hallazgo llega con su fotografía, su ubicación y su gravedad.
+            </motion.p>
+            <motion.div {...enter(0.26)} className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-4">
+              <a
+                href="#contacto"
+                onClick={jump("contacto")}
+                className={`group inline-flex items-center gap-2 rounded-md bg-[var(--pp-or-ink)] px-6 py-3.5 font-bold text-[var(--pp-paper)] transition-[background-color,transform] duration-200 ease-out hover:bg-[var(--pp-or-ink-hover)] active:scale-[0.97] ${focusRing}`}
+              >
+                Hablemos
+                <ArrowRightIcon className="h-4 w-4 transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+              </a>
+              <a
+                href="#proceso"
+                onClick={jump("proceso")}
+                className={`inline-flex items-center gap-1.5 text-sm font-semibold underline-offset-4 hover:underline ${focusRing}`}
+              >
+                Ver cómo trabajamos
+                <ArrowDownIcon className="h-3.5 w-3.5" />
+              </a>
+            </motion.div>
+            <motion.ul
+              {...enter(0.36)}
+              className="mt-10 flex flex-wrap gap-x-8 gap-y-2 border-t border-[var(--pp-ink)] pt-3 font-[family-name:var(--pp-mono)] text-[13px] text-[var(--pp-dim)]"
+            >
+              {FACTS.map((f) => (
+                <li key={f.label}>
+                  <span className="font-medium text-[var(--pp-ink)] tabular-nums">{f.value}</span> {f.label}
+                </li>
+              ))}
+            </motion.ul>
+          </div>
+          <TramoPlan />
+        </div>
       </section>
 
-      {/* ── STATS ────────────────────────────────────────────────── */}
-      <section className="border-y border-white/6 bg-white/1.5">
-        <div className="max-w-5xl mx-auto px-6 py-16 grid grid-cols-2 md:grid-cols-4 gap-8">
-          {STATS.map((stat, i) => (
-            <Reveal key={stat.label} delay={i * 0.08}>
-              <div className="text-center">
-                <div className="text-4xl sm:text-5xl font-extrabold text-orange-400 tabular-nums">
-                  <AnimatedNumber value={stat.value} />
-                  {stat.suffix}
-                </div>
-                <div className="mt-2.5 text-sm text-white/35 font-medium tracking-wide">{stat.label}</div>
+      {/* ── OPERATORS ────────────────────────────────────────────── */}
+      <section className="border-y border-[var(--pp-rule)] bg-[var(--pp-sunk)]">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-12 gap-y-5 px-5 py-7 sm:px-8">
+          <p className="font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-dim)] uppercase">
+            Trabajamos para
+          </p>
+          <div className="flex flex-wrap items-center gap-x-10 gap-y-4">
+            {[
+              [tigoLogo, "Tigo"],
+              [vivaLogo, "Viva"],
+              [entelLogo, "Entel"],
+            ].map(([src, name]) => (
+              <img key={name} src={src} alt={name} className="h-7 object-contain opacity-75 brightness-0" />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── SERVICES ─────────────────────────────────────────────── */}
+      <section id="servicios" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-24 sm:px-8 sm:py-28">
+        <Reveal className="grid gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-5">
+            <Eyebrow>Servicios</Eyebrow>
+            <h2 className="mt-4 text-3xl leading-[1.05] font-extrabold tracking-[-0.015em] text-balance [font-stretch:112%] sm:text-[2.6rem]">
+              Del poste al informe, de nuestra mano.
+            </h2>
+          </div>
+          <p className="max-w-[52ch] self-end leading-relaxed text-[var(--pp-dim)] lg:col-span-6 lg:col-start-7">
+            Nos ocupamos de todo el recorrido: salimos a campo, registramos lo que encontramos, lo
+            seguimos hasta que se resuelve y te lo entregamos en el formato que ya usas.
+          </p>
+        </Reveal>
+
+        <div className="mt-14 border-b border-[var(--pp-ink)]">
+          <div
+            aria-hidden="true"
+            className="hidden grid-cols-12 gap-8 border-b border-[var(--pp-ink)] pb-2 font-[family-name:var(--pp-mono)] text-[11px] tracking-[0.12em] text-[var(--pp-dim)] uppercase md:grid"
+          >
+            <span className="col-span-4">Servicio</span>
+            <span className="col-span-5">Qué hacemos</span>
+            <span className="col-span-3">Qué recibes</span>
+          </div>
+          {SERVICES.map((s, i) => (
+            <Reveal key={s.title} delay={i * 0.06}>
+              <div className="grid gap-2 border-t border-[var(--pp-rule)] py-6 transition-colors duration-300 first:border-t-0 hover:bg-[var(--pp-sunk)] md:grid-cols-12 md:gap-8 md:px-3 md:-mx-3">
+                <h3 className="text-lg font-bold [font-stretch:108%] md:col-span-4">{s.title}</h3>
+                <p className="leading-relaxed text-[var(--pp-dim)] md:col-span-5">{s.text}</p>
+                <p className="mt-1 flex gap-2 font-[family-name:var(--pp-mono)] text-[13px] md:col-span-3 md:mt-0">
+                  <span aria-hidden="true" className="mt-[7px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-or)]" />
+                  {s.delivers}
+                </p>
               </div>
             </Reveal>
           ))}
         </div>
       </section>
 
-      {/* ── SYSTEM SHOWCASE ──────────────────────────────────────── */}
-      <ScrollShowcase />
-
-      {/* ── SERVICES ─────────────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-6 py-28">
-        <Reveal className="text-center mb-16">
-          <p className="text-orange-400 text-xs font-semibold uppercase tracking-[0.25em] mb-5">Nuestros servicios</p>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
-            Todo lo que tu red necesita,
-            <br />
-            <span className="text-white/30">gestionado por nosotros.</span>
-          </h2>
-        </Reveal>
-
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {SERVICES.map((service, i) => {
-            const Icon = service.icon;
-            return (
-              <Reveal key={service.title} delay={i * 0.1}>
-                <div className="group relative h-full bg-white/2.5 hover:bg-white/5 border border-white/6 hover:border-orange-500/30 rounded-2xl p-7 transition-all duration-500 cursor-default overflow-hidden">
-                  {/* hover glow */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none bg-[radial-gradient(ellipse_at_30%_0%,rgba(249,115,22,0.1),transparent_65%)]" />
-                  <div className="relative z-10">
-                    <div className="w-12 h-12 bg-orange-500/8 rounded-xl flex items-center justify-center mb-6 group-hover:bg-orange-500/15 transition-colors duration-300">
-                      <Icon className="h-5 w-5 text-orange-400" />
-                    </div>
-                    <h3 className="font-bold text-[0.9rem] text-white mb-3">{service.title}</h3>
-                    <p className="text-white/38 text-sm leading-relaxed">{service.description}</p>
-                  </div>
-                </div>
-              </Reveal>
-            );
-          })}
-        </div>
-      </section>
-
       {/* ── PROCESS ──────────────────────────────────────────────── */}
-      <section className="relative bg-white/1.5 border-y border-white/6 py-28">
-        <div className="max-w-5xl mx-auto px-6">
-          <Reveal className="text-center mb-20">
-            <p className="text-orange-400 text-xs font-semibold uppercase tracking-[0.25em] mb-5">Proceso</p>
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
-              De campo a reporte,
-              <br />
-              <span className="text-white/30">sin perder detalle.</span>
+      <section id="proceso" className="scroll-mt-16 border-t border-[var(--pp-rule)]">
+        <div className="mx-auto max-w-6xl px-5 py-24 sm:px-8 sm:py-28">
+          <Reveal className="mb-14 max-w-2xl">
+            <Eyebrow>Cómo trabajamos</Eyebrow>
+            <h2 className="mt-4 text-3xl leading-[1.05] font-extrabold tracking-[-0.015em] text-balance [font-stretch:112%] sm:text-[2.6rem]">
+              De campo a reporte, sin perder detalle.
             </h2>
           </Reveal>
-
-          <div className="relative grid md:grid-cols-3 gap-10">
-            <div className="hidden md:block absolute top-8 left-[calc(16.67%+1.5rem)] right-[calc(16.67%+1.5rem)] h-px bg-linear-to-r from-transparent via-orange-500/30 to-transparent" />
-
-            {STEPS.map((step, i) => (
-              <Reveal key={step.number} delay={i * 0.15}>
-                <div className="text-center">
-                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-full border border-orange-500/25 bg-orange-500/6 mb-7 relative z-10">
-                    <span className="text-orange-400 font-extrabold text-lg tracking-tight">{step.number}</span>
-                  </div>
-                  <h3 className="font-bold text-white mb-3 text-lg">{step.title}</h3>
-                  <p className="text-white/38 text-sm leading-relaxed">{step.description}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
+          <Process />
         </div>
       </section>
 
-      {/* ── FOR WHOM ─────────────────────────────────────────────── */}
-      <section className="max-w-5xl mx-auto px-6 py-28">
-        <div className="grid md:grid-cols-2 gap-16 items-start">
-          <Reveal>
-            <p className="text-orange-400 text-xs font-semibold uppercase tracking-[0.25em] mb-5">Para quién</p>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-6">
-              Diseñado para
-              <br />
-              <span className="text-white/30">operadoras de telecomunicaciones.</span>
+      {/* ── SHOWCASE ─────────────────────────────────────────────── */}
+      <div id="plataforma" className="scroll-mt-16">
+        <ScrollShowcase />
+      </div>
+
+      {/* ── CONTACT ──────────────────────────────────────────────── */}
+      <section id="contacto" className="mx-auto max-w-6xl scroll-mt-16 px-5 py-24 sm:px-8 sm:py-32">
+        <div className="grid gap-14 lg:grid-cols-12 lg:gap-10">
+          <Reveal className="lg:col-span-5">
+            <Eyebrow>Contacto</Eyebrow>
+            <h2 className="mt-4 text-4xl leading-[1] font-[850] tracking-[-0.02em] text-balance [font-stretch:118%] sm:text-5xl">
+              ¿Gestionas una red en Bolivia? <span className="text-[var(--pp-or-ink)]">Hablemos.</span>
             </h2>
-            <p className="text-white/45 leading-relaxed mb-10 text-[0.95rem]">
-              Si gestionas una red de telecomunicaciones en Bolivia y necesitas visibilidad
-              real sobre el estado de tu infraestructura en campo, Osefi SRL es tu aliado operativo.
-            </p>
-            <ul className="space-y-4">
-              {BENEFITS.map((b, i) => (
-                <motion.li
-                  key={b}
-                  initial={{ opacity: 0, x: -12 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: i * 0.08, ease }}
-                  className="flex items-start gap-3 text-sm text-white/55"
-                >
-                  <CheckCircle2Icon className="h-4 w-4 text-orange-400 mt-0.5 shrink-0" />
+            <ul className="mt-9 space-y-3">
+              {BENEFITS.map((b) => (
+                <li key={b} className="flex gap-3 leading-relaxed text-[var(--pp-dim)]">
+                  <span aria-hidden="true" className="mt-[9px] h-1.5 w-1.5 shrink-0 bg-[var(--pp-or)]" />
                   {b}
-                </motion.li>
+                </li>
               ))}
             </ul>
           </Reveal>
 
-          <Reveal delay={0.2}>
-            <div className="bg-white/2.5 border border-white/6 rounded-3xl p-8 space-y-7">
-              <div>
-                <p className="text-white/25 text-xs uppercase tracking-widest mb-5">Trabajamos con</p>
-                <div className="flex items-center gap-6">
-                  <img
-                    src={tigoLogo}
-                    alt="Tigo"
-                    className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
-                  />
-                  <img
-                    src={vivaLogo}
-                    alt="Viva"
-                    className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
-                  />
-                  <img
-                    src={entelLogo}
-                    alt="Entel"
-                    className="h-9 object-contain brightness-0 invert opacity-50 hover:opacity-80 transition-opacity"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-white/6 pt-7">
-                <p className="text-white/25 text-xs uppercase tracking-widest mb-3">Cobertura nacional</p>
-                <p className="text-white font-extrabold text-3xl tabular-nums">99</p>
-                <p className="text-white/35 text-sm mt-1">ciudades en territorio boliviano</p>
-              </div>
-
-              <div className="border-t border-white/6 pt-7">
-                <p className="text-white/25 text-xs uppercase tracking-widest mb-3">Plataforma propia</p>
-                <p className="text-white/50 text-sm leading-relaxed">
-                  Sistema interno de gestión con postes, eventos, reportes, bitácora
-                  y mapas en tiempo real — todo integrado para el cliente.
-                </p>
-              </div>
-
-              <div className="border-t border-white/6 pt-7">
-                <Link
-                  to="/login"
-                  className="inline-flex items-center gap-2 bg-orange-500/8 hover:bg-orange-500/15 border border-orange-500/20 hover:border-orange-500/35 text-orange-400 text-sm font-medium px-5 py-2.5 rounded-lg transition-all duration-200 group"
-                >
-                  Ver el sistema
-                  <ArrowRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-                </Link>
-              </div>
+          <Reveal delay={0.12} className="lg:col-span-6 lg:col-start-7 lg:pt-10">
+            <div className="border-b border-[var(--pp-rule)]">
+              <ContactRow label="Correo" value={CONTACT.email} href={`mailto:${CONTACT.email}`} />
+              <ContactRow label="WhatsApp" value={CONTACT.phone} href={CONTACT.whatsapp} external />
+              <ContactRow label="Teléfono" value={CONTACT.phone} href={CONTACT.phoneHref} />
+              <ContactRow label="Oficina" value={CONTACT.address} />
             </div>
           </Reveal>
         </div>
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────────── */}
-      <footer className="border-t border-white/6 bg-white/1.5">
-        <div className="max-w-5xl mx-auto px-6 py-16">
-          <div className="flex flex-col md:flex-row items-start justify-between gap-12">
-            <div className="space-y-5 max-w-xs">
-              <div className="flex items-center gap-3">
-                <img src={logo} alt="Osefi SRL" className="h-7 w-7 object-contain" />
-                <span className="font-bold text-sm tracking-wide">
-                  OSEFI<span className="text-orange-400"> SRL</span>
-                </span>
-              </div>
-              <p className="text-white/28 text-sm leading-relaxed">
-                Telecomunicaciones e Infraestructuras.
-                <br />
-                Precisión en campo. Continuidad en red.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-white/25 text-xs uppercase tracking-widest">Contacto</p>
-              <div className="flex items-center gap-2.5 text-sm text-white/45">
-                <MailIcon className="h-4 w-4 text-orange-400 shrink-0" />
-                Osefibolivia@gmail.com
-              </div>
-              <div className="flex items-center gap-2.5 text-sm text-white/45">
-                <PhoneIcon className="h-4 w-4 text-orange-400 shrink-0" />
-                +591 76846009
-              </div>
-              <div className="flex items-center gap-2.5 text-sm text-white/45">
-                <MapPinIcon className="h-4 w-4 text-orange-400 shrink-0" />
-                Calle José Peña Castellón No 1065
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <p className="text-white/25 text-xs uppercase tracking-widest">Sistema interno</p>
-              <Link
-                to="/login"
-                className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold px-6 py-2.5 rounded-lg transition-colors group shadow-lg shadow-orange-500/15"
-              >
-                Acceder al sistema
-                <ArrowRightIcon className="h-3.5 w-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </Link>
+      <footer className="border-t border-[var(--pp-ink)]">
+        <div className="mx-auto flex max-w-6xl flex-col gap-6 px-5 py-10 text-sm sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="" className="h-7 w-7 object-contain" />
+            <div>
+              <p className="font-extrabold tracking-[0.06em] [font-stretch:112%]">OSEFI SRL</p>
+              <p className="text-[var(--pp-dim)]">Precisión en campo. Continuidad en red.</p>
             </div>
           </div>
-
-          <div className="mt-12 pt-7 border-t border-white/6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-white/18">
-            <span>© {new Date().getFullYear()} Osefi SRL — Todos los derechos reservados.</span>
-            <span className="uppercase tracking-widest">Bolivia · Telecomunicaciones</span>
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 font-[family-name:var(--pp-mono)] text-[12px] text-[var(--pp-dim)]">
+            <span>© {new Date().getFullYear()} Osefi SRL</span>
+            <Link
+              to="/login"
+              className={`inline-flex items-center gap-1 text-[var(--pp-ink)] underline-offset-4 hover:underline ${focusRing}`}
+            >
+              Acceso clientes
+              <ArrowRightIcon className="h-3 w-3" />
+            </Link>
           </div>
         </div>
       </footer>

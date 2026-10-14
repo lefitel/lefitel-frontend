@@ -44,8 +44,10 @@ export const PLAN_SCRIPT = ONE_SHOT;
 
 // ── 2 · the pole card ────────────────────────────────────────────────────────
 export const CARD_SCRIPT: Script = {
-  duration: 1800,
-  steps: [{ at: 0 }, { at: 450 }],
+  // The map flies in from the whole town to the pole first; the card opens
+  // only once the camera has landed, as it does when a pole is clicked.
+  duration: 2600,
+  steps: [{ at: 0 }, { at: 1500 }],
 };
 
 // ── 3 · narrowing the view to pending work ───────────────────────────────────

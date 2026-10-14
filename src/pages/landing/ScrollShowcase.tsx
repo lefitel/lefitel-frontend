@@ -25,14 +25,17 @@ import { ColumnsPart, ExportPart } from "./parts/report";
  * a half screens, which is a tour, not the quick look this is meant to be.
  * Beside, the captions line up into one column the eye can run down and the
  * pieces into another.
+ *
+ * The page around the pieces is set in its own typeface; the pieces are the
+ * application, so they are set back in the application's (`font-sans`).
  */
 
 function Caption({ tag, title, text }: { tag: string; title: string; text: string }) {
   return (
     <div className="max-w-xl">
-      <p className="font-mono text-[10px] tracking-[0.18em] text-orange-400/75 uppercase">{tag}</p>
-      <h3 className="mt-2.5 text-lg font-bold tracking-tight text-white sm:text-xl">{title}</h3>
-      <p className="mt-2 text-[13.5px] leading-relaxed text-white/45">{text}</p>
+      <p className="font-[family-name:var(--pp-mono)] text-[11px] tracking-[0.14em] text-[var(--pp-or)] uppercase">{tag}</p>
+      <h3 className="mt-2.5 text-lg font-bold tracking-tight text-[var(--pp-paper)] [font-stretch:108%] sm:text-xl">{title}</h3>
+      <p className="mt-2 text-[14px] leading-relaxed text-[var(--pp-paper)]/60">{text}</p>
     </div>
   );
 }
@@ -66,7 +69,7 @@ function Row({
       </Reveal>
       <Reveal
         delay={0.12}
-        className={`min-w-0 ${flip ? "lg:col-span-6 lg:row-start-1" : "lg:col-span-8"}`}
+        className={`min-w-0 font-sans ${flip ? "lg:col-span-6 lg:row-start-1" : "lg:col-span-8"}`}
       >
         {children}
       </Reveal>
@@ -93,7 +96,9 @@ function Half({
       <Reveal>
         <Caption tag={tag} title={title} text={text} />
       </Reveal>
-      <Reveal delay={0.12}>{children}</Reveal>
+      <Reveal delay={0.12} className="font-sans">
+        {children}
+      </Reveal>
     </div>
   );
 }
@@ -102,20 +107,19 @@ export function ScrollShowcase() {
   return (
     <section
       style={screenVars}
-      className="relative border-t border-white/6 px-6 py-24 sm:py-28"
+      className="relative bg-[var(--pp-band)] py-24 text-[var(--pp-paper)] sm:py-28"
       aria-label="El sistema por dentro"
     >
-      <div className="mx-auto max-w-[1040px]">
+      <div className="mx-auto max-w-6xl px-5 sm:px-8">
         <Reveal className="max-w-2xl">
-          <p className="mb-5 text-xs font-semibold tracking-[0.25em] text-orange-400 uppercase">
+          <p className="flex items-center gap-2.5 font-[family-name:var(--pp-mono)] text-[12px] tracking-[0.12em] text-[var(--pp-paper)]/55 uppercase">
+            <span aria-hidden="true" className="h-2 w-2 bg-[var(--pp-or)]" />
             La plataforma
           </p>
-          <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl lg:text-5xl">
-            Esto es lo que verás
-            <br />
-            <span className="text-white/30">cada mañana al entrar.</span>
+          <h2 className="mt-4 text-3xl leading-[1.05] font-extrabold tracking-[-0.015em] text-balance [font-stretch:112%] sm:text-[2.6rem]">
+            Esto es lo que verás <span className="text-[var(--pp-paper)]/45">cada mañana al entrar.</span>
           </h2>
-          <p className="mt-6 text-[0.95rem] leading-relaxed text-white/45">
+          <p className="mt-6 max-w-[56ch] leading-relaxed text-[var(--pp-paper)]/60">
             Once piezas del sistema, cada una haciendo su trabajo. Todas siguen al mismo poste: el
             P472 del tramo Coroico › Coripata, con la ferretería fuera de la cruceta.
           </p>
@@ -139,7 +143,7 @@ export function ScrollShowcase() {
             id="plan"
             tag="Mapa · /app/ciudades"
             title="Cada poste, en su sitio."
-            text="Mil quinientos cuarenta y un postes inspeccionados en ochenta y seis ciudades, sobre el plano. El color dice el estado de cada uno."
+            text="Más de mil quinientos postes inspeccionados en más de ochenta y cinco ciudades, sobre el plano. El color dice el estado de cada uno."
           >
             <PlanPart />
           </Row>
@@ -157,7 +161,7 @@ export function ScrollShowcase() {
               id="filter"
               tag="Mapa · filtro de vista"
               title="Solo lo que falta."
-              text="De los mil quinientos, ciento cuarenta y ocho esperan cuadrilla. El resto se aparta."
+              text="De todos ellos, ciento cuarenta y ocho esperan cuadrilla. El resto se aparta."
             >
               <FilterPart />
             </Half>

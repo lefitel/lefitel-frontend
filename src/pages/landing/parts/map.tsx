@@ -1,213 +1,196 @@
-import { motion } from "motion/react";
+import { useEffect, useMemo } from "react";
+import { animate, motion, useMotionValue, useTransform, type MotionValue } from "motion/react";
 import { ArrowRightIcon, LayersIcon } from "lucide-react";
 import { Counter, Cursor, Panel } from "../chrome";
 import { EXPO } from "../tokens";
 import { useTargetBox } from "../targets";
 import { CARD_SCRIPT, FILTER_SCRIPT, PLAN_SCRIPT, beatOf, pressCount } from "../scripts";
 import { usePart } from "../usePart";
+import { useNarrow } from "../useNarrow";
 import { EVENT, NETWORK, POLE } from "./fiction";
+import { FLAGGED, LAYERS, PLAN, POLES, type PoleState } from "./coroico";
 
 /**
  * The three pieces that come from the operations map: the network on a plan,
  * one pole opened, and the view narrowed to what still needs a crew.
  */
 
-type PinState = "crit" | "warn" | "ok" | "idle";
+type PinState = PoleState;
 
 const PIN_COLOR: Record<PinState, string> = {
   crit: "var(--scr-crit)",
   warn: "var(--scr-warn)",
   ok: "var(--scr-ok)",
-  idle: "oklch(0.46 0.015 258)",
+  idle: "oklch(0.52 0.015 258)",
 };
-
-// ── The plan itself ──────────────────────────────────────────────────────────
-
-/**
- * A city, drawn rather than tiled.
- *
- * The first version was streets on an empty ground and it read as graph paper:
- * a real plan is mostly blocks, and the streets are the gaps between them. So
- * the ground is paved and the blocks are cut out of it, with irregular spacing
- * from a fixed seed so no two rows line up into a lattice. No map tiles are
- * fetched, which keeps the public page free of a third-party request made only
- * to decorate a section.
- */
-const GROUND = "oklch(0.248 0.013 258)";
-const BLOCK = "oklch(0.196 0.013 258)";
 
 const seeded = (seed: number) => {
   let s = seed;
   return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296;
 };
 
-const BLOCKS = (() => {
-  const rnd = seeded(20260821);
-  const xs = [0, 62, 128, 196, 268, 348, 420, 496, 566, 640, 712, 782, 840];
-  const ys = [0, 58, 118, 176, 238, 300, 356, 412, 442];
-  const out: { x: number; y: number; w: number; h: number; park: boolean }[] = [];
+// ── The plan itself ──────────────────────────────────────────────────────────
 
-  for (let i = 0; i < xs.length - 1; i++) {
-    for (let j = 0; j < ys.length - 1; j++) {
-      const roll = rnd();
-      if (roll < 0.055) continue; // an empty lot here and there
-      const pad = 3 + rnd() * 2.4;
-      out.push({
-        x: (xs[i] ?? 0) + pad,
-        y: (ys[j] ?? 0) + pad,
-        w: (xs[i + 1] ?? 0) - (xs[i] ?? 0) - pad * 2,
-        h: (ys[j + 1] ?? 0) - (ys[j] ?? 0) - pad * 2,
-        park: roll > 0.978,
-      });
-    }
-  }
-  return out;
-})();
+/**
+ * Coroico, painted the way the application paints its map.
+ *
+ * Two earlier versions drew an invented city: a lattice of rectangles, then
+ * paved ground with blocks cut out of it. Neither read as a map, because a
+ * real town is not a grid. This one is the real street plan of Coroico, where
+ * the tramo the section follows begins, taken from OpenStreetMap by
+ * `scripts/build-landing-map.mjs` and filled with the colours of the
+ * application's own dark style (`public/map-styles/basic-dark.json`): what a
+ * client sees here is what the map looks like when they log in.
+ *
+ * It is still a drawing, not a map widget. No tiles are fetched, so the public
+ * page makes no third-party request to decorate a section, and the plan scales
+ * by cropping (`slice`) rather than stretching, so streets keep their angles at
+ * any panel shape.
+ */
+const STYLE = {
+  ground: "hsl(220 14% 11%)",
+  fields: "hsl(30 10% 16%)",
+  green: "hsl(126 26% 21%)",
+  residential: "hsl(220 12% 15%)",
+  water: "hsl(203 48% 21%)",
+  building: "hsl(220 10% 18%)",
+  buildingLine: "hsl(220 10% 26%)",
+  minor: "hsl(220 8% 25%)",
+  major: "hsl(220 9% 36%)",
+  label: "hsl(220 16% 92%)",
+  halo: "hsl(220 16% 8% / 0.85)",
+};
 
-function CityPlan({ viewBox = "0 0 840 442", scale = 1 }: { viewBox?: string; scale?: number }) {
+function Streets() {
   return (
-    <svg
-      viewBox={viewBox}
-      preserveAspectRatio="none"
-      className="absolute inset-0 h-full w-full"
-      aria-hidden="true"
-    >
-      <rect x="0" y="0" width="840" height="442" fill={GROUND} />
-
-      {BLOCKS.map((b, i) => (
-        <rect
-          key={i}
-          x={b.x}
-          y={b.y}
-          width={b.w}
-          height={b.h}
-          rx="2"
-          fill={b.park ? "oklch(0.232 0.017 158)" : BLOCK}
-        />
-      ))}
-
-      <g stroke={GROUND} strokeLinecap="square">
-        <path d="M0 88 H840" strokeWidth={13 * scale} />
-        <path d="M0 208 H840" strokeWidth={13 * scale} />
-        <path d="M0 328 H840" strokeWidth={11 * scale} />
-        <path d="M158 0 V442" strokeWidth={13 * scale} />
-        <path d="M462 0 V442" strokeWidth={13 * scale} />
-        <path d="M676 0 V442" strokeWidth={11 * scale} />
-        <path d="M0 404 L840 116" strokeWidth={15 * scale} />
-      </g>
-      <g stroke="oklch(0.30 0.014 258)" strokeWidth={scale} opacity="0.8">
-        <path d="M0 88 H840" />
-        <path d="M0 208 H840" />
-        <path d="M158 0 V442" />
-        <path d="M462 0 V442" />
-      </g>
-
+    <>
+      <rect x={-PLAN.w} y={-PLAN.h} width={PLAN.w * 3} height={PLAN.h * 3} fill={STYLE.ground} />
+      <path d={LAYERS.fields} fill={STYLE.fields} />
+      <path d={LAYERS.green} fill={STYLE.green} opacity="0.75" />
+      <path d={LAYERS.residential} fill={STYLE.residential} />
+      <path d={LAYERS.pools} fill={STYLE.water} />
       <path
-        d="M0 268 C 160 302, 300 238, 440 266 S 700 322, 840 284"
-        fill="none"
-        stroke="oklch(0.375 0.055 232)"
-        strokeWidth={17 * scale}
-        strokeLinecap="round"
+        d={LAYERS.buildings}
+        fill={STYLE.building}
+        stroke={STYLE.buildingLine}
+        strokeWidth="0.35"
       />
-    </svg>
+      <g fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <path d={LAYERS.paths} stroke={STYLE.minor} strokeWidth="0.7" strokeDasharray="1.6 1.4" />
+        <path d={LAYERS.minor} stroke={STYLE.minor} strokeWidth="2.6" />
+        <path d={LAYERS.major} stroke={STYLE.major} strokeWidth="4.2" />
+      </g>
+    </>
   );
 }
 
-// ── 1 · the network on the plan ──────────────────────────────────────────────
+/** The town's name, set the way the map style sets a place label. */
+function PlaceLabel({ x, y, size }: { x: number; y: number; size: number }) {
+  return (
+    <text
+      x={x}
+      y={y}
+      textAnchor="middle"
+      fontSize={size}
+      fontWeight={600}
+      letterSpacing="0.04em"
+      fill={STYLE.label}
+      stroke={STYLE.halo}
+      strokeWidth={size * 0.28}
+      paintOrder="stroke"
+      style={{ fontFamily: "'Geist Variable', sans-serif" }}
+    >
+      Coroico
+    </text>
+  );
+}
 
-/** Sample of the network. Positions are in the plan's own 840x442 space. */
-const PINS: { x: number; y: number; s: PinState }[] = [
-  { x: 96, y: 74, s: "ok" },
-  { x: 152, y: 61, s: "warn" },
-  { x: 214, y: 89, s: "ok" },
-  { x: 268, y: 66, s: "idle" },
-  { x: 331, y: 93, s: "ok" },
-  { x: 392, y: 70, s: "crit" },
-  { x: 456, y: 85, s: "ok" },
-  { x: 519, y: 62, s: "idle" },
-  { x: 578, y: 91, s: "ok" },
-  { x: 641, y: 69, s: "warn" },
-  { x: 706, y: 87, s: "ok" },
-  { x: 128, y: 177, s: "warn" },
-  { x: 197, y: 209, s: "ok" },
-  { x: 263, y: 171, s: "ok" },
-  { x: 318, y: 225, s: "idle" },
-  { x: 387, y: 185, s: "ok" },
-  { x: 455, y: 214, s: "warn" },
-  { x: 524, y: 179, s: "ok" },
-  { x: 589, y: 221, s: "idle" },
-  { x: 653, y: 183, s: "ok" },
-  { x: 719, y: 217, s: "crit" },
-  { x: 111, y: 319, s: "ok" },
-  { x: 175, y: 357, s: "idle" },
-  { x: 243, y: 321, s: "warn" },
-  { x: 309, y: 365, s: "ok" },
-  { x: 373, y: 327, s: "ok" },
-  { x: 439, y: 369, s: "idle" },
-  { x: 507, y: 331, s: "crit" },
-  { x: 573, y: 373, s: "ok" },
-  { x: 639, y: 335, s: "ok" },
-  { x: 703, y: 367, s: "warn" },
-  { x: 763, y: 301, s: "ok" },
-];
-
-const pct = (v: number, span: number, origin = 0) => `${((v - origin) / span) * 100}%`;
-
+/**
+ * A pole on the plan. Pending and critical ones carry a soft halo so they
+ * stand out of the solved majority the way they do in the application.
+ *
+ * The radius is a motion value because the pole card zooms the plan: its pins
+ * have to keep their size on screen while the ground grows under them. On the
+ * still plan it simply never changes.
+ */
 function Pin({
   x,
   y,
   state,
-  index,
+  delay,
   still,
-  size = 11,
-  pulse = true,
+  radius,
+  pulses = 0,
 }: {
-  x: string;
-  y: string;
+  x: number;
+  y: number;
   state: PinState;
-  index: number;
+  delay: number;
   still: boolean;
-  size?: number;
-  pulse?: boolean;
+  radius: MotionValue<number>;
+  pulses?: number;
 }) {
   const color = PIN_COLOR[state];
+  const loud = state === "crit" || state === "warn";
+  const halo = useTransform(radius, (r) => r * 2.3);
+  const line = useTransform(radius, (r) => r * 0.42);
+
   return (
-    <motion.div
-      className="absolute"
-      style={{ left: x, top: y }}
-      initial={still ? false : { scale: 0, y: -12, opacity: 0 }}
-      animate={{ scale: 1, y: 0, opacity: 1 }}
-      transition={{ duration: 0.55, ease: EXPO, delay: still ? 0 : index * 0.028 }}
+    <motion.g
+      style={{ transformBox: "fill-box", transformOrigin: "center" }}
+      initial={still ? false : { scale: 0, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      transition={{ duration: 0.5, ease: EXPO, delay: still ? 0 : delay }}
     >
-      {state === "crit" && pulse && !still && (
-        <motion.span
-          className="absolute rounded-full"
-          style={{
-            left: -size,
-            top: -size,
-            width: size * 2,
-            height: size * 2,
-            border: `1.5px solid ${color}`,
+      {loud && <motion.circle cx={x} cy={y} r={halo} fill={color} opacity="0.18" />}
+      {pulses > 0 && !still && (
+        <motion.circle
+          cx={x}
+          cy={y}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={line}
+          style={{ transformBox: "fill-box", transformOrigin: "center" }}
+          initial={{ scale: 1, opacity: 0 }}
+          animate={{ scale: [1, 3.4], opacity: [0.8, 0] }}
+          transition={{
+            duration: 1.6,
+            ease: "easeOut",
+            delay: delay + 0.4,
+            repeat: pulses - 1,
+            repeatDelay: 0.5,
           }}
-          animate={{ scale: [0.55, 1.6], opacity: [0.6, 0] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeOut", delay: index * 0.4 }}
         />
       )}
-      <span
-        className="block rounded-full"
-        style={{
-          width: size,
-          height: size,
-          marginLeft: -size / 2,
-          marginTop: -size / 2,
-          background: color,
-          border: "2px solid oklch(0.192 0.013 258)",
-          boxShadow: state === "crit" || state === "warn" ? `0 0 12px -2px ${color}` : "none",
-        }}
+      <motion.circle
+        cx={x}
+        cy={y}
+        r={radius}
+        fill={color}
+        stroke={STYLE.ground}
+        strokeWidth={line}
       />
-    </motion.div>
+    </motion.g>
   );
 }
+
+/** Where on the plan the reveal starts: the pole the section follows. */
+const ORIGIN = POLES[FLAGGED] ?? { x: PLAN.w / 2, y: PLAN.h / 2 };
+const FARTHEST = Math.max(...POLES.map((p) => Math.hypot(p.x - ORIGIN.x, p.y - ORIGIN.y)));
+
+/** Small print on the plan, styled like the map's own controls. */
+function MapBadge({ className = "", children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div
+      className={`absolute flex items-center gap-1.5 rounded-md border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.9)] px-2 py-1 text-[9.5px] text-[var(--scr-faint)] tabular-nums ${className}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ── 1 · the network on the plan ──────────────────────────────────────────────
 
 const LEGEND = [
   { s: "crit" as const, label: "Críticos", value: NETWORK.crit },
@@ -216,24 +199,51 @@ const LEGEND = [
   { s: "idle" as const, label: "Sin eventos", value: NETWORK.idle },
 ];
 
+/**
+ * The plan arrives the way a map loads: the ground fades in while the camera
+ * settles a few per cent closer, then the poles come up as a wave spreading
+ * out from the P472, so the reader's eye is already on the pole the next piece
+ * opens. Critical poles ring twice and then hold still; a page where eleven
+ * things loop forever is a fairground.
+ */
 export function PlanPart() {
-  const { ref, still } = usePart<HTMLDivElement>(PLAN_SCRIPT);
+  const { ref, still, onScreen } = usePart<HTMLDivElement>(PLAN_SCRIPT);
+  const shown = onScreen || still;
+  const pinR = useMotionValue(3.8);
+  const flaggedR = useMotionValue(5);
 
   return (
     <div ref={ref}>
       <Panel className="relative aspect-[4/3] overflow-hidden sm:aspect-[2/1]">
-        <CityPlan />
-
-        {PINS.map((pin, i) => (
-          <Pin
-            key={i}
-            x={pct(pin.x, 840)}
-            y={pct(pin.y, 442)}
-            state={pin.s}
-            index={i}
-            still={still}
-          />
-        ))}
+        <motion.div
+          className="absolute inset-0"
+          initial={still ? false : { opacity: 0, scale: 1.07 }}
+          animate={shown ? { opacity: 1, scale: 1 } : { opacity: 0, scale: 1.07 }}
+          transition={{ duration: 1.3, ease: EXPO }}
+        >
+          <svg
+            viewBox={`0 0 ${PLAN.w} ${PLAN.h}`}
+            preserveAspectRatio="xMidYMid slice"
+            className="absolute inset-0 h-full w-full"
+            aria-hidden="true"
+          >
+            <Streets />
+            <PlaceLabel x={ORIGIN.x + 110} y={ORIGIN.y - 85} size={15} />
+            {shown &&
+              POLES.map((p, i) => (
+                <Pin
+                  key={i}
+                  x={p.x}
+                  y={p.y}
+                  state={p.s}
+                  still={still}
+                  radius={i === FLAGGED ? flaggedR : pinR}
+                  delay={0.45 + (Math.hypot(p.x - ORIGIN.x, p.y - ORIGIN.y) / FARTHEST) * 0.9}
+                  pulses={p.s === "crit" ? 2 : 0}
+                />
+              ))}
+          </svg>
+        </motion.div>
 
         <div className="absolute top-3 left-3 rounded-lg border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.92)] px-3 py-2">
           {LEGEND.map((row) => (
@@ -244,20 +254,22 @@ export function PlanPart() {
               />
               <span className="w-[74px] text-[var(--scr-dim)]">{row.label}</span>
               <span className="w-[38px] text-right font-semibold text-[var(--scr-text)]">
-                <Counter to={row.value} still={still} duration={1.4} />
+                <Counter to={shown ? row.value : 0} still={still} duration={1.4} />
               </span>
             </div>
           ))}
         </div>
 
-        <div className="absolute bottom-3 left-3 rounded-md border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.9)] px-2 py-1 text-[9.5px] tracking-tight text-[var(--scr-faint)] tabular-nums">
-          −17.7833, −63.1821
-        </div>
-
-        <div className="absolute right-3 bottom-3 flex items-center gap-1.5 rounded-md border border-[var(--scr-hair)] bg-[oklch(0.192_0.013_258/0.9)] px-2 py-1 text-[9.5px] text-[var(--scr-faint)]">
+        <MapBadge className="bottom-3 left-3">
+          {PLAN.lat.toFixed(4).replace("-", "−")}, {PLAN.lon.toFixed(4).replace("-", "−")}
+        </MapBadge>
+        <MapBadge className="right-3 bottom-3">
           <LayersIcon className="h-2.5 w-2.5" />
           Bolivia · {NETWORK.cities} ciudades
-        </div>
+        </MapBadge>
+        <p className="absolute top-2 right-3 text-[8.5px] text-[var(--scr-faint)]/80">
+          © OpenStreetMap
+        </p>
       </Panel>
     </div>
   );
@@ -265,15 +277,17 @@ export function PlanPart() {
 
 // ── 2 · one pole, opened ─────────────────────────────────────────────────────
 
-/** A closer look at the streets around the pole the section follows. */
-const CROP = { x: 400, y: 150, w: 286, h: 214 };
-const CROP_PINS: { x: number; y: number; s: PinState }[] = [
-  { x: 524, y: 179, s: "ok" },
-  { x: 600, y: 172, s: "ok" },
-  { x: 424, y: 330, s: "idle" },
-  { x: 470, y: 300, s: "ok" },
-  { x: 455, y: 214, s: "warn" },
-];
+/**
+ * The camera's two framings: the whole town, and the street the pole stands
+ * on. The card's panel is three by two, so both are; a different panel shape
+ * only crops the edges.
+ */
+const WIDE = { x: PLAN.w / 2, y: PLAN.h / 2, w: 630 };
+const CLOSE = { x: ORIGIN.x + 60, y: ORIGIN.y + 26, w: 330 };
+/** On a phone the card spans the panel's width, so the pole goes to the top. */
+const CLOSE_NARROW = { x: ORIGIN.x, y: ORIGIN.y + 78, w: 330 };
+/** Pin radius at the close framing, in plan units. */
+const PIN_R = 4.2;
 
 const FICHA = [
   ["Propietario", POLE.owner],
@@ -282,27 +296,77 @@ const FICHA = [
   ["Última revisión", POLE.lastCheck],
 ];
 
+/**
+ * A flight from the town to the P472, then its card.
+ *
+ * One motion value drives the camera from 0 (whole town) to 1 (the pole's
+ * street). The width eases on a log scale, which is how a map zoom feels, and
+ * the pins are resized against it so they stay the same size on screen while
+ * the streets grow under them. When the camera lands the pole rings like the
+ * application's selected marker, and the card opens.
+ */
 export function CardPart() {
-  const { ref, step, still } = usePart<HTMLDivElement>(CARD_SCRIPT);
+  const { ref, step, still, onScreen } = usePart<HTMLDivElement>(CARD_SCRIPT);
   const open = step >= 1;
+  const zoom = useMotionValue(still ? 1 : 0);
+  const close = useNarrow() ? CLOSE_NARROW : CLOSE;
+
+  useEffect(() => {
+    if (still) {
+      zoom.set(1);
+      return;
+    }
+    if (!onScreen) return;
+    const controls = animate(zoom, 1, {
+      duration: 1.5,
+      ease: [0.65, 0, 0.35, 1],
+    });
+    return () => controls.stop();
+  }, [onScreen, still, zoom]);
+
+  const width = useTransform(zoom, (z) => WIDE.w * Math.pow(close.w / WIDE.w, z));
+  const viewBox = useTransform(zoom, (z) => {
+    const w = WIDE.w * Math.pow(close.w / WIDE.w, z);
+    const h = (w * 2) / 3;
+    const x = WIDE.x + (close.x - WIDE.x) * z;
+    const y = WIDE.y + (close.y - WIDE.y) * z;
+    return `${x - w / 2} ${y - h / 2} ${w} ${h}`;
+  });
+  const radius = useTransform(width, (w) => (PIN_R * w) / close.w);
+  const flaggedR = useTransform(radius, (r) => r * 1.45);
+  const shown = onScreen || still;
+
+  // Only the poles near the pole's street matter once the camera lands; the
+  // rest are drawn while it is still wide, then simply leave the frame.
+  const pins = useMemo(
+    () => POLES.map((p, i) => ({ ...p, i })).filter((p) => Math.abs(p.x - ORIGIN.x) < 360),
+    [],
+  );
 
   return (
     <div ref={ref}>
       <Panel className="relative aspect-[5/4] overflow-hidden sm:aspect-[3/2]">
-        <CityPlan viewBox={`${CROP.x} ${CROP.y} ${CROP.w} ${CROP.h}`} scale={0.42} />
-
-        {CROP_PINS.map((pin, i) => (
-          <Pin
-            key={i}
-            x={pct(pin.x, CROP.w, CROP.x)}
-            y={pct(pin.y, CROP.h, CROP.y)}
-            state={pin.s}
-            index={i}
-            still={still}
-            size={pin.s === "warn" ? 15 : 11}
-            pulse={false}
-          />
-        ))}
+        <motion.svg
+          viewBox={viewBox}
+          preserveAspectRatio="xMidYMid slice"
+          className="absolute inset-0 h-full w-full"
+          aria-hidden="true"
+        >
+          <Streets />
+          {shown &&
+            pins.map((p) => (
+              <Pin
+                key={p.i}
+                x={p.x}
+                y={p.y}
+                state={p.i === FLAGGED ? "warn" : p.s}
+                still={still}
+                radius={p.i === FLAGGED ? flaggedR : radius}
+                delay={p.i === FLAGGED ? 1.2 : 0.05}
+                pulses={p.i === FLAGGED ? 2 : 0}
+              />
+            ))}
+        </motion.svg>
 
         <motion.div
           className="absolute right-3 bottom-3 left-3 overflow-hidden rounded-xl border border-[var(--scr-line)] bg-[var(--scr-panel)] shadow-[0_24px_50px_-20px_oklch(0_0_0/0.9)] sm:left-auto sm:w-[254px]"
